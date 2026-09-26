@@ -1,12 +1,13 @@
 /**
  * A Hasura-shaped GraphQL schema built from the indexer's schema.graphql,
- * the way Envio exposes it: one root field per entity with where / order_by
- * / limit / offset, `<Entity>_bool_exp` and `<Entity>_order_by` inputs,
- * BigInt as `numeric`, a `<field>_id` column for each relation, derived
- * fields as nested lists, and the `_meta` status table. Good enough to catch
- * a misspelt field, a wrong variable type or a missing fragment before a
- * document ever reaches the indexer; the live endpoint remains the final
- * word (see the README).
+ * the way envio 3.12.1 sets Hasura up (src/Hasura.res): every entity table
+ * tracked under the entity's name, so one root field per entity with where /
+ * order_by / limit / offset and `<Entity>_bool_exp` / `<Entity>_order_by`
+ * inputs; BigInt as `numeric`; each relation as an object relationship named
+ * after the field plus its `<field>_id` column; each @derivedFrom as an array
+ * relationship; and the `_meta` status view. Good enough to catch a misspelt
+ * field, a wrong variable type or a missing fragment before a document ever
+ * reaches the indexer; the live endpoint remains the final word (README).
  */
 
 import { buildSchema, Kind, parse, type FieldDefinitionNode, type GraphQLSchema, type ObjectTypeDefinitionNode, type TypeNode } from "graphql";
@@ -80,9 +81,10 @@ export function hasuraSchema(sdl: string): GraphQLSchema {
     roots.push(`${t}${listArgs(t)}: [${t}!]!`, `${t}_by_pk(id: String!, chainId: Int!): ${t}`);
   }
 
-  // Envio's indexing status (docs: observability, "Indexing status").
+  // Envio's indexing status: the `_meta` view (envio 3.12.1, src/db/InternalTable.res).
   out.push(
-    "type _meta { chainId: Int! progressBlock: Int! eventsProcessed: Int sourceBlock: Int bufferBlock: Int firstEventBlock: Int readyAt: timestamptz isReady: Boolean! startBlock: Int endBlock: Int }",
+    "scalar float4",
+    "type _meta { chainId: Int! ecosystem: String startBlock: Int endBlock: Int progressBlock: Int! progressBlockTime: timestamptz bufferBlock: Int firstEventBlock: Int eventsProcessed: float4 sourceBlock: Int readyAt: timestamptz isReady: Boolean! }",
     "input _meta_bool_exp { chainId: Int_comparison_exp }",
   );
   roots.push("_meta(where: _meta_bool_exp): [_meta!]!");
