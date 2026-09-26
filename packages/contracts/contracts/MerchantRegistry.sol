@@ -63,6 +63,8 @@ contract MerchantRegistry is Ownable, EIP712, Nonces {
     event MerchantUpdated(address indexed merchant, address payoutAddress, uint128 maxOrderValue);
     event SettlementRecorded(address indexed merchant, uint256 amount);
     event OperatorSet(address indexed operator, bool allowed);
+    /// A merchant cancelled their next signature without using it.
+    event NonceInvalidated(address indexed merchant, uint256 nonce);
 
     error AlreadyRegistered();
     error NotRegistered();
@@ -211,11 +213,32 @@ contract MerchantRegistry is Ownable, EIP712, Nonces {
         emit MerchantUpdated(merchant, _merchants[merchant].payoutAddress, maxOrderValue);
     }
 
+    /**
+     * @notice Move the caller's payouts.
+     * @dev Consumes the merchant's nonce, the same one their signed updates
+     *      use. A merchant who signed a PayoutUpdate and then changed their
+     *      mind here used to leave that signature live: whoever held it could
+     *      relay it before its deadline and move payouts back to an address
+     *      the merchant had just abandoned, perhaps because it was
+     *      compromised. The latest decision now wins, whichever path made it.
+     */
     function updatePayoutAddress(address payoutAddress) external {
         Merchant storage m = _merchants[msg.sender];
         if (m.registeredAt == 0) revert NotRegistered();
+        _useNonce(msg.sender);
         m.payoutAddress = payoutAddress;
         emit MerchantUpdated(msg.sender, payoutAddress, m.maxOrderValue);
+    }
+
+    /**
+     * @notice Cancel the caller's next signature without using it.
+     * @dev For a merchant who holds gas. A merchant who does not cancels the
+     *      same way through a relayer: a fresh PayoutUpdate to the address
+     *      payouts already go to consumes the same nonce and changes nothing.
+     */
+    function invalidateNonce() external returns (uint256 nonce) {
+        nonce = _useNonce(msg.sender);
+        emit NonceInvalidated(msg.sender, nonce);
     }
 
     function recordSettlement(address merchant, uint256 amount) external onlyOwner {

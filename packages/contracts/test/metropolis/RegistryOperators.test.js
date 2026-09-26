@@ -6,7 +6,8 @@
  * the merchant's signature. What these tests prove is that this is a delivery
  * mechanism and not a privilege: the entry an operator creates is exactly the
  * one the merchant signed for, an operator can neither invent one nor squat an
- * address, a gasless merchant can still move its payouts, and only the owner
+ * address, a gasless merchant can still move its payouts, a signature the
+ * merchant has since overridden or cancelled moves nothing, and only the owner
  * decides who is an operator.
  */
 const { expect } = require("chai");
@@ -359,6 +360,61 @@ describe("merchant registry operators", () => {
     await registry.connect(merchant).register("Self Serve", merchant.address, "");
     await registry.connect(merchant).updatePayoutAddress(payout.address);
     expect((await registry.merchantOf(merchant.address)).payoutAddress).to.equal(payout.address);
+  });
+
+  it("a signed payout update the merchant has since overridden directly cannot be relayed to move payouts back", async () => {
+    const [, , , , , , abandoned, safe] = await ethers.getSigners();
+    await registry.connect(merchant).register("Shop", merchant.address, "");
+
+    // The merchant signs an update to an address it later learns is
+    // compromised, and moves payouts somewhere safe itself.
+    const held = await signPayoutUpdate(merchant, abandoned.address);
+    await expect(registry.connect(merchant).updatePayoutAddress(safe.address))
+      .to.emit(registry, "MerchantUpdated")
+      .withArgs(merchant.address, safe.address, AUSD(500));
+    expect(await registry.nonces(merchant.address)).to.equal(1n);
+
+    // Whoever held the signature back can no longer roll payouts back.
+    await expect(
+      registry
+        .connect(stranger)
+        .updatePayoutAddressWithSig(merchant.address, abandoned.address, MAX_UINT, held)
+    ).to.be.revertedWithCustomError(registry, "InvalidSignature");
+    expect((await registry.merchantOf(merchant.address)).payoutAddress).to.equal(safe.address);
+  });
+
+  it("a merchant can cancel a signature it no longer wants, with gas or through a relayer", async () => {
+    const [, , , , , , abandoned] = await ethers.getSigners();
+
+    // With gas: cancel outright.
+    await registry.connect(merchant).register("Shop", merchant.address, "");
+    const held = await signPayoutUpdate(merchant, abandoned.address);
+    await expect(registry.connect(merchant).invalidateNonce())
+      .to.emit(registry, "NonceInvalidated")
+      .withArgs(merchant.address, 0n);
+    await expect(
+      registry.connect(stranger).updatePayoutAddressWithSig(merchant.address, abandoned.address, MAX_UINT, held)
+    ).to.be.revertedWithCustomError(registry, "InvalidSignature");
+    expect((await registry.merchantOf(merchant.address)).payoutAddress).to.equal(merchant.address);
+
+    // Without gas: a fresh update to where payouts already go spends the same
+    // nonce and changes nothing else.
+    const shop = gaslessWallet();
+    await onboard(shop, "Gasless", payout.address);
+    const stale = await signPayoutUpdate(shop, abandoned.address);
+    await registry
+      .connect(operator)
+      .updatePayoutAddressWithSig(
+        shop.address,
+        payout.address,
+        MAX_UINT,
+        await signPayoutUpdate(shop, payout.address)
+      );
+    await expect(
+      registry.connect(stranger).updatePayoutAddressWithSig(shop.address, abandoned.address, MAX_UINT, stale)
+    ).to.be.revertedWithCustomError(registry, "InvalidSignature");
+    expect((await registry.merchantOf(shop.address)).payoutAddress).to.equal(payout.address);
+    expect(await ethers.provider.getBalance(shop.address)).to.equal(0n);
   });
 
   it("refuses to register the zero address", async () => {
