@@ -1,3 +1,4 @@
+import { Blog } from "@/components/sections/Blog";
 import { CreditSection } from "@/components/sections/CreditSection";
 import { Faq } from "@/components/sections/Faq";
 import { Hero } from "@/components/sections/Hero";
@@ -18,6 +19,7 @@ export default function Page() {
       <Pricing />
       <Faq />
       <Testimonial assets={assets} />
+      <Blog assets={assets} />
     </main>
   );
 }
