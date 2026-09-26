@@ -39,9 +39,22 @@ const paths = {
   wallet: "M4 7.5A2.5 2.5 0 0 1 6.5 5H17a1 1 0 0 1 1 1v3M4 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5zM16 14h.01",
   trendUp: "M4 16.5 9.5 11l3.5 3.5L20 7.5M14.5 7.5H20V13",
   store: "M4 9.5 5.5 4.5h13L20 9.5M4 9.5a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0 2.7 2.7 0 0 0 5.3 0M5.5 12v7.5h13V12M10 19.5v-4.5h4v4.5",
+  bag: "M6.2 8h11.6l.9 10.6a1.5 1.5 0 0 1-1.5 1.6H6.8a1.5 1.5 0 0 1-1.5-1.6zM9 10.5V7a3 3 0 0 1 6 0v3.5",
+  calendar: "M6.5 5.5h11a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2zM8.5 3.8v3.4M15.5 3.8v3.4M4.5 10h15",
+  /* The floating nav, drawn after the reference's set. */
+  navHome:
+    "M4.6 10.4c0-.7.3-1.3.8-1.7l5.3-4.3a2 2 0 0 1 2.6 0l5.3 4.3c.5.4.8 1 .8 1.7v7.1a2.5 2.5 0 0 1-2.5 2.5H7.1a2.5 2.5 0 0 1-2.5-2.5zM9 14.2c1.7 1.5 4.3 1.5 6 0",
+  navActivity: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM7.3 12.4l2.3 2.4 3.6-5.2 3.5 4",
+  navCards: "M7 4.5h10a3.5 3.5 0 0 1 3.5 3.5v8a3.5 3.5 0 0 1-3.5 3.5H7A3.5 3.5 0 0 1 3.5 16V8A3.5 3.5 0 0 1 7 4.5zM3.5 10h17M3.5 14h17",
+  navPay:
+    "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM14.3 9.7c-.3-.9-1.2-1.5-2.3-1.5-1.3 0-2.3.7-2.3 1.8 0 2.4 4.7 1.3 4.7 3.9 0 1.1-1 1.9-2.4 1.9-1.2 0-2.1-.6-2.4-1.5M12 6.7v1.5M12 15.8v1.5",
+  navProfile: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 12.4a2.9 2.9 0 1 0 0-5.8 2.9 2.9 0 0 0 0 5.8zM6.7 18.4c1.2-2 3-3 5.3-3s4.1 1 5.3 3",
 } as const;
 
-export type IconName = keyof typeof paths | "star";
+export type IconName = keyof typeof paths | "star" | "backspaceFilled";
+
+/** The reference keypad's delete key: a filled tag with a white cross. */
+const BACKSPACE_FILLED = "M8.6 5.2h10.4a2.6 2.6 0 0 1 2.6 2.6v8.4a2.6 2.6 0 0 1-2.6 2.6H8.6a2 2 0 0 1-1.5-.7L2.8 13a1.6 1.6 0 0 1 0-2l4.3-5.1a2 2 0 0 1 1.5-.7z";
 
 /** The Polaris mark: a four-point star. */
 const STAR = "M12 1.8C12.9 8.1 15.9 11.1 22.2 12 15.9 12.9 12.9 15.9 12 22.2 11.1 15.9 8.1 12.9 1.8 12 8.1 11.1 11.1 8.1 12 1.8Z";
@@ -61,6 +74,14 @@ export function Icon({
   title?: string;
 }) {
   const a11y = title ? { role: "img", "aria-label": title } : { "aria-hidden": true };
+  if (name === "backspaceFilled") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" className={className} {...a11y}>
+        <path d={BACKSPACE_FILLED} fill="currentColor" />
+        <path d="m11.4 9.6 4.8 4.8m0-4.8-4.8 4.8" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" fill="none" />
+      </svg>
+    );
+  }
   if (name === "star") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" className={className} {...a11y}>

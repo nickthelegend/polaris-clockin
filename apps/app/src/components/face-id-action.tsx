@@ -12,7 +12,7 @@ import {
 } from "@/lib/account";
 import { useAccountState, useAccountSupport, useInAppBrowser } from "@/lib/account/hooks";
 import { RelayError } from "@/lib/relayer";
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 import { OpenOnPhone } from "./open-on-phone";
 import { Button, cx, Skeleton } from "./ui";
 
@@ -39,8 +39,11 @@ export function FaceIdAction({
   hint,
   className,
   variant = "primary",
+  icon = "faceId",
 }: {
   variant?: "primary" | "quiet" | "danger";
+  /** The glyph on the button; `false` for a plain label ("Send money"). */
+  icon?: IconName | false;
   label?: string;
   /** For a device with no account yet. Defaults to `label`. */
   newLabel?: string;
@@ -90,7 +93,7 @@ export function FaceIdAction({
   }
 
   if (state.status === "unknown" || support.status === "checking") {
-    return <Skeleton className={cx("h-14 w-full rounded-btn", className)} />;
+    return <Skeleton className={cx("h-[54px] w-full rounded-btn", className)} />;
   }
 
   const busy = stage !== "idle";
@@ -102,7 +105,7 @@ export function FaceIdAction({
       <Button
         block
         variant={variant}
-        icon="faceId"
+        icon={icon || undefined}
         disabled={disabled}
         busy={busy}
         onClick={() => void run(isNew ? createAccount : () => authorize())}
@@ -115,7 +118,7 @@ export function FaceIdAction({
           type="button"
           disabled={disabled}
           onClick={() => void run(() => signIn())}
-          className="press mx-auto mt-3 flex h-11 items-center gap-1.5 rounded-full px-4 text-[15px] font-medium text-fg disabled:opacity-45"
+          className="press mx-auto mt-2 flex h-10 items-center gap-1.5 rounded-full px-4 text-[15px] font-medium tracking-[-0.02em] text-fg disabled:opacity-45"
         >
           I already use Polaris
         </button>

@@ -1,18 +1,19 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAddress, isAddress } from "viem";
-import { Coin, MiniCard } from "@/components/art";
+import { CardThumb, Coin } from "@/components/art";
 import { Avatar } from "@/components/avatar";
 import { FaceIdAction } from "@/components/face-id-action";
 import { HelpButton } from "@/components/help";
 import { Icon } from "@/components/icon";
 import { Keypad } from "@/components/keypad";
 import { LocalEquivalent } from "@/components/money";
+import { ChangePill, PartyCard, PartyRow } from "@/components/party";
 import { QrCode } from "@/components/qr";
-import { Button, Card, cx, ScreenHeader } from "@/components/ui";
+import { Sheet } from "@/components/sheet";
+import { Button, Card, cx, SCREEN_TOP, ScreenHeader } from "@/components/ui";
 import { type CreatedSendLink, cancelSendLink, createSendLink, transferTo } from "@/lib/actions";
 import { useAccountState } from "@/lib/account/hooks";
 import { getBalance, getContacts, getProfile, getSendLink, type Person } from "@/lib/data";
@@ -28,8 +29,12 @@ type Recipient =
   | { kind: "contact"; person: Person }
   | { kind: "account"; person: Person & { address: `0x${string}` } };
 
+const SCREEN = "flex min-h-dvh flex-col px-[15px] pb-[calc(20.5px+env(safe-area-inset-bottom))]";
+
+/** Send money, laid out on the reference's third screen. */
 export function Send() {
   const params = useSearchParams();
+  const router = useRouter();
   const account = useAccountState();
   const owner = account.status === "ready" || account.status === "locked" ? account.address : null;
   const balance = useData(() => getBalance(owner), [owner]);
@@ -37,6 +42,7 @@ export function Send() {
   const profile = useData(() => getProfile(owner), [owner]);
   const prefs = usePrefs();
   const [value, setValue] = useState("0");
+  const [picking, setPicking] = useState(false);
   const [link, setLink] = useState<CreatedSendLink | null>(null);
   const [sent, setSent] = useState<{ receipt: RelayReceipt; amount: bigint; to: Person } | null>(null);
 
@@ -65,77 +71,71 @@ export function Send() {
   if (sent) return <Sent sent={sent} />;
   if (link) return <LinkReady link={link} recipient={recipient} senderName={senderName} />;
 
+  const change = <ChangePill onClick={() => setPicking(true)} label="Change who you're sending to" />;
+
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main id="main" className={SCREEN}>
       <ScreenHeader title="Send money" back="/" right={<HelpButton />} />
 
       {/* Send to */}
-      <Card className="p-4">
-        <p className="text-[15px] text-muted">Send to</p>
-        <div className="mt-3 flex items-center gap-3 border-t border-divider pt-3">
-          {recipient.kind === "link" ? (
-            <>
-              <Avatar name="Link" kind="polaris" icon="link" size={52} />
-              <div className="min-w-0 flex-1">
-                <p className="text-[17px] font-medium">Anyone with the link</p>
-                <p className="truncate text-[14px] text-muted">They claim it with Face ID, anywhere</p>
-              </div>
-            </>
-          ) : (
-            <>
+      <PartyCard label="Send to" className="mt-[21px]">
+        {recipient.kind === "link" ? (
+          <PartyRow
+            avatar={<Avatar name="Link" kind="polaris" icon="link" size={57.5} />}
+            name="Anyone with the link"
+            meta="They claim it with Face ID, anywhere"
+            action={change}
+          />
+        ) : (
+          <PartyRow
+            avatar={
               <Avatar
                 name={recipient.person.name}
                 country={recipient.kind === "contact" ? recipient.person.country : undefined}
-                size={52}
+                photo={recipient.kind === "contact"}
+                size={57.5}
               />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[17px] font-medium">{recipient.person.name}</p>
-                <p className="truncate text-[14px] text-muted">
-                  {recipient.kind === "contact" ? `${recipient.person.handle} · by link` : "Polaris account"}
-                </p>
-              </div>
-              <Link href="/send" replace className="press inline-flex h-8 items-center rounded-full bg-pill px-3.5 text-[14px]">
-                Change
-              </Link>
-            </>
-          )}
-        </div>
-      </Card>
+            }
+            name={recipient.person.name}
+            meta={recipient.kind === "contact" ? recipient.person.handle : "Polaris account"}
+            action={change}
+          />
+        )}
+      </PartyCard>
 
       {/* Amount */}
-      <section className="flex flex-1 flex-col items-center justify-center py-6" aria-live="polite">
+      <section className="relative flex flex-1 items-center justify-center py-6" aria-live="polite">
         <p className="sr-only">Amount: {usd(amount, { trim: true })}</p>
-        <p aria-hidden className="tabular flex items-center font-display text-[64px] leading-none font-bold tracking-[-0.05em]">
+        <p aria-hidden className="flex items-center font-display text-[62px] leading-none font-medium tracking-[-0.005em]">
           ${Number(value).toLocaleString("en-US")}
-          <span className="amount-cursor ml-1 inline-block h-[56px] w-[3px] rounded-full bg-lime" />
+          <span className="amount-cursor ml-[8px] inline-block h-[67px] w-[3px] rounded-full bg-lime" />
         </p>
-        <p className={cx("mt-2 h-5 text-[15px]", tooMuch && "text-negative")}>
+        <p className={cx("absolute inset-x-0 bottom-3 text-center text-[14px]", tooMuch && "text-negative")}>
           {tooMuch ? "That's more than your balance" : amount > 0n ? <LocalEquivalent amount={amount} /> : null}
         </p>
       </section>
 
       {/* From */}
-      <Card className="mb-3 flex items-center gap-3 p-4">
-        <MiniCard className="h-9 w-14" />
+      <Card className="flex h-[76.5px] items-center gap-[14.5px] px-[16.5px]">
+        <CardThumb />
         <div className="min-w-0 flex-1">
-          <p className="text-[16px] font-medium">Dollar account</p>
-          <p className="tabular text-[14px] text-muted">
-            Balance {available !== undefined ? usd(available) : "…"}
+          <p className="truncate text-[16px] leading-[22px] font-medium tracking-[-0.03em]">Dollar account</p>
+          <p className="mt-[2px] truncate text-[14px] leading-[18px] tracking-[-0.02em] text-meta">
+            Balance <span className="text-fg">{available !== undefined ? usd(available) : "…"}</span>
           </p>
         </div>
-        {senderName && recipient.kind !== "account" ? (
-          <Link href="/profile" className="max-w-[40%] truncate text-right text-[13px] text-muted">
-            From <span className="font-medium text-fg">{senderName}</span>
-          </Link>
-        ) : null}
+        <ChangePill href="/cards" label="Change the account you send from" />
       </Card>
 
-      <Keypad value={value} onChange={setValue} />
+      <div className="mt-[13.5px]">
+        <Keypad value={value} onChange={setValue} />
+      </div>
 
-      <div className="mt-3">
+      <div className="mt-[13.5px]">
         <FaceIdAction
-          label={recipient.kind === "account" ? `Send ${usd(amount, { trim: true })}` : "Create link"}
-          newLabel={recipient.kind === "account" ? `Send ${usd(amount, { trim: true })}` : "Create link"}
+          icon={false}
+          label="Send money"
+          newLabel="Send money"
           busyLabel={recipient.kind === "account" ? "Sending…" : "Making your link…"}
           disabled={amount === 0n || tooMuch}
           onAccount={async (signer) => {
@@ -150,6 +150,49 @@ export function Send() {
           }}
         />
       </div>
+
+      <Sheet open={picking} onClose={() => setPicking(false)} title="Send to">
+        <ul className="-mx-2 flex flex-col">
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                setPicking(false);
+                router.replace("/send");
+              }}
+              className="press flex w-full items-center gap-[14.5px] rounded-[18px] px-2 py-2 text-left hover:bg-fg/[0.03]"
+            >
+              <Avatar name="Link" kind="polaris" icon="link" size={48} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-medium tracking-[-0.03em]">Anyone with a link</span>
+                <span className="block text-[14px] text-meta">Share it anywhere; they claim it with Face ID</span>
+              </span>
+              {recipient.kind === "link" ? <Icon name="check" size={18} strokeWidth={2.2} /> : null}
+            </button>
+          </li>
+          {(contacts.value ?? []).map((person) => (
+            <li key={person.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setPicking(false);
+                  router.replace(`/send?contact=${person.id}`);
+                }}
+                className="press flex w-full items-center gap-[14.5px] rounded-[18px] px-2 py-2 text-left hover:bg-fg/[0.03]"
+              >
+                <Avatar name={person.name} country={person.country} size={48} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[16px] font-medium tracking-[-0.03em]">{person.name}</span>
+                  <span className="block truncate text-[14px] text-meta">{person.handle}</span>
+                </span>
+                {recipient.kind === "contact" && recipient.person.id === person.id ? (
+                  <Icon name="check" size={18} strokeWidth={2.2} />
+                ) : null}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Sheet>
     </main>
   );
 }
@@ -185,48 +228,49 @@ function LinkReady({ link, recipient, senderName }: { link: CreatedSendLink; rec
   }
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main id="main" className={SCREEN}>
       <ScreenHeader title="Send money" back="/" right={<HelpButton />} />
 
-      <section className="rise relative overflow-hidden rounded-card bg-promo p-5 text-white ring-1 ring-white/5">
-        <p className="text-[15px] text-white/70">{who ? `Your link for ${who}` : "Your link is ready"}</p>
-        <p className="tabular mt-1 font-display text-[52px] leading-none font-bold tracking-[-0.05em]">
-          {usd(link.amount, { trim: true })}
-        </p>
-        <p className="mt-3 max-w-[24ch] text-[14px] text-white/70">
-          Whoever opens it gets the dollars. Share it only with {who ?? "the person it's for"}.
-        </p>
-        <Coin size={92} className="absolute -right-2 -bottom-3 drop-shadow-[0_8px_14px_rgb(0_0_0/0.5)]" />
+      <section className="rise relative mt-[21px] flex min-h-[122px] items-center overflow-hidden rounded-card bg-promo py-4 pr-[14px] pl-[16.5px] text-white shadow-[0_0_0_1px_rgb(255_255_255/0.75)]">
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] tracking-[-0.02em] text-[#a6a6a6]">{who ? `Your link for ${who}` : "Your link is ready"}</p>
+          <p className="mt-1 font-display text-[44px] leading-none font-semibold tracking-[-0.04em]">
+            {usd(link.amount, { trim: true })}
+          </p>
+          <p className="mt-2 max-w-[236px] text-[13px] leading-[19px] tracking-[-0.015em] text-[#a6a6a6]">
+            Whoever opens it gets the dollars. Share it only with {who ?? "the person it's for"}.
+          </p>
+        </div>
+        <Coin size={68} className="shrink-0" />
       </section>
 
-      <div className="mt-5 flex justify-center">
-        <QrCode value={link.url} size={176} label="QR code of your send link" className="ring-1 ring-hairline" />
-      </div>
+      <Card className="mt-[13.5px] flex flex-col items-center px-4 pt-5 pb-4">
+        <QrCode value={link.url} size={172} label="QR code of your send link" className="p-2" />
+        <div className="mt-3 flex items-center justify-center gap-2 text-[15px] tracking-[-0.02em]" role="status" aria-live="polite">
+          {state === "open" ? (
+            <>
+              <span className="pulse-dot size-2.5 rounded-full bg-lime text-lime" aria-hidden />
+              <span className="font-medium">Waiting to be claimed</span>
+              <span className="text-muted">· until {longDate(link.expiresAt)}</span>
+            </>
+          ) : state === "claimed" ? (
+            <>
+              <Icon name="check" size={18} className="text-positive" />
+              <span className="font-medium">Claimed. It arrived.</span>
+            </>
+          ) : (
+            <>
+              <Icon name="receive" size={18} />
+              <span className="font-medium">Cancelled. The money is back in your account.</span>
+            </>
+          )}
+        </div>
+      </Card>
 
-      <div className="mt-5 flex items-center justify-center gap-2 text-[15px]" role="status" aria-live="polite">
+      <div className="mt-auto flex flex-col gap-[13.5px] pt-8">
         {state === "open" ? (
           <>
-            <span className="pulse-dot size-2.5 rounded-full bg-lime text-lime" aria-hidden />
-            <span className="font-medium">Waiting to be claimed</span>
-            <span className="text-muted">· until {longDate(link.expiresAt)}</span>
-          </>
-        ) : state === "claimed" ? (
-          <>
-            <Icon name="check" size={18} className="text-positive" />
-            <span className="font-medium">Claimed. It arrived.</span>
-          </>
-        ) : (
-          <>
-            <Icon name="receive" size={18} />
-            <span className="font-medium">Cancelled. The money is back in your account.</span>
-          </>
-        )}
-      </div>
-
-      <div className="mt-auto flex flex-col gap-3 pt-8">
-        {state === "open" ? (
-          <>
-            <div className="grid grid-cols-[1fr_auto] gap-3">
+            <div className="grid grid-cols-[1fr_auto] gap-[8.5px]">
               <Button icon="share" onClick={() => void share()}>
                 Share link
               </Button>
@@ -255,22 +299,23 @@ function LinkReady({ link, recipient, senderName }: { link: CreatedSendLink; rec
 function Sent({ sent }: { sent: { receipt: RelayReceipt; amount: bigint; to: Person } }) {
   const router = useRouter();
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
-      <div className="pt-[calc(env(safe-area-inset-top)+72px)] text-center">
+    <main id="main" className={SCREEN}>
+      <div className={cx("text-center", SCREEN_TOP)}>
+        <span className="block h-[72px]" aria-hidden />
         <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-lime text-on-lime">
           <Icon name="check" size={40} strokeWidth={2.4} />
         </span>
-        <h1 className="mt-6 font-display text-[44px] leading-none font-bold tracking-[-0.05em]">Sent.</h1>
-        <p className="mt-3 text-[17px]" role="status">
+        <h1 className="mt-6 font-display text-[44px] leading-none font-semibold tracking-[-0.05em]">Sent.</h1>
+        <p className="mt-3 text-[16px] tracking-[-0.02em]" role="status">
           {usd(sent.amount, { trim: true })} is in {sent.to.name}&apos;s account.
         </p>
       </div>
-      <div className="mt-auto flex flex-col gap-3 pt-8">
+      <div className="mt-auto flex flex-col gap-[13.5px] pt-8">
         <a
           href={sent.receipt.explorerUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="press flex h-14 items-center justify-center gap-2 rounded-btn bg-surface text-[16px] font-medium"
+          className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] font-medium tracking-[-0.02em] shadow-surface"
         >
           View receipt
           <Icon name="external" size={18} />

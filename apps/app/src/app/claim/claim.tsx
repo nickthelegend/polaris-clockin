@@ -9,7 +9,7 @@ import { FaceIdAction } from "@/components/face-id-action";
 import { HelpButton } from "@/components/help";
 import { Icon } from "@/components/icon";
 import { LocalEquivalent } from "@/components/money";
-import { Button, Card, Skeleton, stagger, Wordmark } from "@/components/ui";
+import { Button, Card, cx, SCREEN_TOP, Skeleton, stagger, Wordmark } from "@/components/ui";
 import { claimLink } from "@/lib/actions";
 import { useAccountState } from "@/lib/account/hooks";
 import { getSendLink } from "@/lib/data";
@@ -63,17 +63,27 @@ export function Claim() {
   return <ClaimReady parsed={parsed} onClaimed={setClaimed} />;
 }
 
+/** The Home header (wordmark and help), over whatever the link holds. */
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
-      <header className="flex h-16 items-center justify-between pt-[env(safe-area-inset-top)]">
-        <Wordmark className="text-[26px]" />
+    <main
+      id="main"
+      className={cx("flex min-h-dvh flex-col px-[15px] pb-[calc(20.5px+env(safe-area-inset-bottom))]", SCREEN_TOP)}
+    >
+      <header className="flex h-[41px] items-center justify-between">
+        <Wordmark />
         <HelpButton />
       </header>
       {children}
     </main>
   );
 }
+
+const POINTS = [
+  { icon: "faceId" as const, title: "Face ID is your account", meta: "No password, no forms" },
+  { icon: "globe" as const, title: "Dollars, wherever you are", meta: "Hold them, pay with them, send them on" },
+  { icon: "bolt" as const, title: "No fees to claim", meta: "It lands in under a second" },
+];
 
 function ClaimReady({
   parsed,
@@ -91,40 +101,46 @@ function ClaimReady({
 
   return (
     <Frame>
-      <section className="rise relative overflow-hidden rounded-card bg-promo p-5 pb-6 text-white ring-1 ring-white/5" style={stagger(0)}>
-        <p className="text-[15px] text-white/70">You&apos;ve got dollars</p>
-        <p className="tabular mt-2 font-display text-[60px] leading-none font-bold tracking-[-0.05em]">
-          {usd(amount, { trim: true })}
-        </p>
-        <p className="mt-2 text-[18px] font-medium">from {parsed.name}</p>
-        <p className="mt-4 max-w-[22ch] text-[14px] text-white/70">
-          Claim it with Face ID. It&apos;s yours in under a second, wherever you are.
-        </p>
-        <Coin size={104} className="absolute -right-3 -bottom-4 drop-shadow-[0_8px_14px_rgb(0_0_0/0.5)]" />
+      <section
+        className="rise relative mt-[21px] flex min-h-[176px] items-center overflow-hidden rounded-card bg-promo py-5 pr-[10px] pl-[16.5px] text-white shadow-[0_0_0_1px_rgb(255_255_255/0.75)]"
+        style={stagger(0)}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] tracking-[-0.02em] text-[#a6a6a6]">You&apos;ve got dollars</p>
+          <p className="mt-1.5 font-display text-[52px] leading-none font-medium tracking-[-0.01em]">
+            {usd(amount, { trim: true })}
+          </p>
+          <p className="mt-2 text-[16px] font-medium tracking-[-0.03em]">from {parsed.name}</p>
+          <p className="mt-1 max-w-[210px] text-[13px] leading-[19px] tracking-[-0.015em] text-[#a6a6a6]">
+            Claim it with Face ID. It&apos;s yours in under a second, wherever you are.
+          </p>
+        </div>
+        <Coin size={112} className="-mr-2 shrink-0" />
       </section>
 
-      <p className="rise mt-3 text-center text-[15px]" style={stagger(1)}>
+      <p className="rise mt-2.5 h-5 text-center text-[14px]" style={stagger(1)}>
         <LocalEquivalent amount={amount} />
       </p>
 
-      <ul className="rise mt-6 flex flex-col gap-3 px-1" style={stagger(2)}>
-        {[
-          { icon: "faceId" as const, text: "Face ID is your account. No password, no forms." },
-          { icon: "globe" as const, text: "Hold dollars, pay with them, or send them on." },
-          { icon: "bolt" as const, text: "No fees to claim." },
-        ].map((p) => (
-          <li key={p.text} className="flex items-center gap-3 text-[15px]">
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-surface">
-              <Icon name={p.icon} size={18} />
-            </span>
-            {p.text}
-          </li>
-        ))}
-      </ul>
+      <Card className="rise mt-[3.5px] px-4 py-[7.25px]" style={stagger(2)}>
+        <ul>
+          {POINTS.map((p) => (
+            <li key={p.title} className="flex h-[70.5px] items-center gap-[14.5px]">
+              <span className="grid size-14 shrink-0 place-items-center rounded-full bg-well text-[#77797c]">
+                <Icon name={p.icon} size={26} strokeWidth={1.5} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] leading-[22px] font-medium tracking-[-0.03em]">{p.title}</span>
+                <span className="mt-[3px] block text-[14px] leading-[18px] tracking-[-0.02em] text-meta">{p.meta}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </Card>
 
       <div className="mt-auto pt-8">
         {state === undefined ? (
-          <Skeleton className="h-14 w-full rounded-btn" />
+          <Skeleton className="h-[54px] w-full rounded-btn" />
         ) : state === "open" ? (
           <FaceIdAction
             label="Claim with Face ID"
@@ -140,14 +156,14 @@ function ClaimReady({
           />
         ) : (
           <Card className="p-4 text-center" role="status">
-            <p className="text-[16px] font-medium">
+            <p className="text-[16px] font-medium tracking-[-0.03em]">
               {state === "claimed"
                 ? "This link has already been claimed."
                 : state === "cancelled"
                   ? `${parsed.name} cancelled this link.`
                   : "This link has expired."}
             </p>
-            <p className="mt-1 text-[14px] text-muted">
+            <p className="mt-1 text-[14px] tracking-[-0.02em] text-meta">
               {state === "claimed"
                 ? "Each link pays out once. If it wasn't you, ask the sender for a new one."
                 : "The money went back to the sender. Ask them for a new link."}
@@ -163,12 +179,12 @@ function BrokenLink() {
   const router = useRouter();
   return (
     <Frame>
-      <Card className="mt-6 p-5 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-full bg-pill">
-          <Icon name="link" size={22} />
+      <Card className="mt-[21px] px-5 pt-6 pb-5 text-center">
+        <span className="mx-auto grid size-14 place-items-center rounded-full bg-well text-[#77797c]">
+          <Icon name="link" size={26} strokeWidth={1.5} />
         </span>
-        <h1 className="mt-4 font-display text-[22px] font-semibold tracking-[-0.03em]">This link isn&apos;t complete</h1>
-        <p className="mx-auto mt-2 max-w-[30ch] text-[15px] text-muted">
+        <h1 className="mt-4 text-[18px] font-medium tracking-[-0.04em]">This link isn&apos;t complete</h1>
+        <p className="mx-auto mt-2 max-w-[30ch] text-[14px] tracking-[-0.02em] text-meta">
           Part of it went missing on the way. Ask the sender to share it again, and open it straight from the message.
         </p>
       </Card>
@@ -184,25 +200,26 @@ function BrokenLink() {
 function Arrived({ receipt, amount, name }: { receipt: RelayReceipt; amount: Micros; name: string }) {
   const router = useRouter();
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
-      <div className="pt-[calc(env(safe-area-inset-top)+72px)] text-center">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(20.5px+env(safe-area-inset-bottom))]">
+      <div className={cx("text-center", SCREEN_TOP)}>
+        <span className="block h-[72px]" aria-hidden />
         <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-lime text-on-lime">
           <Icon name="check" size={40} strokeWidth={2.4} />
         </span>
-        <h1 className="mt-6 font-display text-[44px] leading-none font-bold tracking-[-0.05em]">Arrived.</h1>
-        <p className="mt-3 text-[17px]" role="status">
+        <h1 className="mt-6 font-display text-[44px] leading-none font-semibold tracking-[-0.05em]">Arrived.</h1>
+        <p className="mt-3 text-[16px] tracking-[-0.02em]" role="status">
           {usd(amount, { trim: true })} from {name} is in your account.
         </p>
         <p className="mt-1 text-[15px]">
           <LocalEquivalent amount={amount} />
         </p>
       </div>
-      <div className="mt-auto flex flex-col gap-3 pt-8">
+      <div className="mt-auto flex flex-col gap-[13.5px] pt-8">
         <a
           href={receipt.explorerUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="press flex h-14 items-center justify-center gap-2 rounded-btn bg-surface text-[16px] font-medium"
+          className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] tracking-[-0.03em] shadow-surface"
         >
           View receipt
           <Icon name="external" size={18} />

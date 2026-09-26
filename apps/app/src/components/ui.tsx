@@ -19,20 +19,21 @@ export function stagger(i: number): CSSProperties {
 type ButtonVariant = "primary" | "secondary" | "lime" | "quiet" | "danger";
 
 const buttonBase =
-  "press inline-flex items-center justify-center gap-2 rounded-btn font-medium select-none disabled:opacity-45";
+  "press inline-flex items-center justify-center gap-2 rounded-btn tracking-[-0.03em] select-none disabled:opacity-45";
 
 const buttonVariants: Record<ButtonVariant, string> = {
-  primary: "bg-cta text-on-cta",
-  secondary: "bg-surface text-fg",
+  primary: "bg-cta text-on-cta shadow-float",
+  secondary: "bg-surface text-fg shadow-surface",
   lime: "bg-lime text-on-lime",
-  quiet: "bg-pill text-fg",
+  quiet: "bg-pill-soft text-fg",
   danger: "bg-negative/10 text-negative",
 };
 
+/** Heights from the reference: 54 (Send money, Send / Receive), 44, and the 34px "Change" pill. */
 const buttonSizes = {
-  lg: "h-14 px-6 text-[16px]",
-  md: "h-12 px-5 text-[15px]",
-  sm: "h-9 px-3.5 text-[14px]",
+  lg: "h-[54px] px-6 text-[16px]",
+  md: "h-11 px-5 text-[15px]",
+  sm: "h-[34px] px-4 text-[15px]",
 } as const;
 
 type ButtonOwnProps = {
@@ -64,7 +65,7 @@ export function Button({
       className={cx(buttonBase, buttonVariants[variant], buttonSizes[size], block && "w-full", className)}
       {...rest}
     >
-      {busy ? <Spinner /> : icon ? <Icon name={icon} size={size === "sm" ? 18 : 20} /> : null}
+      {busy ? <Spinner /> : icon ? <Icon name={icon} size={size === "sm" ? 16 : 18} /> : null}
       <span>{children}</span>
     </button>
   );
@@ -81,7 +82,7 @@ export function ButtonLink({
 }: Omit<ButtonOwnProps, "busy"> & ComponentProps<typeof Link>) {
   return (
     <Link className={cx(buttonBase, buttonVariants[variant], buttonSizes[size], block && "w-full", className)} {...rest}>
-      {icon ? <Icon name={icon} size={size === "sm" ? 18 : 20} /> : null}
+      {icon ? <Icon name={icon} size={size === "sm" ? 16 : 18} /> : null}
       <span>{children}</span>
     </Link>
   );
@@ -96,7 +97,7 @@ export function Spinner({ className }: { className?: string }) {
   );
 }
 
-/** The 40px round header button: white, hairline ring. */
+/** The 41px round header button: a near-white disc lifted off the ground. */
 export function CircleButton({
   icon,
   label,
@@ -111,19 +112,20 @@ export function CircleButton({
   className?: string;
 }) {
   const cls = cx(
-    "press grid size-10 shrink-0 place-items-center rounded-full bg-surface-2 text-fg ring-1 ring-hairline ring-inset",
+    "press grid size-[41px] shrink-0 place-items-center rounded-full bg-surface text-fg shadow-surface",
     className,
   );
+  const glyph = <Icon name={icon} size={icon === "help" ? 22 : 20} strokeWidth={2} />;
   if (href) {
     return (
       <Link href={href} aria-label={label} className={cls}>
-        <Icon name={icon} size={20} />
+        {glyph}
       </Link>
     );
   }
   return (
     <button type="button" aria-label={label} onClick={onClick} className={cls}>
-      <Icon name={icon} size={20} />
+      {glyph}
     </button>
   );
 }
@@ -143,28 +145,47 @@ export function BackButton({ fallback = "/", label = "Back" }: { fallback?: stri
   );
 }
 
-/** The black pill with a lime sparkle: "Pay later" in the header. */
+/** The black header pill with its sparkle: "Pay later". */
 export function ChipLink({ href, icon, children, sparkle }: { href: string; icon: IconName; children: ReactNode; sparkle?: boolean }) {
   return (
     <Link
       href={href}
-      className="press relative inline-flex h-10 items-center gap-2 rounded-full bg-chip pr-4 pl-3.5 text-[15px] font-medium text-on-chip"
+      className="press relative inline-flex h-10 items-center gap-[7px] rounded-full bg-chip pr-[15px] pl-[13px] text-[16px] font-[450] tracking-[-0.02em] text-on-chip shadow-[0_0_0_1.5px_rgb(255_255_255/0.9)]"
     >
-      <Icon name={icon} size={18} />
+      <Icon name={icon} size={18} strokeWidth={1.6} />
       {children}
-      {sparkle ? (
-        <span className="absolute -top-0.5 -right-0.5 text-lime" aria-hidden>
-          <Icon name="star" size={12} />
-        </span>
-      ) : null}
+      {sparkle ? <Sparkle /> : null}
     </Link>
   );
 }
 
-/** Grey pill: "Credit available $500", "Change". */
+/** The two-star glint on the corner of the header pill. */
+export function Sparkle({ className }: { className?: string }) {
+  return (
+    <span aria-hidden className={cx("pointer-events-none absolute -top-[3px] -right-px text-sparkle", className)}>
+      <svg width="17" height="22" viewBox="0 0 16 21" className="overflow-visible">
+        <path
+          d="M8 .6C8.6 4.4 10.2 6 14 6.6 10.2 7.2 8.6 8.8 8 12.6 7.4 8.8 5.8 7.2 2 6.6 5.8 6 7.4 4.4 8 .6Z"
+          fill="currentColor"
+          stroke="#fff"
+          strokeWidth="0.8"
+          strokeLinejoin="round"
+        />
+        <path d="M11.8 15.3c.2 1.3.8 1.9 2.1 2.1-1.3.2-1.9.8-2.1 2.1-.2-1.3-.8-1.9-2.1-2.1 1.3-.2 1.9-.8 2.1-2.1Z" fill="#fbf6c8" />
+      </svg>
+    </span>
+  );
+}
+
+/** Grey pill: "Credit available $500". */
 export function Pill({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span className={cx("inline-flex h-8 items-center gap-1.5 rounded-full bg-pill px-3.5 text-[14px] text-muted", className)}>
+    <span
+      className={cx(
+        "inline-flex h-9 items-center gap-1 rounded-full bg-pill px-4 text-[14px] tracking-[-0.03em] text-muted",
+        className,
+      )}
+    >
       {children}
     </span>
   );
@@ -174,18 +195,43 @@ export function Pill({ children, className }: { children: ReactNode; className?:
 
 export function Card({ className, children, ...rest }: ComponentProps<"section">) {
   return (
-    <section className={cx("rounded-card bg-surface", className)} {...rest}>
+    <section className={cx("rounded-card bg-surface shadow-surface", className)} {...rest}>
       {children}
     </section>
   );
 }
 
+/** "Send again", "History": 18px medium, tight, with one action on the right. */
 export function CardTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="text-[17px] font-medium tracking-[-0.01em] text-fg">{children}</h2>
+    <div className="flex min-h-[27px] items-center justify-between gap-3">
+      <h2 className="text-[18px] leading-none font-medium tracking-[-0.04em] text-fg">{children}</h2>
       {action}
     </div>
+  );
+}
+
+/** The faint "+ Add" pill inside a card. */
+export function SoftPill({ className, children, ...rest }: ComponentProps<typeof Link>) {
+  return (
+    <Link
+      className={cx(
+        "press inline-flex h-[27px] items-center gap-1 rounded-full bg-pill-faint px-3 text-[15px] tracking-[-0.02em] text-fg",
+        className,
+      )}
+      {...rest}
+    >
+      {children}
+    </Link>
+  );
+}
+
+/** "see more": a quiet text link. */
+export function MoreLink({ className, children, ...rest }: ComponentProps<typeof Link>) {
+  return (
+    <Link className={cx("text-[14px] tracking-[-0.02em] text-muted hover:text-fg", className)} {...rest}>
+      {children}
+    </Link>
   );
 }
 
@@ -194,6 +240,12 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 /* ── Page frame ───────────────────────────────────────────────────────── */
+
+/**
+ * The top of every screen sits where the reference's does: a 41px row whose
+ * top is 44px down (or just under the status bar, when installed).
+ */
+export const SCREEN_TOP = "pt-[max(44px,calc(env(safe-area-inset-top)+12px))]";
 
 /** "← Title (?)" for every screen that isn't a tab. */
 export function ScreenHeader({
@@ -206,17 +258,18 @@ export function ScreenHeader({
   right?: ReactNode;
 }) {
   return (
-    <header className="flex h-16 items-center justify-between gap-3 px-4 pt-[env(safe-area-inset-top)]">
-      <div className="w-10">{back !== false ? <BackButton fallback={back} /> : null}</div>
-      <h1 className="truncate text-[17px] font-medium tracking-[-0.01em]">{title}</h1>
-      <div className="flex w-10 justify-end">{right}</div>
+    <header className={cx("flex items-center justify-between gap-3", SCREEN_TOP)}>
+      <div className="flex h-[41px] w-[41px] items-center">{back !== false ? <BackButton fallback={back} /> : null}</div>
+      <h1 className="truncate text-[18px] font-medium tracking-[-0.04em]">{title}</h1>
+      <div className="flex w-[41px] justify-end">{right}</div>
     </header>
   );
 }
 
+/** The wordmark: 30px, medium and tight, like the reference's logotype. */
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <span className={cx("font-display text-[30px] leading-none font-extrabold tracking-[-0.05em]", className)}>
+    <span className={cx("font-display text-[30px] leading-none font-medium tracking-[-0.05em]", className)}>
       Polaris
     </span>
   );

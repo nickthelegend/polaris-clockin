@@ -16,8 +16,9 @@ export function applyKey(value: string, key: Key): string {
 }
 
 /**
- * The reference keypad: 1–9, 000, 0 and delete on a surface panel. The key
- * you press flashes lime for 180ms. A hardware keyboard works too.
+ * The reference keypad: 1–9, 000, 0 and delete as capsules on a surface
+ * panel. The key you press flashes lime for 180ms (and stays lime while it is
+ * held). A hardware keyboard works too.
  */
 export function Keypad({ value, onChange }: { value: string; onChange: (next: string) => void }) {
   const refs = useRef(new Map<Key, HTMLButtonElement>());
@@ -57,7 +58,11 @@ export function Keypad({ value, onChange }: { value: string; onChange: (next: st
   }, []);
 
   return (
-    <div className="grid grid-cols-3 gap-2 rounded-card bg-surface p-3" role="group" aria-label="Amount keypad">
+    <div
+      className="grid grid-cols-3 gap-x-[6px] gap-y-[6.5px] rounded-card bg-surface px-[16.5px] pt-[17.5px] pb-[16.5px] shadow-surface"
+      role="group"
+      aria-label="Amount keypad"
+    >
       {KEYS.map((key) => (
         <button
           key={key}
@@ -68,9 +73,9 @@ export function Keypad({ value, onChange }: { value: string; onChange: (next: st
           }}
           onClick={() => press(key)}
           aria-label={key === "back" ? "Delete" : key === "000" ? "Three zeros" : key}
-          className="press grid h-[54px] place-items-center rounded-key bg-key font-display text-[22px] font-medium tracking-[-0.02em] text-fg"
+          className="grid h-[51.5px] place-items-center rounded-key bg-key font-display text-[20px] tracking-[-0.01em] text-fg transition-colors duration-150 select-none active:bg-lime active:text-on-lime"
         >
-          {key === "back" ? <Icon name="backspace" size={24} /> : key}
+          {key === "back" ? <Icon name="backspaceFilled" size={22} /> : key}
         </button>
       ))}
     </div>

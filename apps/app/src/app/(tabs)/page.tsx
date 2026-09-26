@@ -3,20 +3,20 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ActivityList } from "@/components/activity-list";
-import { Coin, MiniCard } from "@/components/art";
+import { CardChip, Coin } from "@/components/art";
 import { Avatar } from "@/components/avatar";
 import { HelpButton } from "@/components/help";
 import { Icon } from "@/components/icon";
 import { BalanceFigure, LocalEquivalent } from "@/components/money";
 import { ReceiveSheet } from "@/components/receive-sheet";
 import { TabBarSpacer } from "@/components/tab-bar";
-import { Card, CardTitle, ChipLink, Skeleton, Wordmark } from "@/components/ui";
+import { Card, CardTitle, ChipLink, MoreLink, SCREEN_TOP, Skeleton, SoftPill, Wordmark, cx } from "@/components/ui";
 import { useAccountState } from "@/lib/account/hooks";
 import { getActivity, getBalance, getContacts, getCreditLine } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { relativeDay } from "@/lib/dates";
 import { usd } from "@/lib/money";
 
+/** Home, laid out on the reference's home screen. */
 export default function HomePage() {
   const account = useAccountState();
   const owner = account.status === "ready" || account.status === "locked" ? account.address : null;
@@ -27,217 +27,144 @@ export default function HomePage() {
   const [receiveOpen, setReceiveOpen] = useState(false);
 
   return (
-    <main id="main" className="px-4 pt-[calc(env(safe-area-inset-top)+14px)]">
-      <header className="flex h-12 items-center justify-between">
+    <main id="main" className={cx("relative px-[15px]", SCREEN_TOP)}>
+      {/* The faint grid behind the header and balance, fading out around it. */}
+      <div aria-hidden className="balance-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[340px]" />
+
+      <header className="flex h-[41px] items-center justify-between">
         <h1>
           <Wordmark />
         </h1>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-[9.5px]">
           <HelpButton />
-          <ChipLink href="/plans" icon="plans" sparkle>
+          <ChipLink href="/plans" icon="calendar" sparkle>
             Pay later
           </ChipLink>
         </div>
       </header>
 
-      {account.status === "none" ? (
-        <Link
-          href="/onboard?next=/"
-          className="press mt-4 flex items-center gap-3 rounded-card bg-surface p-3.5 pr-4"
-        >
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-lime text-on-lime">
-            <Icon name="faceId" size={22} />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-medium">This is a sample account</span>
-            <span className="block text-[13px] text-muted">Create yours with Face ID. It takes a second.</span>
-          </span>
-          <Icon name="chevronRight" size={20} className="text-muted" />
-        </Link>
-      ) : null}
-
       {/* Balance */}
-      <section aria-labelledby="balance-label" className="relative -mx-4 mt-5 px-4 pt-3 pb-5 text-center">
-        <div aria-hidden className="balance-grid absolute inset-0 -z-10" />
+      <section aria-labelledby="balance-label" className="mt-8 text-center">
         <Link
           href="/cards"
           id="balance-label"
-          className="press mx-auto inline-flex h-8 items-center gap-2 rounded-full px-2 text-[15px] text-muted"
+          className="press mx-auto inline-flex h-6 items-center text-[16px] tracking-[-0.025em] text-muted"
         >
           Your dollar balance
-          <MiniCard className="h-[14px] w-[22px]" />
-          <Icon name="chevronDown" size={16} />
+          <CardChip className="ml-[6px]" />
+          <Icon name="chevronDown" size={14} strokeWidth={2} className="ml-[8px]" />
           <span className="sr-only">, see your cards</span>
         </Link>
-        <p className="mt-2 text-[46px] leading-none">
-          {balance.value ? <BalanceFigure amount={balance.value.available} /> : <Skeleton className="mx-auto h-[46px] w-56" />}
+        <p className="mt-3 h-[46px] text-[46px] leading-none">
+          {balance.value ? (
+            <BalanceFigure amount={balance.value.available} />
+          ) : (
+            <Skeleton className="mx-auto h-[46px] w-56" />
+          )}
         </p>
-        <p className="mt-2 h-5 text-[15px]">
-          {balance.value ? <LocalEquivalent amount={balance.value.available} /> : null}
-        </p>
+        {balance.value ? <LocalEquivalent amount={balance.value.available} className="mt-1 block text-[14px]" /> : null}
         <Link
           href="/plans"
-          className="press mt-3 inline-flex h-8 items-center gap-1.5 rounded-full bg-pill px-3.5 text-[14px] text-muted"
+          className="press mt-[10.5px] inline-flex h-9 items-center gap-[5px] rounded-full bg-pill px-4 text-[14px] tracking-[-0.03em] text-muted"
         >
           Credit available
-          <span className="tabular font-medium text-fg">{credit.value ? usd(credit.value.available) : "…"}</span>
+          <span className="tabular font-medium text-fg">
+            {credit.value ? usd(credit.value.available, { trim: true }) : "…"}
+          </span>
         </Link>
       </section>
 
       {/* Send / Receive */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="mt-[27.5px] grid grid-cols-2 gap-[8.5px]">
         <Link
           href="/send"
-          className="press flex h-14 items-center justify-center gap-2 rounded-btn bg-surface text-[16px] font-medium"
+          className="press flex h-[55px] items-center justify-center gap-[9px] rounded-full bg-surface text-[16px] tracking-[-0.02em] shadow-surface"
         >
-          <Icon name="send" size={20} />
+          <Icon name="send" size={20} strokeWidth={1.6} />
           Send
         </Link>
         <button
           type="button"
           onClick={() => setReceiveOpen(true)}
-          className="press flex h-14 items-center justify-center gap-2 rounded-btn bg-surface text-[16px] font-medium"
+          className="press flex h-[55px] items-center justify-center gap-[9px] rounded-full bg-surface text-[16px] tracking-[-0.02em] shadow-surface"
         >
-          <Icon name="receive" size={20} />
+          <Icon name="receive" size={20} strokeWidth={1.6} />
           Receive
         </button>
       </div>
 
-      <div className="mt-3 flex flex-col gap-3">
-        {/* Promo */}
-        <Link
-          href="/send"
-          className="press relative flex items-center gap-3 overflow-hidden rounded-card bg-promo p-4 pr-3 text-white ring-1 ring-white/5"
-        >
-          <span className="min-w-0 flex-1">
-            <span className="block text-[17px] font-medium tracking-[-0.01em]">Send dollars abroad, fee free</span>
-            <span className="mt-1 block text-[14px] leading-snug text-white/70">
-              Pay anyone in 150+ countries with a link. It lands in under a second.
-            </span>
+      {/* Promo */}
+      <Link
+        href="/send"
+        className="press relative mt-[22px] flex min-h-[94.5px] items-center overflow-hidden rounded-card bg-promo py-[13px] pr-[14px] pl-[16.5px] text-white shadow-[0_0_0_1px_rgb(255_255_255/0.75)]"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-[16px] leading-5 font-medium tracking-[-0.03em] whitespace-nowrap">
+            Send dollars abroad, fee free
           </span>
-          <Coin size={78} className="shrink-0 drop-shadow-[0_6px_10px_rgb(0_0_0/0.45)]" />
-        </Link>
+          <span className="mt-1 block max-w-[236px] text-[13px] leading-[19px] tracking-[-0.015em] text-[#a6a6a6]">
+            Pay anyone in 150+ countries with a link. It lands in under a second.
+          </span>
+        </span>
+        <Coin size={68} className="shrink-0" />
+      </Link>
 
-        {/* Credit line */}
-        <Card className="p-4">
+      {/* Send again */}
+      <Card className="mt-[13.5px] overflow-hidden pt-4 pb-[16.5px]">
+        <div className="px-4">
           <CardTitle
             action={
-              <Link href="/plans" className="text-[14px] text-muted hover:text-fg">
-                Plans
-              </Link>
-            }
-          >
-            Pay later
-          </CardTitle>
-          {credit.value ? (
-            <>
-              <p className="tabular mt-2 font-display text-[26px] font-medium tracking-[-0.03em]">
-                {usd(credit.value.available)}
-                <span className="ml-1.5 font-sans text-[15px] font-normal tracking-normal text-muted">
-                  available of {usd(credit.value.limit, { trim: true })}
-                </span>
-              </p>
-              <div
-                className="mt-3 flex h-2 overflow-hidden rounded-full bg-pill"
-                role="img"
-                aria-label={`${usd(credit.value.used)} of ${usd(credit.value.limit, { trim: true })} in use`}
-              >
-                <span
-                  className="h-full rounded-full bg-lime"
-                  style={{
-                    width: `${credit.value.limit > 0n ? Number((credit.value.available * 1000n) / credit.value.limit) / 10 : 0}%`,
-                  }}
-                />
-              </div>
-              {credit.value.nextPayment ? (
-                <p className="mt-3 flex items-center gap-2 text-[14px] text-muted">
-                  <Icon name="clock" size={16} />
-                  Next payment
-                  <span className="tabular font-medium text-fg">{usd(credit.value.nextPayment.amount)}</span>
-                  {relativeDay(credit.value.nextPayment.dueAt)} · {credit.value.nextPayment.merchant}
-                </p>
-              ) : (
-                <p className="mt-3 text-[14px] text-muted">Nothing due. Split your next purchase into four at checkout.</p>
-              )}
-            </>
-          ) : (
-            <div className="mt-3 space-y-3">
-              <Skeleton className="h-7 w-48" />
-              <Skeleton className="h-2 w-full" />
-              <Skeleton className="h-4 w-56" />
-            </div>
-          )}
-        </Card>
-
-        {/* Send again */}
-        <Card className="p-4 pb-3">
-          <CardTitle
-            action={
-              <Link
-                href="/send"
-                className="press inline-flex h-8 items-center gap-1 rounded-full bg-surface-2 px-3 text-[14px] ring-1 ring-hairline ring-inset"
-              >
-                <Icon name="plus" size={16} />
+              <SoftPill href="/send">
+                <Icon name="plus" size={15} strokeWidth={1.8} />
                 Add
-              </Link>
+              </SoftPill>
             }
           >
             Send again
           </CardTitle>
-          <ul className="-mx-4 mt-3 flex gap-1 overflow-x-auto px-3 pb-1 [scrollbar-width:none]">
-            {contacts.value
-              ? contacts.value.map((person) => (
-                  <li key={person.id}>
-                    <Link
-                      href={`/send?contact=${person.id}`}
-                      className="press flex w-[68px] flex-col items-center gap-1.5 rounded-2xl py-1"
-                    >
-                      <Avatar name={person.name} country={person.country} size={52} />
-                      <span className="w-full truncate text-center text-[13px]">
-                        {person.name.split(" ")[0]} {person.name.split(" ")[1]?.[0]}
-                      </span>
-                    </Link>
-                  </li>
-                ))
-              : Array.from({ length: 5 }, (_, i) => (
-                  <li key={i} className="flex w-[68px] flex-col items-center gap-1.5 py-1">
-                    <Skeleton className="size-[52px] rounded-full" />
-                    <Skeleton className="h-3 w-10" />
-                  </li>
-                ))}
-          </ul>
-        </Card>
+        </div>
+        <ul className="mt-[14px] flex gap-[17.25px] overflow-x-auto px-4 [scrollbar-width:none]">
+          {contacts.value
+            ? contacts.value.map((person) => (
+                <li key={person.id} className="shrink-0">
+                  <Link href={`/send?contact=${person.id}`} className="press flex w-[57px] flex-col items-center">
+                    <Avatar name={person.name} country={person.country} size={57} />
+                    <span className="mt-[4.5px] w-[74px] truncate text-center text-[14px] leading-[18px] tracking-[-0.03em]">
+                      {person.name.split(" ")[0]} {person.name.split(" ")[1]?.[0]}
+                    </span>
+                  </Link>
+                </li>
+              ))
+            : Array.from({ length: 5 }, (_, i) => (
+                <li key={i} className="flex w-[57px] shrink-0 flex-col items-center gap-[4.5px]">
+                  <Skeleton className="size-[57px] rounded-full" />
+                  <Skeleton className="h-[18px] w-10" />
+                </li>
+              ))}
+        </ul>
+      </Card>
 
-        {/* History */}
-        <Card className="p-4 pb-2">
-          <CardTitle
-            action={
-              <Link href="/activity" className="text-[14px] text-muted hover:text-fg">
-                See all
-              </Link>
-            }
-          >
-            History
-          </CardTitle>
-          <div className="mt-2">
-            {activity.value ? (
-              <ActivityList items={activity.value.slice(0, 4)} />
-            ) : (
-              <div className="space-y-3 py-2">
-                {Array.from({ length: 3 }, (_, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <Skeleton className="size-12 rounded-full" />
-                    <div className="flex-1 space-y-2">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-3 w-24" />
-                    </div>
+      {/* History */}
+      <Card className="mt-[13.5px] px-4 pt-4 pb-2">
+        <CardTitle action={<MoreLink href="/activity">see more</MoreLink>}>History</CardTitle>
+        <div className="mt-[7.25px]">
+          {activity.value ? (
+            <ActivityList items={activity.value.slice(0, 4)} />
+          ) : (
+            <div>
+              {Array.from({ length: 3 }, (_, i) => (
+                <div key={i} className="flex h-[70.5px] items-center gap-[14.5px]">
+                  <Skeleton className="size-14 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </Card>
-      </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
 
       <TabBarSpacer />
       <ReceiveSheet open={receiveOpen} onClose={() => setReceiveOpen(false)} />

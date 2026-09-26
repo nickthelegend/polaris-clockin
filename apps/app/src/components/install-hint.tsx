@@ -35,13 +35,13 @@ export function InstallHint() {
   if (standalone || dismissed || (!ios && !prompt)) return null;
 
   return (
-    <Card className="flex items-center gap-3 p-4">
-      <span className="grid size-11 shrink-0 place-items-center rounded-[14px] bg-chip text-lime">
+    <Card className="flex items-center gap-[14.5px] px-[16.5px] py-[14.5px]">
+      <span className="grid size-11 shrink-0 place-items-center rounded-[12px] bg-chip text-lime">
         <Icon name="star" size={22} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-medium">Keep Polaris on your home screen</p>
-        <p className="text-[13px] text-muted">
+        <p className="text-[16px] font-medium tracking-[-0.03em]">Keep Polaris on your home screen</p>
+        <p className="text-[14px] tracking-[-0.02em] text-meta">
           {ios ? "Tap Share, then Add to Home Screen." : "One tap, and it opens like an app."}
         </p>
       </div>

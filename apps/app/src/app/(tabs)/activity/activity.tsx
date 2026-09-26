@@ -6,7 +6,7 @@ import { HelpButton } from "@/components/help";
 import { Icon } from "@/components/icon";
 import { TabBarSpacer } from "@/components/tab-bar";
 import { TabHeader } from "@/components/tab-header";
-import { Card, cx, Skeleton } from "@/components/ui";
+import { Card, CardTitle, cx, Skeleton } from "@/components/ui";
 import { useAccountState } from "@/lib/account/hooks";
 import { type ActivityItem, getActivity } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
@@ -42,10 +42,10 @@ export function Activity() {
   const groups = groupByDay(items);
 
   return (
-    <main id="main" className="px-4 pt-[calc(env(safe-area-inset-top)+14px)]">
+    <main id="main" className="px-[15px]">
       <TabHeader title="Activity" right={<HelpButton />} />
 
-      <div role="radiogroup" aria-labelledby={filterLabel} className="mt-5 flex gap-2">
+      <div role="radiogroup" aria-labelledby={filterLabel} className="mt-[21px] flex gap-[8.5px]">
         <span id={filterLabel} className="sr-only">
           Show
         </span>
@@ -57,8 +57,8 @@ export function Activity() {
             aria-checked={filter === f.id}
             onClick={() => setFilter(f.id)}
             className={cx(
-              "press h-9 rounded-full px-4 text-[14px] font-medium",
-              filter === f.id ? "bg-chip text-on-chip" : "bg-surface text-fg",
+              "press h-10 rounded-full px-[15px] text-[16px] tracking-[-0.02em]",
+              filter === f.id ? "bg-chip text-on-chip" : "bg-surface text-fg shadow-surface",
             )}
           >
             {f.label}
@@ -66,36 +66,41 @@ export function Activity() {
         ))}
       </div>
 
-      <div className="mt-5 flex flex-col gap-5">
+      <div className="mt-[13.5px] flex flex-col gap-[13.5px]">
         {activity.value === undefined ? (
-          <Card className="space-y-4 p-4">
-            {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <Skeleton className="size-12 rounded-full" />
-                <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-36" />
-                  <Skeleton className="h-3 w-24" />
+          <Card className="px-4 pt-4 pb-2">
+            <Skeleton className="h-[18px] w-20" />
+            <div className="mt-[7.25px]">
+              {Array.from({ length: 5 }, (_, i) => (
+                <div key={i} className="flex h-[70.5px] items-center gap-[14.5px]">
+                  <Skeleton className="size-14 rounded-full" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-4 w-16" />
                 </div>
-                <Skeleton className="h-4 w-16" />
-              </div>
-            ))}
+              ))}
+            </div>
           </Card>
         ) : groups.length === 0 ? (
-          <Card className="p-6 text-center">
-            <span className="mx-auto grid size-12 place-items-center rounded-full bg-pill">
-              <Icon name="activity" size={22} />
+          <Card className="px-5 pt-6 pb-5 text-center">
+            <span className="mx-auto grid size-14 place-items-center rounded-full bg-well text-[#77797c]">
+              <Icon name="navActivity" size={26} strokeWidth={1.5} />
             </span>
-            <p className="mt-3 text-[16px] font-medium">Nothing here yet</p>
-            <p className="mt-1 text-[14px] text-muted">Payments, links and instalments show up the moment they happen.</p>
+            <p className="mt-3 text-[16px] font-medium tracking-[-0.03em]">Nothing here yet</p>
+            <p className="mx-auto mt-1 max-w-[32ch] text-[14px] tracking-[-0.02em] text-meta">
+              Payments, links and instalments show up the moment they happen.
+            </p>
           </Card>
         ) : (
           groups.map((group) => (
-            <section key={group.label} aria-label={group.label}>
-              <h2 className="mb-2 px-1 text-[14px] font-medium text-muted">{group.label}</h2>
-              <Card className="px-4 py-1.5">
-                <ActivityList items={group.items} />
-              </Card>
-            </section>
+            <Card key={group.label} aria-label={group.label} className="px-4 pt-4 pb-2">
+              <CardTitle>{group.label}</CardTitle>
+              <div className="mt-[7.25px]">
+                <ActivityList items={group.items} withTime />
+              </div>
+            </Card>
           ))
         )}
       </div>

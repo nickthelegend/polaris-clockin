@@ -9,15 +9,16 @@ import { HelpButton } from "@/components/help";
 import { Icon } from "@/components/icon";
 import { InstallHint } from "@/components/install-hint";
 import { LocalEquivalent } from "@/components/money";
+import { PartyCard, PartyRow } from "@/components/party";
 import { ReceiptRows } from "@/components/receipt-sheet";
-import { Button, Card, cx, ScreenHeader, Skeleton, stagger } from "@/components/ui";
+import { Button, Card, cx, SCREEN_TOP, ScreenHeader, Skeleton, stagger } from "@/components/ui";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState } from "@/lib/account/hooks";
 import { describeDuration, describeInterval, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { longDate, shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
-import { usd, usdParts } from "@/lib/money";
+import { usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
 import { useNow } from "@/lib/use-now";
 
@@ -53,49 +54,43 @@ export function Checkout({ link }: { link: PaymentLink }) {
 
   if (paid) return <Receipt link={link} paid={paid} />;
 
-  const { whole, cents } = usdParts(link.amount);
-
   return (
-    <main id="main" className="px-4 pb-[calc(190px+env(safe-area-inset-bottom))]">
+    <main id="main" className="px-[15px] pb-[calc(200px+env(safe-area-inset-bottom))]">
       <ScreenHeader title="Checkout" back="/" right={<HelpButton />} />
 
-      {/* Merchant, as the "Send to" card */}
-      <Card className="rise p-4" style={stagger(0)}>
-        <p className="text-[15px] text-muted">Pay to</p>
-        <div className="mt-3 flex items-center gap-3 border-t border-divider pt-3">
-          <Avatar name={link.merchant.name} kind="merchant" size={52} />
-          <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1.5 text-[17px] font-medium">
-              {link.merchant.name}
-              <span className="grid size-4 place-items-center rounded-full bg-lime text-on-lime" title="Verified business">
-                <Icon name="check" size={11} strokeWidth={3} />
-                <span className="sr-only">Verified business</span>
+      {/* The merchant, on the reference's "Send to" card */}
+      <div className="rise mt-[21px]" style={stagger(0)}>
+        <PartyCard label="Pay to">
+          <PartyRow
+            avatar={<Avatar name={link.merchant.name} kind="merchant" icon="store" size={57.5} />}
+            name={
+              <span className="inline-flex items-center gap-1.5">
+                {link.merchant.name}
+                <span className="grid size-4 place-items-center rounded-full bg-lime text-on-lime" title="Verified business">
+                  <Icon name="check" size={11} strokeWidth={3} />
+                  <span className="sr-only">Verified business</span>
+                </span>
               </span>
-            </p>
-            <p className="truncate text-[14px] text-muted">
-              {link.merchant.category} · {link.merchant.city}
-            </p>
-          </div>
-        </div>
-      </Card>
+            }
+            meta={`${link.merchant.category} · ${link.merchant.city}`}
+          />
+        </PartyCard>
+      </div>
 
       {/* Amount */}
-      <section className="rise py-8 text-center" style={stagger(1)} aria-label="Amount">
-        <p className="tabular font-display text-[64px] leading-none font-bold tracking-[-0.05em]">
-          {whole}
-          <span className="text-[40px] tracking-[-0.04em]">{cents === ".00" ? "" : cents}</span>
+      <section className="rise pt-10 pb-9 text-center" style={stagger(1)} aria-label="Amount">
+        <p className="font-display text-[62px] leading-none font-medium tracking-[-0.005em]">
+          {usd(link.amount, { trim: true })}
         </p>
-        <p className="mt-2 text-[15px]">
-          <LocalEquivalent amount={link.amount} />
-        </p>
-        <p className="mx-auto mt-3 max-w-[30ch] text-[16px] text-fg">{link.description}</p>
+        <p className="mt-2 text-[16px] tracking-[-0.02em]">{link.description}</p>
+        <LocalEquivalent amount={link.amount} className="mt-0.5 block text-[14px]" />
       </section>
 
       {/* How to pay */}
-      <h2 id={groupLabel} className="rise mb-3 px-1 text-[15px] font-medium text-muted" style={stagger(2)}>
+      <h2 id={groupLabel} className="rise mb-3 px-[2px] text-[16px] tracking-[-0.025em] text-muted" style={stagger(2)}>
         How do you want to pay?
       </h2>
-      <div role="radiogroup" aria-labelledby={groupLabel} className="rise flex flex-col gap-3" style={stagger(3)}>
+      <div role="radiogroup" aria-labelledby={groupLabel} className="rise flex flex-col gap-[13.5px]" style={stagger(3)}>
         {link.modes.now ? (
           <Option
             checked={mode === "now"}
@@ -135,11 +130,11 @@ export function Checkout({ link }: { link: PaymentLink }) {
 
       {/* The limit, and why */}
       {mode === "later" && later ? (
-        <Card className="mt-3 p-4">
+        <Card className="mt-[13.5px] px-[16.5px] pt-4 pb-[14px]">
           <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-[15px] font-medium">Your Pay later limit</h3>
+            <h3 className="text-[16px] font-medium tracking-[-0.03em]">Your Pay later limit</h3>
             {credit.value ? (
-              <p className="tabular text-[15px]">
+              <p className="text-[16px] tracking-[-0.03em]">
                 <span className="font-medium">{usd(credit.value.available)}</span>
                 <span className="text-muted"> of {usd(credit.value.limit, { trim: true })}</span>
               </p>
@@ -148,11 +143,11 @@ export function Checkout({ link }: { link: PaymentLink }) {
             )}
           </div>
           {credit.value ? (
-            <ul className="mt-3 flex flex-col gap-1.5 border-t border-divider pt-3" aria-label="Why your limit is what it is">
+            <ul className="mt-3 flex flex-col gap-2 border-t border-divider pt-3" aria-label="Why your limit is what it is">
               {credit.value.reasons.map((r) => (
-                <li key={r.label} className="flex justify-between gap-3 text-[14px] text-muted">
+                <li key={r.label} className="flex justify-between gap-3 text-[14px] tracking-[-0.02em] text-meta">
                   <span>{r.label}</span>
-                  <span className={cx("tabular", r.points > 0 ? "text-positive" : "text-muted")}>
+                  <span className={cx(r.points > 0 ? "text-positive" : "text-muted")}>
                     {r.points > 0 ? `+${r.points}` : r.points}
                   </span>
                 </li>
@@ -160,7 +155,7 @@ export function Checkout({ link }: { link: PaymentLink }) {
             </ul>
           ) : null}
           {overLimit && credit.value ? (
-            <p className="mt-3 rounded-[14px] bg-pill px-3 py-2.5 text-[14px]" role="status">
+            <p className="mt-3 rounded-[14px] bg-pill-soft px-3 py-2.5 text-[14px] tracking-[-0.02em]" role="status">
               This plan needs {usd(later.total)} of limit and you have {usd(credit.value.available)}. Pay now, or raise
               your limit.
             </p>
@@ -169,14 +164,16 @@ export function Checkout({ link }: { link: PaymentLink }) {
             <button
               type="button"
               onClick={() => setHistoryOpen(true)}
-              className="press mt-3 flex w-full items-center gap-3 rounded-[16px] bg-surface-2 p-3 text-left ring-1 ring-hairline ring-inset"
+              className="press mt-3 flex w-full items-center gap-3 rounded-[14px] bg-pill-faint p-3 text-left"
             >
               <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lime text-on-lime">
                 <Icon name="trendUp" size={18} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[15px] font-medium">Raise your limit</span>
-                <span className="block text-[13px] text-muted">Bring your history from a wallet you already use</span>
+                <span className="block text-[15px] font-medium tracking-[-0.03em]">Raise your limit</span>
+                <span className="block text-[13px] tracking-[-0.01em] text-meta">
+                  Bring your history from a wallet you already use
+                </span>
               </span>
               <Icon name="chevronRight" size={18} className="text-muted" />
             </button>
@@ -187,9 +184,9 @@ export function Checkout({ link }: { link: PaymentLink }) {
       <BringHistorySheet open={historyOpen} onClose={() => setHistoryOpen(false)} credit={credit.value} />
 
       {/* Confirm */}
-      <div className="column-fixed bottom-0 z-30 bg-gradient-to-t from-[var(--bg-bottom)] from-70% to-transparent px-4 pt-8 pb-[calc(16px+env(safe-area-inset-bottom))]">
+      <div className="column-fixed bottom-0 z-30 bg-gradient-to-t from-[var(--bg-bottom)] from-65% to-transparent px-[15px] pt-8 pb-[calc(20.5px+env(safe-area-inset-bottom))]">
         {shortOfMoney ? (
-          <p className="mb-3 text-center text-[14px] text-negative" role="status">
+          <p className="mb-3 text-center text-[14px] tracking-[-0.02em] text-negative" role="status">
             Not enough dollars in your account for this. {later && mode !== "later" ? "Try Pay in 4." : ""}
           </p>
         ) : null}
@@ -214,7 +211,7 @@ export function Checkout({ link }: { link: PaymentLink }) {
   );
 }
 
-/** A selectable surface card; the selected one gets an ink ring and a filled dot. */
+/** A selectable surface card; the selected one gets an ink ring and an ink check. */
 function Option({
   checked,
   onSelect,
@@ -234,7 +231,7 @@ function Option({
     <div
       className={cx(
         "rounded-card bg-surface transition-shadow duration-200",
-        checked ? "shadow-[inset_0_0_0_2px_var(--fg)]" : "shadow-[inset_0_0_0_1px_var(--divider)]",
+        checked ? "shadow-[0_0_0_1.5px_var(--fg),0_6px_14px_-8px_rgb(0_0_0/0.1)]" : "shadow-surface",
       )}
     >
       <button
@@ -242,26 +239,26 @@ function Option({
         role="radio"
         aria-checked={checked}
         onClick={onSelect}
-        className="press flex w-full items-center gap-3 rounded-card p-4 text-left"
+        className="press flex w-full items-center gap-[14.5px] rounded-card px-[16.5px] py-4 text-left"
       >
         <span
           aria-hidden
           className={cx(
-            "grid size-6 shrink-0 place-items-center rounded-full",
-            checked ? "bg-fg text-bg" : "ring-[1.5px] ring-hairline ring-inset",
+            "grid size-[22px] shrink-0 place-items-center rounded-full",
+            checked ? "bg-fg text-white" : "shadow-[inset_0_0_0_1.5px_var(--hairline)]",
           )}
         >
-          {checked ? <Icon name="check" size={14} strokeWidth={3} /> : null}
+          {checked ? <Icon name="check" size={13} strokeWidth={3} /> : null}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-3">
-            <span className="text-[17px] font-medium">{title}</span>
-            <span className="tabular font-display text-[19px] font-semibold tracking-[-0.02em]">{figure}</span>
+            <span className="text-[16px] leading-[22px] font-medium tracking-[-0.03em]">{title}</span>
+            <span className="text-[16px] font-medium tracking-[-0.03em] whitespace-nowrap">{figure}</span>
           </span>
-          <span className="mt-0.5 block text-[14px] text-muted">{detail}</span>
+          <span className="mt-[2px] block text-[14px] leading-[18px] tracking-[-0.02em] text-meta">{detail}</span>
         </span>
       </button>
-      {checked && children ? <div className="px-4 pb-4">{children}</div> : null}
+      {checked && children ? <div className="px-[16.5px] pb-4">{children}</div> : null}
     </div>
   );
 }
@@ -275,17 +272,17 @@ function Schedule({ link, now }: { link: PaymentLink; now: number | null }) {
       <ol className="grid grid-cols-4 gap-2" aria-label="Payment schedule">
         {later.amounts.map((amount, i) => (
           <li key={i} className="flex flex-col gap-1.5">
-            <span aria-hidden className={cx("h-1.5 rounded-full", i === 0 ? "bg-lime" : "bg-pill")} />
-            <span className="text-[12px] text-muted">
-              {i === 0 ? "Today" : now ? shortDate(now + i * later.interval * 1000) : " "}
+            <span aria-hidden className={cx("h-[5px] rounded-full", i === 0 ? "bg-lime" : "bg-pill")} />
+            <span className="text-[13px] tracking-[-0.01em] text-muted">
+              {i === 0 ? "Today" : now ? shortDate(now + i * later.interval * 1000) : " "}
             </span>
-            <span className="tabular text-[14px] font-medium">{usd(amount)}</span>
+            <span className="text-[14px] font-medium tracking-[-0.02em]">{usd(amount)}</span>
           </li>
         ))}
       </ol>
-      <p className="mt-3 flex justify-between text-[14px]">
-        <span className="text-muted">Total, {later.aprBps / 100}% APR</span>
-        <span className="tabular font-medium">{usd(later.total)}</span>
+      <p className="mt-3 flex justify-between text-[14px] tracking-[-0.02em]">
+        <span className="text-meta">Total, {later.aprBps / 100}% APR</span>
+        <span className="font-medium">{usd(later.total)}</span>
       </p>
     </div>
   );
@@ -335,8 +332,9 @@ function Receipt({ link, paid }: { link: PaymentLink; paid: Paid }) {
   }, [link, paid]);
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
-      <div className="pt-[calc(env(safe-area-inset-top)+56px)] text-center">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(20.5px+env(safe-area-inset-bottom))]">
+      <div className={cx("text-center", SCREEN_TOP)}>
+        <span className="block h-14" aria-hidden />
         <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-lime text-on-lime">
           <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden>
             <path
@@ -350,23 +348,23 @@ function Receipt({ link, paid }: { link: PaymentLink; paid: Paid }) {
             />
           </svg>
         </span>
-        <h1 className="mt-6 font-display text-[44px] leading-none font-bold tracking-[-0.05em]">Paid.</h1>
-        <p className="mt-3 text-[17px]" role="status">
+        <h1 className="mt-6 font-display text-[44px] leading-none font-semibold tracking-[-0.05em]">Paid.</h1>
+        <p className="mt-3 text-[16px] tracking-[-0.02em]" role="status">
           {headline}
         </p>
       </div>
 
-      <div className="mt-8 flex flex-col gap-3">
+      <div className="mt-8 flex flex-col gap-[13.5px]">
         <ReceiptRows rows={rows} />
         <InstallHint />
       </div>
 
-      <div className="mt-auto flex flex-col gap-3 pt-8">
+      <div className="mt-auto flex flex-col gap-[13.5px] pt-8">
         <a
           href={paid.receipt.explorerUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="press flex h-14 items-center justify-center gap-2 rounded-btn bg-surface text-[16px] font-medium"
+          className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] tracking-[-0.03em] shadow-surface"
         >
           View receipt
           <Icon name="external" size={18} />
