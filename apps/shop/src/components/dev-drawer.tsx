@@ -63,7 +63,7 @@ function Json({ value }: { value: unknown }) {
 
 function Code({ children }: { children: string }) {
   return (
-    <pre className="overflow-x-auto rounded-xl bg-black/40 p-4 font-mono text-[0.76rem] leading-[1.65] text-[#e9ecef]">
+    <pre className="overflow-x-auto rounded-xl bg-black/40 p-3.5 font-mono text-[0.66rem] leading-[1.65] text-[#e9ecef] sm:p-4 sm:text-[0.76rem]">
       <code>{children}</code>
     </pre>
   );
