@@ -21,6 +21,8 @@ export function HeroNav() {
   const go = ready || reduced;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
 
   // Start on the first frame after mount, in step with the hero.
   useEffect(() => {
@@ -30,9 +32,14 @@ export function HeroNav() {
 
   useEffect(() => {
     if (!menuOpen) return;
+    // Move focus into the menu when it opens.
+    listRef.current?.querySelector("a")?.focus();
     const close = (e: PointerEvent | KeyboardEvent) => {
       if (e instanceof KeyboardEvent) {
-        if (e.key === "Escape") setMenuOpen(false);
+        if (e.key === "Escape") {
+          setMenuOpen(false);
+          buttonRef.current?.focus();
+        }
         return;
       }
       if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
@@ -143,6 +150,7 @@ export function HeroNav() {
           </div>
 
           <motion.button
+            ref={buttonRef}
             type="button"
             aria-label={menuOpen ? "Close menu" : "Open menu"}
             aria-expanded={menuOpen}
@@ -166,7 +174,7 @@ export function HeroNav() {
                 exit={{ opacity: 0, scale: 0.96, y: -4 }}
                 transition={{ duration: 0.25, ease: EASE_REVEAL }}
               >
-                <ul>
+                <ul ref={listRef}>
                   {[...nav.links, nav.login].map((link) => (
                     <li key={link.label}>
                       <a

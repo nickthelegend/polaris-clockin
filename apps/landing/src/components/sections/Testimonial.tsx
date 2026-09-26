@@ -17,7 +17,9 @@ import type { Assets } from "@/lib/assets";
  * 7. Testimonial: a full-bleed photo with a soft green blur rising from the
  * bottom left. The name and role in lime, then a large lime quote that
  * reveals line by line. Round prev/next buttons at the bottom right; the next
- * button's ring draws over the 6s autoplay interval, then advances.
+ * button's ring draws over the 6s autoplay interval, then advances. Autoplay
+ * pauses on hover and focus, and stops for good once it has shown every
+ * quote once (back on the first), so it never runs on indefinitely.
  */
 export function Testimonial({ assets }: { assets: Assets }) {
   const { items, intervalMs } = testimonials;
@@ -25,8 +27,14 @@ export function Testimonial({ assets }: { assets: Assets }) {
   const [ref, inView] = useReveal<HTMLElement>(0.35);
   const reduced = useReduced();
   const [paused, setPaused] = useState(false);
+  const [autoTurns, setAutoTurns] = useState(0);
+  const autoplay = autoTurns < items.length;
 
   const next = useCallback(() => setIndex((i) => (i + 1) % items.length), [items.length]);
+  const autoNext = useCallback(() => {
+    setAutoTurns((n) => n + 1);
+    next();
+  }, [next]);
   const prev = useCallback(() => setIndex((i) => (i - 1 + items.length) % items.length), [items.length]);
   const item = items[index] ?? items[0]!;
 
@@ -103,9 +111,9 @@ export function Testimonial({ assets }: { assets: Assets }) {
           </button>
           <ProgressRing
             duration={intervalMs / 1000}
-            running={inView && !reduced && !paused}
+            running={autoplay && inView && !reduced && !paused}
             runKey={index}
-            onComplete={next}
+            onComplete={autoNext}
             size={48}
             className="text-white/90"
           >

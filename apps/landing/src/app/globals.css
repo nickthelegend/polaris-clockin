@@ -18,12 +18,15 @@
   --lavender: #e0e5f8;
   --paper: #ffffff;
   --paper-warm: #fdfff2;
-  --muted: #8a8f7a;
+  /* Muted copy. The frames sample about #8a8f7a, which is 3.3:1 on white;
+     this is the nearest tone that passes AA (4.9:1) at body sizes. */
+  --muted: #6e735f;
   --pill: #eeeeea;
   --stone: #d6d7cb;
   --sage: #808767;
   --sage-panel: #abb38c; /* the frosted "Send money" panel */
-  --footer-muted: #899264;
+  /* Footer copy on the olive card: sampled #899264 lifted to 4.7:1. */
+  --footer-muted: #9ca576;
 
   --radius-card: 22px;
   --radius-footer: 28px;

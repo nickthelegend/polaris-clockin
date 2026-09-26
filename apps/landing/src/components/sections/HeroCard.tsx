@@ -104,8 +104,9 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
                   aria-pressed={tab === name}
                   onClick={() => setTab(name)}
                   className={cn(
-                    "reveal-word transition-colors",
-                    tab === name ? "font-medium text-olive" : "text-[#9a9d8f] hover:text-olive/70",
+                    // A 24px target; the negative margin keeps the row where it was.
+                    "reveal-word -mx-0.5 -my-[5px] min-h-6 px-0.5 py-[5px] transition-colors",
+                    tab === name ? "font-medium text-olive" : "text-muted hover:text-olive/70",
                   )}
                   initial={{ opacity: 0, filter: "blur(8px)", y: 4 }}
                   animate={go ? { opacity: 1, filter: "blur(0px)", y: 0 } : undefined}
@@ -160,7 +161,7 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
               delay={1.3}
               stagger={0.05}
               lineClassName=""
-              className="absolute bottom-[22px] left-6 text-[13px] tracking-[-0.01em] text-[#8e9184]"
+              className="absolute bottom-[22px] left-6 text-[13px] tracking-[-0.01em] text-muted"
             />
           </div>
         </motion.div>

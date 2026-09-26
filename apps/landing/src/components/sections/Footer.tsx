@@ -125,7 +125,8 @@ export function Footer() {
                       aria-pressed={lang === l}
                       onClick={() => setLang(l)}
                       className={cn(
-                        "transition-colors",
+                        // A 24px target; the negative margin keeps the row where it was.
+                        "-mx-1.5 -my-[5px] min-h-6 min-w-6 px-1.5 py-[5px] transition-colors",
                         lang === l ? "text-white" : "text-footer-muted hover:text-white/80",
                       )}
                     >
