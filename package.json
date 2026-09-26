@@ -1,0 +1,15 @@
+{
+  "name": "polaris",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Polaris: Stripe for every app on Monad. Payment links, pay-in-4 credit and subscriptions, settled in AUSD.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "packageManager": "pnpm@10.29.2",
+  "scripts": {
+    "contracts:compile": "pnpm --filter @polarispay/contracts compile",
+    "contracts:test": "pnpm --filter @polarispay/contracts test"
+  }
+}
