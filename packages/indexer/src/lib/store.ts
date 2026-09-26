@@ -138,8 +138,11 @@ export class Store {
       id: PROTOCOL_ID,
       feeBps: s.feeBps,
       requireUnderwriting: s.requireUnderwriting,
+      // CollateralVault's default; MultiplierChanged updates it.
       collateralMultiplierBps: 15_000,
-      collateralCountsTowardLimits: false,
+      // The deploy script always points ScoreManager at the vault, so this is
+      // right even when ENVIO_START_BLOCK skips the CollateralVaultSet event.
+      collateralCountsTowardLimits: true,
       checkoutPaused: false,
       merchantCount: 0,
       registeredMerchantCount: 0,
