@@ -5,6 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface ICollateralBoost {
     function creditBoostOf(address user) external view returns (uint256);
+    function lockedOf(address user) external view returns (uint256);
 }
 
 /**
@@ -31,6 +32,11 @@ interface ICollateralBoost {
  *      `recordOnTimePayment` for any wallet and lift it past the $1,000
  *      underwriting cap, so a bug in the receiver became unlimited credit.
  *      Split, neither key can do the other's job.
+ *
+ *      The on-time bonus is rationed here, not in the engine: one clock per
+ *      wallet, whatever the number of writers. Kept per engine, every writer
+ *      paid its own weekly bonus and a redeploy reset everyone's ration, and
+ *      underwriting could not start the clock. See `recordOnTimeInstallment`.
  */
 contract ScoreManager is Ownable {
     uint16 public constant MIN_SCORE = 300;
@@ -65,6 +71,23 @@ contract ScoreManager is Ownable {
     uint16 public constant MAX_DEFI_POINTS = 30;
     uint16 public constant EXCHANGE_FUNDED_POINTS = 10;
 
+    /// How many liquidations close a wallet's unsecured line for good. The
+    /// same count declines a report in `scoreFromFacts`, so a default on
+    /// Polaris weighs at least as much as one the DON attests elsewhere.
+    uint32 public constant DECLINE_AT_LIQUIDATIONS = 2;
+
+    /**
+     * @notice The least time between two on-time bonuses for one wallet,
+     *         measured on the schedule rather than the clock.
+     * @dev A wallet that can earn a bonus per call reaches 850 with a dust plan
+     *      prepaid a unit at a time, or twenty plans paid at once: no rule
+     *      about a single instalment stops a farmer who opens many. What a
+     *      farmer cannot parallelise is time, so bonuses are at most one a
+     *      week, the way a bureau reads a monthly statement rather than every
+     *      card swipe. See `recordOnTimeInstallment` for which moment counts.
+     */
+    uint256 public constant BONUS_PERIOD = 7 days;
+
     struct Profile {
         uint16 score;
         uint32 onTimePayments;
@@ -72,8 +95,10 @@ contract ScoreManager is Ownable {
         uint32 liquidations;
         uint64 firstSeenAt;
         bool initialized;
-        /// Set by underwriting when a fact disqualifies the wallet outright.
-        /// A declined wallet gets no unsecured line; collateral still works.
+        /// Set by underwriting when a fact disqualifies the wallet outright,
+        /// and by a wallet's DECLINE_AT_LIQUIDATIONS-th liquidation here. A
+        /// declined wallet gets no unsecured line; collateral still works, at
+        /// face value.
         bool declined;
         /// Set only by `underwrite`. `initialized` says the wallet has a
         /// record; this says the DON has looked at it. While
@@ -104,6 +129,9 @@ contract ScoreManager is Ownable {
     mapping(address => bool) public isWriter;
     /// May open a first line from attested facts. The DON report receiver.
     mapping(address => bool) public isUnderwriter;
+    /// The moment each wallet's last on-time bonus counts from, or its report
+    /// if that is later. See BONUS_PERIOD.
+    mapping(address => uint64) public lastBonusAt;
 
     /// Optional. Unset means the protocol runs as pure credit, no collateral.
     ICollateralBoost public collateralVault;
@@ -123,8 +151,17 @@ contract ScoreManager is Ownable {
      *      wallet skip the DON by repaying a dust plan on the secured path, and
      *      a secured-path default opened a $200 line a clean stranger could not
      *      get. The gate reads `underwritten`, which only `underwrite` sets.
-     *      History earned on the secured path is not thrown away: it is folded
-     *      into the opening score when the wallet is underwritten.
+     *      History earned on the secured path is not thrown away: on-time and
+     *      late payments alike are folded into the opening score when the
+     *      wallet is underwritten.
+     *
+     *      Nor does the secured path lend unsecured by the back door. The
+     *      vault's multiplier (150% by default) means a third of a secured line
+     *      is credit no collateral covers, so a fresh account could lock X,
+     *      borrow 1.5X and walk away. A wallet with no unsecured line of its
+     *      own -- not yet underwritten while this is on, or declined -- borrows
+     *      against its collateral at face value, so a default is always
+     *      recoverable in full. See `creditLimitOf`.
      */
     bool public requireUnderwriting;
 
@@ -134,6 +171,9 @@ contract ScoreManager is Ownable {
     event CollateralVaultSet(address indexed vault);
     event Underwritten(address indexed user, uint16 score, bool declined, uint64 observedAt);
     event RequireUnderwritingSet(bool required);
+    /// A wallet's liquidations here reached DECLINE_AT_LIQUIDATIONS and its
+    /// unsecured line closed. The app reads this to explain a limit of zero.
+    event DeclinedForDefaults(address indexed user, uint32 liquidations);
 
     error VaultNotAContract(address vault);
 
@@ -210,16 +250,15 @@ contract ScoreManager is Ownable {
      *      ("get to 700 and your limit doubles") instead of a smooth curve
      *      nobody can reason about.
      *
-     *      Zero, whatever the score, for a wallet underwriting declined, and,
-     *      while `requireUnderwriting` is on, for any wallet not yet
-     *      underwritten, however its record came about. Both still reach the
-     *      collateral boost through `creditLimitOf`, so the secured path stays
-     *      open to them.
+     *      Zero, whatever the score, for a declined wallet (by its report, or by
+     *      defaulting here DECLINE_AT_LIQUIDATIONS times), and, while
+     *      `requireUnderwriting` is on, for any wallet not yet underwritten,
+     *      however its record came about. Both still reach their collateral
+     *      through `creditLimitOf`, so the secured path stays open to them.
      */
     function baseLimitOf(address user) public view returns (uint256) {
         Profile storage p = _profiles[user];
-        if (p.declined) return 0;
-        if (requireUnderwriting && !p.underwritten) return 0;
+        if (_securedOnly(p)) return 0;
 
         uint16 s = p.initialized ? p.score : STARTING_SCORE;
         if (s >= 800) return 5_000e6;
@@ -241,17 +280,42 @@ contract ScoreManager is Ownable {
      *      A failing vault call must not brick origination, so the boost is
      *      read defensively: an unreachable or misbehaving vault degrades to
      *      "no boost" rather than reverting every loan in the protocol.
+     *
+     *      A wallet with no unsecured line of its own (see `_securedOnly`) gets
+     *      at most the collateral's face value. The multiplier's extra half is
+     *      credit nothing secures, and for these wallets nobody has assessed
+     *      it: a never-underwritten account locked X, borrowed 1.5X, walked away
+     *      and left a third as bad debt, from as many fresh accounts as it
+     *      liked. At face value, everything owed, interest included, fits
+     *      inside what liquidation can seize. An underwritten wallet keeps the
+     *      full multiplier on top of the line its report opened.
      */
     function creditLimitOf(address user) external view returns (uint256) {
         uint256 base = baseLimitOf(user);
         if (address(collateralVault) == address(0)) {
             return base;
         }
-        try collateralVault.creditBoostOf(user) returns (uint256 boost) {
-            return base + boost;
+        uint256 boost;
+        try collateralVault.creditBoostOf(user) returns (uint256 b) {
+            boost = b;
         } catch {
             return base;
         }
+        if (_securedOnly(_profiles[user])) {
+            try collateralVault.lockedOf(user) returns (uint256 locked) {
+                if (boost > locked) boost = locked;
+            } catch {
+                // Face value unknown: lend nothing rather than guess.
+                boost = 0;
+            }
+        }
+        return base + boost;
+    }
+
+    /// No unsecured line: declined, or not yet underwritten while underwriting
+    /// is required. Such a wallet borrows only against collateral, at face value.
+    function _securedOnly(Profile storage p) private view returns (bool) {
+        return p.declined || (requireUnderwriting && !p.underwritten);
     }
 
     // -----------------------------------------------------------------
@@ -302,7 +366,7 @@ contract ScoreManager is Ownable {
         }
 
         score = uint16(uint256(raw));
-        declined = f.priorLiquidations >= 2 || f.relatedWallets >= 25;
+        declined = f.priorLiquidations >= DECLINE_AT_LIQUIDATIONS || f.relatedWallets >= 25;
     }
 
     /**
@@ -310,21 +374,33 @@ contract ScoreManager is Ownable {
      * @dev Underwriter-only: the receiver that verifies the DON's report calls
      *      this.
      *
-     *      Runs once per wallet, and never over a record that holds a late
-     *      payment or a liquidation. If it could, a borrower who defaulted
-     *      could fetch a fresh report of a clean-looking wallet and have the
-     *      liquidation written over: a bad record laundered through an oracle.
-     *      While `requireUnderwriting` is off it also refuses any record at
-     *      all, since that record already gives the wallet a line and
-     *      underwriting is for the cold start only.
+     *      Runs once per wallet, and never over a record that holds a
+     *      liquidation. If it could, a borrower who defaulted could fetch a
+     *      fresh report of a clean-looking wallet and have the liquidation
+     *      written over: a bad record laundered through an oracle. While
+     *      `requireUnderwriting` is off it also refuses any record at all,
+     *      since that record already gives the wallet a line and underwriting
+     *      is for the cold start only.
      *
-     *      That leaves one record it accepts: while underwriting is required, a
-     *      wallet whose only history is on-time payments on the secured path.
-     *      Such a wallet has no unsecured line, and refusing it would leave it
-     *      without one for good. Its earned points are kept, added to what the
-     *      facts give, and the sum is still capped at MAX_UNDERWRITTEN_SCORE,
-     *      so however much secured history came first, a report never opens a
+     *      While underwriting is required it accepts one more kind of record: a
+     *      wallet never underwritten, with no liquidation, whose history is
+     *      on-time and late payments on the secured path. Such a wallet has no
+     *      unsecured line, and refusing it would leave it without one for good.
+     *      Refusing a late mark too turned a -40 into a lifetime ban, and the
+     *      timing of that mark is in the relayer's and the keeper's hands, not
+     *      the borrower's. So the history is folded in instead: what the
+     *      secured path moved the score by, up or down, is added to what the
+     *      facts give, the same number the wallet would hold had the report
+     *      come first. A penalty carries into the opening score, so nothing is
+     *      laundered, and the sum is still capped at MAX_UNDERWRITTEN_SCORE, so
+     *      however much secured history came first, a report never opens a
      *      line above $1,000.
+     *
+     *      The report starts the bonus clock. Otherwise a wallet whose last
+     *      bonus was a week ago could underwrite at the top of the $1,000 tier
+     *      and cross into $2,500 with a plan opened and repaid in the next
+     *      transaction: the cap would last one block. From the report, the
+     *      first bonus waits a full BONUS_PERIOD.
      *
      *      Refuses facts observed more than MAX_EVIDENCE_AGE ago, or stamped in
      *      the future. An old report is a snapshot of a wallet that may since
@@ -337,10 +413,7 @@ contract ScoreManager is Ownable {
         returns (uint16 score)
     {
         Profile storage p = _profiles[user];
-        if (
-            p.initialized &&
-            (p.underwritten || !requireUnderwriting || p.latePayments != 0 || p.liquidations != 0)
-        ) {
+        if (p.initialized && (p.underwritten || !requireUnderwriting || p.liquidations != 0)) {
             revert AlreadyHasRecord();
         }
         if (f.observedAt > block.timestamp || block.timestamp - f.observedAt > MAX_EVIDENCE_AGE) {
@@ -352,13 +425,17 @@ contract ScoreManager is Ownable {
 
         uint16 old = STARTING_SCORE;
         if (p.initialized) {
-            // Clean secured-path history: on-time payments only, so the score
-            // has only ever risen from STARTING_SCORE. Guarded anyway, so the
-            // fold can never underflow into a revert that locks a wallet out.
+            // Secured-path history, signed: every record starts at
+            // STARTING_SCORE, so the difference is exactly what its payments
+            // earned and cost.
             old = p.score;
-            uint256 earned = old > STARTING_SCORE ? old - STARTING_SCORE : 0;
-            uint256 folded = uint256(score) + earned;
-            score = folded > MAX_UNDERWRITTEN_SCORE ? MAX_UNDERWRITTEN_SCORE : uint16(folded);
+            int256 folded = int256(uint256(score)) + int256(uint256(old)) -
+                int256(uint256(STARTING_SCORE));
+            if (folded < int256(uint256(MIN_SCORE))) folded = int256(uint256(MIN_SCORE));
+            if (folded > int256(uint256(MAX_UNDERWRITTEN_SCORE))) {
+                folded = int256(uint256(MAX_UNDERWRITTEN_SCORE));
+            }
+            score = uint16(uint256(folded));
         } else {
             p.initialized = true;
             p.firstSeenAt = uint64(block.timestamp);
@@ -367,6 +444,7 @@ contract ScoreManager is Ownable {
         p.score = score;
         p.declined = declined;
         p.underwritten = true;
+        lastBonusAt[user] = uint64(block.timestamp);
 
         emit Underwritten(user, score, declined, f.observedAt);
         emit ScoreChanged(user, old, score, "underwritten");
@@ -376,9 +454,71 @@ contract ScoreManager is Ownable {
     // Repayment history -- what the LoanEngine records
     // -----------------------------------------------------------------
 
+    /**
+     * @notice Record an instalment paid on time, and pay its bonus if the
+     *         wallet's ration allows. Returns whether the score moved.
+     * @dev What the LoanEngine calls. `dueAt` is when the instalment fell due.
+     *
+     *      The ration is measured on the schedule, not on the block. Each bonus
+     *      counts from the earlier of the instalment's due date and the moment
+     *      it was paid, and the next must count from at least BONUS_PERIOD
+     *      later. Measured on the block, the weekly Pay in 4 the product sells
+     *      lost bonuses it had earned: its instalments fall due exactly a week
+     *      apart, so a keeper that collected one a second sooner after its due
+     *      date than the last, or a retry inside grace followed by a prompt
+     *      collection, landed under a week and withheld an on-time bonus. A
+     *      hostile keeper could do that to every other instalment on purpose.
+     *      On the schedule, instalments a week apart are a week apart whatever
+     *      the lag, and paying inside grace costs nothing.
+     *
+     *      Paying early does not move the count forward: an instalment paid
+     *      before its due date counts from the moment it was paid. Otherwise a
+     *      farmer, who chooses the due dates of its own plans, could open one
+     *      due a week out, prepay it at once, and take a bonus the moment the
+     *      previous one landed. The cost is that an early payment inside a week
+     *      of the last bonus earns none; waiting for the due date never earns
+     *      less. Nor does counting from the due date let collections run the
+     *      ration ahead: an instalment scored on time was paid inside its grace
+     *      period, so it counts from no earlier than the grace period before
+     *      the block, and each bonus counts from a week after the last. Two
+     *      bonuses can land up to one grace period under a week apart on the
+     *      clock, but that is borrowed once, not per bonus: N of them still
+     *      span N-1 weeks of schedule, and N bonuses after a report need N
+     *      full weeks of clock.
+     *
+     *      Writers are trusted to pass the real due date; a writer can already
+     *      pay a bonus outright with `recordOnTimePayment`.
+     *
+     *      `onTimePayments` counts every on-time instalment recorded here,
+     *      rationed or not; the score moves at most once per BONUS_PERIOD.
+     */
+    function recordOnTimeInstallment(address user, uint256 dueAt)
+        external
+        onlyWriter
+        returns (bool scored)
+    {
+        Profile storage p = _touch(user);
+        p.onTimePayments += 1;
+
+        uint256 countsFrom = dueAt < block.timestamp ? dueAt : block.timestamp;
+        uint256 last = lastBonusAt[user];
+        if (last != 0 && countsFrom < last + BONUS_PERIOD) return false;
+
+        lastBonusAt[user] = uint64(countsFrom);
+        _adjust(user, p, int256(uint256(ON_TIME_BONUS)), "on-time payment");
+        return true;
+    }
+
+    /**
+     * @notice Pay an on-time bonus outright, with no ration.
+     * @dev Kept for the imported interface. Every Polaris engine records
+     *      instalments through `recordOnTimeInstallment`; this still starts the
+     *      bonus clock, so a bonus paid here is one the ration sees.
+     */
     function recordOnTimePayment(address user) external onlyWriter {
         Profile storage p = _touch(user);
         p.onTimePayments += 1;
+        lastBonusAt[user] = uint64(block.timestamp);
         _adjust(user, p, int256(uint256(ON_TIME_BONUS)), "on-time payment");
     }
 
@@ -388,10 +528,25 @@ contract ScoreManager is Ownable {
         _adjust(user, p, -int256(uint256(LATE_PENALTY)), "late payment");
     }
 
+    /**
+     * @notice Record a liquidation. The DECLINE_AT_LIQUIDATIONS-th closes the
+     *         wallet's unsecured line for good.
+     * @dev The penalty alone is not enough. Every score under 580 reads as the
+     *      $200 floor tier, the minimum score included, so a wallet that had
+     *      been underwritten once could borrow its $200, revoke the allowance,
+     *      default, and do it again every few days for ever, each round booked
+     *      in full as bad debt. Two liquidations elsewhere decline a report
+     *      outright; two here now close the line the same way. The secured path
+     *      stays open, at face value.
+     */
     function recordLiquidation(address user) external onlyWriter {
         Profile storage p = _touch(user);
         p.liquidations += 1;
         _adjust(user, p, -int256(uint256(DEFAULT_PENALTY)), "liquidation");
+        if (p.liquidations >= DECLINE_AT_LIQUIDATIONS && !p.declined) {
+            p.declined = true;
+            emit DeclinedForDefaults(user, p.liquidations);
+        }
     }
 
     function _touch(address user) private returns (Profile storage p) {

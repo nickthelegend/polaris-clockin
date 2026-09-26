@@ -6,9 +6,11 @@
  * formula to a hand-computed table, hold the off-chain mirror to the contract,
  * and prove the guards around the one write that sets a score without
  * repayment history: it runs once, on fresh evidence, never over bad history,
- * and it never opens a line above $1,000. With underwriting required, they
- * prove that nothing but a report opens an unsecured line: not a dust plan,
- * not a default, not a late payment.
+ * and it never opens a line above $1,000, not even for the one transaction
+ * after it lands. With underwriting required, they prove that nothing but a
+ * report opens an unsecured line: not a dust plan, not a default, not a late
+ * payment, and not the collateral multiplier either. And they prove that a
+ * line, once open, cannot be defaulted on for ever.
  */
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
@@ -246,7 +248,7 @@ describe("underwriting", () => {
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
     });
 
-    it("only an underwriter can underwrite, and a repayment writer cannot", async () => {
+    it("only a writer can underwrite: the underwriter role, which a repayment writer does not hold", async () => {
       // The engine's role: it records repayments and nothing else.
       const [, , , , , engineKey] = await ethers.getSigners();
       await scores.setWriter(engineKey.address, true);
@@ -435,21 +437,28 @@ describe("underwriting", () => {
       expect(await scores.scoreOf(user.address)).to.equal(720);
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(1_000));
 
-      // Nor with a real plan paid off at once: one bonus, and the week's is spent.
+      // Nor with a real plan paid off at once: the report started the clock.
       await engine.createLoan(user.address, merchant.address, AUSD(40), 2, HOUR);
-      await engine.connect(user).repay(2, await engine.installmentAmount(2));
-      await expect(engine.connect(user).repay(2, await engine.outstandingOf(2)))
-        .to.emit(engine, "OnTimeBonusWithheld")
-        .withArgs(2, user.address);
-      expect(await scores.scoreOf(user.address)).to.equal(732);
+      for (let i = 0; i < 2; i++) {
+        await expect(engine.connect(user).repay(2, await engine.installmentAmount(2)))
+          .to.emit(engine, "OnTimeBonusWithheld")
+          .withArgs(2, user.address);
+      }
+      expect(await scores.scoreOf(user.address)).to.equal(720);
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(1_000));
 
-      // 740 is reached by repaying over time: a week on, the next instalment counts.
-      await time.increase(BONUS_PERIOD);
-      await engine.createLoan(user.address, merchant.address, AUSD(40), 2, HOUR);
-      await engine.connect(user).repay(3, await engine.installmentAmount(3));
-      expect(await scores.scoreOf(user.address)).to.equal(744);
-      expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(2_500));
+      // 740 is reached by repaying over time: a bonus a week, two weeks.
+      for (const [week, score, limit] of [
+        [1, 732, 1_000],
+        [2, 744, 2_500],
+      ]) {
+        await time.increase(BONUS_PERIOD);
+        await engine.createLoan(user.address, merchant.address, AUSD(40), 2, HOUR);
+        const id = await engine.loanCount();
+        await engine.connect(user).repay(id, await engine.installmentAmount(id));
+        expect(await scores.scoreOf(user.address), "week " + week).to.equal(score);
+        expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(limit));
+      }
     });
 
     it("two liquidations decline the line", async () => {
@@ -493,10 +502,12 @@ describe("underwriting", () => {
       expect(await scores.creditLimitOf(user.address)).to.equal(0n);
 
       await vault.connect(user).lock(AUSD(200));
-      // 150% of what is locked, and nothing unsecured on top.
-      expect(await scores.creditLimitOf(user.address)).to.equal(AUSD(300));
-      await expect(borrow(user, AUSD(250))).to.not.be.reverted;
-      await expect(borrow(user, AUSD(100))).to.be.revertedWithCustomError(
+      // What is locked, at face value: the multiplier's extra half would be
+      // unsecured credit, which is exactly what the decline refused.
+      expect(await vault.creditBoostOf(user.address)).to.equal(AUSD(300));
+      expect(await scores.creditLimitOf(user.address)).to.equal(AUSD(200));
+      await expect(borrow(user, AUSD(190))).to.not.be.reverted;
+      await expect(borrow(user, AUSD(10))).to.be.revertedWithCustomError(
         engine,
         "ExceedsCreditLimit"
       );
@@ -524,9 +535,9 @@ describe("underwriting", () => {
         "ExceedsCreditLimit"
       );
 
-      // Collateral is the way in without a report.
+      // Collateral is the way in without a report, at its face value.
       await vault.connect(stranger).lock(AUSD(100));
-      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(150));
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(100));
 
       // And a report opens the unsecured line.
       await scores.connect(underwriter).underwrite(user.address, await fresh());
@@ -553,7 +564,7 @@ describe("underwriting", () => {
 
       // A real plan prepaid instalment by instalment earns one bonus, not 24,
       // and even that record opens nothing without a report.
-      await vault.connect(stranger).lock(AUSD(199));
+      await vault.connect(stranger).lock(AUSD(249));
       await engine.createLoan(stranger.address, merchant.address, AUSD(240), 24, HOUR);
       for (let i = 0; i < 24; i++) {
         await engine.connect(stranger).repay(2, await engine.installmentAmount(2));
@@ -563,7 +574,7 @@ describe("underwriting", () => {
       expect(await scores.baseLimitOf(stranger.address)).to.equal(0n);
 
       // Collateral back out: no line at all, let alone $5,000.
-      await vault.connect(stranger).withdraw(AUSD(200));
+      await vault.connect(stranger).withdraw(AUSD(250));
       expect(await scores.creditLimitOf(stranger.address)).to.equal(0n);
       await expect(
         engine.createLoan(stranger.address, merchant.address, AUSD(4_900), 1, 30 * DAY)
@@ -578,11 +589,11 @@ describe("underwriting", () => {
       await scores.setRequireUnderwriting(true);
       expect(await scores.baseLimitOf(user.address)).to.equal(0n);
 
-      // The reproduced attack: 1 AUSD locked, a 1.4 AUSD plan, allowance
+      // The reproduced attack: 1 AUSD locked, a plan for all of it, allowance
       // revoked, liquidated. The record used to read as the $200 tier.
       await vault.connect(stranger).lock(AUSD(1));
-      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(1.5));
-      await engine.createLoan(stranger.address, merchant.address, AUSD(1.4), 1, HOUR);
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(1));
+      await engine.createLoan(stranger.address, merchant.address, AUSD(0.99), 1, HOUR);
       await ausd.connect(stranger).approve(await engine.getAddress(), 0);
       await time.increase(HOUR + GRACE + 1);
       await engine.connect(merchant).liquidate(1);
@@ -592,9 +603,13 @@ describe("underwriting", () => {
       expect(p.liquidations).to.equal(1);
       expect(p.underwritten).to.equal(false);
 
-      // A defaulter gets no more than a clean stranger: nothing.
+      // A defaulter gets no more than a clean stranger: nothing unsecured,
+      // only the few units of collateral the seizure left behind.
       expect(await scores.baseLimitOf(stranger.address)).to.equal(0n);
-      expect(await scores.creditLimitOf(stranger.address)).to.equal(0n);
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(
+        await vault.lockedOf(stranger.address)
+      );
+      expect(await vault.lockedOf(stranger.address)).to.be.lessThan(AUSD(0.01));
       await ausd.connect(stranger).approve(await engine.getAddress(), AUSD(5_000));
       await expect(
         engine.createLoan(stranger.address, merchant.address, AUSD(195), 1, 30 * DAY)
@@ -608,30 +623,78 @@ describe("underwriting", () => {
       }
       expect(await scores.scoreOf(stranger.address)).to.equal(450);
 
-      // The secured path stays open to it.
+      // The secured path stays open to it, and the default cost the pool nothing.
+      expect(await engine.badDebt()).to.equal(0n);
       await vault.connect(stranger).lock(AUSD(100));
-      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(150));
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(
+        await vault.lockedOf(stranger.address)
+      );
     });
 
     it("a late payment on the secured path never opens an unsecured line either", async () => {
       await scores.setRequireUnderwriting(true);
-      await vault.connect(stranger).lock(AUSD(200));
+      await vault.connect(stranger).lock(AUSD(250));
       await borrow(stranger, AUSD(200));
 
       await time.increaseTo((await engine.installmentDueAt(1, 0)) + BigInt(GRACE) + 1n);
       await engine.connect(merchant).collectInstallment(1);
       expect(await scores.scoreOf(stranger.address)).to.equal(560);
       expect(await scores.baseLimitOf(stranger.address)).to.equal(0n);
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(250));
+    });
 
-      await expect(
-        scores.connect(underwriter).underwrite(stranger.address, await fresh(BEST))
-      ).to.be.revertedWithCustomError(scores, "AlreadyHasRecord");
-      expect(await scores.baseLimitOf(stranger.address)).to.equal(0n);
+    it("one late mark on the secured path, collected a second past grace, no longer bars a wallet from underwriting for good", async () => {
+      await scores.setRequireUnderwriting(true);
+
+      // Two identical borrowers; only `user` was underwritten before borrowing.
+      await scores.connect(underwriter).underwrite(user.address, await fresh(BEST));
+      for (const who of [user, stranger]) {
+        await vault.connect(who).lock(AUSD(250));
+        await borrow(who, AUSD(200));
+      }
+
+      // The keeper, or a hostile relayer, lands both first instalments one
+      // second past grace.
+      for (const id of [1n, 2n]) {
+        await time.setNextBlockTimestamp((await engine.installmentDueAt(id, 0)) + BigInt(GRACE) + 1n);
+        await engine.connect(merchant).collectInstallment(id);
+      }
+      expect(await scores.scoreOf(user.address)).to.equal(680);
+      expect(await scores.scoreOf(stranger.address)).to.equal(560);
+
+      // The same report now opens the same line for both: the -40 carries
+      // into the opening score instead of becoming a lifetime ban.
+      await expect(scores.connect(underwriter).underwrite(stranger.address, await fresh(BEST)))
+        .to.emit(scores, "Underwritten")
+        .withArgs(stranger.address, 680, false, anyValue)
+        .and.to.emit(scores, "ScoreChanged")
+        .withArgs(stranger.address, 560, 680, "underwritten");
+      expect(await scores.baseLimitOf(stranger.address)).to.equal(await scores.baseLimitOf(user.address));
+      expect(await scores.baseLimitOf(stranger.address)).to.equal(AUSD(1_000));
+      const p = await scores.profileOf(stranger.address);
+      expect(p.latePayments).to.equal(1);
+      expect(p.underwritten).to.equal(true);
+
+      // And nothing is laundered: with a weaker report the penalty still
+      // lands, 40 under what the report alone would open.
+      const [, , , , , weak] = await ethers.getSigners();
+      await ausd.mint(weak.address, AUSD(1_000));
+      await ausd.connect(weak).approve(await vault.getAddress(), AUSD(1_000));
+      await ausd.connect(weak).approve(await engine.getAddress(), AUSD(1_000));
+      await vault.connect(weak).lock(AUSD(250));
+      await borrow(weak, AUSD(200));
+      await time.increaseTo((await engine.installmentDueAt(3n, 0)) + BigInt(GRACE) + 1n);
+      await engine.connect(merchant).collectInstallment(3n);
+      const report = await fresh({ priorLiquidations: 1 });
+      expect((await scores.scoreFromFacts(report))[0]).to.equal(445n);
+      await scores.connect(underwriter).underwrite(weak.address, report);
+      expect(await scores.scoreOf(weak.address)).to.equal(405);
+      expect(await scores.baseLimitOf(weak.address)).to.equal(AUSD(200));
     });
 
     it("a clean secured-path record opens no unsecured line until it is underwritten, then counts toward the opening score", async () => {
       await scores.setRequireUnderwriting(true);
-      await vault.connect(stranger).lock(AUSD(200));
+      await vault.connect(stranger).lock(AUSD(250));
       await borrow(stranger, AUSD(200));
       await engine.connect(stranger).repay(1, await engine.installmentAmount(1));
 
@@ -643,7 +706,7 @@ describe("underwriting", () => {
 
       // Paid off and the collateral taken back: nothing unsecured remains.
       await engine.connect(stranger).repay(1, await engine.outstandingOf(1));
-      await vault.connect(stranger).withdraw(AUSD(200));
+      await vault.connect(stranger).withdraw(AUSD(250));
       expect(await scores.creditLimitOf(stranger.address)).to.equal(0n);
       await expect(borrow(stranger, AUSD(10))).to.be.revertedWithCustomError(
         engine,
@@ -661,7 +724,9 @@ describe("underwriting", () => {
 
       const after = await scores.profileOf(stranger.address);
       expect(after.underwritten).to.equal(true);
-      expect(after.onTimePayments).to.equal(1);
+      // Both payments were on time and both are counted; the second, inside
+      // a week of the first, moved no score.
+      expect(after.onTimePayments).to.equal(2);
       expect(after.firstSeenAt).to.equal(before.firstSeenAt);
       expect(await scores.baseLimitOf(stranger.address)).to.equal(AUSD(200));
       await expect(borrow(stranger, AUSD(150))).to.not.be.reverted;
@@ -674,7 +739,7 @@ describe("underwriting", () => {
 
     it("the DON's decline still applies to a wallet that repaid on the secured path first", async () => {
       await scores.setRequireUnderwriting(true);
-      await vault.connect(stranger).lock(AUSD(200));
+      await vault.connect(stranger).lock(AUSD(250));
       await borrow(stranger, AUSD(200));
       await engine.connect(stranger).repay(1, await engine.installmentAmount(1));
       expect(await scores.scoreOf(stranger.address)).to.equal(612);
@@ -689,13 +754,13 @@ describe("underwriting", () => {
         .withArgs(stranger.address, 328, true, anyValue);
 
       expect(await scores.baseLimitOf(stranger.address)).to.equal(0n);
-      // 150% of the $200 still locked, and nothing unsecured on top.
-      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(300));
+      // The $250 still locked, at face value, and nothing unsecured on top.
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(250));
     });
 
     it("secured-path history folded into a report still never opens a line above $1,000", async () => {
       await scores.setRequireUnderwriting(true);
-      await vault.connect(stranger).lock(AUSD(200));
+      await vault.connect(stranger).lock(AUSD(250));
       await borrow(stranger, AUSD(200));
 
       // Two on-time instalments a fortnight apart: +24.
@@ -732,6 +797,176 @@ describe("underwriting", () => {
       await scores.setRequireUnderwriting(false);
       await check();
       await expect(borrow(stranger, AUSD(400))).to.not.be.reverted;
+    });
+  });
+
+  describe("what a report cannot be turned into", () => {
+    /// The cheapest plan that scores: $20, one hourly instalment, repaid at once.
+    async function farm(who) {
+      await engine.createLoan(who.address, merchant.address, AUSD(20), 1, HOUR);
+      const id = await engine.loanCount();
+      return engine.connect(who).repay(id, await engine.outstandingOf(id));
+    }
+
+    it("the $1,000 cap outlasts the report: a folded score at the top of the tier cannot cross into $2,500 the next transaction", async () => {
+      await scores.setRequireUnderwriting(true);
+
+      // One bonus earned on the secured path, a week before the report.
+      await vault.connect(user).lock(AUSD(21));
+      await farm(user);
+      expect(await scores.scoreOf(user.address)).to.equal(612);
+      await time.increase(BONUS_PERIOD);
+
+      // The best facts plus the +12 folded in: 732, the $1,000 tier.
+      await scores.connect(underwriter).underwrite(user.address, await fresh(BEST));
+      expect(await scores.scoreOf(user.address)).to.equal(732);
+      expect(await scores.lastBonusAt(user.address)).to.equal(BigInt(await time.latest()));
+
+      // The reproduced attack: a $20 plan opened and repaid straight after the
+      // report used to land 744 and the $2,500 tier. Every day of the first
+      // week, it earns nothing.
+      for (let day = 0; day < 7; day++) {
+        await expect(farm(user)).to.emit(engine, "OnTimeBonusWithheld");
+        expect(await scores.scoreOf(user.address)).to.equal(732);
+        expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(1_000));
+        await time.increase(DAY - 60);
+      }
+
+      // A full week after the report, the next bonus counts.
+      await time.increaseTo((await scores.lastBonusAt(user.address)) + BigInt(BONUS_PERIOD));
+      await farm(user);
+      expect(await scores.scoreOf(user.address)).to.equal(744);
+      expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(2_500));
+    });
+
+    it("from a report, each tier above $1,000 takes a week of repaying per bonus, however the plans are timed", async () => {
+      await scores.connect(underwriter).underwrite(user.address, await fresh(BEST));
+      const reportedAt = BigInt(await time.latest());
+      expect(await scores.scoreOf(user.address)).to.equal(720);
+
+      // Recycling the same $20 twice a week: only one of each pair counts,
+      // the one a full week after the last bonus (or the report) counted.
+      for (let week = 1; week <= 7; week++) {
+        const nextAt = (await scores.lastBonusAt(user.address)) + BigInt(BONUS_PERIOD);
+        await time.increaseTo(nextAt - BigInt(3 * DAY));
+        await expect(farm(user)).to.emit(engine, "OnTimeBonusWithheld");
+        await time.increaseTo(nextAt);
+        await farm(user);
+        expect(await scores.scoreOf(user.address), "week " + week).to.equal(720 + 12 * week);
+        expect(await scores.baseLimitOf(user.address)).to.equal(
+          week < 2 ? AUSD(1_000) : week < 7 ? AUSD(2_500) : AUSD(5_000)
+        );
+      }
+      // 800 is seven bonuses from the report, so $5,000 took seven full weeks.
+      expect(BigInt(await time.latest()) - reportedAt).to.be.greaterThanOrEqual(
+        BigInt(7 * BONUS_PERIOD)
+      );
+    });
+
+    it("with requireUnderwriting on, a never-underwritten wallet borrows against collateral at face value, so defaulting never pays", async () => {
+      await scores.setRequireUnderwriting(true);
+      const wallets = (await ethers.getSigners()).slice(10, 13);
+      const merchantBefore = await ausd.balanceOf(merchant.address);
+      let locked = 0n;
+
+      for (const w of wallets) {
+        await ausd.mint(w.address, AUSD(1_000));
+        await ausd.connect(w).approve(await vault.getAddress(), AUSD(1_000));
+        await ausd.connect(w).approve(await engine.getAddress(), AUSD(2_000));
+        await vault.connect(w).lock(AUSD(1_000));
+        locked += AUSD(1_000);
+
+        // The multiplier still says 150%; nobody has assessed the extra half.
+        expect(await vault.creditBoostOf(w.address)).to.equal(AUSD(1_500));
+        expect(await scores.baseLimitOf(w.address)).to.equal(0n);
+        expect(await scores.creditLimitOf(w.address)).to.equal(AUSD(1_000));
+
+        // The reproduced attack borrowed $1,480 against $1,000.
+        await expect(
+          engine.createLoan(w.address, merchant.address, AUSD(1_480), 1, HOUR)
+        ).to.be.revertedWithCustomError(engine, "ExceedsCreditLimit");
+
+        // All it can do is borrow what it locked, and walk away.
+        await engine.createLoan(w.address, merchant.address, AUSD(990), 1, HOUR);
+        const id = await engine.loanCount();
+        await ausd.connect(w).approve(await engine.getAddress(), 0);
+        await time.increase(HOUR + GRACE + 1);
+        await engine.connect(merchant).liquidate(id);
+      }
+
+      // Everything owed, interest included, came back out of the collateral.
+      const received = (await ausd.balanceOf(merchant.address)) - merchantBefore;
+      expect(received).to.equal(AUSD(2_970));
+      expect(received).to.be.lessThan(locked);
+      expect(await engine.badDebt()).to.equal(0n);
+    });
+
+    it("an underwritten wallet keeps the full multiplier on top of the line its report opened", async () => {
+      await scores.setRequireUnderwriting(true);
+      await scores.connect(underwriter).underwrite(user.address, await fresh());
+      await vault.connect(user).lock(AUSD(100));
+      expect(await scores.creditLimitOf(user.address)).to.equal(AUSD(200) + AUSD(150));
+    });
+  });
+
+  describe("defaults on Polaris", () => {
+    /// Borrow what the line allows, revoke the allowance, and be liquidated.
+    async function defaultOnce(who, principal) {
+      await ausd.connect(who).approve(await engine.getAddress(), AUSD(5_000));
+      await engine.createLoan(who.address, merchant.address, principal, 1, HOUR);
+      const id = await engine.loanCount();
+      await ausd.connect(who).approve(await engine.getAddress(), 0);
+      await time.increase(HOUR + GRACE + 1);
+      return engine.connect(merchant).liquidate(id);
+    }
+
+    it("a wallet cannot default its $200 floor line again and again: its second liquidation here closes the line", async () => {
+      await scores.setRequireUnderwriting(true);
+      // An empty report opens the $200 floor line, by design.
+      await scores.connect(underwriter).underwrite(user.address, await fresh());
+      expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
+      const walletStart = await ausd.balanceOf(user.address);
+
+      await defaultOnce(user, AUSD(190));
+      expect(await scores.scoreOf(user.address)).to.equal(370);
+      // One default costs 150 points and leaves the floor line: people recover.
+      expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
+
+      // The second closes it, the same count that declines a report.
+      await expect(defaultOnce(user, AUSD(190)))
+        .to.emit(scores, "DeclinedForDefaults")
+        .withArgs(user.address, 2);
+      const p = await scores.profileOf(user.address);
+      expect(p.liquidations).to.equal(2);
+      expect(p.declined).to.equal(true);
+      expect(p.underwritten).to.equal(true);
+      expect(await scores.baseLimitOf(user.address)).to.equal(0n);
+
+      // The loop is over: no third plan, and at most two floor lines lost.
+      await ausd.connect(user).approve(await engine.getAddress(), AUSD(5_000));
+      await expect(
+        engine.createLoan(user.address, merchant.address, AUSD(10), 1, HOUR)
+      ).to.be.revertedWithCustomError(engine, "ExceedsCreditLimit");
+      expect(await engine.badDebt()).to.be.lessThan(AUSD(400));
+      expect(await ausd.balanceOf(user.address)).to.equal(walletStart);
+
+      // What the two facts would have said, the chain now says too.
+      const [, wouldDecline] = await scores.scoreFromFacts(facts({ priorLiquidations: 2 }));
+      expect(wouldDecline).to.equal(true);
+      expect(await scores.DECLINE_AT_LIQUIDATIONS()).to.equal(2n);
+
+      // Collateral still works, at face value, so every later default is covered.
+      await vault.connect(user).lock(AUSD(100));
+      expect(await scores.creditLimitOf(user.address)).to.equal(AUSD(100));
+    });
+
+    it("two liquidations close the line with underwriting off as well", async () => {
+      expect(await scores.requireUnderwriting()).to.equal(false);
+      await defaultOnce(stranger, AUSD(190));
+      expect(await scores.baseLimitOf(stranger.address)).to.equal(AUSD(200));
+      await defaultOnce(stranger, AUSD(190));
+      expect(await scores.baseLimitOf(stranger.address)).to.equal(0n);
+      expect(await scores.creditLimitOf(stranger.address)).to.equal(0n);
     });
   });
 });

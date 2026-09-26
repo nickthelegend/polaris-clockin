@@ -35,9 +35,10 @@ interface IMerchantChecks {
  *        collectInstallment(loanId)   anyone; takes no amount, draws exactly
  *                                     the instalment that has fallen due
  *        repay(loanId, amount)        the borrower only; any amount, any time
- *        repayWithSig(loanId, amount, deadline, sig)
+ *        repayWithSig(loanId, amount, expectedRepaid, deadline, sig)
  *                                     anyone, carrying the borrower's signed
- *                                     RepayIntent for that loan and amount
+ *                                     RepayIntent for that loan, amount and
+ *                                     the loan's state when they signed
  *      The keeper path is permissionless because the schedule, not the caller,
  *      decides what moves and when, so a stranger can only ever do what the
  *      borrower already agreed to. `repay` takes an arbitrary amount, and that
@@ -48,8 +49,9 @@ interface IMerchantChecks {
  *      is the borrower's consent.
  *
  *      Paying on time raises the score, but slowly and only for real plans:
- *      at most one on-time bonus per borrower per BONUS_PERIOD, and none from
- *      a plan under MIN_SCORED_PRINCIPAL. See `_applyPayment`.
+ *      none from a plan under MIN_SCORED_PRINCIPAL, and at most one bonus a
+ *      week per borrower, rationed by ScoreManager on the instalments' due
+ *      dates so every engine shares one clock. See `_applyPayment`.
  *
  *      Two functions exist purely for the keeper and are the reason this
  *      protocol maps cleanly onto KeeperHub's check-and-execute:
@@ -98,21 +100,6 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     uint64 public immutable minInterval;
 
     /**
-     * @notice The least time between two on-time bonuses for one borrower.
-     * @dev The bonus used to land on every call that completed an instalment,
-     *      however small the plan and however early the payment, so a wallet
-     *      could open a 24-base-unit plan, prepay it one unit at a time and
-     *      reach 850 in 24 transactions. A per-instalment rule cannot fix that:
-     *      whatever makes one instalment count, a farmer opens twenty of them
-     *      in parallel and pays them all at once. What a farmer cannot
-     *      parallelise is time, so the bonus is rationed per borrower in
-     *      wall-clock time: +12 a week at most, the way a bureau reads a
-     *      monthly statement rather than every card swipe. A Pay in 4 plan
-     *      on a two-week schedule still earns on every instalment.
-     */
-    uint256 public constant BONUS_PERIOD = 7 days;
-
-    /**
      * @notice The smallest plan whose instalments can raise a score.
      * @dev A plan below this still opens, still collects and still costs a
      *      late payment or a liquidation; it just earns no bonus. Repaying a
@@ -121,9 +108,11 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
      */
     uint256 public constant MIN_SCORED_PRINCIPAL = 20e6;
 
-    /// EIP-712 typehash for the borrower's signed payment.
-    bytes32 public constant REPAY_INTENT_TYPEHASH =
-        keccak256("RepayIntent(uint256 loanId,uint256 amount,uint256 nonce,uint256 deadline)");
+    /// EIP-712 typehash for the borrower's signed payment. `expectedRepaid` is
+    /// the loan's `totalRepaid` when the borrower signed. See `repayWithSig`.
+    bytes32 public constant REPAY_INTENT_TYPEHASH = keccak256(
+        "RepayIntent(uint256 loanId,uint256 amount,uint256 expectedRepaid,uint256 nonce,uint256 deadline)"
+    );
 
     enum LoanStatus {
         Active,
@@ -151,8 +140,6 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     mapping(uint256 => Loan) public loans;
     mapping(address => uint256) public activeDebtOf;
     mapping(address => bool) public isOriginator;
-    /// When each borrower last earned an on-time bonus. See BONUS_PERIOD.
-    mapping(address => uint64) public lastBonusAt;
 
     uint256 public loanCount;
     uint256 public protocolFeesAccrued;
@@ -184,9 +171,12 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     /// payment the borrower made themselves.
     event InstallmentCollected(uint256 indexed loanId, address indexed caller, uint256 amount);
     /// An instalment completed on time but earned no bonus: the plan is under
-    /// MIN_SCORED_PRINCIPAL, or the borrower already earned one within
-    /// BONUS_PERIOD. Emitted so the app can say why the score did not move.
+    /// MIN_SCORED_PRINCIPAL, or the borrower's weekly ration in ScoreManager
+    /// was already spent. Emitted so the app can say why the score did not
+    /// move.
     event OnTimeBonusWithheld(uint256 indexed loanId, address indexed borrower);
+    /// A borrower cancelled their next signed RepayIntent without paying.
+    event NonceInvalidated(address indexed borrower, uint256 nonce);
     event LoanFullyRepaid(uint256 indexed loanId, address indexed borrower);
     event LoanLiquidated(
         uint256 indexed loanId,
@@ -214,6 +204,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     error NotBorrower();
     error SignatureExpired();
     error InvalidSignature();
+    error StaleIntent(uint256 repaid, uint256 expected);
     error InvalidInterval();
     error MerchantNotEligible();
     error ZeroAddress();
@@ -502,10 +493,22 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
      *      move exactly what the borrower chose, into this loan, and nothing
      *      else. The nonce stops a relayer replaying it, and the deadline
      *      stops one holding it back for later.
+     *
+     *      It also names the loan's `totalRepaid` at signing, and is refused
+     *      once any other payment has landed on the loan. A borrower who
+     *      signs a cure for an overdue instalment chose to pay that
+     *      instalment, not to prepay the next. Without the binding, the
+     *      keeper's retry could collect the instalment first, and the cure
+     *      then landed as a prepayment, drawing a second instalment a week or
+     *      more early; and an intent the borrower had covered by paying
+     *      directly could still be spent, drawing the same amount twice. Any
+     *      payment to the loan, by anyone, now retires the intents signed
+     *      before it. `invalidateNonce` cancels one without paying.
      */
     function repayWithSig(
         uint256 loanId,
         uint256 amount,
+        uint256 expectedRepaid,
         uint256 deadline,
         bytes calldata signature
     ) external nonReentrant {
@@ -515,13 +518,36 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
 
         bytes32 digest = _hashTypedDataV4(
             keccak256(
-                abi.encode(REPAY_INTENT_TYPEHASH, loanId, amount, _useNonce(l.borrower), deadline)
+                abi.encode(
+                    REPAY_INTENT_TYPEHASH,
+                    loanId,
+                    amount,
+                    expectedRepaid,
+                    _useNonce(l.borrower),
+                    deadline
+                )
             )
         );
         (address signer, ECDSA.RecoverError err, ) = ECDSA.tryRecover(digest, signature);
         if (err != ECDSA.RecoverError.NoError || signer != l.borrower) revert InvalidSignature();
+        // After the signature, so a forged or replayed intent reads as one
+        // whatever the loan's state, and a stale one is told apart from both.
+        if (uint256(l.totalRepaid) != expectedRepaid) {
+            revert StaleIntent(l.totalRepaid, expectedRepaid);
+        }
 
         _repay(loanId, l, amount);
+    }
+
+    /**
+     * @notice Cancel the caller's next signed RepayIntent without paying.
+     * @dev For a borrower who holds gas and changes their mind about an intent
+     *      a relayer still holds. A borrower who does not can let the deadline
+     *      run out, or pay the loan, which retires it.
+     */
+    function invalidateNonce() external returns (uint256 nonce) {
+        nonce = _useNonce(msg.sender);
+        emit NonceInvalidated(msg.sender, nonce);
     }
 
     /// What `repay` and `repayWithSig` share once the borrower's consent is
@@ -621,22 +647,23 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
         //
         // A late instalment always costs, whatever the plan's size: trust is
         // fast to lose. An on-time one earns only on a plan of at least
-        // MIN_SCORED_PRINCIPAL, and only if this borrower has not earned a
-        // bonus within BONUS_PERIOD, so neither dust, nor prepaying a plan one
-        // unit at a time, nor twenty plans at once can buy a tier. A withheld
-        // bonus writes nothing to the score record; the event says why.
+        // MIN_SCORED_PRINCIPAL, and only as often as ScoreManager's weekly
+        // ration allows, counted on the instalment's due date, so neither
+        // dust, nor prepaying a plan one unit at a time, nor twenty plans at
+        // once, nor a second engine can buy a tier, while a weekly plan
+        // collected with any lag inside grace earns every week. A dust plan
+        // writes nothing to the score record; either way the event says why.
         if (completedOne) {
             address borrower = l.borrower;
             if (!onTime) {
                 scoreManager.recordLatePayment(borrower);
             } else if (
-                l.principal >= MIN_SCORED_PRINCIPAL &&
-                (lastBonusAt[borrower] == 0 ||
-                    block.timestamp >= uint256(lastBonusAt[borrower]) + BONUS_PERIOD)
+                l.principal < MIN_SCORED_PRINCIPAL ||
+                !scoreManager.recordOnTimeInstallment(
+                    borrower,
+                    installmentDueAt(loanId, targetIndex)
+                )
             ) {
-                lastBonusAt[borrower] = uint64(block.timestamp);
-                scoreManager.recordOnTimePayment(borrower);
-            } else {
                 emit OnTimeBonusWithheld(loanId, borrower);
             }
         }
