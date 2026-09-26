@@ -302,31 +302,43 @@ test("malformed input fails loudly", () => {
   expect(() => runWith(config(), { user: buyer, extra: 1 })).toThrow(/underwriting payload/);
 });
 
-test("every fixture persona pair fits CRE's 15 HTTP calls with the staging recipe", async () => {
-  const personas: Address[] = [
-    "0xb0b0000000000000000000000000000000000002",
-    "0xb0b0000000000000000000000000000000000003",
-    "0xb0b0000000000000000000000000000000000004",
-    "0xb0b0000000000000000000000000000000000005",
-    "0xb0b0000000000000000000000000000000000006",
-    "0xb0b0000000000000000000000000000000000007",
-    "0xb0b0000000000000000000000000000000000008",
-  ];
+test("the staging recipe fits CRE's 15 HTTP calls for every fixture persona pair but the worst case, which it names", () => {
+  const personas = [2, 3, 4, 5, 6, 7, 8].map((i) => `0xb0b000000000000000000000000000000000000${i}` as Address);
+  const over: string[] = [];
   for (const account of [REGULAR_ACCOUNT, FRESH_ACCOUNT, "0xacc0000000000000000000000000000000000003" as Address]) {
     for (const wallet of [null, ...personas]) {
+      let calls = 0;
       const send = (spec: { method: "GET" | "POST"; url: string; headers: Record<string, string>; body?: string }): Reply => {
+        calls++;
         const r = answerFromFixtures({ url: spec.url, method: spec.method, headers: spec.headers, body: spec.body, cached: true });
         return { ok: true, status: r.statusCode, body: JSON.parse(Buffer.from(r.body, "base64").toString("utf8")) };
       };
-      let calls = 0;
-      const counting = (spec: Parameters<typeof send>[0]) => {
-        calls++;
-        return send(spec);
-      };
-      const opts = recipeOptions(0);
-      runSync(accountRecipe(account, opts), counting);
-      if (wallet) runSync(linkedRecipe(wallet, opts), counting);
-      expect({ account, wallet, calls }).toEqual({ account, wallet, calls: Math.min(calls, 15) });
+      runSync(accountRecipe(account, recipeOptions(0)), send);
+      if (wallet) runSync(linkedRecipe(wallet, recipeOptions(0)), send);
+      if (calls > 15) over.push(`${account.slice(-1)}+${wallet?.slice(-1)}`);
     }
   }
+  // Only a busy account (dated with probes) plus a wallet Nansen has no funder
+  // for (dated with probes too), with all three liquidation chains counted.
+  expect(over.sort()).toEqual(["2+6", "3+6"]);
+});
+
+test("over the call budget, the run stops without a report rather than attest what it could not read", async () => {
+  const noFunder = cloneFixtures([
+    { from: "0xb0b0000000000000000000000000000000000006", to: walletKey.address },
+    { from: REGULAR_ACCOUNT, to: buyer },
+  ]);
+  const seen = wire();
+  const http = HttpActionsMock.testInstance();
+  http.sendRequest = (input) => {
+    const s = toSent(input as unknown as CreRequestLike);
+    seen.sent.push(s);
+    return answerFromFixtures(s, noFunder);
+  };
+  const out = runWith(config(), { user: buyer, linked: await proof(buyer) });
+  expect(out.status).toBe("incomplete");
+  expect(out.httpCalls).toBe(15);
+  expect(seen.sent).toHaveLength(15);
+  expect(out.missing.length).toBeGreaterThan(0);
+  expect(seen.reports).toHaveLength(0);
 });

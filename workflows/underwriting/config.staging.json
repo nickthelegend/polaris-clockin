@@ -10,7 +10,7 @@
     "accountZerionChain": "monad-test-v2",
     "accountChainId": 10143,
     "historyRpcUrls": ["https://ethereum-rpc.publicnode.com", "https://mainnet.base.org"],
-    "liquidationChainIds": [1],
+    "liquidationChainIds": [1, 42161, 137],
     "useNansenLabels": false
   },
   "httpBudget": 15,
