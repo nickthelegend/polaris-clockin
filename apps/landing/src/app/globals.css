@@ -129,12 +129,15 @@ html.lenis body {
     font-weight: 500;
     letter-spacing: -0.04em;
     line-height: 0.98;
+    text-wrap: balance;
   }
 
+  /* Balanced so a heading that flows on phones never leaves a lone word. */
   .heading {
     font-weight: 500;
     letter-spacing: -0.04em;
     line-height: 1.06;
+    text-wrap: balance;
   }
 
   /* A word in a blur reveal: inline-block so transforms apply, but it keeps

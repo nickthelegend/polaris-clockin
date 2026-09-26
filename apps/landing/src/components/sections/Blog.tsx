@@ -9,6 +9,7 @@ import { fallbacks } from "@/components/ui/fallbacks";
 import { SmartImage } from "@/components/ui/SmartImage";
 import { blog } from "@/content";
 import type { Assets } from "@/lib/assets";
+import { cn } from "@/lib/cn";
 
 const FILES = ["article-1.jpg", "article-2.jpg", "article-3.jpg"] as const;
 /** Starting heights: the first card starts tallest, so they enter at different depths. */
@@ -40,7 +41,7 @@ export function Blog({ assets }: { assets: Assets }) {
           </Rise>
         </div>
 
-        <div className="mt-10 grid gap-5 md:grid-cols-3 lg:mt-[62px]">
+        <div className="mt-10 grid gap-5 md:grid-cols-2 lg:mt-[62px] lg:grid-cols-3">
           {blog.articles.map((article, i) => (
             <Grow
               key={article.href + i}
@@ -48,7 +49,11 @@ export function Blog({ assets }: { assets: Assets }) {
               delay={i * CARD_STAGGER}
               duration={1.1}
               radius={20}
-              className="relative h-[380px] overflow-hidden rounded-[20px] md:h-[clamp(300px,30.8vw,444px)]"
+              className={cn(
+                "relative h-[380px] overflow-hidden rounded-[20px] md:h-[clamp(300px,30.8vw,444px)]",
+                // Two columns on tablets: the third card takes the full row.
+                i === 2 && "md:col-span-2 lg:col-span-1",
+              )}
             >
               <a href={article.href} className="group absolute inset-0 block">
                 <GrowAnchor className="absolute inset-0">
