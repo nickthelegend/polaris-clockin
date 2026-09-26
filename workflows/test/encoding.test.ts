@@ -115,15 +115,19 @@ describe("workflow identity and gas", () => {
 });
 
 describe("candidate windows and batching", () => {
-  test("the newest ids every run, and a rotating sweep that reaches every older id", () => {
-    const seen = new Set<bigint>();
-    for (let tick = 0n; tick < 20n; tick++) {
-      const w = chainWindow(100n, 10, 15, tick);
-      for (let id = 91n; id <= 100n; id++) expect(w).toContain(id);
-      expect(w.length).toBeLessThanOrEqual(25);
-      for (const id of w) seen.add(id);
+  test("the newest ids every run, and a sweep that reaches every older id on a real cron's ticks", () => {
+    // Every minute at second 0, and daily: ticks that are multiples of 60 and
+    // 86,400, which a sweep stepping by the tick would never rotate through.
+    for (const period of [60n, 86_400n]) {
+      const seen = new Set<bigint>();
+      for (let run = 0n; run < 40n; run++) {
+        const w = chainWindow(120n, 10, 20, 1_790_000_000n - (1_790_000_000n % period) + run * period);
+        for (let id = 111n; id <= 120n; id++) expect(w).toContain(id);
+        expect(w.length).toBeLessThanOrEqual(30);
+        for (const id of w) seen.add(id);
+      }
+      expect(seen.size).toBe(120);
     }
-    expect(seen.size).toBe(100);
   });
 
   test("small and empty counts", () => {

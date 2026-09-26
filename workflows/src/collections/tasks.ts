@@ -13,7 +13,15 @@
  * receiver itself.
  */
 
-import { decodeAbiParameters, encodeAbiParameters, type Hex, parseAbiParameters } from "viem";
+import {
+  decodeAbiParameters,
+  encodeAbiParameters,
+  type Hex,
+  hexToBigInt,
+  keccak256,
+  numberToHex,
+  parseAbiParameters,
+} from "viem";
 
 export const REPORT_KIND_COLLECTIONS = 1;
 
@@ -70,6 +78,10 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
  * moves on every run, so every id is revisited while each run stays inside
  * CRE's read quota. `tick` must be the same on every node: the cron's
  * scheduled time, not a clock read. Ids start at 1 (`++loanCount`).
+ *
+ * The slice starts at keccak256(tick) mod the older range. Stepping by the
+ * tick itself would not do: a cron's ticks are multiples of its period, and a
+ * step that shares a factor with the range revisits the same slice forever.
  */
 export function chainWindow(count: bigint, recent: number, sweep: number, tick: bigint): bigint[] {
   if (count <= 0n) return [];
@@ -79,7 +91,7 @@ export function chainWindow(count: bigint, recent: number, sweep: number, tick: 
   const older = newestFrom - 1n; // ids 1..older are not in the newest slice
   if (older > 0n && sweep > 0) {
     const span = BigInt(sweep) < older ? BigInt(sweep) : older;
-    const start = (tick * span) % older; // 0-based
+    const start = hexToBigInt(keccak256(numberToHex(tick))) % older; // 0-based
     for (let k = 0n; k < span; k++) ids.add(((start + k) % older) + 1n);
   }
   return [...ids].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
