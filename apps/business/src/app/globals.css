@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* The shared library's tokens, themes and Satoshi, all namespaced (--ui-*, ui-*). */
+@import "@polaris/ui/styles.css";
 
 /*
   POLARIS FOR BUSINESS
