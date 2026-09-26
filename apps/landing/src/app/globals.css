@@ -127,13 +127,13 @@ html.lenis body {
 
   .display {
     font-weight: 500;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.04em;
     line-height: 0.98;
   }
 
   .heading {
     font-weight: 500;
-    letter-spacing: -0.045em;
+    letter-spacing: -0.04em;
     line-height: 1.06;
   }
 
@@ -160,6 +160,57 @@ html.lenis body {
   }
   .no-scrollbar {
     scrollbar-width: none;
+  }
+}
+
+/* The calculator's native range input sits invisibly over the drawn slider;
+   its thumb matches the drawn 20px knob so dragging lines up. */
+.range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  margin: 0;
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 26px;
+}
+.range-input::-moz-range-thumb {
+  width: 20px;
+  height: 26px;
+  border: 0;
+}
+
+/* The drawn stand-in for streaks.jpg: soft diagonal bands that drift. */
+.streaks-drawn {
+  transform: rotate(-26deg);
+  filter: blur(6px) saturate(1.05);
+}
+.streak {
+  position: absolute;
+  left: -10%;
+  width: 120%;
+  height: 17%;
+  border-radius: 9999px;
+  filter: blur(16px);
+  animation: streak-drift 9s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.streak:nth-child(2n) {
+  animation-duration: 12s;
+  animation-direction: alternate-reverse;
+}
+.streak:nth-child(3n) {
+  animation-duration: 15s;
+}
+@keyframes streak-drift {
+  from {
+    transform: translateX(-9%);
+  }
+  to {
+    transform: translateX(9%);
   }
 }
 
