@@ -41,7 +41,9 @@ for (const p of [relayerPolicy, registryPolicy]) {
   if (problems.length) throw new Error(`Policy ${p.name} is invalid: ${problems.join("; ")}`);
 }
 
-banner(`Polaris relayer on chain ${deployment.chainId} (${deployment.file})`);
+banner(`Polaris relayer on chain ${deployment.chainId}`);
+console.log(`Contracts from ${deployment.file}
+`);
 console.log("The relayer may sign exactly these calls (eth_signTransaction, value 0):");
 for (const c of RELAYER_CALLS) console.log(`  ALLOW  ${c.contract.padEnd(10)} ${c.functionName.padEnd(28)} ${c.why}`);
 console.log("  DENY   any transaction that carries MON");
