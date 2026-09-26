@@ -89,6 +89,12 @@ the help of AI coding tools. We use **Claude Code** (Anthropic) for
 implementation, tests and review. Commits it co-authored carry a
 `Co-Authored-By: Claude` trailer.
 
+The photographs, portraits, the 3D coin and the abstract light streaks in
+`apps/landing/public/assets` and `apps/app/public/assets` are AI-generated with
+ChatGPT's image generation. The looping background video, where present, is
+generated with Gemini. They depict no real people. The Polaris mark and wordmark
+in `packages/brand` are the team's own artwork.
+
 ## Attribution
 
 *TBD: the full list of external libraries by package.* So far:
