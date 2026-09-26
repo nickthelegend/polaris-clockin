@@ -1,5 +1,6 @@
 import { Hero } from "@/components/sections/Hero";
 import { LogoStrip } from "@/components/sections/LogoStrip";
+import { StripeSection } from "@/components/sections/StripeSection";
 import { getAssets } from "@/lib/assets";
 
 export default function Page() {
@@ -8,6 +9,7 @@ export default function Page() {
     <main>
       <Hero assets={assets} />
       <LogoStrip />
+      <StripeSection assets={assets} />
     </main>
   );
 }
