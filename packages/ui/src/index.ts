@@ -31,3 +31,19 @@ export type { ToastInput, ToastTone } from "./primitives/Toast";
 export { Table, CellStack } from "./primitives/Table";
 export type { TableProps, TableColumn, SortState } from "./primitives/Table";
 export { Logo, LogoMark } from "./primitives/Logo";
+
+// Charts
+export { Sparkline } from "./charts/Sparkline";
+export type { SparklineProps } from "./charts/Sparkline";
+export { LineArea } from "./charts/LineArea";
+export type { LineAreaProps, LinePoint } from "./charts/LineArea";
+export { CandlestickChart } from "./charts/CandlestickChart";
+export type { CandlestickChartProps, Candle } from "./charts/CandlestickChart";
+export { DonutChart } from "./charts/DonutChart";
+export type { DonutChartProps, DonutSegment } from "./charts/DonutChart";
+export { BarChart, BAR_COLORS } from "./charts/BarChart";
+export type { BarChartProps, Bar } from "./charts/BarChart";
+export { HBarList, HBAR_COLORS } from "./charts/HBarList";
+export type { HBarListProps, HBar } from "./charts/HBarList";
+export { ProgressLegend } from "./charts/ProgressLegend";
+export type { ProgressLegendProps, LegendItem } from "./charts/ProgressLegend";
