@@ -126,14 +126,11 @@ function CreditLineCard() {
   const { line } = credit;
   const [ref, inView] = useReveal<HTMLDivElement>(0.4);
   const value = useCountUp(line.amount, inView, { duration: 1.2, delay: 0.55 });
-  const progress = useTransform(value, (v) => v / line.amount);
   const label = useTransform(value, (v) => formatUsd(v));
-  // Each segment grows to its share in step with the number.
-  const widths = line.legend.map((item) => item.value);
-  const w0 = useTransform(progress, (p) => `${p * (widths[0] ?? 0)}%`);
-  const w1 = useTransform(progress, (p) => `${p * (widths[1] ?? 0)}%`);
-  const w2 = useTransform(progress, (p) => `${p * (widths[2] ?? 0)}%`);
-  const segmentWidths = [w0, w1, w2];
+  // The bar fills in step with the number: its segments sit at their final
+  // widths and the whole row scales out from the left, so each one grows to
+  // its share of the progress, and CSS alone can show the end state.
+  const fill = useTransform(value, (v) => v / line.amount);
 
   return (
     <Grow from={0.5} delay={CARD_STAGGER} className={cn(CARD, "flex flex-col bg-lavender px-[30px] pb-[30px] pt-[34px]")}>
@@ -149,7 +146,13 @@ function CreditLineCard() {
           <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <span className="text-[38px] font-medium leading-none tracking-[-0.045em]">
               <span className="sr-only">{formatUsd(line.amount)}</span>
-              <motion.span aria-hidden="true">{label}</motion.span>
+              <motion.span aria-hidden="true" className="nojs-hide">
+                {label}
+              </motion.span>
+              {/* Without JS nothing counts, so the amount shows as it is */}
+              <span aria-hidden="true" className="nojs-show hidden">
+                {formatUsd(line.amount)}
+              </span>
             </span>
             <span className="text-[13px] tracking-[-0.01em]">{line.of}</span>
           </div>
@@ -164,14 +167,16 @@ function CreditLineCard() {
               </Rise>
             ))}
           </dl>
-          <div className="mt-auto flex h-[12px] w-full overflow-hidden bg-[#f1f2ec]" aria-hidden="true">
-            {line.legend.map((item, i) => (
-              <motion.span
-                key={item.label}
-                className={cn("h-full", SEGMENT_TONES[item.tone])}
-                style={{ width: segmentWidths[i] }}
-              />
-            ))}
+          <div className="mb-4 mt-auto h-[12px] w-[82%] overflow-hidden bg-[#f1f2ec]" aria-hidden="true">
+            <motion.div className="rv flex h-full w-full origin-left" style={{ scaleX: fill }}>
+              {line.legend.map((item) => (
+                <span
+                  key={item.label}
+                  className={cn("h-full", SEGMENT_TONES[item.tone])}
+                  style={{ width: `${item.value}%` }}
+                />
+              ))}
+            </motion.div>
           </div>
         </div>
       </Rise>

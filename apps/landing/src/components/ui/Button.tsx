@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { usePlay } from "@/components/motion/hooks";
 import { cn } from "@/lib/cn";
 import { ArrowRight } from "./icons";
@@ -68,10 +68,13 @@ export function Button({ href, children, variant = "olive", size = "md", arrow, 
       href={href}
       className={cn(
         "rv relative inline-flex shrink-0 items-center justify-center overflow-hidden whitespace-nowrap rounded-full font-normal tracking-[-0.02em] transition-[border-color,transform] duration-300 after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:transition-colors after:duration-300 active:scale-[0.98]",
+        // Without JS or with reduced motion, CSS shows the final fill.
+        animated && "rv-fill",
         variants[variant],
         sizes[size],
         className,
       )}
+      style={animated ? ({ "--rv-bg": final.bg, "--rv-fg": final.text } as CSSProperties) : undefined}
       initial={
         animated
           ? {

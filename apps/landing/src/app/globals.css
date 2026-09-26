@@ -216,7 +216,10 @@ html.lenis body {
 
 /*
  * Reduced motion: every reveal shows its final state, before and after
- * hydration. (.rv marks the roots of the motion primitives.)
+ * hydration. .rv marks the roots of the motion primitives; the rv-* classes
+ * cover reveals that animate a size or a colour, with the final value in a
+ * custom property. The same rules are repeated in a <noscript> style in
+ * layout.tsx, so the page is complete without JavaScript too.
  */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -233,5 +236,15 @@ html.lenis body {
     filter: none !important;
     transform: none !important;
     clip-path: none !important;
+  }
+  .rv-h {
+    height: var(--rv-h) !important;
+  }
+  .rv-w {
+    width: auto !important;
+  }
+  .rv-fill {
+    background-color: var(--rv-bg) !important;
+    color: var(--rv-fg) !important;
   }
 }

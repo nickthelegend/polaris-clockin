@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { BlurWords } from "@/components/motion/BlurWords";
 import { useReduced } from "@/components/motion/hooks";
 import { EASE_REVEAL } from "@/components/motion/tokens";
@@ -47,7 +47,8 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
 
       <div className="relative" style={{ height: CARD_HEIGHT }}>
         <motion.div
-          className="rv absolute inset-x-0 bottom-0 overflow-hidden rounded-[22px] bg-white text-olive shadow-[0_30px_70px_-30px_rgba(0,0,0,0.55)]"
+          className="rv rv-h absolute inset-x-0 bottom-0 overflow-hidden rounded-[22px] bg-white text-olive shadow-[0_30px_70px_-30px_rgba(0,0,0,0.55)]"
+          style={{ "--rv-h": `${CARD_HEIGHT}px` } as CSSProperties}
           initial={{ height: 28, opacity: 0 }}
           animate={go ? { height: CARD_HEIGHT, opacity: 1 } : undefined}
           transition={{
@@ -67,7 +68,8 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
                   className="text-[25px] font-medium leading-none tracking-[-0.04em]"
                 />
                 <motion.span
-                  className="rv inline-flex h-[24px] items-center rounded-full px-[9px] text-[13px] font-medium tracking-[-0.01em]"
+                  className="rv rv-fill inline-flex h-[24px] items-center rounded-full px-[9px] text-[13px] font-medium tracking-[-0.01em]"
+                  style={{ "--rv-bg": "#2d3a02", "--rv-fg": "#e1ff67" } as CSSProperties}
                   initial={{ opacity: 0, scale: 0.6, backgroundColor: "#d9dccb", color: "#ffffff" }}
                   animate={
                     go

@@ -79,7 +79,7 @@ export function HeroNav({ ready }: { ready: boolean }) {
             <PolarisMark size={30} />
           </motion.span>
           <motion.span
-            className="rv inline-block overflow-hidden whitespace-nowrap"
+            className="rv rv-w inline-block overflow-hidden whitespace-nowrap"
             initial={{ width: 0 }}
             animate={go ? { width: "auto" } : undefined}
             transition={{ delay: 0.42, duration: 0.8, ease: EASE_REVEAL }}
