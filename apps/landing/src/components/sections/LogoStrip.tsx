@@ -18,7 +18,7 @@ export function LogoStrip() {
           y={14}
           blur={6}
           duration={0.7}
-          className="flex min-h-[38px] items-center rounded-full bg-pill px-4 text-center text-[14px] tracking-[-0.02em] text-olive md:text-[16px] lg:h-[42px] lg:px-[22px] lg:text-[18px]"
+          className="flex min-h-[38px] items-center rounded-full bg-pill px-4 text-center text-[14px] tracking-[-0.02em] text-olive md:text-[16px] lg:h-[44px] lg:px-[26px] lg:text-[21px]"
         >
           {logos.pill}
         </Rise>
@@ -26,7 +26,7 @@ export function LogoStrip() {
       <Rise y={0} duration={1} delay={0.15} className="mt-9 lg:mt-[58px]">
         <Marquee
           speed={LOGO_SPEED}
-          gap="clamp(44px, 6.1vw, 88px)"
+          gap="clamp(40px, 4.9vw, 70px)"
           className="mx-auto max-w-[calc(var(--content)+var(--gutter)*2)] py-2 [mask-image:linear-gradient(90deg,transparent_0%,#000_12%,#000_88%,transparent_100%)]"
         >
           {logos.items.map((item) => (

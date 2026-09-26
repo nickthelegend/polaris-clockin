@@ -6,9 +6,10 @@
 type GlyphName = "monad" | "privy" | "chainlink" | "agora" | "envio" | "nansen" | "circle" | "zerion";
 
 function Glyph({ name }: { name: GlyphName }) {
+  // Scales with the wordmark: 30px beside the 32px desktop text.
   const common = {
-    width: 26,
-    height: 26,
+    width: "0.94em",
+    height: "0.94em",
     viewBox: "0 0 26 26",
     "aria-hidden": true as const,
     focusable: false as const,
@@ -72,7 +73,7 @@ function Glyph({ name }: { name: GlyphName }) {
 
 export function Wordmark({ name, glyph }: { name: string; glyph: GlyphName }) {
   return (
-    <span className="inline-flex items-center gap-2.5 whitespace-nowrap text-[22px] font-semibold tracking-[-0.04em] text-olive lg:text-[26px]">
+    <span className="inline-flex items-center gap-2.5 whitespace-nowrap text-[24px] font-semibold tracking-[-0.04em] text-olive lg:text-[32px]">
       <Glyph name={glyph} />
       {name}
     </span>
