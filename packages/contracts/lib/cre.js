@@ -1,8 +1,9 @@
 /**
  * Chainlink CRE report encoding for the Polaris receivers.
  *
- * The CRE workflows (TypeScript, @chainlink/cre-sdk) build the same bytes with
- * viem's encodeAbiParameters; these ethers helpers are what the tests and the
+ * The CRE workflows (workflows/, TypeScript, @chainlink/cre-sdk) build the same
+ * bytes with viem's encodeAbiParameters, and their tests hold them to these
+ * byte for byte; these ethers helpers are what the tests and the
  * local end-to-end run use, and what a fallback keeper can use to build a
  * report by hand. See docs in CollectionsReceiver.sol and
  * UnderwritingReceiver.sol for the formats, and docs/research/cre.md section 7.4
@@ -21,7 +22,7 @@ const REPORT_KIND = { COLLECTIONS: 1, UNDERWRITING: 2 };
 /** CollectionsReceiver task actions. */
 const ACTION = { COLLECT_INSTALLMENT: 1, CHARGE_SUBSCRIPTION: 2, LIQUIDATE: 3 };
 
-/** The workflow names in cre/<workflow>/workflow.yaml. */
+/** The workflow names in workflows/<workflow>/workflow.yaml (@polaris/cre-workflows). */
 const WORKFLOW_NAMES = { COLLECTIONS: "polaris-collections", UNDERWRITING: "polaris-underwrite" };
 
 const TASKS_TYPE = "tuple(uint8 action,uint256 id)[]";
