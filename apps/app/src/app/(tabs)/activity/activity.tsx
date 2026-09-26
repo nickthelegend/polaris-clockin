@@ -42,7 +42,7 @@ export function Activity() {
   const groups = groupByDay(items);
 
   return (
-    <main id="main" className="px-4 pt-[calc(env(safe-area-inset-top)+14px)]">
+    <main id="main" className="px-[15px]">
       <TabHeader title="Activity" right={<HelpButton />} />
 
       <div role="radiogroup" aria-labelledby={filterLabel} className="mt-5 flex gap-2">

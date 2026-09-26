@@ -48,6 +48,31 @@ for text.
 - **The subtle grid:** the home balance area has a faint square grid (1px lines
   at about 4% black, 24px cells) that fades out radially around the balance.
 
+### Measured at 402px (what the app implements)
+
+The numbers above were a first read. Measured from the cropped screens
+(`reference-home.png`, `reference-cards.png`, `reference-send.png`, 2× of a
+402px-wide phone), the reference is smaller and tighter, and these win:
+
+- **Ground:** `#EFF1F3`, flat for the top third, then falling to `#CFD1D5` at
+  the bottom edge of the screen (fixed to the viewport, not the page).
+- **Gutter 15px** (so full-width cards are 372px); **13px** between stacked
+  surfaces on Home and Send, **12px** between the Select card cards.
+- **Radius:** surfaces and cards 18px (the reference uses smoothed corners of
+  about 16–17px); buttons, pills and keypad keys are full capsules.
+- **Surfaces:** `#F9F9F9` with a white hairline and the faintest lift, never a
+  visible border.
+- **Type:** Inter Tight throughout, tracked in: body −0.015em, titles −0.04em.
+  Wordmark 30px/500; section titles ("Send again") 18px/500; labels 16px/400;
+  row titles 16px/500; row meta 14px in `#45484C` (darker than labels);
+  "see more" and pills 14px; the balance 46px/700 at −0.065em.
+- **Header:** a 41px row whose top is 44px down: the wordmark, a 41px
+  near-white help disc, 9px, and the 40px ink pill with a yellow two-star
+  sparkle on its corner.
+- **Floating nav:** 226×52, 21px above the bottom, five 21px outline icons on
+  40px targets (home with a smile, a pulse in a circle, a banded card, a
+  dollar in a circle, a person in a circle); inactive at 55% white.
+
 ## Screen map: reference → Polaris
 
 ### 1. Home (reference screen 1)

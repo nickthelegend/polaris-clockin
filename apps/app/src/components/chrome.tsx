@@ -9,10 +9,10 @@ import { Wordmark } from "./ui";
 export function DevSignerBadge() {
   if (!DEV_SIGNER) return null;
   return (
-    <div className="column-fixed pointer-events-none top-[calc(6px+env(safe-area-inset-top))] z-50 flex justify-center">
+    <div className="column-fixed pointer-events-none top-[calc(10px+env(safe-area-inset-top))] z-50 flex justify-center">
       <p
         role="note"
-        className="flex h-6 items-center gap-1.5 rounded-full bg-[#ffb020] px-2.5 text-[11px] font-semibold tracking-[0.02em] text-black shadow-float"
+        className="flex h-5 items-center gap-1.5 rounded-full bg-[#ffb020] px-2 text-[10px] leading-none font-semibold tracking-[0.01em] text-black"
       >
         <span aria-hidden className="size-1.5 rounded-full bg-black" />
         Dev signer · not Face ID

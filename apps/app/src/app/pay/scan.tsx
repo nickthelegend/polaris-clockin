@@ -102,7 +102,7 @@ export function Scan() {
   }
 
   return (
-    <main id="main" className="px-4 pb-[calc(32px+env(safe-area-inset-bottom))]">
+    <main id="main" className="px-[15px] pb-[calc(32px+env(safe-area-inset-bottom))]">
       <ScreenHeader title="Pay" back="/" />
 
       {/* Viewfinder */}

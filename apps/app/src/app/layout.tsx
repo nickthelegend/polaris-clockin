@@ -1,4 +1,3 @@
-import "@fontsource-variable/inter";
 import "@fontsource-variable/inter-tight";
 import "./globals.css";
 
@@ -28,10 +27,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#eff1f3" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1016" },
-  ],
+  // Light only, like the reference.
+  colorScheme: "light",
+  themeColor: "#eff1f3",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

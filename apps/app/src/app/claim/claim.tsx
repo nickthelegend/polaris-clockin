@@ -65,7 +65,7 @@ export function Claim() {
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(24px+env(safe-area-inset-bottom))]">
       <header className="flex h-16 items-center justify-between pt-[env(safe-area-inset-top)]">
         <Wordmark className="text-[26px]" />
         <HelpButton />
@@ -184,7 +184,7 @@ function BrokenLink() {
 function Arrived({ receipt, amount, name }: { receipt: RelayReceipt; amount: Micros; name: string }) {
   const router = useRouter();
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(24px+env(safe-area-inset-bottom))]">
       <div className="pt-[calc(env(safe-area-inset-top)+72px)] text-center">
         <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-lime text-on-lime">
           <Icon name="check" size={40} strokeWidth={2.4} />

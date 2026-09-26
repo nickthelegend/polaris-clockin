@@ -56,7 +56,7 @@ export function Checkout({ link }: { link: PaymentLink }) {
   const { whole, cents } = usdParts(link.amount);
 
   return (
-    <main id="main" className="px-4 pb-[calc(190px+env(safe-area-inset-bottom))]">
+    <main id="main" className="px-[15px] pb-[calc(190px+env(safe-area-inset-bottom))]">
       <ScreenHeader title="Checkout" back="/" right={<HelpButton />} />
 
       {/* Merchant, as the "Send to" card */}
@@ -335,7 +335,7 @@ function Receipt({ link, paid }: { link: PaymentLink; paid: Paid }) {
   }, [link, paid]);
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(24px+env(safe-area-inset-bottom))]">
       <div className="pt-[calc(env(safe-area-inset-top)+56px)] text-center">
         <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-lime text-on-lime">
           <svg viewBox="0 0 24 24" width="40" height="40" aria-hidden>

@@ -66,7 +66,7 @@ export function Send() {
   if (link) return <LinkReady link={link} recipient={recipient} senderName={senderName} />;
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(16px+env(safe-area-inset-bottom))]">
       <ScreenHeader title="Send money" back="/" right={<HelpButton />} />
 
       {/* Send to */}
@@ -185,7 +185,7 @@ function LinkReady({ link, recipient, senderName }: { link: CreatedSendLink; rec
   }
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(16px+env(safe-area-inset-bottom))]">
       <ScreenHeader title="Send money" back="/" right={<HelpButton />} />
 
       <section className="rise relative overflow-hidden rounded-card bg-promo p-5 text-white ring-1 ring-white/5">
@@ -255,7 +255,7 @@ function LinkReady({ link, recipient, senderName }: { link: CreatedSendLink; rec
 function Sent({ sent }: { sent: { receipt: RelayReceipt; amount: bigint; to: Person } }) {
   const router = useRouter();
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(24px+env(safe-area-inset-bottom))]">
       <div className="pt-[calc(env(safe-area-inset-top)+72px)] text-center">
         <span className="pop mx-auto grid size-20 place-items-center rounded-full bg-lime text-on-lime">
           <Icon name="check" size={40} strokeWidth={2.4} />

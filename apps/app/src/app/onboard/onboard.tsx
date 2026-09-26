@@ -22,7 +22,7 @@ export function Onboard() {
   const state = useAccountState();
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pb-[calc(24px+env(safe-area-inset-bottom))]">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pb-[calc(24px+env(safe-area-inset-bottom))]">
       <ScreenHeader title="" back={next} right={<HelpButton />} />
 
       <div className="rise mt-2" style={stagger(0)}>

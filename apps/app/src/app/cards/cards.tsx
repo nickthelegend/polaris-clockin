@@ -31,8 +31,8 @@ export function Cards() {
   );
 
   return (
-    <main id="main" className="flex min-h-dvh flex-col px-4 pt-[calc(env(safe-area-inset-top)+14px)] pb-[calc(24px+env(safe-area-inset-bottom))]">
-      <header className="flex h-12 items-center justify-between">
+    <main id="main" className="flex min-h-dvh flex-col px-[15px] pt-[max(44px,calc(env(safe-area-inset-top)+12px))] pb-[calc(24px+env(safe-area-inset-bottom))]">
+      <header className="flex h-[41px] items-center justify-between">
         <h1 className="text-[19px] font-medium tracking-[-0.01em]">Select card</h1>
         <button
           type="button"

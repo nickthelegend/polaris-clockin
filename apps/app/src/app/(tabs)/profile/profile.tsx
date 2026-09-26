@@ -31,7 +31,7 @@ export function Profile() {
   const autoCurrency = locale ? currencyForLocale(locale) : "USD";
 
   return (
-    <main id="main" className="px-4 pt-[calc(env(safe-area-inset-top)+14px)]">
+    <main id="main" className="px-[15px]">
       <TabHeader title="Profile" right={<HelpButton />} />
 
       <Card className="mt-5 flex items-center gap-4 p-4">

@@ -34,7 +34,7 @@ export function Plans() {
   const subs = plans.value?.subscriptions ?? [];
 
   return (
-    <main id="main" className="px-4 pt-[calc(env(safe-area-inset-top)+14px)]">
+    <main id="main" className="px-[15px]">
       <TabHeader title="Plans" right={<HelpButton />} />
 
       {/* The credit line, as the black card */}

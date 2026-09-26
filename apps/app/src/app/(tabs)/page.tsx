@@ -27,8 +27,8 @@ export default function HomePage() {
   const [receiveOpen, setReceiveOpen] = useState(false);
 
   return (
-    <main id="main" className="px-4 pt-[calc(env(safe-area-inset-top)+14px)]">
-      <header className="flex h-12 items-center justify-between">
+    <main id="main" className="px-[15px] pt-[max(44px,calc(env(safe-area-inset-top)+12px))]">
+      <header className="flex h-[41px] items-center justify-between">
         <h1>
           <Wordmark />
         </h1>
