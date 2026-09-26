@@ -7,6 +7,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {IERC3009} from "./interfaces/IERC3009.sol";
 
@@ -34,12 +35,14 @@ import {IERC3009} from "./interfaces/IERC3009.sol";
  *      On Polaris no buyer or merchant is expected to hold gas, so every
  *      action here also has a form a relayer can submit:
  *        payWithAuthorization  pay an order from an ERC-3009 authorization
+ *        quoteOrder            an operator pins an order's price for a merchant
  *        subscribeFor          the checkout subscribes a buyer who signed
  *        createPlanFor         an operator publishes a merchant's plan
  *        cancelWithSignature   a subscriber cancels by EIP-712 signature
- *      In each one a signature or a fixed rule, never the caller, decides
- *      whose money moves and where it goes. The relayer carries the
- *      transaction; it can't redirect it.
+ *      Wherever money moves, a signature from the account it belongs to
+ *      decides where it goes -- checked here, or for `subscribeFor` by the
+ *      checkout contract the owner appointed to check it. The relayer
+ *      carries the transaction; it can't redirect it.
  */
 contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
@@ -72,19 +75,35 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      * @notice The one contract allowed to subscribe a buyer on their behalf.
      * @dev PolarisCheckout verifies the buyer's signed intent and permit
      *      before it calls `subscribeFor`. This contract trusts it to have
-     *      done so, which is why only the owner can appoint it.
+     *      done so, which is why only the owner can appoint it, and why it
+     *      must be a contract (see `setCheckout`).
      */
     address public checkout;
 
     /**
-     * @notice Accounts that may publish or retire plans for merchants.
+     * @notice Accounts that may publish plans and quote orders for merchants.
      * @dev A merchant onboarded through Polaris for Business holds no MON, so
-     *      the relayer creates plans in its name. An operator can only ever
-     *      name the merchant as the plan's payee and can only stop new
-     *      sign-ups; it can't move anyone's money or touch a live
-     *      subscription.
+     *      the relayer publishes plans and pins order prices in its name.
+     *
+     *      The role is global, and the operator chooses which merchant it
+     *      acts for, so it can publish a plan in any merchant's name. What
+     *      bounds it: a plan only ever pays the merchant it names, so an
+     *      operator can't route money to itself; it can retire only plans
+     *      published through `createPlanFor`, never one a merchant published
+     *      itself, so a merchant that holds gas and never delegated keeps
+     *      sole control of its own plans; and it can't move anyone's money or
+     *      touch a live subscription.
      */
     mapping(address => bool) public isOperator;
+
+    /**
+     * @notice Plans published on a merchant's behalf through `createPlanFor`.
+     * @dev These are the only plans an operator may retire. Without the
+     *      distinction any operator could permanently close every plan in
+     *      the protocol, including those merchants published and paid gas
+     *      for themselves, and there is no way to reopen a plan.
+     */
+    mapping(uint256 => bool) public publishedOnBehalf;
 
     // -----------------------------------------------------------------
     // Direct payments
@@ -100,6 +119,20 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     mapping(bytes32 => Payment) public payments;
     uint256 public paymentCount;
 
+    /**
+     * @notice The price pinned on an order before it was paid, by merchant
+     *         and payment id. Zero means the order was never quoted.
+     * @dev An order id is only a string, so without a quote nothing on chain
+     *      ties an order to a price and whoever pays an id first owns it at
+     *      any amount: 1 micro-AUSD marks a 200 AUSD order paid and kills the
+     *      buyer's signed payment with `DuplicatePayment`. A quoted order can
+     *      only be paid at exactly its price, by either path. Keyed by
+     *      merchant as well as id, so a quote only ever governs orders that
+     *      pay the merchant it names, and one merchant can't pin a price on
+     *      another's order.
+     */
+    mapping(address => mapping(bytes32 => uint256)) public quotedAmount;
+
     event PaymentMade(
         bytes32 indexed paymentId,
         address indexed payer,
@@ -108,6 +141,7 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         uint256 fee,
         string orderId
     );
+    event OrderQuoted(bytes32 indexed paymentId, address indexed merchant, uint256 amount);
 
     // -----------------------------------------------------------------
     // Subscriptions
@@ -178,6 +212,9 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     error NotCheckout();
     error NotOperator();
     error SignatureExpired();
+    error WrongAmount(uint256 quoted, uint256 offered);
+    error CheckoutNotAContract(address checkout);
+    error InvalidMerchant(address merchant);
 
     constructor(address initialOwner, IERC20 _stablecoin, address _treasury, uint64 _minPeriod)
         Ownable(initialOwner)
@@ -201,9 +238,23 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         treasury = _treasury;
     }
 
-    /// @notice Appoint the checkout. The zero address switches relayed
-    ///         subscriptions off.
+    /**
+     * @notice Appoint the checkout. The zero address switches relayed
+     *         subscriptions off.
+     * @dev Refuses an address with no code. A buyer's subscription permit is
+     *      one pooled allowance to this contract, sized for a year of the
+     *      plan they chose, and nothing here ties it to that plan: whoever is
+     *      checkout can spend it on any plan, including one an attacker
+     *      published a moment ago priced at the whole allowance. That is safe
+     *      only while the checkout is a contract that holds every call to the
+     *      buyer's signed `SubscribeIntent`. An EOA -- the relayer's server
+     *      wallet, say -- would put every outstanding permit behind one hot
+     *      key.
+     */
     function setCheckout(address _checkout) external onlyOwner {
+        if (_checkout != address(0) && _checkout.code.length == 0) {
+            revert CheckoutNotAContract(_checkout);
+        }
         checkout = _checkout;
         emit CheckoutSet(_checkout);
     }
@@ -222,6 +273,7 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      * @dev `orderId` is hashed with the merchant to form the payment id, so a
      *      merchant cannot be paid twice for the same order by a retrying
      *      checkout -- the second call reverts rather than charging again.
+     *      If the order was quoted, only its quoted price pays it.
      */
     function pay(address merchant, uint256 amount, string calldata orderId)
         external
@@ -258,6 +310,16 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      *      `DuplicatePayment`. A replayed authorization fails the same way,
      *      and would fail again at the token as a spent nonce.
      *
+     *      First come, first served cuts both ways. This call exposes the
+     *      merchant and order id while it is pending, so anyone -- the relayer
+     *      included -- can pay the same order first with `pay` and kill the
+     *      buyer's authorization. On an unquoted order that costs them 1
+     *      micro-AUSD and leaves the order recorded as paid at that amount.
+     *      Quote the order with `quoteOrder` when the session is created and
+     *      the race can only be won by paying the full price to the
+     *      merchant; either way, match `payer` and `amount` before fulfilling
+     *      (see `paymentFor`).
+     *
      *      The money lands here and is split by `safeTransfer` with the same
      *      `_fee` that `pay` applies. The balance delta is measured rather than
      *      trusted, so a token that reports success without delivering the
@@ -283,6 +345,47 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         emit PaymentMade(paymentId, payer, merchant, amount, fee, orderId);
     }
 
+    /**
+     * @notice Pin an order's price before anyone can pay it, so that only
+     *         that price can. The merchant can do this, and so can the owner
+     *         or an operator acting for a merchant that holds no gas; the
+     *         checkout-session service does it when it creates a session.
+     * @dev Takes the payment id, not the order id, so the quote reveals
+     *      nothing `pay` needs: a watcher who sees it can't pay the order
+     *      without the order id, and by the time the buyer's payment reveals
+     *      the id, the price is already pinned. Anyone racing that payment
+     *      can then only pay the full price to the merchant, which settles
+     *      the order instead of griefing it.
+     *
+     *      Order ids should still be unpredictable. A guessable id can be
+     *      claimed before its quote lands; the quote then reverts with
+     *      `DuplicatePayment` and the session has to pick a new id.
+     *
+     *      A quote can be replaced until the order is paid, and never after,
+     *      so the price an order was paid at can't be rewritten.
+     */
+    function quoteOrder(address merchant, bytes32 paymentId, uint256 amount) external {
+        if (msg.sender != merchant && msg.sender != owner() && !isOperator[msg.sender]) {
+            revert NotOperator();
+        }
+        if (merchant == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
+        if (payments[paymentId].paidAt != 0) revert DuplicatePayment();
+
+        quotedAmount[merchant][paymentId] = amount;
+        emit OrderQuoted(paymentId, merchant, amount);
+    }
+
+    /**
+     * @notice The payment recorded for an order, if any.
+     * @dev A record proves only that `payer` paid `amount` for this id. It
+     *      does not prove the order was paid in full, or by the buyer the
+     *      merchant expected: an unquoted order id belongs to whoever pays it
+     *      first, at any amount. Before fulfilling, the merchant, the checkout
+     *      and the indexer behind `payment.succeeded` must match `amount`,
+     *      and `payer` where it matters, against the order -- or quote the
+     *      order with `quoteOrder`, so that nothing but its price can pay it.
+     */
     function paymentFor(address merchant, string calldata orderId)
         external
         view
@@ -307,7 +410,15 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      *         gas. Owner or operator only.
      * @dev Safe to delegate because a plan moves nothing on its own: money
      *      only flows once a subscriber signs up, and then only to the merchant
-     *      named here. The validation is `createPlan`'s, `minPeriod` included.
+     *      named here. The caller chooses that merchant, so this can publish a
+     *      plan in any merchant's name; the merchant can retire it with
+     *      `deactivatePlan`. The validation is `createPlan`'s, `minPeriod`
+     *      included.
+     *
+     *      Two payees are refused. This contract can't spend what a plan pays
+     *      it, so every subscriber's money would be locked here for good. The
+     *      treasury is not a merchant; a plan paying it would let the
+     *      protocol's own operator bill subscribers to itself.
      */
     function createPlanFor(
         address merchant,
@@ -317,21 +428,28 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     ) external returns (uint256 planId) {
         if (msg.sender != owner() && !isOperator[msg.sender]) revert NotOperator();
         if (merchant == address(0)) revert ZeroAddress();
-        return _createPlan(merchant, pricePerPeriod, periodSeconds, name);
+        if (merchant == address(this) || merchant == treasury) revert InvalidMerchant(merchant);
+
+        planId = _createPlan(merchant, pricePerPeriod, periodSeconds, name);
+        publishedOnBehalf[planId] = true;
     }
 
     /**
      * @notice Stop new sign-ups to a plan. The plan's merchant can do this,
-     *         and so can an operator acting for a merchant who holds no gas.
+     *         and so can an operator for a plan published on a merchant's
+     *         behalf through `createPlanFor`.
      * @dev Live subscriptions keep charging: deactivating a plan closes it to
-     *      newcomers, it does not cancel anyone.
+     *      newcomers, it does not cancel anyone. A plan the merchant published
+     *      itself stays the merchant's alone, because retiring is permanent
+     *      and that merchant never delegated anything.
      */
     function deactivatePlan(uint256 planId) external {
         Plan storage p = plans[planId];
-        if (msg.sender != p.merchant && !isOperator[msg.sender]) revert NotSubscriber();
-        // An operator must not be able to retire an id that does not exist
-        // yet, or an indexer would see a plan retired before it was created.
+        // Nobody may retire an id that does not exist yet, or an indexer
+        // would see a plan retired before it was created.
         if (p.merchant == address(0)) revert PlanNotActive();
+        bool asOperator = publishedOnBehalf[planId] && isOperator[msg.sender];
+        if (msg.sender != p.merchant && !asOperator) revert NotSubscriber();
         p.active = false;
         emit PlanDeactivated(planId);
     }
@@ -357,6 +475,12 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      *      the buyer's signed intent and submitted their permit, and the first
      *      period is drawn from the subscriber's own allowance to this
      *      contract, never from the checkout. Everything else is `subscribe`.
+     *
+     *      The allowance is not tied to a plan, so this contract can't tell
+     *      whether `planId` is the one the buyer chose. The checkout must: it
+     *      has to pass the plan id the buyer signed and refuse a plan priced
+     *      above what they signed for. That is why the checkout must be a
+     *      contract (see `setCheckout`).
      */
     function subscribeFor(address subscriber, uint256 planId)
         external
@@ -442,7 +566,13 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         if (block.timestamp > deadline) revert SignatureExpired();
 
         Subscription storage sub = subscriptions[subId];
-        if (sub.status != SubStatus.Active) revert SubscriptionNotActive();
+        // A slot that was never written reads as Active with a zero
+        // subscriber, and a garbage signature recovers to the zero address.
+        // Refusing an unwritten slot outright means a future id can never be
+        // "cancelled" before it exists, whatever recovery does with bad input.
+        if (sub.subscriber == address(0) || sub.status != SubStatus.Active) {
+            revert SubscriptionNotActive();
+        }
 
         bytes32 digest =
             _hashTypedDataV4(keccak256(abi.encode(CANCEL_SUBSCRIPTION_TYPEHASH, subId, deadline)));
@@ -479,7 +609,8 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
 
     /// Claim an order's id and record who paid it, before any token moves.
     /// Both payment paths go through here, which is what makes an order
-    /// payable exactly once whichever path lands first.
+    /// payable exactly once whichever path lands first, and a quoted order
+    /// payable only at its price whichever path is used.
     function _recordPayment(address payer, address merchant, uint256 amount, string calldata orderId)
         private
         returns (bytes32 paymentId)
@@ -489,10 +620,15 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         paymentId = keccak256(abi.encodePacked(merchant, orderId));
         if (payments[paymentId].paidAt != 0) revert DuplicatePayment();
 
+        uint256 quoted = quotedAmount[merchant][paymentId];
+        if (quoted != 0 && amount != quoted) revert WrongAmount(quoted, amount);
+
         payments[paymentId] = Payment({
             payer: payer,
             merchant: merchant,
-            amount: uint128(amount),
+            // Checked, not truncated, so the record can't disagree with the
+            // amount that moved and was emitted.
+            amount: SafeCast.toUint128(amount),
             paidAt: uint64(block.timestamp)
         });
         paymentCount++;
@@ -562,6 +698,11 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         string calldata name
     ) private returns (uint256 planId) {
         if (pricePerPeriod == 0) revert ZeroAmount();
+        // Checked, not truncated: 2^128 would pass the zero check and be
+        // stored as a free plan anyone could join with no balance, and
+        // 2^128 + 20 AUSD would charge 20 AUSD while PlanCreated announced
+        // the untruncated price.
+        uint128 price = SafeCast.toUint128(pricePerPeriod);
         // A period under the deployment's minimum is almost certainly a
         // mistake, and one over a year makes the allowance a standing risk for
         // no benefit.
@@ -570,7 +711,7 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         planId = ++planCount;
         plans[planId] = Plan({
             merchant: merchant,
-            pricePerPeriod: uint128(pricePerPeriod),
+            pricePerPeriod: price,
             periodSeconds: periodSeconds,
             active: true,
             name: name
