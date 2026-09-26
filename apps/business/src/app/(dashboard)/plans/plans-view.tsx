@@ -132,7 +132,7 @@ export function PlansView() {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="hidden overflow-x-auto md:block">
               <table className="ledger min-w-[880px]">
                 <caption className="sr-only">Pay in 4 plans</caption>
                 <thead>
@@ -173,6 +173,24 @@ export function PlansView() {
                 </tbody>
               </table>
             </div>
+
+            {/* Phones: one entry per plan, the ticks kept whole. */}
+            <ul className="grid md:hidden" aria-label="Pay in 4 plans">
+              {loading || !data ? (
+                [0, 1, 2, 3].map((i) => (
+                  <li key={i} className="grid gap-3 border-b border-line px-3 py-4 last:border-0">
+                    <Skeleton width="60%" />
+                    <Skeleton width="35%" />
+                  </li>
+                ))
+              ) : rows.length === 0 ? (
+                <li>
+                  <EmptyState title={EMPTY[filter].title}>{EMPTY[filter].body}</EmptyState>
+                </li>
+              ) : (
+                rows.map((plan) => <PlanItem key={plan.id} plan={plan} />)
+              )}
+            </ul>
           </section>
         </>
       )}
@@ -186,12 +204,12 @@ function PlanRow({ plan }: { plan: Plan }) {
     <tr>
       <td className="max-w-[16rem]">
         <span className="block truncate">{plan.description}</span>
-        <span className="machine block text-[12px] text-muted">
+        <span className="machine block text-[12px] whitespace-nowrap text-muted">
           {plan.orderId} · opened {formatDate(plan.openedAt)}
         </span>
       </td>
       <td>
-        <span className="machine text-[12.5px] text-muted" title={plan.buyer}>
+        <span className="machine text-[12.5px] whitespace-nowrap text-muted" title={plan.buyer}>
           {shortAddress(plan.buyer)}
         </span>
       </td>
@@ -213,6 +231,36 @@ function PlanRow({ plan }: { plan: Plan }) {
         <PlanState plan={plan} />
       </td>
     </tr>
+  );
+}
+
+function PlanItem({ plan }: { plan: Plan }) {
+  return (
+    <li className="grid gap-3 border-b border-line px-3 py-4 last:border-0">
+      <div className="flex items-start justify-between gap-3">
+        <span className="min-w-0">
+          <span className="block truncate">{plan.description}</span>
+          <span className="machine block truncate text-[12px] text-muted">
+            {plan.orderId} · {shortAddress(plan.buyer)}
+          </span>
+        </span>
+        <span className="figure shrink-0 text-right font-medium">
+          {money(plan.outstandingCents)}
+          <span className="block text-[12px] font-normal text-muted">of {money(plan.totalCents)}</span>
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <Ticks paid={plan.installmentsPaid} total={plan.installmentCount} failing={plan.state === "dunning"} />
+        <span className="flex items-center gap-3">
+          {plan.nextDueAt ? (
+            <span className={cx("figure text-[13px]", plan.state === "dunning" ? "text-warn-text" : "text-muted")}>
+              {formatDue(plan.nextDueAt)}
+            </span>
+          ) : null}
+          <PlanState plan={plan} />
+        </span>
+      </div>
+    </li>
   );
 }
 

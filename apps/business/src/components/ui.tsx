@@ -12,7 +12,7 @@ export function cx(...parts: (string | false | null | undefined)[]): string {
 
 /* ── Buttons ────────────────────────────────────────────────────────────── */
 
-type Variant = "primary" | "secondary" | "ghost" | "danger";
+type Variant = "primary" | "secondary" | "ghost" | "danger" | "rail";
 type Size = "md" | "sm" | "lg";
 
 const VARIANT: Record<Variant, string> = {
@@ -20,6 +20,7 @@ const VARIANT: Record<Variant, string> = {
   secondary: "bg-field text-text ring-1 ring-inset ring-line-strong hover:ring-[color-mix(in_oklab,var(--text)_28%,transparent)]",
   ghost: "text-text hover:bg-[color-mix(in_oklab,var(--text)_6%,transparent)]",
   danger: "bg-danger-wash text-danger-text hover:bg-[color-mix(in_oklab,var(--danger)_18%,transparent)]",
+  rail: "text-[var(--rail-text)] hover:bg-[var(--rail-hover)]",
 };
 
 const SIZE: Record<Size, string> = {

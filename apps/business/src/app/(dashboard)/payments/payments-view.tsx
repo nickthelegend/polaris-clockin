@@ -113,66 +113,122 @@ export function PaymentsView() {
             <ErrorState message={error} onRetry={reload} />
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="ledger min-w-[860px]">
-              <caption className="sr-only">Payments, newest first</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Date</th>
-                  <th scope="col">Description</th>
-                  <th scope="col">Buyer</th>
-                  <th scope="col">Paid with</th>
-                  <th scope="col">Status</th>
-                  <th scope="col" className="num">
-                    Amount
-                  </th>
-                  <th scope="col" className="num">
-                    Fee
-                  </th>
-                  <th scope="col" className="num">
-                    Net
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading || !payments ? (
-                  Array.from({ length: 8 }, (_, i) => (
-                    <tr key={i}>
-                      {[14, 30, 12, 10, 10, 9, 7, 9].map((w, j) => (
-                        <td key={j} className={j >= 5 ? "num" : undefined}>
-                          <Skeleton width={`${w * 0.6}ch`} />
-                        </td>
-                      ))}
+          <>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="ledger min-w-[860px]">
+                <caption className="sr-only">Payments, newest first</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Buyer</th>
+                    <th scope="col">Paid with</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="num">
+                      Amount
+                    </th>
+                    <th scope="col" className="num">
+                      Fee
+                    </th>
+                    <th scope="col" className="num">
+                      Net
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading || !payments ? (
+                    Array.from({ length: 8 }, (_, i) => (
+                      <tr key={i}>
+                        {[14, 30, 12, 10, 10, 9, 7, 9].map((w, j) => (
+                          <td key={j} className={j >= 5 ? "num" : undefined}>
+                            <Skeleton width={`${w * 0.6}ch`} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : shown.length === 0 ? (
+                    <tr>
+                      <td colSpan={8}>
+                        <EmptyState title={query ? "No payments match" : "No payments yet"}>
+                          {query
+                            ? "Try part of the description, an order ID like ord_1042, or the start of a buyer's address."
+                            : "Payments appear here the moment a buyer pays one of your links or a checkout session."}
+                        </EmptyState>
+                      </td>
                     </tr>
-                  ))
-                ) : shown.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>
-                      <EmptyState title={query ? "No payments match" : "No payments yet"}>
-                        {query
-                          ? "Try part of the description, an order ID like ord_1042, or the start of a buyer's address."
-                          : "Payments appear here the moment a buyer pays one of your links or a checkout session."}
-                      </EmptyState>
-                    </td>
-                  </tr>
-                ) : (
-                  shown.map((p) => <PaymentRow key={p.id} payment={p} />)
-                )}
-              </tbody>
-              {payments && rows.length > 0 ? (
-                <tfoot>
-                  <tr>
-                    <td colSpan={5} className="text-[13px] font-medium">
-                      {rows.length === payments.length ? "All payments" : `${rows.length} matching`}, succeeded only
-                    </td>
-                    <td className="num">{money(totals.gross)}</td>
-                    <td className="num text-muted">{money(totals.fee)}</td>
-                    <td className="num">{money(totals.net)}</td>
-                  </tr>
-                </tfoot>
-              ) : null}
-            </table>
-          </div>
+                  ) : (
+                    shown.map((p) => <PaymentRow key={p.id} payment={p} />)
+                  )}
+                </tbody>
+                {payments && rows.length > 0 ? (
+                  <tfoot>
+                    <tr>
+                      <td colSpan={5} className="text-[13px] font-medium">
+                        {rows.length === payments.length ? "All payments" : `${rows.length} matching`}, succeeded only
+                      </td>
+                      <td className="num">{money(totals.gross)}</td>
+                      <td className="num text-muted">{money(totals.fee)}</td>
+                      <td className="num">{money(totals.net)}</td>
+                    </tr>
+                  </tfoot>
+                ) : null}
+              </table>
+            </div>
+
+            {/* Phones: one entry per payment. */}
+            <ul className="grid md:hidden" aria-label="Payments, newest first">
+              {loading || !payments ? (
+                [0, 1, 2, 3, 4].map((i) => (
+                  <li key={i} className="grid gap-2 border-b border-line px-3 py-4 last:border-0">
+                    <Skeleton width="55%" />
+                    <Skeleton width="35%" />
+                  </li>
+                ))
+              ) : shown.length === 0 ? (
+                <li>
+                  <EmptyState title={query ? "No payments match" : "No payments yet"}>
+                    {query
+                      ? "Try part of the description, an order ID like ord_1042, or the start of a buyer's address."
+                      : "Payments appear here the moment a buyer pays one of your links or a checkout session."}
+                  </EmptyState>
+                </li>
+              ) : (
+                shown.map((p) => (
+                  <li key={p.id} className="grid gap-1 border-b border-line px-3 py-3.5 last:border-0">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="min-w-0 truncate">{p.description}</span>
+                      <span
+                        className={cx(
+                          "figure shrink-0 font-medium",
+                          p.status === "failed" && "text-muted line-through decoration-1",
+                        )}
+                      >
+                        {money(p.amountCents)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3 text-[12.5px] text-muted">
+                      <span className="figure truncate">
+                        {formatDateTime(p.createdAt)} · {MODE_LABEL[p.mode]}
+                      </span>
+                      {p.status === "failed" ? (
+                        <Status tone="danger" className="text-[12.5px]">
+                          Failed
+                        </Status>
+                      ) : (
+                        <span className="figure shrink-0">net {money(p.netCents)}</span>
+                      )}
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+            {payments && rows.length > 0 ? (
+              <p className="figure flex justify-between border-t border-line-strong px-3 pt-3 pb-1 text-[13px] font-medium md:hidden">
+                <span>Net, succeeded</span>
+                <span>{money(totals.net)}</span>
+              </p>
+            ) : null}
+          </>
         )}
 
         {rows.length > limit ? (
@@ -194,7 +250,7 @@ function PaymentRow({ payment: p }: { payment: Payment }) {
       <td className="figure whitespace-nowrap text-muted">{formatDateTime(p.createdAt)}</td>
       <td className="max-w-[16rem]">
         <span className="block truncate">{p.description}</span>
-        <span className="machine block text-[12px] text-muted">{p.orderId}</span>
+        <span className="machine block text-[12px] whitespace-nowrap text-muted">{p.orderId}</span>
       </td>
       <td>
         <span className="machine text-[12.5px] text-muted" title={p.buyer}>

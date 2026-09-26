@@ -55,7 +55,7 @@ export function PayoutsView() {
       {error && !data ? (
         <ErrorState message={error} onRetry={reload} />
       ) : (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
           <WithdrawPanel
             state={data}
             loading={loading}
@@ -70,7 +70,7 @@ export function PayoutsView() {
             loading={loading}
             onChange={(auto) => mutate((s) => (s ? { ...s, auto } : s))}
           />
-          <div className="lg:col-span-2">
+          <div className="min-w-0 lg:col-span-2">
             <HistoryPanel history={data?.history} loading={loading} />
           </div>
         </div>
@@ -351,7 +351,7 @@ function HistoryPanel({ history, loading }: { history: Payout[] | undefined; loa
       <h2 id="history-title" className="section-title px-3 pt-3 pb-3 sm:px-4">
         History
       </h2>
-      <div className="overflow-x-auto">
+      <div className="hidden overflow-x-auto md:block">
         <table className="ledger min-w-[640px]">
           <caption className="sr-only">Payout history, newest first</caption>
           <thead>
@@ -408,6 +408,45 @@ function HistoryPanel({ history, loading }: { history: Payout[] | undefined; loa
           </tbody>
         </table>
       </div>
+
+      {/* Phones: one entry per payout. */}
+      <ul className="grid md:hidden" aria-label="Payout history, newest first">
+        {loading || !history ? (
+          [0, 1, 2].map((i) => (
+            <li key={i} className="grid gap-2 border-b border-line px-3 py-4 last:border-0">
+              <Skeleton width="50%" />
+              <Skeleton width="30%" />
+            </li>
+          ))
+        ) : history.length === 0 ? (
+          <li>
+            <EmptyState title="No payouts yet">Withdrawals and automatic payouts appear here with where they went.</EmptyState>
+          </li>
+        ) : (
+          history.map((p) => (
+            <li key={p.id} className="grid gap-1 border-b border-line px-3 py-3.5 last:border-0">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="machine truncate text-[13px]" title={p.destination}>
+                  {shortAddress(p.destination, 8, 6)}
+                </span>
+                <span className="figure shrink-0 font-medium">{money(p.amountCents)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-[12.5px] text-muted">
+                <span className="figure">
+                  {formatDateTime(p.createdAt)} · {p.kind === "automatic" ? "Automatic" : "Withdrawal"}
+                </span>
+                {p.status === "paid" ? (
+                  <Status tone="neutral" className="text-[12.5px]">Paid</Status>
+                ) : p.status === "queued" ? (
+                  <Status tone="muted" className="text-[12.5px]">Queued</Status>
+                ) : (
+                  <Status tone="danger" className="text-[12.5px]">Failed</Status>
+                )}
+              </div>
+            </li>
+          ))
+        )}
+      </ul>
     </section>
   );
 }

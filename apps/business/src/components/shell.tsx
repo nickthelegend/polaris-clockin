@@ -109,8 +109,7 @@ function Account({ merchant, onRail = false }: { merchant: Merchant | null; onRa
               value={merchant.walletAddress}
               label="Copy payout account address"
               iconOnly
-              variant="ghost"
-              className={onRail ? "text-[var(--rail-text)] hover:bg-[var(--rail-hover)]" : undefined}
+              variant={onRail ? "rail" : "ghost"}
             />
           </div>
         ) : (
@@ -259,7 +258,8 @@ function MobileBar({ merchant }: { merchant: Merchant | null }) {
           aria-label="Account"
           className="arrive fixed inset-x-3 top-[64px] z-40 rounded-[20px] bg-surface p-4 shadow-[var(--shadow-pop)]"
         >
-          <div className="mb-3 flex justify-end">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-[12.5px] font-medium text-muted">Account</p>
             <button
               type="button"
               onClick={() => {

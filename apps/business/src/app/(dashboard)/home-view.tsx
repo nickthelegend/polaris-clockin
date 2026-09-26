@@ -32,7 +32,7 @@ export function HomeView() {
       {error && !data ? (
         <ErrorState message={error} onRetry={reload} />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
           <BalancePanel data={data} loading={loading} />
           <TodayPanel data={data} loading={loading} />
           <PayInFourPanel data={data} loading={loading} />
@@ -47,7 +47,7 @@ type PanelProps = { data: Overview | undefined; loading: boolean };
 
 function BalancePanel({ data, loading }: PanelProps) {
   return (
-    <section aria-labelledby="balance-title" className="panel relative isolate overflow-hidden p-6 sm:p-7">
+    <section aria-labelledby="balance-title" className="panel relative isolate flex flex-col overflow-hidden p-6 sm:p-7">
       <div aria-hidden className="grid-ground absolute inset-0 -z-10" />
       <h2 id="balance-title" className="flex items-center gap-2 text-[14px] text-muted">
         <span aria-hidden className="inline-block h-[11px] w-[15px] rounded-[3px] bg-lime" />
@@ -63,7 +63,7 @@ function BalancePanel({ data, loading }: PanelProps) {
         {data && data.today.grossCents > 0 ? <Pill className="figure">+{money(data.today.grossCents)} today</Pill> : null}
       </div>
 
-      <div className="mt-8 flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-wrap gap-2 pt-8">
         <ButtonLink href="/payouts" icon={<ArrowDownToLine className="size-4" aria-hidden />}>
           Withdraw
         </ButtonLink>
@@ -109,8 +109,8 @@ function TodayPanel({ data, loading }: PanelProps) {
           </li>
         ) : (
           payments.map((p) => (
-            <li key={p.id} className="grid grid-cols-[3.75rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-line py-3 last:border-0">
-              <span className="figure text-[13px] text-muted">{formatTime(p.createdAt)}</span>
+            <li key={p.id} className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-center gap-3 border-b border-line py-3 last:border-0">
+              <span className="figure text-[13px] whitespace-nowrap text-muted">{formatTime(p.createdAt)}</span>
               <span className="min-w-0">
                 <span className="block truncate text-[14px]">{p.description}</span>
                 <span className="block text-[12px] text-muted">

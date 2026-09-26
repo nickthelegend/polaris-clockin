@@ -240,7 +240,7 @@ function SnippetPanel() {
         <CopyButton value={SNIPPET} label="Copy code" />
       </div>
 
-      <figure className="mt-5 overflow-hidden rounded-[18px] bg-[var(--rail)]">
+      <figure className="mt-5 overflow-hidden rounded-[18px] bg-[var(--code)] ring-1 ring-inset ring-[var(--rail-line)]">
         <figcaption className="flex items-center justify-between border-b border-[var(--rail-line)] px-4 py-2.5 text-[12px] text-[var(--rail-muted)]">
           <span className="machine">app/api/checkout/route.ts</span>
           <span>TypeScript</span>

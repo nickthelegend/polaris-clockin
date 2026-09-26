@@ -234,11 +234,12 @@ function Showcase() {
       <div className="relative h-[250px] sm:h-[280px]" aria-hidden>
         {/* Back: the ink card. */}
         <div className="absolute inset-x-6 top-0 h-[200px] overflow-hidden rounded-[24px] bg-[#181818] p-5 text-white sm:h-[218px]">
-          <div className="flex items-start justify-between">
-            <span className="text-[14px] text-white/70">Pay in 4</span>
+          <div className="flex items-baseline justify-between">
+            <span className="text-[14px] text-white/70">
+              Pay in 4 <span className="figure ml-1.5 text-white">4 × $50.38</span>
+            </span>
             <span className="text-[15px] font-black tracking-[-0.02em] italic">POLARIS</span>
           </div>
-          <p className="figure mt-3 text-[22px] font-medium tracking-[-0.02em]">4 × $50.38</p>
           <Emboss color="#181818" />
         </div>
         {/* Front: the lime card. */}

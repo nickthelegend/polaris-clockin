@@ -60,7 +60,7 @@ export function LinksView() {
         description="One link takes a payment in full, in four instalments or on a subscription. Share it anywhere, or print the QR code at the counter."
       />
 
-      <div className="grid items-start gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[400px_minmax(0,1fr)]">
         <div className="grid gap-4 xl:sticky xl:top-6">
           <CreateLinkPanel onCreated={onCreated} />
         </div>
@@ -348,8 +348,8 @@ function LinksTable({
   return (
     <>
       {/* Wide screens: a ledger. */}
-      <div className="hidden md:block">
-        <table className="ledger">
+      <div className="hidden overflow-x-auto md:block">
+        <table className="ledger min-w-[640px]">
           <caption className="sr-only">Payment links</caption>
           <thead>
             <tr>
@@ -370,13 +370,20 @@ function LinksTable({
           <tbody>
             {links.map((link) => (
               <tr key={link.id} className={cx(selectedId === link.id && "bg-[color-mix(in_oklab,var(--text)_4%,transparent)]")}>
-                <td className="max-w-[18rem]">
+                <td className="max-w-[16rem]">
                   <span className="block truncate font-medium">{link.description}</span>
                   <span className="machine block truncate text-[12px] text-muted">{displayUrl(link.url)}</span>
                 </td>
                 <td className="num font-medium">{money(link.amountCents)}</td>
                 <td>
-                  <span className="text-[13px] text-muted">{link.modes.map((m) => MODE_LABEL[m]).join(" · ")}</span>
+                  <span className="flex flex-wrap gap-x-1.5 text-[13px] text-muted">
+                    {link.modes.map((m, i) => (
+                      <span key={m} className="whitespace-nowrap">
+                        {MODE_LABEL[m]}
+                        {i < link.modes.length - 1 ? " ·" : ""}
+                      </span>
+                    ))}
+                  </span>
                   <span className="block text-[12px] text-faint">{link.usage === "single" ? "Single use" : "Reusable"}</span>
                 </td>
                 <td>
@@ -391,11 +398,11 @@ function LinksTable({
                     variant="secondary"
                     size="sm"
                     onClick={() => onSelect(link.id)}
-                    icon={<QrIcon className="size-3.5" aria-hidden />}
-                    aria-label={`Share ${link.description}`}
-                  >
-                    Share
-                  </Button>
+                    icon={<QrIcon className="size-4" aria-hidden />}
+                    aria-label={`Share ${link.description}: link and QR code`}
+                    title="Link and QR code"
+                    className="w-8 px-0"
+                  />
                 </td>
               </tr>
             ))}
