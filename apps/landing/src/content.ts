@@ -1,0 +1,253 @@
+/**
+ * Every word on the landing page lives here, so copy can be edited in one
+ * place. Sections read from this file and never hard-code text.
+ *
+ * Headings are arrays of lines: on desktop each entry is one line, on phones
+ * they flow. Paragraphs are plain strings; they reveal line by line wherever
+ * they happen to wrap. In a two-tone paragraph `lead` is the olive lead-in and
+ * `rest` is muted.
+ */
+
+export const site = {
+  title: "Polaris: Stripe for every app on Monad",
+  description:
+    "Payment links, pay-in-4 credit and subscriptions for every app on Monad. Settled in dollars in under a second.",
+  name: "Polaris",
+};
+
+export const nav = {
+  links: [
+    { label: "Product", href: "#product" },
+    { label: "Business", href: "#pricing" },
+    { label: "Developers", href: "#faq" },
+  ],
+  login: { label: "Log in", href: "#" },
+  cta: { label: "Get the app", href: "#talk" },
+};
+
+export const hero = {
+  headline: ["Credit, built into", "the payment."],
+  sub: "Payment links, pay-in-4 credit and subscriptions for every app on Monad. Settled in dollars in under a second.",
+  cta: { label: "Get started", href: "#product" },
+  card: {
+    title: "Payments",
+    badge: "+23%",
+    tabs: ["Weekly", "Monthly", "Yearly"],
+    caption: "It updates as each payment lands",
+    /**
+     * Each column is a stack of blocks, top to bottom. `tone` picks the
+     * colour, `h` is the block height in px at desktop size, `gap` the space
+     * above the block.
+     */
+    columns: [
+      [
+        { tone: "mid", h: 18, gap: 0 },
+        { tone: "olive", h: 32, gap: 6 },
+        { tone: "lime", h: 11, gap: 6 },
+      ],
+      [
+        { tone: "mid", h: 19, gap: 0 },
+        { tone: "olive", h: 37, gap: 6 },
+        { tone: "lime", h: 12, gap: 6 },
+      ],
+      [
+        { tone: "mid", h: 12, gap: 0 },
+        { tone: "olive", h: 23, gap: 4 },
+        { tone: "lime", h: 25, gap: 4 },
+      ],
+      [
+        { tone: "mid", h: 26, gap: 0 },
+        { tone: "olive", h: 55, gap: 6 },
+        { tone: "lime", h: 38, gap: 6 },
+      ],
+    ] as const,
+  },
+};
+
+export const logos = {
+  pill: "Built on Monad, with the best in crypto infra",
+  items: [
+    { name: "Monad", glyph: "monad" },
+    { name: "Privy", glyph: "privy" },
+    { name: "Chainlink", glyph: "chainlink" },
+    { name: "Agora AUSD", glyph: "agora" },
+    { name: "Envio", glyph: "envio" },
+    { name: "Nansen", glyph: "nansen" },
+    { name: "Circle USDC", glyph: "circle" },
+    { name: "Zerion", glyph: "zerion" },
+  ] as const,
+};
+
+export const stripe = {
+  heading: ["Stripe for every", "app on Monad"],
+  primary: { label: "Start accepting", href: "#pricing" },
+  secondary: { label: "Read the docs", href: "#faq" },
+  paragraphs: [
+    {
+      lead: "Experience checkout without a wallet",
+      rest: "— buyers pay with Face ID, merchants get dollars.",
+    },
+    {
+      lead: "The power of Stripe,",
+      rest: "with credit built in. Links, a checkout API, subscriptions and payouts, with pay-in-4 on every order and the merchant paid up front.",
+    },
+  ],
+  mint: {
+    title: ["Get paid in 0.8s", "at any size"],
+    bullets: ["Payment links and QR codes, no code", "Webhooks and a ten-line SDK"],
+    cta: { label: "Create a link", href: "#pricing" },
+  },
+  dark: {
+    title: ["Pay in 4, with", "credit built in"],
+    send: "Send money",
+    borders: "Across borders",
+  },
+};
+
+export const credit = {
+  heading: "Credit that feels like cash, fast",
+  cta: { label: "Learn more", href: "#faq" },
+  chips: {
+    title: "Pay any way you like",
+    rowA: ["Pay in 4", "Subscriptions", "Send by link", "Payment links"],
+    rowB: ["Payouts", "Cross-border", "QR", "Pay in 4", "Subscriptions"],
+    note: "We pay the merchant up front, so you can split it.",
+  },
+  line: {
+    title: ["Intuitive", "credit."],
+    label: "Credit line",
+    amount: 153.23,
+    of: "Available of $1,000",
+    legend: [
+      { label: "Paid", value: 22, tone: "olive" },
+      { label: "Available", value: 63, tone: "sage" },
+      { label: "Due", value: 15, tone: "stone" },
+    ] as const,
+  },
+  photo: {
+    title: "Face ID, not seed phrases",
+    body: "Open a link, look at your phone, and you've paid. No wallet, no gas, no twelve words to lose.",
+  },
+};
+
+export const pricing = {
+  heading: ["0.5% per payment.", "No hidden fees."],
+  body: "Pay 0.5% when a payment lands, against about 3% for cards. Instalments, collections and credit risk are ours, not yours.",
+  cta: { label: "Start accepting", href: "#talk" },
+  calculator: {
+    title: "Calculator",
+    salesLabel: "Your monthly sales",
+    max: 100_000,
+    step: 100,
+    /** Where the slider settles on first view, as a share of `max`. */
+    intro: 0.25,
+    keep: "You keep",
+    cards: "Cards would take",
+    feeRate: 0.005,
+    cardRate: 0.029,
+    cardFixed: 0.3,
+    orders: 100,
+    footnote: "Cards at 2.9% + 30¢, for 100 orders a month",
+  },
+};
+
+export const faq = {
+  heading: ["Frequently", "Asked Questions"],
+  sub: "Straight answers about checkout, credit, payouts and what it costs.",
+  items: [
+    {
+      q: "Do my customers need a crypto wallet?",
+      a: "No. They open your link and create an account with Face ID in a few seconds. There's no wallet to install, no seed phrase and no gas to hold. Prices are in dollars, and they tap Confirm once.",
+    },
+    {
+      q: "How does pay-in-4 work?",
+      a: "At checkout the buyer can split an order into four payments against a credit line read from their payment history. You're paid 100% up front. They pay 10% APR, pro-rated, so a $200 order becomes 4 × $50.38, shown before they confirm.",
+    },
+    {
+      q: "When do I get paid?",
+      a: "The moment the payment lands. Monad finalises in under a second, so you see Paid before the page could reload, in dollars, and you can withdraw the same minute.",
+    },
+    {
+      q: "What does it cost?",
+      a: "0.5% per payment, with nothing monthly and nothing to set up. Pay-in-4 costs you the same: credit risk and collections are ours, not yours.",
+    },
+    {
+      q: "Is it live?",
+      a: "On Monad testnet today. Payment links, pay-in-4, subscriptions and send-by-link run end to end there. Credit stays on testnet while we're in beta; mainnet starts with Pay now and Send, capped.",
+    },
+  ],
+};
+
+/**
+ * Placeholder quotes: replace them with real ones from design partners before
+ * launch.
+ */
+export const testimonials = {
+  intervalMs: 6000,
+  items: [
+    {
+      name: "Ana Ribeiro, founder at Tidepool Goods",
+      quote:
+        "“We shared one link and were paid in dollars before the buyer closed the tab. Pay-in-4 lifted our basket size, and the credit risk was never ours to carry.”",
+      image: "/assets/testimonial.jpg",
+    },
+    {
+      name: "Dev Malhotra, CTO at Kitebase",
+      quote:
+        "“Ten lines of SDK and one webhook. Our users pay with Face ID and never see a wallet, gas or a seed phrase. Checkout stopped being a support ticket.”",
+      image: "/assets/testimonial.jpg",
+    },
+    {
+      name: "Lena Hoffmann, head of growth at Northwind",
+      quote:
+        "“Subscriptions that skip a missed month instead of stacking it. Payouts land the same minute, and the dashboard tells us what happened without a spreadsheet.”",
+      image: "/assets/testimonial.jpg",
+    },
+  ],
+};
+
+export const blog = {
+  heading: "From the blog",
+  showAll: { label: "Show all", href: "#" },
+  articles: [
+    { title: ["Checkout on Monad,", "without a wallet"], image: "/assets/article-1.jpg", href: "#" },
+    { title: ["Pay in 4, paid in full:", "credit at checkout"], image: "/assets/article-2.jpg", href: "#" },
+    { title: ["Subscriptions that skip,", "not stack"], image: "/assets/article-3.jpg", href: "#" },
+  ],
+};
+
+export const talk = {
+  heading: ["Talk to the team"],
+  body: "Tell us what you sell and how you want to be paid. We'll help you ship a link, the checkout or the SDK, and answer anything about credit and payouts.",
+  label: "Builders",
+  avatars: ["/assets/avatar-1.jpg", "/assets/avatar-2.jpg", "/assets/avatar-3.jpg"],
+  more: "3+",
+  cta: { label: "Book a demo", href: "mailto:hello@polarispay.app" },
+};
+
+export const footer = {
+  blurb: "Stripe for every app on Monad. Payment links, pay-in-4 credit and subscriptions, settled in dollars in under a second.",
+  more: { label: "More about us", href: "#product" },
+  links: [
+    { label: "Product", href: "#product" },
+    { label: "Business", href: "#pricing" },
+    { label: "Developers", href: "#faq" },
+    { label: "Contact.", href: "#talk" },
+  ],
+  contact: {
+    title: "Contact us",
+    lines: ["hello@polarispay.app", "polarispay.app"],
+  },
+  location: {
+    title: "Location",
+    lines: ["Remote-first, on Monad.", "Built for Monad Metropolis 2026"],
+  },
+  socials: [
+    { label: "X", icon: "x", href: "#" },
+    { label: "GitHub", icon: "github", href: "https://github.com/nickthelegend" },
+    { label: "Telegram", icon: "telegram", href: "#" },
+  ] as const,
+  copyright: ["© 2026 — Polaris", "All rights reserved"],
+  languagesLabel: "Languages",
+  languages: ["En", "Es", "Fr", "De", "Ru"],
+};
