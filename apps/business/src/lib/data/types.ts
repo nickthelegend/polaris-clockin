@@ -18,6 +18,18 @@ export type Merchant = {
   walletAddress: Address | null;
   email: string | null;
   createdAt: IsoDate;
+  /** What webhooks and the public API call this merchant: `mer_…`. */
+  publicId?: string;
+  /**
+   * MerchantRegistry, on chain. `registered` merchants can take payments;
+   * `active` ones can also offer Pay in 4 (activation sets their cap).
+   */
+  registration?: {
+    state: "none" | "submitted" | "registered" | "active" | "failed";
+    txHash: `0x${string}` | null;
+    activationTxHash: `0x${string}` | null;
+    error: string | null;
+  };
 };
 
 /* ── Payment links ──────────────────────────────────────────────────────── */
@@ -245,14 +257,20 @@ export type WebhookDelivery = {
   durationMs: number | null;
   attempt: number;
   test: boolean;
-  /** Test deliveries are signed and logged but not sent until live events are wired. */
+  /** True only for a delivery that was signed and logged but never sent. Live and test deliveries are sent. */
   simulated: boolean;
-  /** The exact headers and body that were (or would be) sent. */
+  /** The exact headers and body of the last attempt (the body is the same on every attempt). */
   request: {
     headers: Record<string, string>;
     body: string;
   };
   createdAt: IsoDate;
+  /** pending: queued or waiting for a retry; delivering: in flight; then succeeded or failed (retries exhausted). */
+  state?: "pending" | "delivering" | "succeeded" | "failed";
+  /** When the next retry runs, while `state` is pending. */
+  nextAttemptAt?: IsoDate | null;
+  /** Every attempt so far, oldest first. */
+  attempts?: Array<{ at: IsoDate; status: number | null; durationMs: number; error: string | null; responseBody: string | null }>;
 };
 
 export type WebhooksState = {
