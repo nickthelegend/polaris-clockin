@@ -1,4 +1,5 @@
 import { CreditSection } from "@/components/sections/CreditSection";
+import { Faq } from "@/components/sections/Faq";
 import { Hero } from "@/components/sections/Hero";
 import { LogoStrip } from "@/components/sections/LogoStrip";
 import { Pricing } from "@/components/sections/Pricing";
@@ -14,6 +15,7 @@ export default function Page() {
       <StripeSection assets={assets} />
       <CreditSection assets={assets} />
       <Pricing />
+      <Faq />
     </main>
   );
 }
