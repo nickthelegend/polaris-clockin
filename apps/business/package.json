@@ -1,0 +1,39 @@
+{
+  "name": "@polaris/business",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Polaris for Business: the merchant dashboard. Privy login and payout wallet, payment links, payments, the Pay in 4 ledger, payouts, API keys and webhooks.",
+  "scripts": {
+    "dev": "next dev --port 3100",
+    "build": "next build",
+    "start": "next start --port 3100",
+    "lint": "eslint . && node scripts/check-api-auth.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "5.3.0",
+    "@fontsource-variable/inter-tight": "5.3.0",
+    "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@privy-io/node": "0.35.0",
+    "@privy-io/react-auth": "3.45.0",
+    "lucide-react": "1.48.0",
+    "next": "16.3.6",
+    "qrcode": "1.5.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "0.0.1",
+    "viem": "2.56.9"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "^22.20.4",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.3.6",
+    "tailwindcss": "4.3.3",
+    "typescript": "^5.9.3"
+  }
+}
