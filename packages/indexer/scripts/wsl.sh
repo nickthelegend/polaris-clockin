@@ -3,6 +3,7 @@
 #
 #   bash scripts/wsl.sh setup        # install (standalone, not the workspace) + envio codegen
 #   bash scripts/wsl.sh test         # generate --check, codegen, typecheck, vitest
+#   bash scripts/wsl.sh live         # a local chain indexed end to end over RPC (scripts/live.sh)
 #   bash scripts/wsl.sh <pnpm args>  # anything else, e.g. `dev` (needs Docker) or `codegen`
 #
 # From Windows:  wsl -d <distro> -- bash packages/indexer/scripts/wsl.sh test
@@ -53,8 +54,12 @@ case "${1:-}" in
     pnpm typecheck
     pnpm exec vitest run --test-timeout=60000 "$@"
     ;;
+  live)
+    shift
+    exec bash scripts/live.sh "$@"
+    ;;
   "")
-    echo "usage: bash scripts/wsl.sh setup | test | <pnpm args>" >&2
+    echo "usage: bash scripts/wsl.sh setup | test | live | <pnpm args>" >&2
     exit 2
     ;;
   *)

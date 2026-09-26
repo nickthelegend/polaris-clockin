@@ -17,6 +17,10 @@
  *
  * test/replay.test.ts replays the log through the real handlers and checks
  * the indexed state against those views. Runs on Windows or Linux.
+ *
+ * Options (for scripts/live.sh, which indexes the same chain over RPC):
+ *   --out <file>    write the fixture there instead
+ *   --keep-node     leave the Hardhat node running and print its pid
  */
 
 import { spawn } from "node:child_process";
@@ -29,7 +33,14 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "..");
 const CONTRACTS = resolve(ROOT, "../contracts");
 const PORT = Number(process.env.POLARIS_FIXTURE_PORT || 3540);
-const OUT = join(ROOT, "test", "fixtures", "local-chain.json");
+const args = process.argv.slice(2);
+const flag = (name) => args.includes(name);
+const option = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const OUT = resolve(option("--out") ?? join(ROOT, "test", "fixtures", "local-chain.json"));
+const KEEP_NODE = flag("--keep-node");
 
 const require = createRequire(join(CONTRACTS, "package.json"));
 const { JsonRpcProvider, Interface, Contract } = require("ethers");
@@ -227,7 +238,9 @@ async function main() {
   const node = spawn(process.execPath, [HARDHAT, "node", "--hostname", "127.0.0.1", "--port", String(PORT)], {
     cwd: CONTRACTS,
     stdio: ["ignore", "ignore", "inherit"],
+    detached: KEEP_NODE,
   });
+  let ok = false;
   try {
     const started = Date.now();
     while (!(await rpcReady(url))) {
@@ -244,8 +257,13 @@ async function main() {
     writeFileSync(OUT, `${JSON.stringify(fixture, null, 1)}\n`);
     const kinds = new Set(fixture.events.map((e) => `${e.contract}.${e.event}`));
     console.log(`\nWrote ${OUT}: ${fixture.events.length} logs, ${kinds.size} kinds of event, ${Object.keys(fixture.expected.loans).length} loans.`);
+    ok = true;
+    if (KEEP_NODE) {
+      node.unref();
+      console.log(`Hardhat node left running on ${url} (pid ${node.pid}).`);
+    }
   } finally {
-    node.kill();
+    if (!KEEP_NODE || !ok) node.kill();
   }
 }
 
