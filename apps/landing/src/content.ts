@@ -32,35 +32,33 @@ export const hero = {
   card: {
     title: "Payments",
     badge: "+23%",
-    tabs: ["Weekly", "Monthly", "Yearly"],
+    tabs: ["Weekly", "Monthly", "Yearly"] as const,
     caption: "It updates as each payment lands",
     /**
-     * Each column is a stack of blocks, top to bottom. `tone` picks the
-     * colour, `h` is the block height in px at desktop size, `gap` the space
-     * above the block.
+     * The stacked chart, one data set per tab. Each column floats `top` px
+     * below the chart's top edge and stacks three blocks downwards: `mid`
+     * (olive-green), `olive` and `lime`, with `gap` px between them.
      */
-    columns: [
-      [
-        { tone: "mid", h: 18, gap: 0 },
-        { tone: "olive", h: 32, gap: 6 },
-        { tone: "lime", h: 11, gap: 6 },
+    series: {
+      Weekly: [
+        { top: 45, h: [15, 31, 10], gap: 4 },
+        { top: 29, h: [19, 38, 11], gap: 5 },
+        { top: 16, h: [11, 23, 24], gap: 3 },
+        { top: 0, h: [25, 54, 38], gap: 6 },
       ],
-      [
-        { tone: "mid", h: 19, gap: 0 },
-        { tone: "olive", h: 37, gap: 6 },
-        { tone: "lime", h: 12, gap: 6 },
+      Monthly: [
+        { top: 30, h: [20, 42, 14], gap: 5 },
+        { top: 46, h: [12, 30, 20], gap: 4 },
+        { top: 8, h: [24, 48, 18], gap: 6 },
+        { top: 18, h: [16, 40, 30], gap: 5 },
       ],
-      [
-        { tone: "mid", h: 12, gap: 0 },
-        { tone: "olive", h: 23, gap: 4 },
-        { tone: "lime", h: 25, gap: 4 },
+      Yearly: [
+        { top: 60, h: [12, 24, 12], gap: 4 },
+        { top: 40, h: [16, 34, 16], gap: 5 },
+        { top: 20, h: [20, 44, 22], gap: 5 },
+        { top: 0, h: [26, 58, 40], gap: 6 },
       ],
-      [
-        { tone: "mid", h: 26, gap: 0 },
-        { tone: "olive", h: 55, gap: 6 },
-        { tone: "lime", h: 38, gap: 6 },
-      ],
-    ] as const,
+    },
   },
 };
 
@@ -189,19 +187,16 @@ export const testimonials = {
       name: "Ana Ribeiro, founder at Tidepool Goods",
       quote:
         "“We shared one link and were paid in dollars before the buyer closed the tab. Pay-in-4 lifted our basket size, and the credit risk was never ours to carry.”",
-      image: "/assets/testimonial.jpg",
     },
     {
       name: "Dev Malhotra, CTO at Kitebase",
       quote:
         "“Ten lines of SDK and one webhook. Our users pay with Face ID and never see a wallet, gas or a seed phrase. Checkout stopped being a support ticket.”",
-      image: "/assets/testimonial.jpg",
     },
     {
       name: "Lena Hoffmann, head of growth at Northwind",
       quote:
         "“Subscriptions that skip a missed month instead of stacking it. Payouts land the same minute, and the dashboard tells us what happened without a spreadsheet.”",
-      image: "/assets/testimonial.jpg",
     },
   ],
 };
@@ -210,9 +205,9 @@ export const blog = {
   heading: "From the blog",
   showAll: { label: "Show all", href: "#" },
   articles: [
-    { title: ["Checkout on Monad,", "without a wallet"], image: "/assets/article-1.jpg", href: "#" },
-    { title: ["Pay in 4, paid in full:", "credit at checkout"], image: "/assets/article-2.jpg", href: "#" },
-    { title: ["Subscriptions that skip,", "not stack"], image: "/assets/article-3.jpg", href: "#" },
+    { title: "Checkout on Monad, without a wallet", href: "#" },
+    { title: "Pay in 4, paid in full: credit at checkout", href: "#" },
+    { title: "Subscriptions that skip a month, not stack it", href: "#" },
   ],
 };
 
@@ -220,13 +215,12 @@ export const talk = {
   heading: ["Talk to the team"],
   body: "Tell us what you sell and how you want to be paid. We'll help you ship a link, the checkout or the SDK, and answer anything about credit and payouts.",
   label: "Builders",
-  avatars: ["/assets/avatar-1.jpg", "/assets/avatar-2.jpg", "/assets/avatar-3.jpg"],
   more: "3+",
   cta: { label: "Book a demo", href: "mailto:hello@polarispay.app" },
 };
 
 export const footer = {
-  blurb: "Stripe for every app on Monad. Payment links, pay-in-4 credit and subscriptions, settled in dollars in under a second.",
+  blurb: "Stripe for every app on Monad: payment links, credit at checkout and subscriptions, settled in dollars in under a second.",
   more: { label: "More about us", href: "#product" },
   links: [
     { label: "Product", href: "#product" },

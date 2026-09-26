@@ -1,7 +1,11 @@
+import { Hero } from "@/components/sections/Hero";
+import { getAssets } from "@/lib/assets";
+
 export default function Page() {
+  const assets = getAssets();
   return (
     <main>
-      <h1 className="display text-hero p-10">Polaris</h1>
+      <Hero assets={assets} />
     </main>
   );
 }
