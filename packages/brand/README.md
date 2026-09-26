@@ -21,9 +21,16 @@ Next.js apps add `transpilePackages: ["@polaris/brand"]` to `next.config`.
 | `assets/favicon.ico` | 16, 32 and 48 px |
 | `assets/app-icon-{192,512}.png`, `assets/app-icon-maskable-512.png`, `assets/apple-touch-icon.png` | The lime star on ink, for PWA manifests and home screens |
 | `assets/mark-source.png` | The original artwork the vector was fitted to |
+| `assets/wordmark.png` | The "Polaris" logotype (raster, transparent) |
 
 The vector is fitted to `mark-source.png`, one cubic Bezier per edge (99.1% outer
 and 98.7% inner pixel overlap with the source).
 
-**Wordmark:** the "Polaris" text logo is coming from the team. Until it lands,
-apps set the word in their display face.
+## Wordmark
+
+`assets/wordmark.png` is the team's "Polaris" logotype: glossy green italic
+letters with a star riding the swoosh. It's 872x263 on transparent, from
+`nickthelegend/polaris-merchant-app-fhenix/public/logo.png`. It is raster
+artwork (gloss and glow), so use it as an image: about 32px tall in navs
+(2x-sharp up to 131px) and larger for heroes. Use `PolarisMark` wherever
+only the symbol fits.
