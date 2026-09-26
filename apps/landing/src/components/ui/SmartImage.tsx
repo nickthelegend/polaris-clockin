@@ -22,7 +22,8 @@ export type SmartImageProps = {
  * An image slot that always looks finished: a gradient in the section's
  * palette sits underneath, and the photo fades in over it once it has
  * loaded. A missing or broken file leaves just the gradient, never a
- * broken-image icon.
+ * broken-image icon. A `priority` photo (the hero) is shown straight away
+ * rather than waiting for a load handler, so it can paint before hydration.
  */
 export function SmartImage({
   src,
@@ -70,7 +71,7 @@ export function SmartImage({
           onError={() => setFailed(true)}
           className={cn(
             "absolute inset-0 h-full w-full object-cover transition-opacity duration-700 ease-out",
-            loaded ? "opacity-100" : "opacity-0",
+            loaded || priority ? "opacity-100" : "opacity-0",
             imgClassName,
           )}
         />

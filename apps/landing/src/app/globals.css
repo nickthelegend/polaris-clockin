@@ -149,6 +149,12 @@ html.lenis body {
   .reveal-word {
     display: inline-block;
   }
+
+  /* The hero headline's word reveal, as CSS so it plays before hydration.
+     Each word sets its own animation-delay. */
+  .word-in {
+    animation: word-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
 }
 
 @layer utilities {
@@ -211,6 +217,19 @@ html.lenis body {
 .streak:nth-child(3n) {
   animation-duration: 15s;
 }
+@keyframes word-in {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(0.25em);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0);
+  }
+}
+
 @keyframes streak-drift {
   from {
     transform: translateX(-9%);
@@ -232,6 +251,7 @@ html.lenis body {
   *::before,
   *::after {
     animation-duration: 0.001ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;

@@ -37,11 +37,22 @@ export type BlurWordsProps = {
   play?: boolean;
   amount?: number;
   id?: string;
+  /**
+   * Play on page load with CSS keyframes instead of Motion, so the words
+   * reveal before hydration (the hero headline). `play` is ignored.
+   */
+  css?: boolean;
 };
+
+const HEADINGS = new Set<Tag>(["h1", "h2", "h3", "h4"]);
 
 /**
  * Word-by-word blur reveal: each word goes from opacity 0, blur(12px) and
  * 0.25em down to its place, 700ms on cubic-bezier(.2,.7,.2,1), 70ms apart.
+ *
+ * The text is rendered once (so copying it and textContent read normally);
+ * a heading also carries its whole text as its accessible name, so screen
+ * readers don't step through it word by word.
  */
 export function BlurWords({
   text,
@@ -55,45 +66,50 @@ export function BlurWords({
   play,
   amount,
   id,
+  css = false,
 }: BlurWordsProps) {
   const lines = typeof text === "string" ? [text] : text;
-  const { ref, shown } = usePlay<HTMLElement>(play, amount);
+  const { ref, shown } = usePlay<HTMLElement>(css ? true : play, amount);
   let index = 0;
 
-  const children = (
-    <>
-      <span className="sr-only">{lines.join(" ")}</span>
-      <span aria-hidden="true">
-        {lines.map((line, li) => {
-          const words = line.split(" ").filter(Boolean);
-          return (
-            <Fragment key={li}>
-              <span className={lineClassName}>
-                {words.map((word, wi) => {
-                  const i = index++;
-                  return (
-                    <Fragment key={wi}>
-                      <motion.span
-                        className={cn("reveal-word", wordClassName)}
-                        variants={wordVariants}
-                        custom={{ delay: delay + i * stagger, duration } satisfies Timing}
-                        initial="hidden"
-                        animate={shown ? "visible" : "hidden"}
-                      >
-                        {word}
-                      </motion.span>
-                      {wi < words.length - 1 ? " " : null}
-                    </Fragment>
-                  );
-                })}
-              </span>
-              {li < lines.length - 1 ? " " : null}
-            </Fragment>
-          );
-        })}
-      </span>
-    </>
-  );
+  const children = lines.map((line, li) => {
+    const words = line.split(" ").filter(Boolean);
+    return (
+      <Fragment key={li}>
+        <span className={lineClassName}>
+          {words.map((word, wi) => {
+            const i = index++;
+            const at = delay + i * stagger;
+            return (
+              <Fragment key={wi}>
+                {css ? (
+                  <span
+                    className={cn("reveal-word word-in", wordClassName)}
+                    style={{ animationDelay: `${at}s`, animationDuration: `${duration}s` }}
+                  >
+                    {word}
+                  </span>
+                ) : (
+                  <motion.span
+                    className={cn("reveal-word", wordClassName)}
+                    variants={wordVariants}
+                    custom={{ delay: at, duration } satisfies Timing}
+                    initial="hidden"
+                    animate={shown ? "visible" : "hidden"}
+                  >
+                    {word}
+                  </motion.span>
+                )}
+                {wi < words.length - 1 ? " " : null}
+              </Fragment>
+            );
+          })}
+        </span>
+        {li < lines.length - 1 ? " " : null}
+      </Fragment>
+    );
+  });
 
-  return createElement(as, { ref, className, id }, children);
+  const label = HEADINGS.has(as) ? lines.join(" ") : undefined;
+  return createElement(as, { ref, className, id, "aria-label": label }, children);
 }

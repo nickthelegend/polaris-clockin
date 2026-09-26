@@ -15,9 +15,9 @@ import { HeroCard } from "./HeroCard";
 /**
  * 1. Hero: a full-bleed photo under a dark gradient, the headline at the
  * bottom left and the Payments card at the bottom right (the nav, HeroNav,
- * sits over it from outside <main>). Everything plays its load sequence
- * once the page has mounted; the photo moves at about 0.85x the scroll
- * speed.
+ * sits over it from outside <main>). The headline's words blur in with CSS,
+ * so they play before hydration; the rest plays its load sequence once the
+ * page has mounted. The photo moves at about 0.85x the scroll speed.
  */
 export function Hero({ assets }: { assets: Assets }) {
   const sectionRef = useRef<HTMLElement>(null);
@@ -67,13 +67,7 @@ export function Hero({ assets }: { assets: Assets }) {
 
       <div className="relative flex min-h-[100svh] flex-col justify-end px-4 pb-8 pt-28 md:px-8 md:pb-10 lg:min-h-[max(720px,100svh)] lg:flex-row lg:items-end lg:justify-between lg:gap-10 lg:px-12 lg:pb-12">
         <div className="max-w-[820px]">
-          <BlurWords
-            as="h1"
-            text={hero.headline}
-            play={ready}
-            delay={0.15}
-            className="display text-hero text-white"
-          />
+          <BlurWords as="h1" text={hero.headline} css delay={0.15} className="display text-hero text-white" />
           <BlurLines
             text={hero.sub}
             play={ready}

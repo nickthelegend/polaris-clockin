@@ -29,6 +29,7 @@ export type BlurLinesProps = {
  * Line-by-line blur reveal for paragraphs. The words are laid out as normal
  * text, then grouped by the line they landed on, so it works at any width.
  * Every word on a line shares the line's delay; segments keep their colours.
+ * The text is rendered once; a heading also gets its text as its name.
  */
 export function BlurLines({
   text,
@@ -80,30 +81,24 @@ export function BlurLines({
     return () => observer.disconnect();
   }, [plain]);
 
-  const children = (
-    <>
-      <span className="sr-only">{plain}</span>
-      <span aria-hidden="true">
-        {words.map(({ word, className: tone }, i) => (
-          <Fragment key={i}>
-            <motion.span
-              ref={(el: HTMLSpanElement | null) => {
-                wordRefs.current[i] = el;
-              }}
-              className={cn("reveal-word", tone)}
-              variants={wordVariants}
-              custom={{ delay: delay + (lineOf[i] ?? 0) * stagger, duration }}
-              initial="hidden"
-              animate={shown ? "visible" : "hidden"}
-            >
-              {word}
-            </motion.span>
-            {i < words.length - 1 ? " " : null}
-          </Fragment>
-        ))}
-      </span>
-    </>
-  );
+  const children = words.map(({ word, className: tone }, i) => (
+    <Fragment key={i}>
+      <motion.span
+        ref={(el: HTMLSpanElement | null) => {
+          wordRefs.current[i] = el;
+        }}
+        className={cn("reveal-word", tone)}
+        variants={wordVariants}
+        custom={{ delay: delay + (lineOf[i] ?? 0) * stagger, duration }}
+        initial="hidden"
+        animate={shown ? "visible" : "hidden"}
+      >
+        {word}
+      </motion.span>
+      {i < words.length - 1 ? " " : null}
+    </Fragment>
+  ));
 
-  return createElement(as, { ref, className, id }, children);
+  const label = as === "h3" || as === "h4" ? plain : undefined;
+  return createElement(as, { ref, className, id, "aria-label": label }, children);
 }
