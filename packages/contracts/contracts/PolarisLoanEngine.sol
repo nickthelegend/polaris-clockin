@@ -63,6 +63,20 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
      */
     uint256 public immutable gracePeriod;
 
+    /// Shortest instalment interval a deployment may use when none is given.
+    uint64 public constant DEFAULT_MIN_INTERVAL = 1 hours;
+    /// Floor on any configured minimum, so no deployment can allow a schedule
+    /// that is due in full at origination.
+    uint64 public constant MIN_ALLOWED_INTERVAL = 60;
+
+    /**
+     * @notice Shortest instalment interval this deployment accepts.
+     * @dev Immutable per deployment for the same reason as `gracePeriod`: a
+     *      consumer book wants an hour or more, and a demo deployment wants a
+     *      minute so a whole plan's life can be shown end to end.
+     */
+    uint64 public immutable minInterval;
+
     enum LoanStatus {
         Active,
         Repaid,
@@ -152,10 +166,15 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         IERC20 _stablecoin,
         ScoreManager _scoreManager,
         address _treasury,
-        uint256 _gracePeriod
+        uint256 _gracePeriod,
+        uint64 _minInterval
     ) Ownable(initialOwner) {
         if (_gracePeriod > MAX_GRACE_PERIOD) revert InvalidGracePeriod();
         gracePeriod = _gracePeriod == 0 ? DEFAULT_GRACE_PERIOD : _gracePeriod;
+        if (_minInterval != 0 && (_minInterval < MIN_ALLOWED_INTERVAL || _minInterval > 30 days)) {
+            revert InvalidInterval();
+        }
+        minInterval = _minInterval == 0 ? DEFAULT_MIN_INTERVAL : _minInterval;
         stablecoin = _stablecoin;
         scoreManager = _scoreManager;
         treasury = _treasury;
@@ -229,7 +248,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         // An unvalidated interval let a caller pass 0, which made the loan
         // interest-free and due in full at origination -- liquidatable one
         // grace period later, with a schedule that never existed.
-        if (intervalSeconds < 1 hours || intervalSeconds > 365 days) revert InvalidInterval();
+        if (intervalSeconds < minInterval || intervalSeconds > 365 days) revert InvalidInterval();
         if (merchant == address(0) || borrower == address(0)) revert ZeroAddress();
 
         if (

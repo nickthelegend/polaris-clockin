@@ -28,7 +28,8 @@ describe("CollateralVault units", () => {
       await usdc.getAddress(),
       await scores.getAddress(),
       owner.address,
-      3 * DAY
+      3 * DAY,
+    0
     );
     vault = await (
       await ethers.getContractFactory("CollateralVault")

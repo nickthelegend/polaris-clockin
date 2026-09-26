@@ -37,6 +37,19 @@ contract PolarisPayments is Ownable, ReentrancyGuard {
     IERC20 public immutable stablecoin;
     address public treasury;
 
+    /// Shortest subscription period a deployment may use when none is given.
+    uint64 public constant DEFAULT_MIN_PERIOD = 1 hours;
+    /// Floor on any configured minimum.
+    uint64 public constant MIN_ALLOWED_PERIOD = 60;
+
+    /**
+     * @notice Shortest subscription period this deployment accepts.
+     * @dev Immutable per deployment, mirroring the loan engine's
+     *      `minInterval`: production wants an hour or more, a demo wants a
+     *      minute so a renewal can be shown on camera.
+     */
+    uint64 public immutable minPeriod;
+
     // -----------------------------------------------------------------
     // Direct payments
     // -----------------------------------------------------------------
@@ -123,11 +136,15 @@ contract PolarisPayments is Ownable, ReentrancyGuard {
     error InvalidFee();
     error DuplicatePayment();
 
-    constructor(address initialOwner, IERC20 _stablecoin, address _treasury)
+    constructor(address initialOwner, IERC20 _stablecoin, address _treasury, uint64 _minPeriod)
         Ownable(initialOwner)
     {
+        if (_minPeriod != 0 && (_minPeriod < MIN_ALLOWED_PERIOD || _minPeriod > 30 days)) {
+            revert InvalidPeriod();
+        }
         stablecoin = _stablecoin;
         treasury = _treasury;
+        minPeriod = _minPeriod == 0 ? DEFAULT_MIN_PERIOD : _minPeriod;
     }
 
     function setFeeBps(uint256 bps) external onlyOwner {
@@ -198,7 +215,7 @@ contract PolarisPayments is Ownable, ReentrancyGuard {
         if (pricePerPeriod == 0) revert ZeroAmount();
         // A period under an hour is almost certainly a mistake, and one over a
         // year makes the allowance a standing risk for no benefit.
-        if (periodSeconds < 1 hours || periodSeconds > 365 days) revert InvalidPeriod();
+        if (periodSeconds < minPeriod || periodSeconds > 365 days) revert InvalidPeriod();
 
         planId = ++planCount;
         plans[planId] = Plan({

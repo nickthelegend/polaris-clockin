@@ -43,7 +43,8 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
       await usdc.getAddress(),
       await scores.getAddress(),
       owner.address,
-      GRACE
+      GRACE,
+    0
     );
 
     await scores.setWriter(await engine.getAddress(), true);

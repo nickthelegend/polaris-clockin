@@ -15,7 +15,7 @@ describe("PolarisLoanEngine", () => {
     scores = await (await ethers.getContractFactory("ScoreManager")).deploy(owner.address);
     engine = await (
       await ethers.getContractFactory("PolarisLoanEngine")
-    ).deploy(owner.address, await usdc.getAddress(), await scores.getAddress(), owner.address, 3 * DAY);
+    ).deploy(owner.address, await usdc.getAddress(), await scores.getAddress(), owner.address, 3 * DAY, 0);
 
     await scores.setWriter(await engine.getAddress(), true);
     await engine.setOriginator(owner.address, true);

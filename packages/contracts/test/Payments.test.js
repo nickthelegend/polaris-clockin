@@ -14,7 +14,7 @@ describe("PolarisPayments", () => {
     usdc = await (await ethers.getContractFactory("MockUSDC")).deploy();
     pay = await (
       await ethers.getContractFactory("PolarisPayments")
-    ).deploy(owner.address, await usdc.getAddress(), treasury.address);
+    ).deploy(owner.address, await usdc.getAddress(), treasury.address, 0);
 
     await usdc.mint(payer.address, USDC(10_000));
     await usdc.connect(payer).approve(await pay.getAddress(), USDC(10_000));
@@ -199,7 +199,7 @@ describe("CollateralVault", () => {
     scores = await (await ethers.getContractFactory("ScoreManager")).deploy(owner.address);
     engine = await (
       await ethers.getContractFactory("PolarisLoanEngine")
-    ).deploy(owner.address, await usdc.getAddress(), await scores.getAddress(), owner.address, 3 * DAY);
+    ).deploy(owner.address, await usdc.getAddress(), await scores.getAddress(), owner.address, 3 * DAY, 0);
     vault = await (
       await ethers.getContractFactory("CollateralVault")
     ).deploy(owner.address, await usdc.getAddress());

@@ -17,6 +17,19 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
+    // Monad is EVM-equivalent, so the same compiler settings apply. Monad
+    // charges gas on the gas limit rather than gas used, so every sender we
+    // write estimates first instead of passing a blanket limit.
+    monadTestnet: {
+      url: process.env.MONAD_TESTNET_RPC_URL || "https://testnet-rpc.monad.xyz",
+      chainId: 10143,
+      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+    },
+    monad: {
+      url: process.env.MONAD_RPC_URL || "https://rpc.monad.xyz",
+      chainId: 143,
+      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+    },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
       chainId: 11155111,
