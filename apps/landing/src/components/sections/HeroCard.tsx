@@ -18,9 +18,9 @@ const ORDER = [1, 0, 2] as const;
 
 /**
  * The floating "Payments" card at the bottom right of the hero. On load it
- * grows up from a thin pill, its title blurs in, the bars grow from zero
- * height on a staggered spring, and the badge pops. The tabs switch data sets
- * and the bars glide to their new heights.
+ * grows up from a thin pill, its title blurs in, the badge pops to olive and
+ * the bars grow from zero height on a staggered spring. The tabs switch data
+ * sets and the bars glide to their new heights.
  */
 export function HeroCard({ ready, className }: { ready: boolean; className?: string }) {
   const reduced = useReduced();
@@ -33,13 +33,13 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
       {/* The thin scroll indicator to the card's left */}
       <motion.div
         aria-hidden="true"
-        className="rv absolute -left-[20px] top-[38px] hidden h-[210px] w-[6px] origin-top overflow-hidden rounded-full bg-white/25 backdrop-blur-sm lg:block"
+        className="rv absolute -left-[20px] top-[37px] hidden h-[177px] w-[4px] origin-top overflow-hidden rounded-full bg-white/25 backdrop-blur-sm lg:block"
         initial={{ opacity: 0, scaleY: 0.4 }}
         animate={go ? { opacity: 1, scaleY: 1 } : undefined}
         transition={{ delay: 1.15, duration: 0.7, ease: EASE_REVEAL }}
       >
         <motion.div
-          className="h-[34px] w-full rounded-full bg-white"
+          className="h-[28px] w-full rounded-full bg-white"
           animate={reduced ? undefined : { y: [0, 6, 0] }}
           transition={{ delay: 2, duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
         />
@@ -67,6 +67,8 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
                   lineClassName=""
                   className="text-[25px] font-medium leading-none tracking-[-0.04em]"
                 />
+                {/* In the video the badge turns olive while the bars are
+                    still thin lines, so it pops before they grow. */}
                 <motion.span
                   className="rv rv-fill inline-flex h-[24px] items-center rounded-full px-[9px] text-[13px] font-medium tracking-[-0.01em]"
                   style={{ "--rv-bg": "#2d3a02", "--rv-fg": "#e1ff67" } as CSSProperties}
@@ -82,10 +84,10 @@ export function HeroCard({ ready, className }: { ready: boolean; className?: str
                       : undefined
                   }
                   transition={{
-                    delay: 0.45,
-                    duration: 1.25,
-                    times: [0, 0.2, 0.7, 0.85, 1],
-                    opacity: { delay: 0.45, duration: 0.25 },
+                    delay: 0.35,
+                    duration: 0.8,
+                    times: [0, 0.2, 0.55, 0.75, 1],
+                    opacity: { delay: 0.35, duration: 0.25 },
                   }}
                 >
                   {hero.card.badge}
