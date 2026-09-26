@@ -86,10 +86,25 @@ export class DuplicateKeyError extends Error {
   }
 }
 
-const NAME = /^[a-z][a-z0-9_]{0,62}$/;
+/**
+ * True for a DuplicateKeyError from any copy of this module. A bundler can
+ * load a package twice (Next.js builds instrumentation and route handlers
+ * separately) while both share one store, so `instanceof` alone isn't enough.
+ */
+export function isDuplicateKeyError(error: unknown): error is DuplicateKeyError {
+  return error instanceof DuplicateKeyError || (error instanceof Error && error.name === "DuplicateKeyError");
+}
 
-export function assertName(kind: string, name: string): void {
-  if (!NAME.test(name)) throw new Error(`Invalid ${kind} name ${JSON.stringify(name)}: use a-z, 0-9 and _`);
+/** Collections become table names: lower case. Index fields become columns: camelCase allowed. */
+const NAMES: Record<string, RegExp> = {
+  collection: /^[a-z][a-z0-9_]{0,62}$/,
+  index: /^[A-Za-z][A-Za-z0-9_]{0,62}$/,
+};
+
+export function assertName(kind: "collection" | "index", name: string): void {
+  if (!NAMES[kind]?.test(name)) {
+    throw new Error(`Invalid ${kind} name ${JSON.stringify(name)}: use ${kind === "collection" ? "a-z" : "letters"}, 0-9 and _`);
+  }
 }
 
 /** Normalise a condition to its object form. */

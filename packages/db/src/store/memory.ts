@@ -67,6 +67,7 @@ class MemoryCollection<T> implements Collection<T> {
 
   constructor(spec: CollectionSpec<T>) {
     assertName("collection", spec.name);
+    for (const f of Object.keys(spec.indexes)) assertName("index", f);
     this.spec = spec;
     this.name = spec.name;
   }

@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { collections } from "../src/schema.ts";
 import { DuplicateKeyError, openMemoryStore, openSqliteStore, openStore, type CollectionSpec, type Store } from "../src/store/index.ts";
 
 type Doc = { id: string; merchant: string; amount: number; at: string; paid: boolean; note: string | null };
@@ -17,6 +18,8 @@ const spec: CollectionSpec<Doc> = {
     at: (d) => d.at,
     paid: (d) => d.paid,
     note: (d) => d.note,
+    // camelCase index names, as the record schema uses (publicId, nextAttemptAtMs, ...)
+    merchantUpper: (d) => d.merchant.toUpperCase(),
   },
 };
 
@@ -84,6 +87,17 @@ describe.each(stores)("%s store", (_name, open) => {
     expect(await c.count({ merchant: "m1" })).toBe(2);
     expect((await c.findOne({ merchant: "m2" }, { orderBy: "amount", direction: "desc" }))?.id).toBe("d4");
     expect(await c.find({ merchant: { in: [] } })).toEqual([]);
+  });
+
+  it("queries a camelCase index", async () => {
+    const c = open().collection(spec);
+    await c.insert(doc("c1", { merchant: "m9" }));
+    expect((await c.find({ merchantUpper: "M9" })).map((d) => d.id)).toEqual(["c1"]);
+  });
+
+  it("opens every collection of the record schema", () => {
+    const store = open();
+    expect(() => collections(store)).not.toThrow();
   });
 
   it("refuses queries on fields that aren't indexed", async () => {
