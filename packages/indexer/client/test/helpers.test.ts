@@ -80,10 +80,15 @@ describe("webhook events", () => {
     txHash: "0xfeed",
   };
 
-  it("has a stable id and only the fields that apply", () => {
-    const event = toWebhookEvent(base);
+  it("is the SDK's envelope, with a stable id and only the fields that apply", () => {
+    const event = toWebhookEvent(base, { merchantId: "mer_123" });
     assert.equal(event.id, "evt_12000000010");
+    assert.equal(event.object, "event");
     assert.equal(event.type, "installment.failed");
+    assert.equal(event.createdAt, "2026-09-21T14:13:20.000Z");
+    assert.equal(event.livemode, false);
+    assert.equal(event.merchantId, "mer_123");
+    assert.equal(toWebhookEvent(base).merchantId, "0x11");
     assert.deepEqual(event.data, {
       merchant: "0x11",
       id: "1",
@@ -96,6 +101,7 @@ describe("webhook events", () => {
       reason: "InsufficientBalance",
       reasonAction: "TOP_UP",
       transaction: { hash: "0xfeed", blockNumber: 1200, logIndex: 1 },
+      cursor: "12000000010",
     });
     assert.equal(JSON.parse(JSON.stringify(event)).data.amount, "50383562");
   });

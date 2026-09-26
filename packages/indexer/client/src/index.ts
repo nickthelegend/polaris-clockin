@@ -20,7 +20,7 @@ export {
   type CollectionAction,
   type Task,
 } from "./cre.js";
-export { committed, nextCursor, toWebhookEvent, type WebhookEvent } from "./webhooks.js";
+export { committed, nextCursor, toWebhookEvent, type WebhookEvent, type WebhookEventData } from "./webhooks.js";
 export { AUSD_DECIMALS, formatUsd, fromCents, toCents } from "./money.js";
 export { availableCredit, baseLimitOf, creditLimitOf, securedOnly, type CreditInputs, type CreditSettings } from "./credit.js";
 export * from "./types.js";

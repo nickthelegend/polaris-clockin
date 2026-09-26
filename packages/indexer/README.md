@@ -219,7 +219,7 @@ const order = await indexer.waitForOrder(orderKey); // keccak256(encodePacked(me
 // Webhook dispatcher: tail the outbox, sign and send each event in order
 let cursor = await loadCursor();
 const { activities } = await indexer.activityAfter(cursor, 100);
-for (const a of activities) await deliver(a.merchant_id, toWebhookEvent(a)); // sign with packages/db
+for (const a of activities) await deliver(toWebhookEvent(a, { merchantId })); // the SDK's envelope; sign and send with @polaris/db
 await saveCursor(nextCursor(cursor, activities));
 ```
 
