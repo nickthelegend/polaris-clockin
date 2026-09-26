@@ -1,4 +1,5 @@
 import "@fontsource-variable/inter-tight";
+import "@fontsource-variable/inter-tight/wght-italic.css";
 import "./globals.css";
 
 import type { Metadata, Viewport } from "next";

@@ -204,13 +204,13 @@ button:disabled {
   mask-image: radial-gradient(ellipse 60% 56% at 50% 46%, #000 20%, transparent 88%);
 }
 
-/* The giant embossed wordmark on cards: card-coloured, lit from the top left. */
+/* The giant embossed wordmark on cards: card-coloured, raised, lit from the
+   top left, with a soft shade on its bottom-right edges. */
 .emboss {
   font-family: var(--font-display);
-  font-weight: 800;
-  letter-spacing: -0.055em;
-  line-height: 0.8;
-  color: transparent;
+  font-weight: 450;
+  letter-spacing: -0.03em;
+  line-height: 1;
   user-select: none;
   pointer-events: none;
   white-space: nowrap;
@@ -218,20 +218,20 @@ button:disabled {
 .emboss-lime {
   color: var(--lime);
   text-shadow:
-    -1.5px -1.5px 1px rgb(255 255 255 / 0.55),
-    2px 2px 2px color-mix(in oklab, var(--lime-deep) 85%, black);
+    -1.5px -1.5px 1.5px rgb(255 255 255 / 0.55),
+    2px 2px 3px rgb(96 120 0 / 0.42);
 }
 .emboss-ink {
   color: var(--ink-card);
   text-shadow:
-    -1.5px -1.5px 1px rgb(255 255 255 / 0.1),
-    2px 2px 2px rgb(0 0 0 / 0.65);
+    -1.5px -1.5px 1.5px rgb(255 255 255 / 0.1),
+    2px 2px 3px rgb(0 0 0 / 0.85);
 }
 .emboss-white {
-  color: #fbfbfb;
+  color: var(--surface);
   text-shadow:
-    -1.5px -1.5px 1px #ffffff,
-    2px 2px 2px rgb(0 0 0 / 0.1);
+    -1.5px -1.5px 1.5px #ffffff,
+    2px 2px 3px rgb(0 0 0 / 0.08);
 }
 
 /* Press: everything tappable gives a little. */

@@ -43,9 +43,9 @@ export function Plans() {
           <PolarisCard
             tone="ink"
             label="Pay later"
-            amount={`${usd(credit.value.available)} available`}
+            amount={usd(credit.value.available)}
+            suffix="available"
             last4="0095"
-            compact
             badge={
               <span className="tabular inline-flex h-8 items-center rounded-full bg-white/12 px-3 text-[14px] font-medium text-white">
                 of {usd(credit.value.limit, { trim: true })}
