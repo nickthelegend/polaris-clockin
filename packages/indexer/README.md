@@ -2,11 +2,11 @@
 
 The [Envio HyperIndex](https://docs.envio.dev/docs/HyperIndex/overview) indexer
 for Polaris on Monad testnet (chain 10143). It turns every event of every
-Polaris contract into the rows three core flows read:
+Polaris contract into the rows these read:
 
 | Reader | What it asks | Breaks without it |
 |---|---|---|
-| **The CRE `polaris-collections` workflow** | Which instalments are due (or due a retry), which plans are past grace, which subscriptions renew: `DueCandidates` | Nothing gets collected: the workflow's candidate list comes only from here ("the indexer proposes, the chain disposes") |
+| **The CRE `polaris-collections` workflow** | Which instalments are due (or due a retry on the dunning ladder), which plans are past grace, which subscriptions renew: `DueCandidates` | The workflow proposes from the indexer and the chain disposes; without it, it falls back to scanning windows of ids and retries a failing buyer on every run |
 | **The webhook dispatcher** | The `Activity` outbox after a cursor: `payment.succeeded`, `plan.opened`, `installment.collected`, `installment.failed`, `plan.completed`, `plan.liquidated`, `subscription.charged`, `subscription.canceled`, `payout.paid` | Merchants are never told they were paid |
 | **Polaris for Business** | Balance, payments, the Pay in 4 ledger with instalment tick marks and at-risk exposure, payouts, customers, daily bar and candlestick charts, CRE collector status | "Paid" only ever comes from indexed chain events, so the dashboard has nothing to show |
 | **The Polaris app** | The buyer's credit line and why, open plans and the next payment, receipts, send links | The credit screen and "Arrived" on a claimed link |
@@ -116,12 +116,15 @@ into it) and `envio` is pinned exactly. Cloud needs no API token.
    npx envio-cloud deployment status polaris <commit> --watch-till-synced
    npx envio-cloud deployment endpoint polaris <commit>
    ```
-5. Give that URL to every reader as `POLARIS_INDEXER_URL` (the dashboard and
-   webhook dispatcher) and as `indexerUrl` in the CRE workflow's config.
+5. Give that URL to every reader: `POLARIS_INDEXER_URL` for the dashboard and
+   the webhook dispatcher, and `candidates.indexerUrl` in the CRE collections
+   workflow's config, with `candidates.indexerQuery` set to the client's
+   `DUE_CANDIDATES` document.
 
-Free-plan limits to plan around: a deployment is deleted after 30 days, or 7
-days after it last served a request, or at 100,000 events; 3 deployments per
-indexer. Make the final deployment at the feature freeze (9 Oct), and keep it
+Free-plan limits to plan around: a deployment is deleted after 30 days
+(hard limit); 100,000 events, 5 GB, or 7 days without a request (soft limits)
+start a 7-day grace period, then 3 days read-only, then deletion; 3
+deployments per indexer. Make the final deployment at the feature freeze (9 Oct), and keep it
 queried: the CRE cron does while it runs, and
 `.github/workflows/indexer-keepalive.yml` sends a daily `_meta` query once the
 repository variable `POLARIS_INDEXER_URL` is set. The endpoint is
