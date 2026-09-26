@@ -26,10 +26,18 @@ interface IMerchantChecks {
  * @dev The collection model is a pull, not a push. At checkout the borrower
  *      approves this contract for the full repayment amount once, and each
  *      installment is drawn with transferFrom. That is what lets a keeper
- *      collect on schedule without the borrower being online -- and it is why
- *      `repay` is callable by anyone: the funds can only ever move from the
- *      borrower to this contract, so a third-party caller is harmless and
- *      keeps the keeper permissionless.
+ *      collect on schedule without the borrower being online.
+ *
+ *      There are two ways money comes in, and they differ in who may call them:
+ *        collectInstallment(loanId)   anyone; takes no amount, draws exactly
+ *                                     the instalment that has fallen due
+ *        repay(loanId, amount)        the borrower only; any amount, any time
+ *      The keeper path is permissionless because the schedule, not the caller,
+ *      decides what moves and when, so a stranger can only ever do what the
+ *      borrower already agreed to. `repay` takes an arbitrary amount, and that
+ *      is why it is the borrower's alone: open to anyone, it let a stranger
+ *      drain the whole standing allowance the moment a plan opened. See its
+ *      note.
  *
  *      Two functions exist purely for the keeper and are the reason this
  *      protocol maps cleanly onto KeeperHub's check-and-execute:
@@ -129,6 +137,10 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         uint256 amount,
         bool onTime
     );
+    /// Emitted alongside InstallmentPaid when the payment came through
+    /// collectInstallment, so an indexer can tell a keeper's collection from a
+    /// payment the borrower made themselves.
+    event InstallmentCollected(uint256 indexed loanId, address indexed caller, uint256 amount);
     event LoanFullyRepaid(uint256 indexed loanId, address indexed borrower);
     event LoanLiquidated(
         uint256 indexed loanId,
@@ -151,6 +163,9 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
     error ExceedsCreditLimit();
     error InvalidGracePeriod();
     error InsufficientAllowance(uint256 have, uint256 need);
+    error InsufficientBalance(uint256 have, uint256 need);
+    error NotDue();
+    error NotBorrower();
     error InvalidInterval();
     error MerchantNotEligible();
     error ZeroAddress();
@@ -360,14 +375,70 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Draw `amount` from the borrower against the loan.
-     * @dev Permissionless by design -- see the contract-level note. Funds can
-     *      only move from the borrower to this contract, so the worst a hostile
-     *      caller can do is pay somebody's debt early.
+     * @notice Collect the instalment that has fallen due. This is what the
+     *         keeper calls.
+     * @dev Permissionless, and takes no amount. It draws exactly
+     *      `installmentAmount(loanId)`, what completes the next unpaid
+     *      instalment, and only once that instalment is due. The schedule the
+     *      borrower agreed to decides what moves and when, so a stranger calling
+     *      this can only ever do what the borrower already consented to. They
+     *      can never pull the rest of the standing allowance early.
+     *
+     *      A shortfall is reported before any transfer is attempted, as an error
+     *      a keeper can branch on without decoding a token's revert string. The
+     *      two map onto different rungs of the dunning ladder: a lost allowance
+     *      is something the borrower has to sign again, a short balance is
+     *      something they have to top up, and telling them the wrong one duns a
+     *      buyer for our mistake. Allowance is checked first because without it
+     *      the balance is irrelevant: the engine cannot touch it however large
+     *      it is.
+     *
+     * @return collected What the token actually delivered.
+     */
+    function collectInstallment(uint256 loanId)
+        external
+        nonReentrant
+        returns (uint256 collected)
+    {
+        Loan storage l = loans[loanId];
+        if (l.borrower == address(0)) revert InvalidLoan();
+        if (l.status != LoanStatus.Active || l.installmentsPaid >= l.installmentCount) {
+            revert LoanNotActive();
+        }
+        if (block.timestamp < installmentDueAt(loanId, l.installmentsPaid)) revert NotDue();
+
+        uint256 amount = installmentAmount(loanId);
+        address borrower = l.borrower;
+
+        uint256 allowed = stablecoin.allowance(borrower, address(this));
+        if (allowed < amount) revert InsufficientAllowance(allowed, amount);
+        uint256 held = stablecoin.balanceOf(borrower);
+        if (held < amount) revert InsufficientBalance(held, amount);
+
+        collected = _applyPayment(loanId, l, amount);
+        emit InstallmentCollected(loanId, msg.sender, collected);
+    }
+
+    /**
+     * @notice Pay `amount` toward the loan: part of an instalment, several
+     *         instalments, or the whole balance early.
+     * @dev The borrower's alone. This used to be callable by anyone, on the
+     *      reasoning that funds can only move from the borrower to this
+     *      contract, so the worst a hostile caller could do was pay somebody's
+     *      debt early. That early payment was the harm. With an arbitrary
+     *      amount, a stranger could drain a borrower's whole standing allowance
+     *      the moment a plan opened, taking money the borrower meant to spend
+     *      on other things weeks before any of it was due. The Solana build
+     *      fixed the same hole by making its permissionless path take no
+     *      amount; here that path is `collectInstallment`.
+     *
+     *      An amount above what is outstanding is capped rather than refused, so
+     *      paying off everything never needs the exact figure.
      */
     function repay(uint256 loanId, uint256 amount) external nonReentrant {
         Loan storage l = loans[loanId];
         if (l.borrower == address(0)) revert InvalidLoan();
+        if (msg.sender != l.borrower) revert NotBorrower();
         if (l.status != LoanStatus.Active) revert LoanNotActive();
         if (amount == 0) revert ZeroAmount();
         if (l.installmentsPaid >= l.installmentCount) revert LoanNotActive();
@@ -375,12 +446,29 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         uint256 remaining = uint256(l.totalOwed) - uint256(l.totalRepaid);
         if (amount > remaining) amount = remaining;
 
+        _applyPayment(loanId, l, amount);
+    }
+
+    /**
+     * @notice Draw `requested` from the borrower and book what arrives against
+     *         the loan.
+     * @dev The one place a payment is accounted for. `repay` and
+     *      `collectInstallment` differ only in who may call them and how the
+     *      amount is chosen; sharing this means a keeper's collection and a
+     *      borrower's own payment can never be credited, scored, charged a fee
+     *      or closed differently.
+     * @return amount What the token actually delivered.
+     */
+    function _applyPayment(uint256 loanId, Loan storage l, uint256 requested)
+        private
+        returns (uint256 amount)
+    {
         // Measure what the token actually delivered rather than trusting the
         // requested amount. A fee-on-transfer stablecoin -- USDC supports the
         // mechanism and merely has it disabled -- would otherwise over-credit
         // the borrower for money the contract never received.
         uint256 balanceBefore = stablecoin.balanceOf(address(this));
-        stablecoin.safeTransferFrom(l.borrower, address(this), amount);
+        stablecoin.safeTransferFrom(l.borrower, address(this), requested);
         amount = stablecoin.balanceOf(address(this)) - balanceBefore;
         if (amount == 0) revert ZeroAmount();
 

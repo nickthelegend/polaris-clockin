@@ -64,8 +64,15 @@ describe("PolarisLoanEngine", () => {
       const due = await engine.installmentAmount(1);
       const before = await usdc.balanceOf(borrower.address);
 
-      // Called by a third party -- the keeper -- not the borrower.
-      await engine.connect(keeper).repay(1, due);
+      // Called by a third party -- the keeper -- not the borrower. The keeper's
+      // path takes no amount and only runs once the instalment is due; an
+      // arbitrary-amount repay is the borrower's alone.
+      await time.increaseTo(await engine.installmentDueAt(1, 0));
+      await expect(engine.connect(keeper).repay(1, due)).to.be.revertedWithCustomError(
+        engine,
+        "NotBorrower"
+      );
+      await engine.connect(keeper).collectInstallment(1);
 
       expect(await usdc.balanceOf(borrower.address)).to.equal(before - due);
       expect((await engine.getLoan(1)).installmentsPaid).to.equal(1);
@@ -73,20 +80,20 @@ describe("PolarisLoanEngine", () => {
 
     it("raises the credit score for an on-time payment", async () => {
       const before = await scores.scoreOf(borrower.address);
-      await engine.connect(keeper).repay(1, await engine.installmentAmount(1));
+      await engine.connect(borrower).repay(1, await engine.installmentAmount(1));
       expect(await scores.scoreOf(borrower.address)).to.be.greaterThan(before);
     });
 
     it("lowers the score when the payment is late", async () => {
       await time.increase(20 * DAY); // past due + grace
       const before = await scores.scoreOf(borrower.address);
-      await engine.connect(keeper).repay(1, await engine.installmentAmount(1));
+      await engine.connect(keeper).collectInstallment(1);
       expect(await scores.scoreOf(borrower.address)).to.be.lessThan(before);
     });
 
     it("closes the loan exactly, with no dust left owing", async () => {
       for (let i = 0; i < 4; i++) {
-        await engine.connect(keeper).repay(1, await engine.installmentAmount(1));
+        await engine.connect(borrower).repay(1, await engine.installmentAmount(1));
       }
       const loan = await engine.getLoan(1);
       expect(loan.status).to.equal(1); // Repaid
@@ -94,9 +101,12 @@ describe("PolarisLoanEngine", () => {
     });
 
     it("reverts when the borrower cannot cover the draw, so the keeper's simulation catches it", async () => {
+      const due = await engine.installmentAmount(1);
       await usdc.connect(borrower).transfer(owner.address, await usdc.balanceOf(borrower.address));
-      await expect(engine.connect(keeper).repay(1, await engine.installmentAmount(1))).to.be
-        .reverted;
+      await time.increaseTo(await engine.installmentDueAt(1, 0));
+      await expect(engine.connect(keeper).collectInstallment(1))
+        .to.be.revertedWithCustomError(engine, "InsufficientBalance")
+        .withArgs(0n, due);
     });
   });
 
@@ -127,7 +137,7 @@ describe("PolarisLoanEngine", () => {
       await time.increase(14 * DAY + 4 * DAY);
       expect(await engine.checkLiquidatable(1)).to.equal(true);
 
-      await engine.connect(keeper).repay(1, await engine.installmentAmount(1));
+      await engine.connect(borrower).repay(1, await engine.installmentAmount(1));
 
       expect(await engine.checkLiquidatable(1)).to.equal(false);
       await expect(engine.liquidate(1)).to.be.revertedWithCustomError(engine, "NotLiquidatable");

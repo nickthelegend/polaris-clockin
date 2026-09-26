@@ -123,7 +123,7 @@ describe("CollateralVault units", () => {
 
     it("returns to the full position once the loan is settled", async () => {
       await engine.createLoan(user.address, merchant.address, USDC(300), 4, 14 * DAY);
-      await engine.repay(1, (await engine.getLoan(1)).totalOwed);
+      await engine.connect(user).repay(1, (await engine.getLoan(1)).totalOwed);
 
       expect(await vault.withdrawable(user.address)).to.equal(USDC(200));
       await expect(vault.connect(user).withdraw(USDC(200))).to.not.be.reverted;

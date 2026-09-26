@@ -94,7 +94,7 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
         for (let i = 0; i < count; i++) {
           const due = await engine.installmentAmount(id);
           expect(due).to.be.greaterThan(0n);
-          await engine.connect(keeper).repay(id, due);
+          await engine.connect(w).repay(id, due);
           paid += due;
         }
         expect(paid).to.equal(owed);
@@ -109,10 +109,10 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
       const due = await engine.installmentAmount(1);
 
       expect((await engine.getLoan(1)).totalRepaid).to.equal(0n);
-      await engine.connect(keeper).repay(1, due);
+      await engine.connect(borrower).repay(1, due);
       expect((await engine.getLoan(1)).totalRepaid).to.equal(due);
 
-      await engine.connect(keeper).repay(1, due);
+      await engine.connect(borrower).repay(1, due);
       expect((await engine.getLoan(1)).totalRepaid).to.equal(due * 2n);
     });
 
@@ -121,14 +121,14 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
       const due = await engine.installmentAmount(1);
       const half = due / 2n;
 
-      await engine.connect(keeper).repay(1, half);
+      await engine.connect(borrower).repay(1, half);
 
       expect((await engine.getLoan(1)).totalRepaid).to.equal(half);
       expect((await engine.getLoan(1)).installmentsPaid).to.equal(0);
       // The shortfall carries: the next draw is what is still missing.
       expect(await engine.installmentAmount(1)).to.equal(due - half);
 
-      await engine.connect(keeper).repay(1, due - half);
+      await engine.connect(borrower).repay(1, due - half);
       expect((await engine.getLoan(1)).installmentsPaid).to.equal(1);
     });
 
@@ -137,7 +137,7 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
       const owed = (await engine.getLoan(1)).totalOwed;
       const before = await usdc.balanceOf(borrower.address);
 
-      await engine.connect(keeper).repay(1, USDC(5_000));
+      await engine.connect(borrower).repay(1, USDC(5_000));
 
       expect(await usdc.balanceOf(borrower.address)).to.equal(before - owed);
       expect(await engine.outstandingOf(1)).to.equal(0n);
@@ -148,7 +148,7 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
       const owed = (await engine.getLoan(1)).totalOwed;
       expect(await engine.activeDebtOf(borrower.address)).to.equal(owed);
 
-      await engine.connect(keeper).repay(1, owed);
+      await engine.connect(borrower).repay(1, owed);
       expect(await engine.activeDebtOf(borrower.address)).to.equal(0n);
     });
   });
@@ -166,12 +166,15 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
     });
 
     it("rejects a zero draw", async () => {
-      await expect(engine.repay(1, 0)).to.be.revertedWithCustomError(engine, "ZeroAmount");
+      await expect(engine.connect(borrower).repay(1, 0)).to.be.revertedWithCustomError(
+        engine,
+        "ZeroAmount"
+      );
     });
 
     it("rejects a further draw once the loan is settled", async () => {
-      await engine.connect(keeper).repay(1, (await engine.getLoan(1)).totalOwed);
-      await expect(engine.repay(1, USDC(1))).to.be.revertedWithCustomError(
+      await engine.connect(borrower).repay(1, (await engine.getLoan(1)).totalOwed);
+      await expect(engine.connect(borrower).repay(1, USDC(1))).to.be.revertedWithCustomError(
         engine,
         "LoanNotActive"
       );
@@ -221,7 +224,7 @@ describe("PolarisLoanEngine ladder and boundaries", () => {
       // because that is the same instant liquidation is still refused.
       await time.increaseTo(dueAt + BigInt(GRACE) - 1n);
       const scoreBefore = await scores.scoreOf(borrower.address);
-      await engine.connect(keeper).repay(1, await engine.installmentAmount(1));
+      await engine.connect(borrower).repay(1, await engine.installmentAmount(1));
       expect(await scores.scoreOf(borrower.address)).to.be.greaterThan(scoreBefore);
     });
 
