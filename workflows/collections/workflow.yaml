@@ -1,0 +1,28 @@
+# CRE workflow settings for `collections`, one block per target in ../project.yaml.
+# workflow-name is what the production forwarder carries (as the bytes10 of its
+# sha256) and what CollectionsReceiver.setExpectedWorkflowName checks.
+
+local-settings:
+  user-workflow:
+    workflow-name: "polaris-collections"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.local.json"
+    secrets-path: "../secrets.yaml"
+
+staging-settings:
+  user-workflow:
+    workflow-name: "polaris-collections"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.staging.json"
+    secrets-path: "../secrets.yaml"
+
+production-settings:
+  user-workflow:
+    workflow-name: "polaris-collections"
+    deployment-registry: "private"
+  workflow-artifacts:
+    workflow-path: "./main.ts"
+    config-path: "./config.production.json"
+    secrets-path: "../secrets.yaml"
