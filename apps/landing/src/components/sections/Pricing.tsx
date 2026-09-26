@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { BlurLines } from "@/components/motion/BlurLines";
 import { BlurWords } from "@/components/motion/BlurWords";
 import { DrawLine } from "@/components/motion/DrawLine";
-import { Grow } from "@/components/motion/Grow";
+import { Grow, GrowAnchor } from "@/components/motion/Grow";
 import { useReduced, useReveal } from "@/components/motion/hooks";
 import { Rise } from "@/components/motion/Rise";
 import { RollingNumber } from "@/components/motion/RollingNumber";
@@ -17,8 +17,9 @@ import { formatUsd, formatUsdWhole } from "@/lib/format";
 
 /**
  * 5. "0.5% per payment. No hidden fees.": the copy on the left and the lime
- * calculator on the right. The card grows up from a thin pill; on first view
- * the slider travels from 0 to 25% and the numbers tween after it.
+ * calculator on the right. The card grows up from a thin pill with its
+ * contents riding up on the top edge; on first view the slider travels from
+ * 0 to 25% and the numbers tween after it.
  */
 export function Pricing() {
   return (
@@ -80,65 +81,71 @@ function Calculator() {
       duration={1.15}
       className="relative overflow-hidden rounded-card bg-lime px-6 pb-8 pt-7 text-olive md:px-[31px] md:pb-[36px] md:pt-[31px] lg:min-h-[523px]"
     >
-      <div ref={ref}>
+      <GrowAnchor className="pointer-events-none absolute inset-0">
         <motion.div
           aria-hidden="true"
-          className="rv pointer-events-none absolute -right-1 -top-1 w-[104px] text-olive/[0.16]"
+          className="rv absolute -right-1 -top-1 w-[104px] text-olive/[0.16]"
           initial={{ opacity: 0, rotate: -12, scale: 0.85 }}
           animate={inView ? { opacity: 1, rotate: 0, scale: 1 } : undefined}
           transition={{ delay: 0.6, duration: 1.2, ease: EASE_REVEAL }}
         >
           <LeafArrowDoodle className="h-auto w-full" />
         </motion.div>
+      </GrowAnchor>
 
-        <BlurWords as="h3" text={c.title} delay={0.45} play={inView} className="text-[22px] tracking-[-0.03em] lg:text-[24px]" />
-        <DrawLine
-          play={inView}
-          delay={0.55}
-          className="mt-[24px] h-px w-full bg-[linear-gradient(90deg,rgba(45,58,2,0.16),rgba(45,58,2,0.16)_70%,rgba(45,58,2,0))]"
-        />
+      {/* Everything in the card belongs to its top edge and rides up with it */}
+      <div ref={ref}>
+        <GrowAnchor>
 
-        <label htmlFor={inputId} className="mt-8 block lg:mt-[34px]">
-          <BlurWords text={c.salesLabel} delay={0.6} play={inView} className="text-[18px] tracking-[-0.025em] lg:text-[20px]" />
-        </label>
-        <Rise y={10} blur={10} delay={0.75} play={inView}>
-          <RollingNumber
-            value={sales}
-            format={formatUsd}
-            className="mt-3 block text-[48px] font-medium leading-none tracking-[-0.05em] lg:mt-[14px] lg:text-[clamp(48px,4.25vw,61px)]"
+          <BlurWords as="h3" text={c.title} delay={0.45} play={inView} className="text-[22px] tracking-[-0.03em] lg:text-[24px]" />
+          <DrawLine
+            play={inView}
+            delay={0.55}
+            className="mt-[24px] h-px w-full bg-[linear-gradient(90deg,rgba(45,58,2,0.16),rgba(45,58,2,0.16)_70%,rgba(45,58,2,0))]"
           />
-        </Rise>
 
-        <Slider id={inputId} value={sales} max={c.max} step={c.step} pct={pct} show={inView} onChange={(v) => {
-          touched.current = true;
-          setSales(v);
-        }} />
-
-        <DrawLine
-          play={inView}
-          delay={0.7}
-          className="mt-8 h-px w-full bg-[linear-gradient(90deg,rgba(45,58,2,0.16),rgba(45,58,2,0.16)_70%,rgba(45,58,2,0))] lg:mt-[36px]"
-        />
-
-        <div className="mt-7 grid grid-cols-2 gap-5 lg:mt-[32px]">
-          <div>
-            <BlurWords text={c.keep} delay={0.8} play={inView} className="text-[17px] tracking-[-0.025em] lg:text-[20px]" />
+          <label htmlFor={inputId} className="mt-8 block lg:mt-[34px]">
+            <BlurWords text={c.salesLabel} delay={0.6} play={inView} className="text-[18px] tracking-[-0.025em] lg:text-[20px]" />
+          </label>
+          <Rise y={10} blur={10} delay={0.75} play={inView}>
             <RollingNumber
-              value={keep}
-              format={formatUsdWhole}
-              className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
+              value={sales}
+              format={formatUsd}
+              className="mt-3 block text-[48px] font-medium leading-none tracking-[-0.05em] lg:mt-[14px] lg:text-[clamp(48px,4.25vw,61px)]"
             />
+          </Rise>
+
+          <Slider id={inputId} value={sales} max={c.max} step={c.step} pct={pct} show={inView} onChange={(v) => {
+            touched.current = true;
+            setSales(v);
+          }} />
+
+          <DrawLine
+            play={inView}
+            delay={0.7}
+            className="mt-8 h-px w-full bg-[linear-gradient(90deg,rgba(45,58,2,0.16),rgba(45,58,2,0.16)_70%,rgba(45,58,2,0))] lg:mt-[36px]"
+          />
+
+          <div className="mt-7 grid grid-cols-2 gap-5 lg:mt-[32px]">
+            <div>
+              <BlurWords text={c.keep} delay={0.8} play={inView} className="text-[17px] tracking-[-0.025em] lg:text-[20px]" />
+              <RollingNumber
+                value={keep}
+                format={formatUsdWhole}
+                className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
+              />
+            </div>
+            <div>
+              <BlurWords text={c.cards} delay={0.88} play={inView} className="text-[17px] tracking-[-0.025em] text-olive/60 lg:text-[20px]" />
+              <RollingNumber
+                value={cards}
+                format={formatUsdWhole}
+                className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] text-olive/45 lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
+              />
+            </div>
           </div>
-          <div>
-            <BlurWords text={c.cards} delay={0.88} play={inView} className="text-[17px] tracking-[-0.025em] text-olive/60 lg:text-[20px]" />
-            <RollingNumber
-              value={cards}
-              format={formatUsdWhole}
-              className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] text-olive/45 lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
-            />
-          </div>
-        </div>
-        <BlurLines text={c.footnote} delay={1} play={inView} className="mt-5 text-[12px] tracking-[-0.01em] text-olive/55" />
+          <BlurLines text={c.footnote} delay={1} play={inView} className="mt-5 text-[12px] tracking-[-0.01em] text-olive/55" />
+        </GrowAnchor>
       </div>
     </Grow>
   );

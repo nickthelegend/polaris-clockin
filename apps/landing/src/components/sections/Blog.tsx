@@ -2,7 +2,7 @@
 
 import { BlurLines } from "@/components/motion/BlurLines";
 import { BlurWords } from "@/components/motion/BlurWords";
-import { Grow } from "@/components/motion/Grow";
+import { Grow, GrowAnchor } from "@/components/motion/Grow";
 import { Rise } from "@/components/motion/Rise";
 import { CARD_STAGGER } from "@/components/motion/tokens";
 import { fallbacks } from "@/components/ui/fallbacks";
@@ -17,7 +17,9 @@ const FROM = [0.78, 0.6, 0.4] as const;
 /**
  * 8. "From the blog": the heading with an underlined "Show all", then three
  * image cards with white titles over a blurred, darkened bottom. The cards
- * grow up from different depths (the first higher) and settle into a row.
+ * grow up from different depths (the first higher) and settle into a row;
+ * each photo rides up with its card's top edge while the title stays with
+ * the bottom.
  */
 export function Blog({ assets }: { assets: Assets }) {
   return (
@@ -49,12 +51,14 @@ export function Blog({ assets }: { assets: Assets }) {
               className="relative h-[380px] overflow-hidden rounded-[20px] md:h-[clamp(300px,30.8vw,444px)]"
             >
               <a href={article.href} className="group absolute inset-0 block">
-                <SmartImage
-                  src={assets[FILES[i] ?? "article-1.jpg"]}
-                  alt=""
-                  fallback={fallbacks.articles[i] ?? fallbacks.articles[0]}
-                  className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-                />
+                <GrowAnchor className="absolute inset-0">
+                  <SmartImage
+                    src={assets[FILES[i] ?? "article-1.jpg"]}
+                    alt=""
+                    fallback={fallbacks.articles[i] ?? fallbacks.articles[0]}
+                    className="absolute inset-0 transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+                  />
+                </GrowAnchor>
                 {/* A progressive blur and a warm shade under the title */}
                 <div
                   aria-hidden="true"

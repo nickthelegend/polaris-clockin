@@ -3,27 +3,30 @@
 import { motion, type Variants } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { useReduced, useVisibleOnce } from "./hooks";
-import { CARD_RISE, EASE_REVEAL } from "./tokens";
+import { useIsomorphicLayoutEffect, useReduced, useVisibleOnce } from "./hooks";
+import { EASE_REVEAL } from "./tokens";
 
 type Custom = {
   from: number;
-  radius: number;
   y: number;
   delay: number;
   duration: number;
 };
 
-const inset = (top: number, radius: number) => `inset(${top}% 0% 0% 0% round ${radius}px)`;
-
+/*
+ * The card animates one number, --g: the share of its height still hidden
+ * above the top edge (1 - from at the start, 0 at the end). The clip-path
+ * reads it, and so does every GrowAnchor inside, which is how top-anchored
+ * content rides up with the edge.
+ */
 const growVariants: Variants = {
-  hidden: ({ from, radius, y }: Custom) => ({
-    clipPath: inset((1 - from) * 100, radius),
+  hidden: ({ from, y }: Custom) => ({
+    "--g": 1 - from,
     y,
     opacity: 0,
   }),
-  visible: ({ radius, delay, duration }: Custom) => ({
-    clipPath: inset(0, radius),
+  visible: ({ delay, duration }: Custom) => ({
+    "--g": 0,
     y: 0,
     opacity: 1,
     transition: {
@@ -42,7 +45,7 @@ export type GrowProps = {
   /** Visible share of the height at the start (0..1). The card grows up from its bottom edge. */
   from?: number;
   radius?: number;
-  /** It also rises this far while growing, px. */
+  /** Optionally it also rises this far while growing, px (the credit row). */
   y?: number;
   delay?: number;
   duration?: number;
@@ -52,8 +55,11 @@ export type GrowProps = {
 };
 
 /**
- * A card that grows from a shorter height, anchored to its bottom edge, as it
- * rises 40px and fades in. The growth is a clip-path, so layout never moves.
+ * A card that grows from a shorter height with its bottom edge fixed, as in
+ * the reference: only the top edge moves. The growth is a clip-path, so
+ * layout never moves. Content that belongs to the top of the card (a photo,
+ * a doodle, a title) goes in a GrowAnchor so it travels with that edge;
+ * content anchored to the bottom stays put.
  */
 export function Grow({
   children,
@@ -61,7 +67,7 @@ export function Grow({
   style,
   from = 0.45,
   radius = 22,
-  y = CARD_RISE,
+  y = 0,
   delay = 0,
   duration = 1,
   play,
@@ -71,18 +77,45 @@ export function Grow({
   const [ref, visible] = useVisibleOnce<HTMLDivElement>(amount);
   const reduced = useReduced();
   const shown = reduced || (play ?? visible);
+
+  // Anchors translate by --g times the card's height, published as --gh.
+  // Until it is measured (or without JS) they sit at their final place.
+  useIsomorphicLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const publish = () => el.style.setProperty("--gh", `${el.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <motion.div
       ref={ref}
       id={id}
       className={cn("rv", className)}
-      style={style}
+      style={{ ...style, clipPath: `inset(calc(var(--g, 0) * 100%) 0 0 0 round ${radius}px)` }}
       variants={growVariants}
-      custom={{ from, radius, y, delay, duration } satisfies Custom}
+      custom={{ from, y, delay, duration } satisfies Custom}
       initial="hidden"
       animate={shown ? "visible" : "hidden"}
     >
       {children}
     </motion.div>
+  );
+}
+
+/**
+ * Content pinned to a Grow card's top edge: it starts pushed down by the
+ * hidden share of the card and rides up with the edge as the card grows.
+ * Under reduced motion or without JS (.rv) it simply sits in place.
+ */
+export function GrowAnchor({ children, className }: { children?: ReactNode; className?: string }) {
+  return (
+    <div className={cn("rv", className)} style={{ transform: "translateY(calc(var(--g, 0) * var(--gh, 0px)))" }}>
+      {children}
+    </div>
   );
 }

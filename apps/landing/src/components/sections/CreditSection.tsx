@@ -4,11 +4,11 @@ import { motion, useTransform } from "motion/react";
 import { BlurLines } from "@/components/motion/BlurLines";
 import { BlurWords } from "@/components/motion/BlurWords";
 import { useCountUp } from "@/components/motion/CountUp";
-import { Grow } from "@/components/motion/Grow";
+import { Grow, GrowAnchor } from "@/components/motion/Grow";
 import { useReveal } from "@/components/motion/hooks";
 import { Marquee } from "@/components/motion/Marquee";
 import { Rise } from "@/components/motion/Rise";
-import { CARD_STAGGER, CHIP_SPEED } from "@/components/motion/tokens";
+import { CARD_RISE, CARD_STAGGER, CHIP_SPEED } from "@/components/motion/tokens";
 import { Button } from "@/components/ui/Button";
 import { fallbacks } from "@/components/ui/fallbacks";
 import { SmartImage } from "@/components/ui/SmartImage";
@@ -32,8 +32,9 @@ const ROW_B_TONES: ChipTone[] = ["lime", "grey", "mint", "olive", "grey"];
 
 /**
  * 4. "Credit that feels like cash, fast": the heading with an outline pill,
- * then three cards that grow up and rise in, 120ms apart: the chip rows on
+ * then three cards that grow up and rise 40px, 120ms apart: the chip rows on
  * the green streaks, the credit line that counts up, and the photo card.
+ * What sits at the top of each card rides up with its top edge.
  */
 export function CreditSection({ assets }: { assets: Assets }) {
   return (
@@ -82,8 +83,10 @@ function Chip({ label, tone }: { label: string; tone: ChipTone }) {
 function ChipsCard({ assets }: { assets: Assets }) {
   const { chips } = credit;
   return (
-    <Grow from={0.55} delay={0} className={CARD}>
-      <Streaks image={assets["streaks.jpg"]} video={assets["streaks.mp4"]} />
+    <Grow from={0.55} delay={0} y={CARD_RISE} className={CARD}>
+      <GrowAnchor className="absolute inset-0">
+        <Streaks image={assets["streaks.jpg"]} video={assets["streaks.mp4"]} />
+      </GrowAnchor>
       <Rise
         y={90}
         delay={0.3}
@@ -133,13 +136,20 @@ function CreditLineCard() {
   const fill = useTransform(value, (v) => v / line.amount);
 
   return (
-    <Grow from={0.5} delay={CARD_STAGGER} className={cn(CARD, "flex flex-col bg-lavender px-[30px] pb-[30px] pt-[34px]")}>
-      <BlurWords
-        as="h3"
-        text={line.title}
-        delay={0.3}
-        className="text-[40px] font-medium leading-[1] tracking-[-0.045em] text-olive xl:text-[clamp(38px,3.4vw,49px)]"
-      />
+    <Grow
+      from={0.5}
+      delay={CARD_STAGGER}
+      y={CARD_RISE}
+      className={cn(CARD, "flex flex-col bg-lavender px-[30px] pb-[30px] pt-[34px]")}
+    >
+      <GrowAnchor>
+        <BlurWords
+          as="h3"
+          text={line.title}
+          delay={0.3}
+          className="text-[40px] font-medium leading-[1] tracking-[-0.045em] text-olive xl:text-[clamp(38px,3.4vw,49px)]"
+        />
+      </GrowAnchor>
       <Rise y={70} delay={0.4} duration={0.95} className="mt-auto">
         <div ref={ref} className="flex h-[250px] flex-col rounded-[18px] bg-white px-5 pb-6 pt-[22px] text-olive">
           <p className="text-[13px] tracking-[-0.01em]">{line.label}</p>
@@ -187,24 +197,27 @@ function CreditLineCard() {
 function PhotoCard({ assets }: { assets: Assets }) {
   const { photo } = credit;
   return (
-    <Grow from={0.5} delay={CARD_STAGGER * 2} className={cn(CARD, "md:col-span-2 xl:col-span-1")}>
-      <SmartImage
-        src={assets["phone.jpg"]}
-        alt="A person smiling at their phone"
-        fallback={fallbacks.phone}
-        className="absolute inset-0"
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(20,18,12,0.32)_0%,rgba(20,18,12,0)_32%,rgba(20,18,12,0)_52%,rgba(20,18,12,0.5)_100%)]"
-      />
-      <BlurWords
-        as="h3"
-        text={photo.title}
-        delay={0.45}
-        lineClassName=""
-        className="absolute left-[30px] right-[30px] top-[26px] text-balance text-[40px] font-medium leading-[1] tracking-[-0.045em] text-white xl:text-[clamp(40px,3.9vw,56px)]"
-      />
+    <Grow from={0.5} delay={CARD_STAGGER * 2} y={CARD_RISE} className={cn(CARD, "md:col-span-2 xl:col-span-1")}>
+      {/* The photo and the title ride up with the top edge */}
+      <GrowAnchor className="absolute inset-0">
+        <SmartImage
+          src={assets["phone.jpg"]}
+          alt="A person smiling at their phone"
+          fallback={fallbacks.phone}
+          className="absolute inset-0"
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(20,18,12,0.32)_0%,rgba(20,18,12,0)_32%,rgba(20,18,12,0)_52%,rgba(20,18,12,0.5)_100%)]"
+        />
+        <BlurWords
+          as="h3"
+          text={photo.title}
+          delay={0.45}
+          lineClassName=""
+          className="absolute left-[30px] right-[30px] top-[26px] text-balance text-[40px] font-medium leading-[1] tracking-[-0.045em] text-white xl:text-[clamp(40px,3.9vw,56px)]"
+        />
+      </GrowAnchor>
       <BlurLines
         text={photo.body}
         delay={0.65}
