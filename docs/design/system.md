@@ -184,6 +184,67 @@ teal `#63B59C`, pink `#F8D2D1`, sage `#B0CCC0`, sky `#C5DBF2`.
    squares, account details, and sign out.
 10. **Claim and Plans:** the same parts.
 
+## Presentation: most screens slide up as bottom sheets
+
+The team asked for most screens to pop up from the bottom. Only the five
+tabs are full screens; everything you *do* slides up over them.
+
+- **Tabs (full screens, BottomNav):** Home · Insights · Cards · Activity ·
+  Profile.
+- **Sheets:**
+
+  | Sheet | Size |
+  |---|---|
+  | Send | full |
+  | Receive (QR + request link) | half |
+  | Add money | half |
+  | Checkout `/pay/[id]` | full |
+  | Claim | full |
+  | Select account (the card carousel) | half |
+  | Transaction detail | half |
+  | Plan detail | half, drag up to full |
+  | Credit line | full |
+  | Credit score (candles) | full |
+  | Notifications | half |
+  | Settings and account actions | half |
+  | Filters | half |
+  | Confirm with Face ID | compact |
+  | Success receipt, with a check-mark animation | half |
+
+- **`BottomSheet` in packages/ui:**
+  - Motion drag with snap points (compact, half, full) and a velocity-based
+    swipe to dismiss.
+  - A spring in and out; the backdrop dims to about 60% and blurs by 8px; the
+    screen behind scales to 0.96 with rounded corners, like iOS.
+  - The sheet has 32px top corners, a grab handle and an optional
+    `Sheet.Header` (title + close).
+  - The inner content scrolls without fighting the drag.
+  - `aria-modal`, a focus trap, Escape to close, body scroll lock, safe-area
+    padding. Reduced motion means a fade, no travel.
+- **Routing:** Next.js App Router parallel routes (`@sheet`) with intercepting
+  routes (`(.)send`, `(.)pay/[id]` and so on). Opening one from inside the app
+  presents it as a sheet over the current tab, and its URL still deep-links. A
+  cold link (a checkout link from a merchant) opens the sheet over a blurred
+  Home.
+- **Web dashboard:**
+  - Detail views (payment, plan, payout) open in a right-hand `Drawer`, and
+    create/edit flows (new link, new key, webhook) in a `Dialog`.
+  - Below 768px both become `BottomSheet`s.
+
+## Accounts
+
+- **Consumer app:** Face ID through Mera is the primary sign-up, as the Agora
+  bounty requires.
+  - Privy (email or Google, with an embedded wallet) is offered beneath it as
+    "Continue with email", using the same Privy app as the dashboard.
+  - The account layer is one interface with three implementations: mera,
+    privy and dev.
+  - The Android build's Privy app client id is read from
+    `NEXT_PUBLIC_PRIVY_ANDROID_CLIENT_ID`.
+- **Web dashboard:** Privy, live. It reads the app id and secret from
+  `apps/business/.env.local` (git-ignored), with real sign-in, embedded
+  merchant wallets and server-side token verification.
+
 ## Web dashboard (apps/business)
 
 The shell is light (ref C); analytics sit on dark panels (ref D).
