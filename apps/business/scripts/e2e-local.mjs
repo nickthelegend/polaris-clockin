@@ -54,11 +54,12 @@ import {
 import { APP_DIR, REPO_DIR, flag } from "./privy/lib.mjs";
 import { seedMerchant } from "./lib/seed.mjs";
 
-const NODE_PORT = Number(process.env.E2E_NODE_PORT ?? 8610);
-const APP_PORT = Number(process.env.E2E_APP_PORT ?? 3530);
-const HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 3531);
-const RPC = `http://127.0.0.1:${NODE_PORT}`;
-const BASE = `http://localhost:${APP_PORT}`;
+// Ports: the first free one in each range (E2E_*_PORT pins one).
+let NODE_PORT = Number(process.env.E2E_NODE_PORT ?? 8610);
+let APP_PORT = Number(process.env.E2E_APP_PORT ?? 3530);
+let HOOK_PORT = Number(process.env.E2E_HOOK_PORT ?? 3531);
+let RPC = "";
+let BASE = "";
 const CONTRACTS_DIR = join(REPO_DIR, "packages", "contracts");
 const SDK_DIR = join(REPO_DIR, "packages", "sdk");
 const DEPLOYMENT = join(CONTRACTS_DIR, "deployments", "monad-local.json");
@@ -141,9 +142,21 @@ async function api(path, init = {}) {
 }
 
 async function main() {
-  for (const [port, what] of [[NODE_PORT, "the Hardhat node"], [APP_PORT, "Polaris for Business"], [HOOK_PORT, "the webhook receiver"]]) {
-    if (!(await portFree(port))) throw new Error(`Port ${port} (${what}) is busy. Stop whatever is on it, or set E2E_*_PORT.`);
-  }
+  const taken = new Set();
+  const pick = async (preferred, pinned, last, what) => {
+    for (let port = preferred; port <= (pinned ? preferred : last); port++) {
+      if (!taken.has(port) && (await portFree(port))) {
+        taken.add(port);
+        return port;
+      }
+    }
+    throw new Error(`No free port for ${what} (tried ${preferred}${pinned ? "" : `-${last}`}).`);
+  };
+  NODE_PORT = await pick(NODE_PORT, Boolean(process.env.E2E_NODE_PORT), 8619, "the Hardhat node");
+  APP_PORT = await pick(APP_PORT, Boolean(process.env.E2E_APP_PORT), 3539, "Polaris for Business");
+  HOOK_PORT = await pick(HOOK_PORT, Boolean(process.env.E2E_HOOK_PORT), 3539, "the webhook receiver");
+  RPC = `http://127.0.0.1:${NODE_PORT}`;
+  BASE = `http://localhost:${APP_PORT}`;
 
   log("Polaris for Business, end to end on a local chain\n");
 

@@ -1,7 +1,7 @@
 import "server-only";
 
 import {
-  DuplicateKeyError,
+  isDuplicateKeyError,
   newId,
   serializeEvent,
   sha256Hex,
@@ -68,7 +68,7 @@ export async function emitEvent(input: EmitInput): Promise<{ event: WebhookEvent
   try {
     await db.webhookEvents.insert(record);
   } catch (error) {
-    if (error instanceof DuplicateKeyError) {
+    if (isDuplicateKeyError(error)) {
       return { event: (await db.webhookEvents.get(id)) as WebhookEventRecord, deliveries: [], duplicate: true };
     }
     throw error;

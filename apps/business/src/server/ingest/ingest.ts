@@ -1,7 +1,7 @@
 import "server-only";
 
 import {
-  DuplicateKeyError,
+  isDuplicateKeyError,
   type CheckoutSessionRecord,
   type MerchantRecord,
   type PlanRecord,
@@ -155,7 +155,7 @@ async function claim(log: Decoded): Promise<boolean> {
     await getDb().processedLogs.insert({ id: `${log.txHash}:${log.logIndex}`, txHash: log.txHash, blockNumber: log.blockNumber, at: new Date().toISOString() });
     return true;
   } catch (error) {
-    if (error instanceof DuplicateKeyError) return false;
+    if (isDuplicateKeyError(error)) return false;
     throw error;
   }
 }

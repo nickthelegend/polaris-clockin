@@ -75,7 +75,10 @@ export const withHeadroom = (estimate: bigint) => (estimate * (10_000n + HEADROO
 /* ── Nonces ─────────────────────────────────────────────────────────────── */
 
 type Lane = { tail: Promise<unknown>; next: number | null };
-const lanes = new Map<string, Lane>();
+// On globalThis: Next builds route handlers and the background workers as
+// separate bundles, and both send as the relayer, so they must share lanes.
+const g = globalThis as typeof globalThis & { __polarisNonceLanes?: Map<string, Lane> };
+const lanes: Map<string, Lane> = (g.__polarisNonceLanes ??= new Map<string, Lane>());
 
 function lane(address: Address): Lane {
   const key = address.toLowerCase();

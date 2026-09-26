@@ -1,6 +1,6 @@
 import "server-only";
 
-import { canonicalJson, DuplicateKeyError, sha256Hex } from "@polaris/db";
+import { canonicalJson, isDuplicateKeyError, sha256Hex } from "@polaris/db";
 
 import { getDb } from "../db";
 import { HttpError } from "../http";
@@ -47,7 +47,7 @@ export async function withIdempotency(
       await db.idempotency.insert({ id, requestHash, state: "in_progress", status: null, body: null, createdAt: new Date(now).toISOString(), expiresAtMs: now + TTL_MS });
       break;
     } catch (error) {
-      if (!(error instanceof DuplicateKeyError)) throw error;
+      if (!(isDuplicateKeyError(error))) throw error;
       const existing = await db.idempotency.get(id);
       if (!existing) continue;
       const stale = existing.expiresAtMs <= now || (existing.state === "in_progress" && now - Date.parse(existing.createdAt) > ABANDONED_MS);

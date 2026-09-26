@@ -1,6 +1,6 @@
 import "server-only";
 
-import { DuplicateKeyError, newId, type RelayKind, type RelayRecord } from "@polaris/db";
+import { isDuplicateKeyError, newId, type RelayKind, type RelayRecord } from "@polaris/db";
 import type { Address, Hex, TransactionReceipt } from "viem";
 
 import { requireChain } from "../chain/client";
@@ -96,7 +96,7 @@ export async function carry(input: {
   try {
     await db.relays.insert(record);
   } catch (error) {
-    if (!(error instanceof DuplicateKeyError)) throw error;
+    if (!(isDuplicateKeyError(error))) throw error;
     const existing = await db.relays.get(id);
     if (existing && existing.state !== "failed") {
       if (existing.state === "pending" || !existing.txHash) {

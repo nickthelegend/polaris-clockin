@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { openMemoryStore, type Transport } from "@polaris/db";
+import { openSqliteStore, type Transport } from "@polaris/db";
 import { getAddress, type Abi, type Address } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
@@ -86,7 +86,8 @@ export function setupServer(env: Record<string, string> = {}): TestEnv {
   resetNoncesForTests();
   resetRateLimitsForTests();
   resetEligibilityForTests();
-  replaceStoreForTests(openMemoryStore());
+  // SQLite in memory: the store production runs on, fresh for every test.
+  replaceStoreForTests(openSqliteStore(":memory:"));
   setMerchantVerifierForTests(null);
 
   const chain = new FakeChain(ALL_ABIS);

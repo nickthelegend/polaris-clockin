@@ -1,6 +1,6 @@
 import "server-only";
 
-import { DuplicateKeyError, newMerchantRecord, type MerchantRecord } from "@polaris/db";
+import { isDuplicateKeyError, newMerchantRecord, type MerchantRecord } from "@polaris/db";
 
 import type { Merchant } from "@/lib/data/types";
 import type { AuthedMerchant } from "./auth";
@@ -46,7 +46,7 @@ export async function ensureMerchant(auth: AuthedMerchant): Promise<MerchantReco
     return await db.merchants.insert(record);
   } catch (error) {
     // Two first requests raced; the other one created it.
-    if (error instanceof DuplicateKeyError) return (await db.merchants.get(auth.userId)) as MerchantRecord;
+    if (isDuplicateKeyError(error)) return (await db.merchants.get(auth.userId)) as MerchantRecord;
     throw error;
   }
 }
