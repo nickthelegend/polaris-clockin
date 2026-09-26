@@ -147,8 +147,10 @@ async function main() {
   console.log(`Balance   ${formatEther(balance)} MON`);
 
   if (!local) {
+    // Monad charges min(base + tip, maxFee) per unit of gas LIMIT; eth_gasPrice
+    // is base + tip. maxFeePerGas (2 x base + tip) would double the estimate.
     const { gasPrice, maxFeePerGas } = await hre.ethers.provider.getFeeData();
-    const price = maxFeePerGas ?? gasPrice;
+    const price = gasPrice ?? maxFeePerGas;
     const need = ((await roughDeploymentGas()) * price * 115n) / 100n;
     console.log(`Needs     about ${formatEther(need)} MON at ${hre.ethers.formatUnits(price, "gwei")} gwei (rough)`);
     if (balance < need) {
