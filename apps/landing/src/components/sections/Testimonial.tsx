@@ -59,7 +59,7 @@ export function Testimonial({ assets }: { assets: Assets }) {
       />
 
       <div className="shell relative flex w-full flex-col gap-8 pb-10 pt-40 md:flex-row md:items-end md:justify-between lg:pb-16">
-        <div className="min-h-[260px] max-w-[980px] md:min-h-[300px] lg:min-h-[330px]">
+        <div className="flex min-h-[260px] max-w-[980px] flex-col justify-end md:min-h-[300px] lg:min-h-[330px]">
           <AnimatePresence mode="wait" initial={false}>
             <motion.figure
               key={index}
