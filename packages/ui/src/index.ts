@@ -32,6 +32,18 @@ export { Table, CellStack } from "./primitives/Table";
 export type { TableProps, TableColumn, SortState } from "./primitives/Table";
 export { Logo, LogoMark } from "./primitives/Logo";
 
+// Composites
+export { StatCard } from "./composites/StatCard";
+export type { StatCardProps, StatCardTone } from "./composites/StatCard";
+export { StatTile, KeyValueGrid, DetailsList } from "./composites/Stats";
+export type { StatTileProps, KeyValueGridProps, DetailsListProps, KeyValue } from "./composites/Stats";
+export { TxRow } from "./composites/TxRow";
+export type { TxRowProps } from "./composites/TxRow";
+export { CardStack } from "./composites/CardStack";
+export type { CardStackProps, CardStackAction } from "./composites/CardStack";
+export { GradientCard } from "./composites/GradientCard";
+export type { GradientCardProps, GradientTone } from "./composites/GradientCard";
+
 // Charts
 export { Sparkline } from "./charts/Sparkline";
 export type { SparklineProps } from "./charts/Sparkline";
