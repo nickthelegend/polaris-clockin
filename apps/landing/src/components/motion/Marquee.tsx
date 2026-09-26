@@ -11,8 +11,8 @@ export type MarqueeProps = {
   /** px per second. */
   speed?: number;
   direction?: "left" | "right";
-  /** Space between items and between copies, px. */
-  gap?: number;
+  /** Space between items and between copies: px, or any CSS length. */
+  gap?: number | string;
   className?: string;
   trackClassName?: string;
   pauseOnHover?: boolean;

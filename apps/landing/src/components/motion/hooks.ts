@@ -1,17 +1,33 @@
 "use client";
 
-import { useInView, useReducedMotion } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useInView } from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { VIEW_AMOUNT } from "./tokens";
 
 export const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReduced(onChange: () => void) {
+  const mql = window.matchMedia(REDUCED_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
 /**
  * True when the visitor asked for reduced motion. Primitives then render their
  * final state and skip the animation.
+ *
+ * It reads false while hydrating (matching the server HTML) and switches right
+ * after, so the markup never mismatches; the CSS in globals.css already shows
+ * every reveal in its final state before that.
  */
 export function useReduced(): boolean {
-  return useReducedMotion() ?? false;
+  return useSyncExternalStore(
+    subscribeReduced,
+    () => window.matchMedia(REDUCED_QUERY).matches,
+    () => false,
+  );
 }
 
 /**
@@ -22,6 +38,44 @@ export function useReveal<T extends Element>(amount: number = VIEW_AMOUNT) {
   const ref = useRef<T>(null);
   const inView = useInView(ref, { once: true, amount });
   return [ref, inView] as const;
+}
+
+/**
+ * Like useReveal, but measured from the element's box rather than by an
+ * IntersectionObserver. Chrome intersects against an element's own
+ * clip-path, so a card that starts mostly clipped (Grow) would never count
+ * as 20% visible; this checks the unclipped box on scroll instead.
+ */
+export function useVisibleOnce<T extends Element>(amount: number = VIEW_AMOUNT) {
+  const ref = useRef<T>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || visible) return;
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const r = el.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      const seen = Math.min(r.bottom, vh) - Math.max(r.top, 0);
+      const need = Math.min(r.height, vh) * amount;
+      if (seen > 0 && seen >= need) setVisible(true);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [amount, visible]);
+
+  return [ref, visible] as const;
 }
 
 /**

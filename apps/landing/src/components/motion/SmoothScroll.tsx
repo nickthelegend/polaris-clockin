@@ -1,8 +1,18 @@
 "use client";
 
 import Lenis from "lenis";
-import { MotionConfig } from "motion/react";
+import { MotionConfig, MotionGlobalConfig } from "motion/react";
 import { useEffect } from "react";
+
+const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+
+/*
+ * Under reduced motion every Motion animation jumps straight to its final
+ * state. Set as the module loads, so it is in place before anything animates.
+ */
+if (typeof window !== "undefined") {
+  MotionGlobalConfig.skipAnimations = window.matchMedia(REDUCED_QUERY).matches;
+}
 
 /**
  * Lenis smooth scrolling for the whole page, plus Motion's config. Sections
@@ -11,18 +21,31 @@ import { useEffect } from "react";
  */
 export function SmoothScroll({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) return;
+    const mql = window.matchMedia(REDUCED_QUERY);
+    let lenis: Lenis | null = null;
 
-    const lenis = new Lenis({
-      autoRaf: true,
-      duration: 1.1,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      anchors: { offset: 0 },
-      smoothWheel: true,
-    });
+    const apply = () => {
+      MotionGlobalConfig.skipAnimations = mql.matches;
+      if (mql.matches) {
+        lenis?.destroy();
+        lenis = null;
+      } else if (!lenis) {
+        lenis = new Lenis({
+          autoRaf: true,
+          duration: 1.1,
+          easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+          anchors: { offset: 0 },
+          smoothWheel: true,
+        });
+      }
+    };
 
-    return () => lenis.destroy();
+    apply();
+    mql.addEventListener("change", apply);
+    return () => {
+      mql.removeEventListener("change", apply);
+      lenis?.destroy();
+    };
   }, []);
 
   return <MotionConfig reducedMotion="user">{children}</MotionConfig>;

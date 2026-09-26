@@ -21,8 +21,8 @@ export function RollingNumber({
   value,
   format,
   className,
-  stiffness = 90,
-  damping = 22,
+  stiffness = 150,
+  damping = 26,
 }: RollingNumberProps) {
   const reduced = useReduced();
   const target = useMotionValue(value);

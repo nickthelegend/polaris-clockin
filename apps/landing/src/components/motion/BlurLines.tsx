@@ -50,7 +50,7 @@ export function BlurLines({
   );
   const plain = segments.map((s) => s.text).join(" ");
 
-  const { ref, shown, reduced } = usePlay<HTMLElement>(play, amount);
+  const { ref, shown } = usePlay<HTMLElement>(play, amount);
   const wordRefs = useRef<Array<HTMLSpanElement | null>>([]);
   const [lineOf, setLineOf] = useState<number[]>([]);
 
@@ -93,7 +93,7 @@ export function BlurLines({
               className={cn("reveal-word", tone)}
               variants={wordVariants}
               custom={{ delay: delay + (lineOf[i] ?? 0) * stagger, duration }}
-              initial={reduced ? false : "hidden"}
+              initial="hidden"
               animate={shown ? "visible" : "hidden"}
             >
               {word}

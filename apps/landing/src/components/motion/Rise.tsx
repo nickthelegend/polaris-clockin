@@ -61,7 +61,7 @@ export function Rise({
   amount,
   id,
 }: RiseProps) {
-  const { ref, shown, reduced } = usePlay<HTMLElement>(play, amount);
+  const { ref, shown } = usePlay<HTMLElement>(play, amount);
   const Tag = TAGS[as] as typeof motion.div;
   return (
     <Tag
@@ -71,7 +71,7 @@ export function Rise({
       style={style}
       variants={riseVariants}
       custom={{ delay, duration, y, blur }}
-      initial={reduced ? false : "hidden"}
+      initial="hidden"
       animate={shown ? "visible" : "hidden"}
     >
       {children}

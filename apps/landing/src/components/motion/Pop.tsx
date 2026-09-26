@@ -17,13 +17,13 @@ export type PopProps = {
 
 /** Scales in on a spring with a small overshoot: avatars, badges, bubbles. */
 export function Pop({ children, className, style, delay = 0, play, from = 0.3 }: PopProps) {
-  const { ref, shown, reduced } = usePlay<HTMLSpanElement>(play);
+  const { ref, shown } = usePlay<HTMLSpanElement>(play);
   return (
     <motion.span
       ref={ref}
       className={cn("rv", className)}
       style={style}
-      initial={reduced ? false : { scale: from, opacity: 0 }}
+      initial={{ scale: from, opacity: 0 }}
       animate={shown ? { scale: 1, opacity: 1 } : { scale: from, opacity: 0 }}
       transition={{
         delay,

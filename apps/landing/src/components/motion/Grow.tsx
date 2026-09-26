@@ -3,7 +3,7 @@
 import { motion, type Variants } from "motion/react";
 import type { CSSProperties, ReactNode } from "react";
 import { cn } from "@/lib/cn";
-import { usePlay } from "./hooks";
+import { useReduced, useVisibleOnce } from "./hooks";
 import { CARD_RISE, EASE_REVEAL } from "./tokens";
 
 type Custom = {
@@ -68,7 +68,9 @@ export function Grow({
   amount,
   id,
 }: GrowProps) {
-  const { ref, shown, reduced } = usePlay<HTMLDivElement>(play, amount);
+  const [ref, visible] = useVisibleOnce<HTMLDivElement>(amount);
+  const reduced = useReduced();
+  const shown = reduced || (play ?? visible);
   return (
     <motion.div
       ref={ref}
@@ -77,7 +79,7 @@ export function Grow({
       style={style}
       variants={growVariants}
       custom={{ from, radius, y, delay, duration } satisfies Custom}
-      initial={reduced ? false : "hidden"}
+      initial="hidden"
       animate={shown ? "visible" : "hidden"}
     >
       {children}

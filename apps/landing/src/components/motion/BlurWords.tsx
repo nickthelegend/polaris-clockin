@@ -57,7 +57,7 @@ export function BlurWords({
   id,
 }: BlurWordsProps) {
   const lines = typeof text === "string" ? [text] : text;
-  const { ref, shown, reduced } = usePlay<HTMLElement>(play, amount);
+  const { ref, shown } = usePlay<HTMLElement>(play, amount);
   let index = 0;
 
   const children = (
@@ -77,7 +77,7 @@ export function BlurWords({
                         className={cn("reveal-word", wordClassName)}
                         variants={wordVariants}
                         custom={{ delay: delay + i * stagger, duration } satisfies Timing}
-                        initial={reduced ? false : "hidden"}
+                        initial="hidden"
                         animate={shown ? "visible" : "hidden"}
                       >
                         {word}
