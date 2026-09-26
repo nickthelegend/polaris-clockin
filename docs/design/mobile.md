@@ -1,3 +1,5 @@
+> **Superseded by [`system.md`](system.md)** (design system v2, four new references). This file records the first reference and the v1 screens built from it.
+
 # The Polaris app: visual design
 
 **This supersedes the old Polaris brand for the consumer app (`apps/app`).**
