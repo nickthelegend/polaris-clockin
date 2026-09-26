@@ -51,7 +51,10 @@ const paths = {
   navProfile: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 12.4a2.9 2.9 0 1 0 0-5.8 2.9 2.9 0 0 0 0 5.8zM6.7 18.4c1.2-2 3-3 5.3-3s4.1 1 5.3 3",
 } as const;
 
-export type IconName = keyof typeof paths | "star";
+export type IconName = keyof typeof paths | "star" | "backspaceFilled";
+
+/** The reference keypad's delete key: a filled tag with a white cross. */
+const BACKSPACE_FILLED = "M8.6 5.2h10.4a2.6 2.6 0 0 1 2.6 2.6v8.4a2.6 2.6 0 0 1-2.6 2.6H8.6a2 2 0 0 1-1.5-.7L2.8 13a1.6 1.6 0 0 1 0-2l4.3-5.1a2 2 0 0 1 1.5-.7z";
 
 /** The Polaris mark: a four-point star. */
 const STAR = "M12 1.8C12.9 8.1 15.9 11.1 22.2 12 15.9 12.9 12.9 15.9 12 22.2 11.1 15.9 8.1 12.9 1.8 12 8.1 11.1 11.1 8.1 12 1.8Z";
@@ -71,6 +74,14 @@ export function Icon({
   title?: string;
 }) {
   const a11y = title ? { role: "img", "aria-label": title } : { "aria-hidden": true };
+  if (name === "backspaceFilled") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" className={className} {...a11y}>
+        <path d={BACKSPACE_FILLED} fill="currentColor" />
+        <path d="m11.4 9.6 4.8 4.8m0-4.8-4.8 4.8" stroke="#fff" strokeWidth="1.9" strokeLinecap="round" fill="none" />
+      </svg>
+    );
+  }
   if (name === "star") {
     return (
       <svg width={size} height={size} viewBox="0 0 24 24" className={className} {...a11y}>

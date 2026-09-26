@@ -19,7 +19,7 @@ export function stagger(i: number): CSSProperties {
 type ButtonVariant = "primary" | "secondary" | "lime" | "quiet" | "danger";
 
 const buttonBase =
-  "press inline-flex items-center justify-center gap-2 rounded-btn font-medium tracking-[-0.02em] select-none disabled:opacity-45";
+  "press inline-flex items-center justify-center gap-2 rounded-btn tracking-[-0.03em] select-none disabled:opacity-45";
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary: "bg-cta text-on-cta shadow-float",
