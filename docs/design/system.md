@@ -8,7 +8,7 @@ references, and the product is rebuilt on a shared component library,
 |---|---|---|
 | **A · Aheadly** | [`refs-v2/ref-a-aheadly.webp`](refs-v2/ref-a-aheadly.webp) | The mobile app's core: dark base, lime balance card, round action buttons, quick-transfer avatars, transaction rows, the floating pill nav with a lime active circle, the transfer screen (card carousel, big amount, lime Send, keypad with a purple backspace), the purple spending card and pastel category bars |
 | **B · Findex** | [`refs-v2/ref-b-findex.webp`](refs-v2/ref-b-findex.webp) | Onboarding (3D glass coins, "Invest smarter." headline, white Get Started), the gradient portfolio card, featured tiles, watchlist rows with sparklines, the purple chart card with range tabs, stat tiles, the Market/Limit segmented control, Sell/Buy buttons |
-| **C · Trading** | [`refs-v2/ref-c-trading.webp`](refs-v2/ref-c-trading.webp) | Candlesticks on a dark panel (lime up, purple down, price tags, timeframe chips), the key-value stat grid, the details list, the Send/Receive/Top Up tile buttons, the pill nav with a lime "Home" tab, purple Sell / lime Buy. Its light shell is the web dashboard's shell |
+| **C · Trading** | [`refs-v2/ref-c-trading.webp`](refs-v2/ref-c-trading.webp) | Candlesticks on a dark panel (lime up, purple down, price tags, timeframe chips), the key-value stat grid, the details list, the Send/Receive/Top Up tile buttons, the pill nav with a lime "Home" tab, purple Sell / lime Buy. Its layout and density shape the web dashboard, which is dark (see "Web dashboard") |
 | **D · Sales** | [`refs-v2/ref-d-sales.webp`](refs-v2/ref-d-sales.webp) | Analytics: the sales card with a sparkline and a delta chip, the weekly bar chart with a tooltip, the donut with floating value tags, the legend with thin progress bars, recent-sales rows, the balance card with side action squares |
 
 Match them **exactly**: proportions, radii, spacing, weights, colours, icon
@@ -27,7 +27,8 @@ style, and the density of each component. The content is ours, mapped below.
 
 ## Tokens
 
-**Dark theme** (mobile app, analytics panels):
+**Dark theme** (the mobile app, the web dashboard, the merchant landing and
+sign-in):
 
 | Token | Value |
 |---|---|
@@ -40,7 +41,8 @@ style, and the density of each component. The content is ours, mapped below.
 | text-muted | `#8A8D93` |
 | text-dim | `#55585E` |
 
-**Light theme** (web dashboard shell, ref C):
+**Light theme** (ref C's light screens; kept in `packages/ui` for light
+previews and the gallery, but no product screen uses it as its shell):
 
 | Token | Value |
 |---|---|
@@ -244,11 +246,45 @@ tabs are full screens; everything you *do* slides up over them.
 - **Web dashboard:** Privy, live. It reads the app id and secret from
   `apps/business/.env.local` (git-ignored), with real sign-in, embedded
   merchant wallets and server-side token verification.
+  - The sign-in page's one **Continue** button opens Privy's own modal, which
+    lists exactly the methods turned on in the Privy dashboard (today email
+    and external wallets; Google appears by itself once it is enabled there).
+    We never draw a button for a method that is off.
+  - Every merchant gets an embedded payout wallet at sign-in (the client
+    config requests it for all users).
 
 ## Web dashboard (apps/business)
 
-The shell is light (ref C); analytics sit on dark panels (ref D).
+**The web is dark, in the mobile app's visual language. There is no light
+shell.** The merchant side should feel like the same product as the Polaris
+app: the dark tokens, Satoshi, lime accents, the glass renders, and ref B's
+and ref D's dark panels. Ref C sets the dashboard's layout and density only
+(its stat grid, details list, candle panel and labelled nav), not its light
+ground.
 
+- **Ground and surfaces:** `canvas` for the page, `surface-1` cards at 28px,
+  `surface-2` rows and tiles inside them, hairlines between table rows. The
+  pastel `StatCard`s (sage, pink, honey) and the `CardStack`'s sky card carry
+  the colour; lime is the one action colour.
+- **Three public pages share the look:**
+  - `/` is the merchant landing ("Polaris for Business"), in the spirit of
+    `apps/landing` (its motion tokens, reveal-on-scroll, Lenis and section
+    rhythm), but dark. Its product visual is built from real components (a
+    phone with the Checkout sheet beside a dark dashboard panel with the
+    `CandlestickChart`), never a screenshot. Signed-in merchants see
+    **Open dashboard** in its nav.
+  - `/login` has the wordmark, a two-line headline, one **Continue** (Privy's
+    modal), a trust line, and on wide screens a glass card and a mini
+    dashboard built from components.
+  - The dashboard lives under `/dashboard`; the old top-level paths redirect.
+- **Shell:**
+  - A left sidebar with the team's `PolarisMark` and wordmark
+    (`packages/brand`) and a lime active item. It is full width from 1280px
+    and an icon rail from 768 to 1279px. Below 768px there is a top bar and
+    the floating `BottomNav` (ref A's icon pill with the lime active circle).
+  - A header with the page title, the page's actions, and the signed-in
+    merchant's avatar menu (business name, email, copy the payout address,
+    sign out).
 - **Overview:**
   - a Sales card with a sparkline and delta chip
   - a `BarChart` of customers this week
@@ -256,10 +292,19 @@ The shell is light (ref C); analytics sit on dark panels (ref D).
     a `ProgressLegend`
   - `CandlestickChart` of daily payment volume, with timeframe chips
   - recent sales rows
-- **Payments, Links, Plans ledger, Payouts** (a `CardStack` balance), and
-  **Developers**, all from the same library.
-- **Privy:** sign-in stays Privy (email, Google). The session shows in the
-  header avatar menu.
+  - credit exposure, with plain-language reasons from Nansen wallet history
+  - a Collections card: the Chainlink CRE workflow's last and next run
+  - an "Indexed by Envio" live event feed
+- **Payments, Links, the Plans ledger** (instalment ticks), **Payouts** (a
+  `CardStack` balance, one-tap withdraw, automatic payouts by a Privy session
+  signer) and **Developers** (keys, webhooks, the SDK snippet), all from the
+  same library. Detail views open in a `Drawer` and create and edit flows in
+  a `Dialog`; both become `BottomSheet`s below 768px.
+- **Honest data:** anything not yet backed by a live service (the indexer,
+  the CRE workflow, Nansen, the relayer) shows an empty or "not connected"
+  state. When sample data is on, every card and row that shows it carries a
+  `Sample` chip. A control that can't work yet is disabled with the reason
+  beside it; it is never left to fail.
 
 ## Rules
 
