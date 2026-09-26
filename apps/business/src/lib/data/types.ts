@@ -1,0 +1,261 @@
+/**
+ * The dashboard's domain, as the browser sees it.
+ *
+ * Money is integer US cents everywhere. AUSD carries 6 decimals on chain; the
+ * indexer converts at its boundary, so nothing in the UI ever does float maths
+ * on a balance. Times are ISO-8601 strings in UTC.
+ */
+
+export type Cents = number;
+export type IsoDate = string;
+export type Address = `0x${string}`;
+
+export type Merchant = {
+  /** The Privy user ID (`did:privy:...`). The only identity the server trusts. */
+  id: string;
+  businessName: string | null;
+  /** The embedded payout wallet, read from Privy on the server. Never from a header. */
+  walletAddress: Address | null;
+  email: string | null;
+  createdAt: IsoDate;
+};
+
+/* ── Payment links ──────────────────────────────────────────────────────── */
+
+/** How a buyer may pay: in full, in four instalments, or on a subscription. */
+export type PayMode = "now" | "later" | "subscribe";
+export type LinkUsage = "single" | "reusable";
+export type LinkStatus = "active" | "used" | "expired";
+
+export type PaymentLink = {
+  id: string;
+  url: string;
+  amountCents: Cents;
+  description: string;
+  modes: PayMode[];
+  usage: LinkUsage;
+  expiresAt: IsoDate | null;
+  status: LinkStatus;
+  paymentsCount: number;
+  collectedCents: Cents;
+  createdAt: IsoDate;
+};
+
+export type CreateLinkInput = {
+  amountCents: Cents;
+  description: string;
+  modes: PayMode[];
+  usage: LinkUsage;
+  /** Hours from now, or null for a link that never expires. */
+  expiresInHours: number | null;
+};
+
+/* ── Payments ───────────────────────────────────────────────────────────── */
+
+export type PaymentStatus = "succeeded" | "failed";
+
+export type Payment = {
+  id: string;
+  orderId: string;
+  description: string;
+  /** The buyer's account address. Shown shortened; the buyer never sees it. */
+  buyer: Address;
+  mode: PayMode;
+  status: PaymentStatus;
+  amountCents: Cents;
+  feeCents: Cents;
+  netCents: Cents;
+  linkId: string | null;
+  /** Set once the indexer has seen the settling transaction. Null for sample rows. */
+  txHash: `0x${string}` | null;
+  createdAt: IsoDate;
+};
+
+/* ── Pay in 4 ───────────────────────────────────────────────────────────── */
+
+/** collecting: on schedule. dunning: a collection failed and is being retried. */
+export type PlanState = "collecting" | "dunning" | "repaid" | "written_off";
+export type PlanFilter = "all" | "collecting" | "dunning" | "closed";
+
+export type Plan = {
+  id: string;
+  orderId: string;
+  description: string;
+  buyer: Address;
+  principalCents: Cents;
+  /** What the buyer repays in total: principal plus pro-rated interest. */
+  totalCents: Cents;
+  outstandingCents: Cents;
+  installmentCount: number;
+  installmentsPaid: number;
+  state: PlanState;
+  /** Failed collection attempts on the current instalment. */
+  attempts: number;
+  nextDueAt: IsoDate | null;
+  openedAt: IsoDate;
+};
+
+export type CollectorStatus = {
+  state: "running" | "degraded" | "stopped";
+  lastPassAt: IsoDate | null;
+  /** Where collections run: the CRE workflow, or the fallback keeper. */
+  runner: "cre" | "fallback";
+};
+
+/* ── Overview ───────────────────────────────────────────────────────────── */
+
+export type Overview = {
+  merchant: Merchant;
+  balanceCents: Cents;
+  today: {
+    count: number;
+    grossCents: Cents;
+    payments: Payment[];
+  };
+  exposure: {
+    /** Still owed across open plans: collecting plus at risk. */
+    outstandingCents: Cents;
+    collectingCents: Cents;
+    collectingPlans: number;
+    atRiskCents: Cents;
+    atRiskPlans: number;
+    collectedThisWeekCents: Cents;
+    /** Instalments collected on time over those that came due, in %. Null until one has come due. */
+    collectionRate: number | null;
+  };
+  collector: CollectorStatus;
+  autoPayouts: AutoPayouts;
+  sample: boolean;
+};
+
+/* ── Payouts ────────────────────────────────────────────────────────────── */
+
+export type PayoutKind = "manual" | "automatic";
+export type PayoutStatus = "paid" | "queued" | "failed";
+
+export type Payout = {
+  id: string;
+  kind: PayoutKind;
+  status: PayoutStatus;
+  amountCents: Cents;
+  destination: Address;
+  /** True when the merchant's wallet signed the transfer authorisation. */
+  signed: boolean;
+  txHash: `0x${string}` | null;
+  createdAt: IsoDate;
+};
+
+export type AutoPayouts = {
+  enabled: boolean;
+  payoutAddress: Address | null;
+  /** The Privy policy that pins the signer to `payoutAddress`. Null until created. */
+  policyId: string | null;
+  /** Daily sweep time, in UTC hours. */
+  hourUtc: number;
+  nextRunAt: IsoDate | null;
+};
+
+export type PayoutsState = {
+  balanceCents: Cents;
+  walletAddress: Address | null;
+  auto: AutoPayouts;
+  history: Payout[];
+};
+
+export type WithdrawInput = {
+  amountCents: Cents;
+  destination: Address;
+  /** Present when the payout wallet signed an ERC-3009 authorisation. */
+  authorization?: {
+    validAfter: string;
+    validBefore: string;
+    nonce: `0x${string}`;
+    signature: `0x${string}`;
+  };
+};
+
+export type AutoPayoutsInput = {
+  enabled: boolean;
+  payoutAddress: Address | null;
+};
+
+/* ── Developers ─────────────────────────────────────────────────────────── */
+
+export type ApiKey = {
+  id: string;
+  name: string;
+  /** Always shown in full: a publishable key is safe in a browser. */
+  publishableKey: string;
+  /** `sk_test_…` plus the last four characters. The secret itself is never stored. */
+  secretHint: string;
+  createdAt: IsoDate;
+  lastUsedAt: IsoDate | null;
+};
+
+export type CreatedApiKey = {
+  key: ApiKey;
+  /** Returned exactly once, by the create call. */
+  secret: string;
+};
+
+export type CreateApiKeyInput = { name: string };
+
+export const WEBHOOK_EVENTS = [
+  "payment.succeeded",
+  "plan.opened",
+  "installment.collected",
+  "installment.failed",
+  "plan.completed",
+  "plan.liquidated",
+  "subscription.charged",
+  "subscription.canceled",
+  "payout.paid",
+] as const;
+
+export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number];
+
+export type WebhookEndpoint = {
+  id: string;
+  url: string;
+  events: WebhookEventType[];
+  /** `whsec_…` plus the last four characters. */
+  secretHint: string;
+  createdAt: IsoDate;
+};
+
+export type CreatedWebhookEndpoint = {
+  endpoint: WebhookEndpoint;
+  /** The signing secret, returned exactly once. */
+  secret: string;
+};
+
+export type CreateWebhookInput = {
+  url: string;
+  events: WebhookEventType[];
+};
+
+export type WebhookDelivery = {
+  id: string;
+  endpointId: string;
+  url: string;
+  event: WebhookEventType;
+  eventId: string;
+  /** HTTP status, or null when the attempt never got a response. */
+  status: number | null;
+  durationMs: number | null;
+  attempt: number;
+  test: boolean;
+  /** Test deliveries are signed and logged but not sent until live events are wired. */
+  simulated: boolean;
+  /** The exact headers and body that were (or would be) sent. */
+  request: {
+    headers: Record<string, string>;
+    body: string;
+  };
+  createdAt: IsoDate;
+};
+
+export type WebhooksState = {
+  endpoints: WebhookEndpoint[];
+  deliveries: WebhookDelivery[];
+};

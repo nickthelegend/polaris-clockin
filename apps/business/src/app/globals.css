@@ -1,0 +1,417 @@
+@import "tailwindcss";
+
+/*
+  POLARIS FOR BUSINESS
+  ────────────────────
+  The same Polaris as the consumer app (docs/design/mobile.md): a soft grey
+  ground, flat near-white surfaces, black pills for what you press, and one
+  lime. The merchant side adds the ledger discipline of the old collections
+  dashboard: ruled rows, right-aligned tabular figures, instalments as discrete
+  ticks, and lime reserved for one meaning: money is being collected right now.
+
+  Colour roles
+    --ink         what you press (primary buttons, the nav rail, pills)
+    --lime        live: collecting, paid ticks, the running collector, the brand chip
+    --warn        retrying (dunning)
+    --danger      written off, failed, destructive
+  Nothing else gets a hue.
+*/
+
+:root {
+  color-scheme: light;
+
+  --bg: #eff1f3;
+  --bg-deep: #e8eaec;
+  --surface: #f9f9f9;
+  --field: #ffffff;
+  --key: #eff1f3;
+  --pill: #e4e6e8;
+  --line: #e2e4e7;
+  --line-strong: #d9dbde;
+
+  --ink: #111111;
+  --ink-hover: #2a2a2a;
+  --on-ink: #ffffff;
+  --rail: #111111;
+  --rail-text: #ffffff;
+  --rail-muted: rgb(255 255 255 / 0.66);
+  --rail-line: rgb(255 255 255 / 0.1);
+  --rail-hover: rgb(255 255 255 / 0.07);
+
+  --text: #0b0b0b;
+  --muted: #5f646c;
+  --faint: #8b9098;
+
+  --lime: #b3de00;
+  --lime-deep: #8ba907;
+  --lime-text: #5a7a00;
+  --lime-wash: rgb(179 222 0 / 0.16);
+  --on-lime: #111111;
+
+  --warn: #e0a31f;
+  --warn-text: #8a5300;
+  --warn-wash: rgb(224 163 31 / 0.14);
+  --danger: #d83b3b;
+  --danger-text: #c93434;
+  --danger-wash: rgb(216 59 59 / 0.1);
+
+  --focus: #111111;
+  --grid-line: rgb(0 0 0 / 0.045);
+  --shadow-float: 0 10px 30px rgb(0 0 0 / 0.18);
+  --shadow-pop: 0 12px 32px -8px rgb(0 0 0 / 0.2), 0 2px 6px -2px rgb(0 0 0 / 0.08);
+  --code: #111111;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #0d1016;
+    --bg-deep: #07090d;
+    --surface: #151920;
+    --field: #1b2028;
+    --key: #1e242c;
+    --pill: #242a32;
+    --line: #232931;
+    --line-strong: #2c323b;
+
+    --ink: #f2f4f6;
+    --ink-hover: #ffffff;
+    --on-ink: #0b0b0b;
+    --rail: #151920;
+    --rail-text: #f2f4f6;
+    --rail-muted: rgb(242 244 246 / 0.64);
+    --rail-line: rgb(255 255 255 / 0.07);
+    --rail-hover: rgb(255 255 255 / 0.05);
+
+    --text: #f2f4f6;
+    --muted: #9aa1aa;
+    --faint: #6b727c;
+
+    --lime-text: #b3de00;
+    --lime-wash: rgb(179 222 0 / 0.13);
+
+    --warn-text: #f3bf4d;
+    --warn-wash: rgb(224 163 31 / 0.14);
+    --danger: #ff7b7b;
+    --danger-text: #ff7b7b;
+    --danger-wash: rgb(255 123 123 / 0.12);
+
+    --focus: #b3de00;
+    --grid-line: rgb(255 255 255 / 0.05);
+    --shadow-float: 0 14px 34px rgb(0 0 0 / 0.6);
+    --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
+    --code: #0a0d12;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0d1016;
+  --bg-deep: #07090d;
+  --surface: #151920;
+  --field: #1b2028;
+  --key: #1e242c;
+  --pill: #242a32;
+  --line: #232931;
+  --line-strong: #2c323b;
+
+  --ink: #f2f4f6;
+  --ink-hover: #ffffff;
+  --on-ink: #0b0b0b;
+  --rail: #151920;
+  --rail-text: #f2f4f6;
+  --rail-muted: rgb(242 244 246 / 0.64);
+  --rail-line: rgb(255 255 255 / 0.07);
+  --rail-hover: rgb(255 255 255 / 0.05);
+
+  --text: #f2f4f6;
+  --muted: #9aa1aa;
+  --faint: #6b727c;
+
+  --lime-text: #b3de00;
+  --lime-wash: rgb(179 222 0 / 0.13);
+
+  --warn-text: #f3bf4d;
+  --warn-wash: rgb(224 163 31 / 0.14);
+  --danger: #ff7b7b;
+  --danger-text: #ff7b7b;
+  --danger-wash: rgb(255 123 123 / 0.12);
+
+  --focus: #b3de00;
+  --grid-line: rgb(255 255 255 / 0.05);
+  --shadow-float: 0 14px 34px rgb(0 0 0 / 0.6);
+  --shadow-pop: 0 16px 40px -8px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.06);
+  --code: #0a0d12;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-field: var(--field);
+  --color-key: var(--key);
+  --color-pill: var(--pill);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-on-ink: var(--on-ink);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-lime: var(--lime);
+  --color-lime-deep: var(--lime-deep);
+  --color-lime-text: var(--lime-text);
+  --color-lime-wash: var(--lime-wash);
+  --color-warn: var(--warn);
+  --color-warn-text: var(--warn-text);
+  --color-warn-wash: var(--warn-wash);
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+  --color-danger-wash: var(--danger-wash);
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter Tight Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --radius-card: 24px;
+  --radius-panel: 20px;
+  --radius-field: 14px;
+  --radius-key: 16px;
+}
+
+/* ── Ground ─────────────────────────────────────────────────────────────── */
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100dvh;
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%) fixed;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  font-feature-settings: "cv11" 1, "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Browser surfaces ───────────────────────────────────────────────────── */
+
+::selection {
+  background: var(--lime);
+  color: #111111;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+input,
+textarea {
+  caret-color: var(--lime-deep);
+}
+
+* {
+  scrollbar-color: var(--line-strong) transparent;
+  scrollbar-width: thin;
+}
+
+a {
+  text-underline-offset: 0.24em;
+  text-decoration-thickness: 1px;
+}
+
+/* ── Type ───────────────────────────────────────────────────────────────── */
+
+@layer components {
+  .wordmark {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.045em;
+    line-height: 1;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 28px;
+    line-height: 1.1;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-size: 18px;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  /* Every figure the system computed: tabular so columns of money line up and
+     a changing value never shifts the digits beside it. */
+  .figure {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+  }
+
+  .figure-display {
+    font-family: var(--font-display);
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    letter-spacing: -0.045em;
+    line-height: 0.95;
+    font-weight: 700;
+  }
+
+  /* Machine-produced strings: addresses, keys, IDs, signatures. */
+  .machine {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    letter-spacing: -0.01em;
+    font-variant-ligatures: none;
+  }
+
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+
+  .panel {
+    background: var(--surface);
+    border-radius: var(--radius-panel);
+  }
+
+  /* The consumer app's faint graticule, fading out around the figure it frames. */
+  .grid-ground {
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
+    background-position: -1px -1px;
+    -webkit-mask-image: radial-gradient(ellipse 70% 90% at 22% 40%, #000 30%, transparent 85%);
+    mask-image: radial-gradient(ellipse 70% 90% at 22% 40%, #000 30%, transparent 85%);
+  }
+
+  /* ── Ledger tables ────────────────────────────────────────────────────── */
+
+  /* Positioned so screen-reader-only text inside a cell stays within the
+     table's scroll container instead of widening the page. */
+  .ledger {
+    position: relative;
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  .ledger th {
+    text-align: left;
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 0 14px 10px;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  .ledger td {
+    padding: 13px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+  }
+  .ledger tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .ledger tbody tr {
+    transition: background-color 120ms ease;
+  }
+  .ledger tbody tr:hover {
+    background: color-mix(in oklab, var(--text) 2.5%, transparent);
+  }
+  .ledger .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1, "lnum" 1;
+    white-space: nowrap;
+  }
+  .ledger th.num {
+    text-align: right;
+  }
+  .ledger tfoot td {
+    border-top: 1px solid var(--line-strong);
+    border-bottom: 0;
+    font-weight: 600;
+  }
+
+  /* ── Press feedback ───────────────────────────────────────────────────── */
+
+  .press {
+    transition:
+      transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
+      background-color 140ms ease,
+      color 140ms ease,
+      border-color 140ms ease,
+      opacity 140ms ease;
+  }
+  .press:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+
+  /* ── Loading ──────────────────────────────────────────────────────────── */
+
+  .skeleton {
+    display: inline-block;
+    border-radius: 6px;
+    background: color-mix(in oklab, var(--text) 8%, transparent);
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* The collector's lamp: a slow breath, only while it is actually running. */
+@keyframes lamp {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(179 222 0 / 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 5px rgb(179 222 0 / 0);
+  }
+}
+.lamp-live {
+  animation: lamp 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+/* A panel that has just been filled in (a created link, a revealed secret). */
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+.arrive {
+  animation: arrive 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .press:active:not(:disabled) {
+    transform: none;
+  }
+  .skeleton,
+  .lamp-live,
+  .arrive {
+    animation: none;
+  }
+}
