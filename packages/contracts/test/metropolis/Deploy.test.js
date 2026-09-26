@@ -117,6 +117,19 @@ describe("deploy-monad (in process)", () => {
     expect(record.demo.poolSeeded).to.equal(USD(100_000).toString());
   });
 
+  it("sends every transaction with its own estimate plus 15%, never a blanket limit (Monad bills the limit)", async () => {
+    const tx = require("../../lib/tx");
+    expect(tx.withHeadroom(100_000n)).to.equal(115_000n);
+    const scores = await at("ScoreManager");
+    const estimate = await scores.setWriter.estimateGas(relayer.address, false);
+    const receipt = await tx.send(scores, "setWriter", [relayer.address, false]);
+    const sent = await ethers.provider.getTransaction(receipt.hash);
+    expect(sent.gasLimit).to.equal((estimate * 115n) / 100n);
+    const deployment = await ethers.provider.getTransaction(record.contracts.PolarisCheckout.txHash);
+    expect(deployment.gasLimit).to.be.lessThan(5_000_000n);
+    expect(deployment.gasLimit).to.be.greaterThan(BigInt(record.contracts.PolarisCheckout.gasUsed));
+  });
+
   it("publishes the EIP-712 domains clients sign under", async () => {
     expect(record.eip712.PolarisCheckout.domain).to.deep.equal({
       name: "PolarisCheckout",
