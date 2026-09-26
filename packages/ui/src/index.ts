@@ -31,6 +31,8 @@ export type { ToastInput, ToastTone } from "./primitives/Toast";
 export { Table, CellStack } from "./primitives/Table";
 export type { TableProps, TableColumn, SortState } from "./primitives/Table";
 export { Logo, LogoMark } from "./primitives/Logo";
+export { Keypad, AmountDisplay, applyKey } from "./primitives/Keypad";
+export type { KeypadProps, KeypadKey, AmountDisplayProps } from "./primitives/Keypad";
 
 // Composites
 export { StatCard } from "./composites/StatCard";
@@ -43,6 +45,14 @@ export { CardStack } from "./composites/CardStack";
 export type { CardStackProps, CardStackAction } from "./composites/CardStack";
 export { GradientCard } from "./composites/GradientCard";
 export type { GradientCardProps, GradientTone } from "./composites/GradientCard";
+export { BalanceCard, ActionRow } from "./composites/BalanceCard";
+export type { BalanceCardProps, ActionRowProps, Action } from "./composites/BalanceCard";
+export { QuickTransfer, AssetRow, FeaturedTile, TileButton } from "./composites/Rows";
+export type { QuickTransferProps, AssetRowProps, FeaturedTileProps, TileButtonProps } from "./composites/Rows";
+export { MiniCardCarousel, MINI_CARD_TINTS } from "./composites/MiniCardCarousel";
+export type { MiniCardCarouselProps, MiniCard } from "./composites/MiniCardCarousel";
+export { BottomNav, AppHeader, ScreenHeader } from "./composites/Navigation";
+export type { BottomNavProps, NavItem, AppHeaderProps, ScreenHeaderProps } from "./composites/Navigation";
 
 // Charts
 export { Sparkline } from "./charts/Sparkline";
