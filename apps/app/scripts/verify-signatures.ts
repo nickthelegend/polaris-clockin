@@ -14,6 +14,7 @@
  * Runs on Node 22.18+ (built-in TypeScript type stripping).
  */
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import {
   type Address,
   concat,
@@ -33,9 +34,11 @@ import {
   buildCancel,
   buildCancelSubscription,
   buildClaim,
+  buildOpen,
   buildPermit,
   buildPlanIntent,
   buildReceiveWithAuthorization,
+  buildRepayIntent,
   buildSubscribeIntent,
   buildTransferWithAuthorization,
   domainFromErc5267,
@@ -95,15 +98,25 @@ for (const entry of TYPE_REGISTRY) {
 const now = 1_790_000_000n;
 const cases = [
   buildPlanIntent(domain, {
-    borrower: buyer.address,
+    buyer: buyer.address,
     merchant,
     principal: 200_000_000n,
     installments: 4,
     interval: 604_800n,
-    orderId: orderIdToBytes32("SOL-2026-0142"),
+    orderId: "SOL-2026-0142",
+    nonce: 0n,
     deadline: now + 900n,
   }),
-  buildSubscribeIntent(domain, { subscriber: buyer.address, planId: 7n, deadline: now + 900n }),
+  buildSubscribeIntent(domain, {
+    buyer: buyer.address,
+    merchant,
+    planId: 7n,
+    pricePerPeriod: 9_990_000n,
+    periodSeconds: 2_592_000n,
+    orderId: "SOL-SUB-7",
+    nonce: 1n,
+    deadline: now + 900n,
+  }),
   buildReceiveWithAuthorization(domain, {
     from: buyer.address,
     to: merchant,
@@ -121,9 +134,11 @@ const cases = [
     nonce: keccak256(toHex("transfer")),
   }),
   buildPermit(domain, { owner: buyer.address, spender: merchant, value: 201_534_246n, nonce: 3n, deadline: now }),
-  buildClaim(domain, { to: buyer.address }),
+  buildOpen(domain, { sender: buyer.address, amount: 50_000_000n, expiresAt: now + 604_800n }),
+  buildClaim(domain, { to: buyer.address, deadline: now + 600n }),
   buildCancel(domain, { linkKey: merchant, deadline: now }),
   buildCancelSubscription(domain, { subId: 12n, deadline: now }),
+  buildRepayIntent(domain, { loanId: 3n, amount: 151_150_684n, expectedRepaid: 50_383_562n, nonce: 0n, deadline: now + 600n }),
 ] as const;
 
 for (const typed of cases) {
@@ -132,10 +147,14 @@ for (const typed of cases) {
     assert.ok(entry);
     const fields = (entry.types as Record<string, readonly { name: string; type: string }[]>)[entry.primaryType]!;
     const message = typed.message as Record<string, unknown>;
+    // EIP-712 encodes a `string` member as keccak256 of its bytes, a static bytes32.
     const structHash = keccak256(
       encodeAbiParameters(
-        [{ type: "bytes32" }, ...fields.map((f) => ({ type: f.type }))],
-        [keccak256(stringToBytes(entry.solidity)), ...fields.map((f) => message[f.name])],
+        [{ type: "bytes32" }, ...fields.map((f) => ({ type: f.type === "string" ? "bytes32" : f.type }))],
+        [
+          keccak256(stringToBytes(entry.solidity)),
+          ...fields.map((f) => (f.type === "string" ? keccak256(stringToBytes(message[f.name] as string)) : message[f.name])),
+        ],
       ),
     );
     const expected = keccak256(concat(["0x1901", ozDomainSeparator, structHash]));
@@ -176,5 +195,19 @@ await check("ERC-5267 fields 0x0f drop the unused salt", () => {
   );
   assert.deepEqual(Object.keys(d).sort(), ["chainId", "name", "verifyingContract", "version"]);
 });
+
+// The contracts' own struct list, which their suite checks against every typehash on chain.
+const contracts = createRequire(import.meta.url)("../../../packages/contracts/lib/eip712.js") as {
+  TYPES: Record<string, Record<string, { name: string; type: string }[]>>;
+  typeString: (primary: string, fields: { name: string; type: string }[]) => string;
+};
+const onChain: Record<string, { name: string; type: string }[]> = Object.assign({}, ...Object.values(contracts.TYPES));
+for (const entry of TYPE_REGISTRY) {
+  await check(`${entry.primaryType} is the struct packages/contracts signs`, () => {
+    const fields = onChain[entry.primaryType];
+    assert.ok(fields, `packages/contracts/lib/eip712.js defines ${entry.primaryType}`);
+    assert.equal(entry.solidity, contracts.typeString(entry.primaryType, fields));
+  });
+}
 
 console.log(`\n${passed} checks passed`);
