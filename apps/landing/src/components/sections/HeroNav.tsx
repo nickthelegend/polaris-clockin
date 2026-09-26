@@ -5,13 +5,13 @@ import { useEffect, useRef, useState } from "react";
 import { useReduced } from "@/components/motion/hooks";
 import { EASE_REVEAL, WORD_BLUR } from "@/components/motion/tokens";
 import { MenuIcon } from "@/components/ui/icons";
-import { PolarisMark } from "@/components/ui/Logo";
+import { PolarisWordmark } from "@/components/ui/Logo";
 import { nav, site } from "@/content";
 
 /**
  * The page's banner: the navigation over the top of the hero, with its load
- * sequence. The mark scales in, the wordmark writes on letter by letter
- * behind a clip mask, the link pill fades in with its links blurring in,
+ * sequence. The logotype writes on left to right behind a clip mask, the
+ * link pill fades in with its links blurring in,
  * "Get the app" pops in and "Log in" slides out from behind it, and the menu
  * button fades up last. It sits outside <main>, positioned over the hero.
  */
@@ -85,33 +85,16 @@ export function HeroNav() {
           aria-label={`${site.name} home`}
           className="flex items-center gap-2 text-white lg:absolute lg:left-1/2 lg:top-[50px] lg:h-[54px] lg:-translate-x-1/2"
         >
+          {/* The logotype writes on left to right behind a clip mask, the way the
+              reference's wordmark does, sharpening as it lands; its own star
+              on the swoosh arrives last. */}
           <motion.span
             className="rv inline-flex"
-            initial={{ scale: 0, rotate: -45, opacity: 0 }}
-            animate={go ? { scale: 1, rotate: 0, opacity: 1 } : undefined}
-            transition={{ delay: 0.05, type: "spring", stiffness: 240, damping: 17 }}
+            initial={{ clipPath: "inset(-20% 100% -20% 0%)", filter: "blur(6px)", opacity: 0 }}
+            animate={go ? { clipPath: "inset(-20% 0% -20% 0%)", filter: "blur(0px)", opacity: 1 } : undefined}
+            transition={{ delay: 0.12, duration: 1.0, ease: EASE_REVEAL }}
           >
-            <PolarisMark size={30} />
-          </motion.span>
-          <motion.span
-            className="rv rv-w inline-block overflow-hidden whitespace-nowrap"
-            initial={{ width: 0 }}
-            animate={go ? { width: "auto" } : undefined}
-            transition={{ delay: 0.42, duration: 0.8, ease: EASE_REVEAL }}
-          >
-            <span className="inline-block pr-[2px] text-[25px] font-semibold tracking-[-0.045em] lg:text-[28px]">
-              {site.name.split("").map((ch, i) => (
-                <motion.span
-                  key={i}
-                  className="reveal-word"
-                  initial={{ opacity: 0, filter: "blur(6px)" }}
-                  animate={go ? { opacity: 1, filter: "blur(0px)" } : undefined}
-                  transition={{ delay: 0.45 + i * 0.075, duration: 0.45, ease: "easeOut" }}
-                >
-                  {ch}
-                </motion.span>
-              ))}
-            </span>
+            <PolarisWordmark height={34} className="h-[28px] w-auto lg:h-[34px]" />
           </motion.span>
         </a>
 

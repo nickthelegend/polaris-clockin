@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@polaris/brand": "workspace:*",
     "lenis": "^1.3.26",
     "motion": "^13.4.4",
     "next": "16.3.6",
