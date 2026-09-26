@@ -262,7 +262,7 @@ describe("CollateralVault", () => {
     await engine.createLoan(borrower.address, merchant.address, USDC(100), 2, 14 * DAY);
 
     for (let i = 0; i < 2; i++) {
-      await engine.connect(keeper).repay(1, await engine.installmentAmount(1));
+      await engine.connect(borrower).repay(1, await engine.installmentAmount(1));
     }
 
     expect(await vault.withdrawable(borrower.address)).to.equal(USDC(200));
