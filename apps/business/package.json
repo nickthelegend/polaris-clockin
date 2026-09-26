@@ -9,12 +9,20 @@
     "build": "next build",
     "start": "next start --port 3100",
     "lint": "eslint . && node scripts/check-api-auth.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e:local": "node scripts/e2e-local.mjs",
+    "dev:merchant": "node scripts/dev-merchant.mjs",
+    "privy:setup-relayer": "node scripts/privy/setup-relayer.mjs",
+    "privy:setup-payouts": "node scripts/privy/setup-payouts.mjs",
+    "privy:prove-policy": "node scripts/privy/prove-policy.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",
     "@fontsource-variable/inter-tight": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@polaris/db": "workspace:*",
+    "@polarispay/contracts": "workspace:*",
     "@privy-io/node": "0.35.0",
     "@privy-io/react-auth": "3.45.0",
     "lucide-react": "1.48.0",
@@ -33,7 +41,9 @@
     "@types/react-dom": "19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.6",
+    "polarispay-sdk": "workspace:*",
     "tailwindcss": "4.3.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }

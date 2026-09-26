@@ -1,20 +1,37 @@
 import "server-only";
 
+import { timingSafeEqual } from "node:crypto";
+
+import { hashSecretKey, parseApiKey, type ApiKeyRecord, type MerchantRecord } from "@polaris/db";
 import { getAddress, isAddress } from "viem";
 
 import type { Address } from "@/lib/data/types";
-import { fail, HttpError } from "./http";
+import { ChainNotConfigured } from "./chain/client";
+import { getDb } from "./db";
+import { getConfig } from "./env";
+import { corsHeaders, failFrom, fail, HttpError, newRequestId, preflight, type CorsPolicy } from "./http";
+import { PolicyViolation } from "./policy/relayer";
 import { getPrivy } from "./privy";
+import { consume, LIMITS, type Limit } from "./ratelimit";
+import { RelayRejected, RelayUnavailable } from "./relayer/submit";
 
 /**
- * Who is calling, proven by Privy.
+ * Who is calling, proven server-side. Every route handler under `app/api` is
+ * exported through exactly one of these wrappers, and `pnpm lint` fails if
+ * one isn't (scripts/check-api-auth.mjs):
+ *
+ * | Wrapper              | Credential                                   | Used by                          |
+ * |----------------------|----------------------------------------------|----------------------------------|
+ * | `withMerchant`       | Privy access token (Bearer or `privy-token`) | the dashboard                    |
+ * | `withSecretKey`      | `sk_test_…` API key                          | merchants' servers (the SDK)     |
+ * | `withPublishableKey` | `pk_test_…` API key                          | merchants' pages (SDK direct pay)|
+ * | `withSignedRequest`  | the payer's own EIP-712 / ERC-3009 signature | the Polaris app's relay calls    |
+ * | `withPublic`         | none: public data only, rate-limited         | the hosted checkout's reads      |
+ * | `withCron`           | `CRON_SECRET`                                | schedulers                       |
  *
  * The old merchant platform read the merchant's wallet from an
- * `x-wallet-address` header, so anyone could read any merchant's book by
- * sending someone else's address. Here the only input is the Privy access
- * token: we verify its signature, take the user ID from its claims, and look
- * the embedded wallet up from Privy ourselves. A header, a query string or a
- * body can never name the merchant or their wallet.
+ * `x-wallet-address` header. Here nothing a client sends can name the
+ * merchant: it comes from the verified token or the hashed key.
  */
 
 export type AuthedMerchant = {
@@ -22,6 +39,8 @@ export type AuthedMerchant = {
   userId: string;
   /** The user's Privy embedded wallet. Null in the moment between login and wallet creation. */
   walletAddress: Address | null;
+  /** Privy's id for that wallet. */
+  walletId: string | null;
   email: string | null;
   sessionId: string;
 };
@@ -31,11 +50,17 @@ type TokenSource = "header" | "cookie";
 const COOKIE_NAME = "privy-token";
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
-function readToken(req: Request): { token: string; source: TokenSource } | null {
+function bearer(req: Request): string | null {
   const header = req.headers.get("authorization");
-  if (header) {
-    const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
-    return match?.[1] ? { token: match[1], source: "header" } : null;
+  if (!header) return null;
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+  return match?.[1] ?? null;
+}
+
+function readToken(req: Request): { token: string; source: TokenSource } | null {
+  if (req.headers.get("authorization")) {
+    const token = bearer(req);
+    return token ? { token, source: "header" } : null;
   }
   const cookies = req.headers.get("cookie");
   if (!cookies) return null;
@@ -73,7 +98,7 @@ function assertSameOrigin(req: Request) {
 
 /* ── The embedded wallet, looked up from Privy and cached briefly ──────── */
 
-type Profile = { walletAddress: Address | null; email: string | null };
+type Profile = { walletAddress: Address | null; walletId: string | null; email: string | null };
 const profiles = new Map<string, { value: Profile; expires: number }>();
 const PROFILE_TTL_MS = 5 * 60_000;
 /** Before the wallet exists, look again soon: it is created right after login. */
@@ -82,6 +107,7 @@ const MAX_CACHED = 5_000;
 
 type LinkedAccount = {
   type?: string;
+  id?: string | null;
   address?: string;
   email?: string;
   chain_type?: string;
@@ -89,8 +115,9 @@ type LinkedAccount = {
   wallet_client_type?: string;
 };
 
-function profileFrom(accounts: readonly LinkedAccount[]): Profile {
+export function profileFrom(accounts: readonly LinkedAccount[]): Profile {
   let walletAddress: Address | null = null;
+  let walletId: string | null = null;
   let email: string | null = null;
   for (const account of accounts) {
     const embedded =
@@ -99,11 +126,12 @@ function profileFrom(accounts: readonly LinkedAccount[]): Profile {
       (account.connector_type === "embedded" || account.wallet_client_type === "privy");
     if (embedded && !walletAddress && account.address && isAddress(account.address)) {
       walletAddress = getAddress(account.address);
+      walletId = account.id ?? null;
     }
     if (!email && account.type === "email" && account.address) email = account.address;
     if (!email && account.type === "google_oauth" && account.email) email = account.email;
   }
-  return { walletAddress, email };
+  return { walletAddress, walletId, email };
 }
 
 async function lookupProfile(userId: string): Promise<Profile> {
@@ -127,7 +155,16 @@ async function lookupProfile(userId: string): Promise<Profile> {
   return value;
 }
 
-/* ── Public API ─────────────────────────────────────────────────────────── */
+/* ── Test seam: route tests authenticate without Privy ──────────────────── */
+
+type MerchantVerifier = (req: Request) => Promise<AuthedMerchant>;
+let verifierOverride: MerchantVerifier | null = null;
+
+/** Tests only: replace Privy token verification. Refused in production. */
+export function setMerchantVerifierForTests(verifier: MerchantVerifier | null): void {
+  if (process.env.NODE_ENV === "production") throw new Error("Not in production.");
+  verifierOverride = verifier;
+}
 
 /**
  * Verify the request's Privy access token (`Authorization: Bearer` or the
@@ -135,6 +172,7 @@ async function lookupProfile(userId: string): Promise<Profile> {
  * `HttpError` (401, 403, 502 or 503) otherwise.
  */
 export async function authenticate(req: Request): Promise<AuthedMerchant> {
+  if (verifierOverride) return verifierOverride(req);
   const privy = getPrivy();
   if (!privy) throw new HttpError(503, "auth_not_configured", "Sign-in isn't configured on this server.");
 
@@ -158,28 +196,172 @@ export async function authenticate(req: Request): Promise<AuthedMerchant> {
   return { userId, sessionId, ...profile };
 }
 
-/**
- * Wrap a route handler so it only ever runs for a verified merchant.
- *
- * Every handler under `app/api` is exported through this; `pnpm lint` fails
- * the build if one isn't (scripts/check-api-auth.mjs).
- */
-export function withMerchant<Ctx = unknown>(
-  handler: (req: Request, merchant: AuthedMerchant, ctx: Ctx) => Promise<Response>,
+/* ── API keys ───────────────────────────────────────────────────────────── */
+
+export type KeyContext = { merchant: MerchantRecord; key: ApiKeyRecord };
+
+/** The stored form of a presented secret key; refuses to run unpeppered in production. */
+export function hashKey(secret: string): string {
+  const { keyPepper, production } = getConfig();
+  if (!keyPepper && production) {
+    throw new HttpError(503, "not_configured", "API keys aren't configured on this server (POLARIS_KEY_PEPPER).");
+  }
+  return hashSecretKey(secret, keyPepper);
+}
+
+async function touch(key: ApiKeyRecord): Promise<void> {
+  const last = key.lastUsedAt ? Date.parse(key.lastUsedAt) : 0;
+  if (Date.now() - last < 60_000) return;
+  await getDb().apiKeys.update(key.id, (k) => ({ ...k, lastUsedAt: new Date().toISOString() }));
+}
+
+const INVALID_KEY = () =>
+  new HttpError(401, "invalid_api_key", "Invalid API key. Find yours in Polaris for Business under Developers → API keys.", {
+    headers: { "WWW-Authenticate": 'Bearer realm="polaris"' },
+  });
+
+export async function authenticateSecretKey(req: Request): Promise<KeyContext> {
+  const presented = bearer(req);
+  if (!presented) throw INVALID_KEY();
+  const parsed = parseApiKey(presented);
+  if (!parsed) throw INVALID_KEY();
+  if (parsed.kind === "publishable") {
+    throw new HttpError(403, "secret_key_required", "This call needs your secret key (sk_test_…). Publishable keys are for the browser.");
+  }
+  if (parsed.mode === "live") throw new HttpError(401, "invalid_api_key", "Live keys aren't enabled yet: use your sk_test_ key on Monad testnet.");
+  const db = getDb();
+  const key = await db.apiKeys.findOne({ secretHash: hashKey(presented) });
+  if (!key || key.revokedAt) throw INVALID_KEY();
+  const merchant = await db.merchants.get(key.merchantId);
+  if (!merchant) throw INVALID_KEY();
+  consume(LIMITS.apiPerKey, key.id);
+  await touch(key);
+  return { merchant, key };
+}
+
+export async function authenticatePublishableKey(req: Request): Promise<KeyContext> {
+  const presented = bearer(req);
+  const parsed = presented ? parseApiKey(presented) : null;
+  if (!presented || !parsed) throw INVALID_KEY();
+  if (parsed.kind === "secret") {
+    // A secret key in a browser request is a leak waiting to happen: say so.
+    throw new HttpError(403, "publishable_key_required", "Never send a secret key from a browser. Use your publishable key (pk_test_…).");
+  }
+  const db = getDb();
+  const key = await db.apiKeys.findOne({ publishableKey: presented });
+  if (!key || key.revokedAt) throw INVALID_KEY();
+  const merchant = await db.merchants.get(key.merchantId);
+  if (!merchant) throw INVALID_KEY();
+  consume(LIMITS.apiPerKey, key.id);
+  return { merchant, key };
+}
+
+/* ── One error handler for every wrapper ────────────────────────────────── */
+
+function toResponse(error: unknown, requestId: string): Response {
+  if (error instanceof HttpError) return failFrom(error);
+  if (error instanceof RelayRejected) return fail(error.error.status, error.error.code, error.error.message);
+  if (error instanceof RelayUnavailable) {
+    console.error(`[api ${requestId}] relay unavailable (${error.code})`, error.cause ?? error);
+    return fail(503, error.code, error.message, { "Retry-After": "2" });
+  }
+  if (error instanceof PolicyViolation) {
+    console.error(`[api ${requestId}] relayer policy refused a call: ${error.message}`);
+    return fail(403, "policy_violation", "The relayer's policy doesn't allow this.");
+  }
+  if (error instanceof ChainNotConfigured) return fail(503, "chain_not_configured", "Payments aren't configured on this server yet.");
+  console.error(`[api ${requestId}] unhandled error`, error);
+  return fail(500, "internal", "Something went wrong on our side. Try again.");
+}
+
+type Handler<A, Ctx> = (req: Request, auth: A, ctx: Ctx, meta: { requestId: string }) => Promise<Response>;
+
+function wrap<A, Ctx>(
+  authenticateFn: (req: Request) => Promise<A>,
+  handler: Handler<A, Ctx>,
+  options: { cors?: () => CorsPolicy; limit?: Limit } = {},
 ) {
-  return async function authenticated(req: Request, ctx: Ctx): Promise<Response> {
+  return async function route(req: Request, ctx: Ctx): Promise<Response> {
+    const requestId = newRequestId();
+    let res: Response;
     try {
-      const merchant = await authenticate(req);
-      return await handler(req, merchant, ctx);
+      if (options.limit) consume(options.limit, clientKey(req));
+      const auth = await authenticateFn(req);
+      res = await handler(req, auth, ctx, { requestId });
     } catch (error) {
-      if (error instanceof HttpError) {
-        const headers: HeadersInit | undefined =
-          error.status === 401 ? { "WWW-Authenticate": 'Bearer realm="polaris-business"' } : undefined;
-        return fail(error.status, error.code, error.message, headers);
-      }
-      console.error("[api] unhandled error", error);
-      return fail(500, "internal", "Something went wrong on our side. Try again.");
+      res = toResponse(error, requestId);
     }
+    res.headers.set("Polaris-Request-Id", requestId);
+    if (options.cors) for (const [k, v] of Object.entries(corsHeaders(req, options.cors()))) res.headers.set(k, v);
+    if (res.status === 401 && !res.headers.has("WWW-Authenticate")) res.headers.set("WWW-Authenticate", 'Bearer realm="polaris"');
+    return res;
+  };
+}
+
+const appCors = (): CorsPolicy => ({ kind: "list", origins: getConfig().appOrigins });
+
+function clientKey(req: Request): string {
+  const { trustProxy } = getConfig();
+  if (trustProxy) {
+    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    if (forwarded) return forwarded;
+  }
+  return "local";
+}
+
+/**
+ * The dashboard's routes: a verified Privy session. Every handler under
+ * `app/api` that a merchant's browser calls is exported through this.
+ */
+export function withMerchant<Ctx = unknown>(handler: (req: Request, merchant: AuthedMerchant, ctx: Ctx) => Promise<Response>) {
+  return wrap<AuthedMerchant, Ctx>(authenticate, (req, merchant, ctx) => handler(req, merchant, ctx));
+}
+
+/** Server-to-server API (`/api/v1`): a secret key. */
+export function withSecretKey<Ctx = unknown>(handler: Handler<KeyContext, Ctx>) {
+  return wrap<KeyContext, Ctx>(authenticateSecretKey, handler);
+}
+
+/** Browser API for merchants' own pages: a publishable key, from any origin. */
+export function withPublishableKey<Ctx = unknown>(handler: Handler<KeyContext, Ctx>) {
+  return wrap<KeyContext, Ctx>(authenticatePublishableKey, handler, { cors: () => ({ kind: "any" }) });
+}
+
+/**
+ * The relayer's front door for the Polaris app. There is no account token:
+ * the buyer's own signature over the exact call is the credential, and the
+ * relay verifies it (and simulates the call) before anything is sent. Rate
+ * limited per IP here, and per signing account in the relay.
+ */
+export function withSignedRequest<Ctx = unknown>(handler: Handler<null, Ctx>) {
+  return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit: LIMITS.relayPerIp });
+}
+
+/**
+ * Public, read-only data the hosted checkout needs (never a secret, never
+ * another merchant's book). Rate limited per IP.
+ */
+export function withPublic<Ctx = unknown>(handler: Handler<null, Ctx>) {
+  return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit: LIMITS.publicPerIp });
+}
+
+/** Scheduler routes: `Authorization: Bearer <CRON_SECRET>`. Closed when unset. */
+export function withCron<Ctx = unknown>(handler: Handler<null, Ctx>) {
+  return wrap<null, Ctx>(async (req) => {
+    const secret = getConfig().cronSecret;
+    const given = bearer(req);
+    if (!secret) throw new HttpError(503, "not_configured", "CRON_SECRET isn't set, so scheduled jobs are closed.");
+    const a = Buffer.from(given ?? "");
+    const b = Buffer.from(secret);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) throw new HttpError(401, "unauthenticated", "Wrong cron secret.");
+    return null;
+  }, handler);
+}
+
+/** CORS preflight for the cross-origin routes. */
+export function withPreflight(policy: "app" | "any") {
+  return async function options(req: Request): Promise<Response> {
+    return preflight(req, policy === "any" ? { kind: "any" } : { kind: "list", origins: getConfig().appOrigins });
   };
 }
 
