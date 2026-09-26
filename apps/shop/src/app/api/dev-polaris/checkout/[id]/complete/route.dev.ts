@@ -13,5 +13,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const result = completeSession(id, mode);
   if (!result.ok) return Response.json({ error: { message: result.message } }, { status: result.status });
   const deliveries = await deliver(result.events, result.session.webhookUrl, undefined, id);
-  return Response.json({ status: "complete", mode, deliveries });
+  return Response.json({ status: "complete", result: result.result, deliveries });
 }

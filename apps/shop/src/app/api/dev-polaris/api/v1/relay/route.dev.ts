@@ -7,9 +7,10 @@ import { requestOrigin } from "@/lib/origin";
 export const dynamic = "force-dynamic";
 
 /**
- * Dev mock of the Polaris relayer: checks the buyer's ERC-3009 signature the
- * way PolarisPayments.payWithAuthorization would, submits nothing, and sends
- * payment.succeeded to the store a moment later, as the indexer would.
+ * Dev mock of the Polaris relayer (polarispay-sdk's RelayPayRequest): checks
+ * the buyer's ERC-3009 signature the way PolarisPayments.payWithAuthorization
+ * would, submits nothing, and sends payment.succeeded to the store a moment
+ * later, as the indexer would.
  */
 export async function POST(req: Request) {
   if (!devMockEnabled()) return notFound();
@@ -31,5 +32,6 @@ export async function POST(req: Request) {
     await new Promise((r) => setTimeout(r, 900));
     await deliver([result.event], webhookUrl);
   });
-  return Response.json({ status: "submitted", txHash: result.txHash, paymentId: result.paymentId, mock: true });
+  // polarispay-sdk's RelayPayResponse. "confirmed": Monad finalises in under a second, so pay() needn't poll.
+  return Response.json({ data: { txHash: result.txHash, status: "confirmed", paymentId: result.paymentId }, mock: true });
 }
