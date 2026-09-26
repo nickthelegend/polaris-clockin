@@ -5,7 +5,8 @@ import { ImageReveal } from "@/components/reveal";
 import type { Product } from "@/lib/catalog";
 import { formatUsd } from "@/lib/money";
 import { quotePayIn4 } from "@/lib/polaris";
-import { PolarisLockup, PolarisMark } from "@/lib/polaris-client";
+import { PolarisLockup } from "@/components/polaris-lockup";
+import { PolarisMark } from "@/lib/polaris-client";
 
 const WHEN = ["Today", "Week 2", "Week 3", "Week 4"];
 
@@ -31,7 +32,7 @@ export function PayOverTimeBand({ aprBps, example }: { aprBps: number; example: 
             <br />
             with{" "}
             <span className="whitespace-nowrap">
-              <PolarisMark title="" className="!h-[0.78em] !w-[0.7em] align-[-0.02em]" /> Polaris.
+              <PolarisMark className="!inline-block !h-[0.78em] !w-[0.7em] align-[-0.02em] ![filter:none]" /> Polaris.
             </span>
           </h2>
           <p className="mt-6 max-w-[31rem] text-[1.06rem] leading-relaxed text-ink-2">

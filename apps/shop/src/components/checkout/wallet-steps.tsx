@@ -1,33 +1,29 @@
 "use client";
 
 import { AlertIcon, CheckIcon, Spinner } from "@/components/icons";
-import type { PayButtonState } from "@/lib/polaris-client";
 
-type State = PayButtonState | "confirming" | "paid";
+/** Where a direct wallet payment is: polarispay-sdk's pay() stages, then the store's webhook. */
+export type WalletPhase = "idle" | "connecting" | "signing" | "submitting" | "confirming" | "waiting" | "paid" | "error";
 
 const STEPS = [
-  { id: "connect", label: "Connect your wallet" },
-  { id: "network", label: "Use Monad Testnet" },
+  { id: "connect", label: "Connect your wallet on Monad Testnet" },
   { id: "sign", label: "Confirm the payment in your wallet" },
   { id: "relay", label: "Polaris sends it, gas-free" },
   { id: "confirm", label: "Payment confirmed" },
 ] as const;
 
-export const ACTIVE_STEP: Partial<Record<State, number>> = {
+export const ACTIVE_STEP: Partial<Record<WalletPhase, number>> = {
   connecting: 0,
-  switching_network: 1,
-  signing: 2,
-  relaying: 3,
-  submitting: 3,
-  submitted: 4,
-  confirming: 4,
-  paid: 5,
+  signing: 1,
+  submitting: 2,
+  confirming: 2,
+  waiting: 3,
+  paid: 4,
 };
 
-/** Where a direct wallet payment is, step by step, including the ways it can stop. */
-export function WalletSteps({ state, error, lastStep }: { state: State; error: string | null; lastStep: number }) {
-  const failed = state === "rejected" || state === "wrong_network" || state === "no_wallet" || state === "error";
-  const active = failed ? (state === "wrong_network" ? 1 : state === "no_wallet" ? 0 : lastStep) : ACTIVE_STEP[state];
+export function WalletSteps({ phase, error, lastStep }: { phase: WalletPhase; error: string | null; lastStep: number }) {
+  const failed = phase === "error";
+  const active = failed ? lastStep : ACTIVE_STEP[phase];
 
   return (
     <div className="mt-5">
@@ -46,8 +42,8 @@ export function WalletSteps({ state, error, lastStep }: { state: State; error: s
                 {stopped ? <AlertIcon size={15} /> : done ? <CheckIcon size={14} strokeWidth={2} /> : current ? <Spinner size={13} /> : null}
               </span>
               <span className={done || current ? "text-ink" : "text-faint"}>
-                {step.id === "confirm" && state === "paid" ? "Paid" : step.label}
-                {step.id === "confirm" && state === "confirming" ? <span className="text-muted"> · waiting for Polaris</span> : null}
+                {step.id === "confirm" && phase === "paid" ? "Paid" : step.label}
+                {step.id === "confirm" && phase === "waiting" ? <span className="text-muted"> · waiting for Polaris</span> : null}
               </span>
             </li>
           );

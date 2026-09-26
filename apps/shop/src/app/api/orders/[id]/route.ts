@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (new URL(req.url).searchParams.get("sync") === "1" && order.payment.sessionId) {
     try {
       const retrieved = await retrieveCheckoutSession(order.payment.sessionId, requestOrigin(req));
-      session = { status: retrieved.session.status, mode: retrieved.session.mode ?? null };
+      session = { status: retrieved.session.status, mode: retrieved.session.payment?.mode ?? null };
       order = (await appendSdkLog(order.id, [retrieved.log])) ?? order;
     } catch {
       session = null;

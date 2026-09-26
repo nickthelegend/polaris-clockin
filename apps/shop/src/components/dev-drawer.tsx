@@ -17,25 +17,29 @@ type Entry =
 const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" });
 
 const CODE_SERVER = `// app/api/checkout/route.ts
+import { createPolarisServer } from "polarispay-sdk/server";
+
 const polaris = createPolarisServer({
   secretKey: process.env.POLARIS_SECRET_KEY,
+  baseUrl: process.env.POLARIS_API_BASE,
 });
 
 const session = await polaris.checkout.sessions.create(
   {
     amount: "349.00",
-    currency: "USD",
     description: "Halcyon order",
     lineItems,
     modes: ["later", "now"],
     successUrl: \`\${origin}/orders/\${order.id}\`,
-    metadata: { orderId: order.id },
+    orderId: order.id,
   },
   { idempotencyKey: order.id },
 );`;
 
 const CODE_BROWSER = `// the checkout page
-const polaris = createPolaris({ publishableKey });
+import { createPolaris } from "polarispay-sdk";
+
+const polaris = createPolaris({ publishableKey, relayUrl });
 
 // a popup on desktop, a redirect on phones
 const result = await polaris.openCheckout(createSession);
@@ -49,9 +53,8 @@ const event = polaris.webhooks.verify(
   req.headers.get("polaris-signature"),
   process.env.POLARIS_WEBHOOK_SECRET,
 );
-if (event.type === "payment.succeeded") {
-  markPaid(event.data.metadata.orderId);
-}`;
+if (event.type === "plan.opened") markPaid(event.data.orderId);
+if (event.type === "payment.succeeded") markPaid(event.data.orderId);`;
 
 function Json({ value }: { value: unknown }) {
   return (
@@ -147,7 +150,7 @@ export function DevDrawer() {
         aria-controls="dev-drawer"
         className="fixed bottom-3 left-3 z-30 inline-flex h-9 items-center gap-2 rounded-full bg-[#151514] pl-3 pr-3.5 text-[0.78rem] sm:h-10 sm:pr-4 sm:text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-transform hover:scale-[1.03] sm:bottom-6 sm:left-6"
       >
-        <PolarisMark title="" className="!h-4 !w-4" />
+        <PolarisMark className="!block !h-4 !w-4 ![filter:none]" />
         Built with Polaris
         {order && order.events.length > 0 ? (
           <span className="num grid h-5 min-w-5 place-items-center rounded-full bg-[#bffa62] px-1 text-[0.7rem] text-[#151514]">{order.events.length}</span>
@@ -167,7 +170,7 @@ export function DevDrawer() {
           >
             <div className="flex items-center justify-between px-5 pt-4">
               <p className="flex items-center gap-2 text-[0.95rem] font-semibold">
-                <PolarisMark title="" className="!h-[18px] !w-[16px]" /> Built with Polaris
+                <PolarisMark className="!block !h-[18px] !w-[16px] ![filter:none]" /> Built with Polaris
               </p>
               <button
                 type="button"

@@ -5,7 +5,8 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { WalletIcon } from "@/components/icons";
 import { formatUsd } from "@/lib/money";
-import { PolarisLockup, quotePayIn4 } from "@/lib/polaris-client";
+import { PolarisLockup } from "@/components/polaris-lockup";
+import { quotePayIn4 } from "@/lib/polaris-client";
 
 export type Method = "polaris" | "wallet";
 export type Mode = "now" | "later" | "subscribe";

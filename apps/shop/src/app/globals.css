@@ -38,13 +38,12 @@
 @layer base {
   :root {
     color-scheme: light;
-    /* The Polaris components take their type and shape from the store. */
+    /* polarispay-sdk's components take their type and focus colour from the store. */
     --polaris-font: var(--font-sans);
     --polaris-text: var(--color-ink);
-    --polaris-ink: #111210;
     --polaris-focus: var(--color-sage);
-    --polaris-radius: 14px;
   }
+
 
   html {
     background: var(--color-ground);
@@ -258,4 +257,16 @@
       transition: none;
     }
   }
+}
+
+/*
+ * polarispay-sdk sets its prices in tabular figures; in Schibsted Grotesk that
+ * spaces out the point ("$87 . 25"). Unlayered, so it outranks the SDK's own
+ * unlayered <style> by specificity (a rule inside a Tailwind layer never would).
+ */
+:root .plrs-msg strong,
+:root .plrs-caption strong,
+:root .plrs-hero,
+:root .plrs-amt {
+  font-variant-numeric: lining-nums;
 }

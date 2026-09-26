@@ -1,27 +1,21 @@
 "use client";
 
 // Every browser-side Polaris call the shop makes goes through this file.
-// The imports that change when polarispay-sdk 0.3.0 is published:
-//   import { createPolaris, MONAD_TESTNET } from "polarispay-sdk";
-//   export { PolarisMessaging, ... } from "polarispay-sdk/react";
-import { MONAD_TESTNET, createPolaris, type Polaris } from "./polaris-sdk/browser";
+import { MONAD_TESTNET, createPolaris, type Polaris, type PolarisChain } from "polarispay-sdk";
 
 import type { BrowserPolarisConfig } from "./polaris-config";
 
-export {
-  PolarisCheckoutButton,
-  PolarisLockup,
-  PolarisMark,
-  PolarisMessaging,
-  PolarisPayButton,
-  usePolarisCheckout,
-} from "./polaris-sdk/react";
-export type { PayButtonState } from "./polaris-sdk/react";
-export type { CheckoutResult, CheckoutMode } from "./polaris-sdk/types";
-export type { Polaris, PayResult } from "./polaris-sdk/browser";
-export { isPolarisError, type PolarisError } from "./polaris-sdk/errors";
-export { quotePayIn4 } from "./polaris-sdk/money";
-export { MONAD_TESTNET } from "./polaris-sdk/browser";
+export { PolarisCheckoutButton, PolarisMark, PolarisMessaging } from "polarispay-sdk/react";
+export { MONAD_TESTNET, isPolarisError, quotePayIn4 } from "polarispay-sdk";
+export type { CheckoutMode, CheckoutResult, PayResult, PayStage, Polaris, PolarisError } from "polarispay-sdk";
+
+/**
+ * The dev mock's chain: Monad testnet, with a stand-in PolarisPayments at
+ * 0x…dEaD, which no one can call from. A buyer's signature for it can never
+ * move money; the mock relayer only checks it.
+ */
+export const DEV_MOCK_PAYMENTS = "0x000000000000000000000000000000000000dEaD" as const;
+const DEV_MOCK_CHAIN: PolarisChain = { ...MONAD_TESTNET, payments: DEV_MOCK_PAYMENTS };
 
 /** The browser client for this store, or null when payments are off (or during SSR). */
 export function makePolaris(config: BrowserPolarisConfig): Polaris | null {
@@ -31,7 +25,6 @@ export function makePolaris(config: BrowserPolarisConfig): Polaris | null {
     publishableKey: config.publishableKey,
     checkoutOrigin: config.checkoutOrigin ?? origin,
     relayUrl: new URL(config.relayUrl, origin).toString(),
-    // The dev mock can't read the token's EIP-712 domain from a chain, so it pins it.
-    chain: config.target === "dev-mock" ? { ...MONAD_TESTNET, stablecoinDomain: { name: "AUSD", version: "1" } } : MONAD_TESTNET,
+    chain: config.target === "dev-mock" ? DEV_MOCK_CHAIN : MONAD_TESTNET,
   });
 }

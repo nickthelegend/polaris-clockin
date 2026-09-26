@@ -1,5 +1,5 @@
 import { FLAT_SHIPPING, FREE_SHIPPING_THRESHOLD, getOption, getProduct } from "@/lib/catalog";
-import type { CheckoutMode } from "@/lib/polaris-sdk/types";
+import type { CheckoutMode } from "polarispay-sdk";
 
 import type { Address, Contact, OrderLine } from "./types";
 

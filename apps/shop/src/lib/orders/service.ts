@@ -1,6 +1,6 @@
 import { randomBytes, randomInt } from "node:crypto";
 
-import type { CheckoutSession, PolarisEvent } from "@/lib/polaris-sdk/types";
+import type { CheckoutSession, WebhookEvent as PolarisEvent } from "polarispay-sdk";
 
 import { fingerprint, type PricedCheckout } from "./checkout-request";
 import { orderStore, type OrderStore } from "./store";
@@ -149,9 +149,15 @@ export function recordEvent(
 
     let orderId = orderIdForEvent(event);
     if (!orderId || !data.orders[orderId]) {
-      const sessionId = (event.data as { sessionId?: string }).sessionId;
-      const bySession = sessionId ? Object.values(data.orders).find((o) => o.payment.sessionId === sessionId) : undefined;
-      orderId = bySession?.id ?? null;
+      // Fall back to what the store saw earlier: the session, the plan, the subscription.
+      const ref = event.data as { sessionId?: string | null; planId?: string; subscriptionId?: string };
+      const found = Object.values(data.orders).find(
+        (o) =>
+          (ref.sessionId && o.payment.sessionId === ref.sessionId) ||
+          (ref.planId && o.plan?.planId === ref.planId) ||
+          (ref.subscriptionId && o.subscription?.subscriptionId === ref.subscriptionId),
+      );
+      orderId = found?.id ?? null;
     }
     const order = orderId ? data.orders[orderId] : undefined;
     if (!order) {

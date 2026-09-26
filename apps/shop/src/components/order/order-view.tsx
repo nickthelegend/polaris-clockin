@@ -10,7 +10,8 @@ import { getProduct } from "@/lib/catalog";
 import { fetchOrder } from "@/lib/checkout-client";
 import { formatUsd } from "@/lib/money";
 import type { Order } from "@/lib/orders/types";
-import { MONAD_TESTNET, PolarisLockup } from "@/lib/polaris-client";
+import { PolarisLockup } from "@/components/polaris-lockup";
+import { MONAD_TESTNET } from "@/lib/polaris-client";
 import { useShop } from "@/lib/shop-context";
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });

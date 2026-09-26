@@ -3,23 +3,22 @@ import "server-only";
 import { centsToDecimal } from "@/lib/money";
 import type { Order, SdkCall } from "@/lib/orders/types";
 
-// The one import that changes when polarispay-sdk 0.3.0 is published:
-//   import { createPolarisServer, ... } from "polarispay-sdk";
 import {
   createPolarisServer,
-  type Address,
   type CheckoutSession,
   type CheckoutSessionCreateParams,
-  type PolarisEvent,
   type PolarisServer,
-} from "./polaris-sdk/server";
+  type WebhookEvent,
+} from "polarispay-sdk/server";
 
 import type { BrowserPolarisConfig } from "./polaris-config";
 
-export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "./polaris-sdk/server";
-export type { CheckoutSession, PolarisEvent } from "./polaris-sdk/server";
-// Pay in 4 pricing for server-rendered messaging (the same maths as the loan engine).
-export { quotePayIn4 } from "./polaris-sdk/money";
+export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "polarispay-sdk/server";
+export type { CheckoutSession, WebhookEvent as PolarisEvent } from "polarispay-sdk/server";
+// Pay in 4 pricing for server-rendered messaging: the loan engine's own maths.
+export { quotePayIn4 } from "polarispay-sdk";
+
+type Address = `0x${string}`;
 
 /**
  * Every server-side Polaris call the shop makes goes through this file.
@@ -39,8 +38,9 @@ export { quotePayIn4 } from "./polaris-sdk/money";
  * compiled into a production build at all (see next.config.ts).
  */
 
-export const DEV_MOCK_SECRET_KEY = "sk_test_halcyon_dev_mock";
-export const DEV_MOCK_PUBLISHABLE_KEY = "pk_test_halcyon_dev_mock";
+// Keys are letters and digits after the prefix: the SDK refuses anything else.
+export const DEV_MOCK_SECRET_KEY = "sk_test_halcyonDevMock0001";
+export const DEV_MOCK_PUBLISHABLE_KEY = "pk_test_halcyonDevMock0001";
 export const DEV_MOCK_WEBHOOK_SECRET = "whsec_halcyon_dev_mock";
 export const DEV_MOCK_MERCHANT: Address = "0x4a1c000000000000000000000000000000000000";
 export const DEV_MOCK_PATH = "/api/dev-polaris";
@@ -144,7 +144,15 @@ let cached: { key: string; server: PolarisServer } | null = null;
 function server(config: Extract<PolarisConfig, { ok: true }>): PolarisServer {
   const key = `${config.baseUrl}|${config.secretKey}`;
   if (!cached || cached.key !== key) {
-    cached = { key, server: createPolarisServer({ secretKey: config.secretKey, baseUrl: config.baseUrl }) };
+    cached = {
+      key,
+      server: createPolarisServer({
+        secretKey: config.secretKey,
+        baseUrl: config.baseUrl,
+        // Looked up per request, so tests and instrumentation can patch fetch after the client exists.
+        fetch: (input, init) => globalThis.fetch(input, init),
+      }),
+    };
   }
   return cached.server;
 }
@@ -153,14 +161,11 @@ function server(config: Extract<PolarisConfig, { ok: true }>): PolarisServer {
 export function sessionParamsFor(order: Order, origin: string): CheckoutSessionCreateParams {
   const mode = order.payment.requestedMode ?? "now";
   const lineItems: NonNullable<CheckoutSessionCreateParams["lineItems"]> = order.lines.map((line) => ({
-    name: line.name,
-    description: `${line.optionLabel}: ${line.optionValue}`,
+    name: `${line.name}, ${line.optionValue}`,
     quantity: line.quantity,
     unitAmount: centsToDecimal(line.unitPrice),
-    imageUrl: `${origin}${line.image}`,
-    sku: `${line.productId}/${line.optionId}`,
   }));
-  if (order.shipping > 0) lineItems.push({ name: "Shipping", quantity: 1, unitAmount: centsToDecimal(order.shipping) });
+  if (order.shipping > 0) lineItems.push({ name: "Delivery", quantity: 1, unitAmount: centsToDecimal(order.shipping) });
   return {
     amount: centsToDecimal(order.total),
     currency: "USD",
@@ -169,11 +174,12 @@ export function sessionParamsFor(order: Order, origin: string): CheckoutSessionC
     // The first mode is the one the checkout opens on. Pay in 4 keeps Pay now
     // as a fallback, so a buyer whose plan isn't approved can still finish.
     modes: mode === "later" ? ["later", "now"] : [mode],
+    ...(order.kind === "subscription" ? { subscription: { interval: "month" as const, intervalCount: 1 } } : {}),
     successUrl: `${origin}/orders/${order.id}?via=polaris`,
     cancelUrl: `${origin}/checkout?order=${order.id}&canceled=1`,
-    metadata: { orderId: order.id, orderNumber: order.number },
-    ...(order.kind === "subscription" ? { subscription: { interval: "month" as const, intervalCount: 1 } } : {}),
-    customerEmail: order.contact.email,
+    // Echoed back as data.orderId on every webhook for this session.
+    orderId: order.id,
+    metadata: { orderNumber: order.number },
   };
 }
 
@@ -221,13 +227,13 @@ export async function retrieveCheckoutSession(id: string, origin: string): Promi
       side: "server",
       call: "polaris.checkout.sessions.retrieve",
       args: [id],
-      result: { id: session.id, status: session.status, mode: session.mode ?? null },
+      result: { id: session.id, status: session.status, paymentStatus: session.paymentStatus, payment: session.payment },
     },
   };
 }
 
 /** Verify a delivery against the raw body. Throws PolarisSignatureVerificationError. */
-export function verifyWebhook(rawBody: string, signature: string | null, origin: string, now?: number): PolarisEvent {
+export function verifyWebhook(rawBody: string, signature: string | null, origin: string, now?: number): WebhookEvent {
   const config = polarisConfig(origin);
   if (!config.ok) throw new Error(config.reason);
   return server(config).webhooks.verify(rawBody, signature, config.webhookSecret, now === undefined ? undefined : { now });

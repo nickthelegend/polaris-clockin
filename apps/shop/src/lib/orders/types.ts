@@ -1,4 +1,6 @@
-import type { CheckoutMode, InstallmentStatus } from "@/lib/polaris-sdk/types";
+import type { CheckoutMode } from "polarispay-sdk";
+
+export type InstallmentStatus = "paid" | "due" | "upcoming" | "failed";
 
 /**
  * An order moves forward only: awaiting_payment → paid, or → needs_review
@@ -65,8 +67,8 @@ export interface OrderSubscription {
 export interface ReceivedEvent {
   id: string;
   type: string;
-  /** Unix seconds, from the event. */
-  created: number;
+  /** ISO 8601, when Polaris created the event. */
+  createdAt: string;
   receivedAt: string;
   summary: string;
   outcome: "applied" | "flagged";
