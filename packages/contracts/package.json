@@ -2,10 +2,20 @@
   "name": "@polarispay/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "PolarisPay EVM contracts for Sepolia: BNPL loan engine, credit scores, merchant registry.",
+  "description": "Polaris contracts on Monad: PolarisCheckout (Pay now, Pay in 4, Subscribe), the BNPL loan engine, credit scores, payments, send-by-link, and the Chainlink CRE receivers.",
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
+    "abi": "node scripts/export-abi.js",
+    "check:monad": "node scripts/check-monad.js",
+    "deployer": "node scripts/deployer.js",
+    "deploy:monad": "hardhat run scripts/deploy-monad.js --network monadTestnet",
+    "fund-pool:monad": "hardhat run scripts/fund-pool.js --network monadTestnet",
+    "grant-relayer:monad": "hardhat run scripts/grant-relayer.js --network monadTestnet",
+    "verify:monad": "hardhat run scripts/verify-monad.js --network monadTestnet",
+    "node:local": "hardhat node --hostname 127.0.0.1 --port 8600",
+    "deploy:local": "hardhat run scripts/deploy-monad.js --network monadLocal",
+    "e2e:local": "node scripts/e2e-local.js",
     "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "e2e:sepolia": "hardhat run scripts/e2e.js --network sepolia",
     "seed:sepolia": "hardhat run scripts/seed.js --network sepolia",
@@ -37,5 +47,22 @@
   "dependencies": {
     "@openzeppelin/contracts": "^5.1.0",
     "dotenv": "^16.4.7"
-  }
+  },
+  "exports": {
+    "./abi": {
+      "types": "./abi/index.d.ts",
+      "import": "./abi/index.mjs",
+      "require": "./abi/index.js"
+    },
+    "./abi/*.json": "./abi/*.json",
+    "./deployments/*.json": "./deployments/*.json",
+    "./lib/*": "./lib/*.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "abi",
+    "deployments",
+    "lib",
+    "contracts"
+  ]
 }
