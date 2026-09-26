@@ -106,7 +106,7 @@ export function Scan() {
       <ScreenHeader title="Pay" back="/" />
 
       {/* Viewfinder */}
-      <div className="relative mx-auto aspect-square w-full overflow-hidden rounded-card bg-ink-card">
+      <div className="relative mx-auto mt-[21px] aspect-square w-full overflow-hidden rounded-card bg-ink-card shadow-[0_0_0_1px_rgb(255_255_255/0.75)]">
         <video
           ref={videoRef}
           muted
@@ -122,13 +122,13 @@ export function Scan() {
             </span>
             {canScan === null ? null : canScan ? (
               <>
-                <p className="max-w-[24ch] text-[16px] text-white/80">Point your camera at a Polaris code to pay or claim.</p>
+                <p className="max-w-[24ch] text-[16px] tracking-[-0.02em] text-[#a6a6a6]">Point your camera at a Polaris code to pay or claim.</p>
                 <Button variant="lime" size="md" icon="scan" onClick={() => void start()}>
                   Scan a code
                 </Button>
               </>
             ) : (
-              <p className="max-w-[26ch] text-[16px] text-white/80">
+              <p className="max-w-[26ch] text-[16px] tracking-[-0.02em] text-[#a6a6a6]">
                 Open your phone&apos;s camera and point it at the code. It brings you straight here.
               </p>
             )}
@@ -146,7 +146,7 @@ export function Scan() {
       </div>
 
       {/* Paste */}
-      <form onSubmit={submit} className="mt-4 flex gap-2">
+      <form onSubmit={submit} className="mt-[13.5px] flex gap-[8.5px]">
         <label htmlFor="link" className="sr-only">
           Payment or claim link
         </label>
@@ -159,7 +159,7 @@ export function Scan() {
           placeholder="Paste a Polaris link"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="h-14 min-w-0 flex-1 rounded-btn bg-surface px-5 text-[16px] placeholder:text-muted focus-visible:outline-2"
+          className="h-[54px] min-w-0 flex-1 rounded-full bg-surface px-5 text-[16px] tracking-[-0.02em] shadow-surface placeholder:text-muted focus-visible:outline-2"
         />
         {text ? (
           <Button type="submit" size="lg" className="w-auto px-5">
@@ -215,23 +215,26 @@ function SampleLinks() {
     [],
   );
   return (
-    <Card className="mt-6 p-4 pb-2">
+    <Card className="mt-[13.5px] px-4 pt-4 pb-2">
       <CardTitle>Try a sample link</CardTitle>
-      <ul className="mt-2">
+      <ul className="mt-[7.25px]">
         {links.value
           ? links.value.map((link) => (
               <li key={link.id}>
-                <Link href={`/pay/${link.id}`} className="press -mx-2 flex items-center gap-3 rounded-[18px] px-2 py-2.5 hover:bg-fg/[0.03]">
-                  <Avatar name={link.merchant.name} kind="merchant" size={44} />
+                <Link
+                  href={`/pay/${link.id}`}
+                  className="press -mx-2 flex h-[70.5px] items-center gap-[14.5px] rounded-[18px] px-2 hover:bg-fg/[0.025]"
+                >
+                  <Avatar name={link.merchant.name} kind="merchant" icon="store" size={56} />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[16px] font-medium">{link.merchant.name}</span>
-                    <span className="block truncate text-[13px] text-muted">
+                    <span className="block truncate text-[16px] leading-[22px] font-medium tracking-[-0.03em]">{link.merchant.name}</span>
+                    <span className="mt-[3px] block truncate text-[14px] leading-[18px] tracking-[-0.02em] text-meta">
                       {link.description}
                       {link.modes.later ? " · Pay in 4" : ""}
                       {link.modes.subscription ? " · Subscribe" : ""}
                     </span>
                   </span>
-                  <span className="tabular text-[16px] font-medium">{usd(link.amount, { trim: true })}</span>
+                  <span className="text-[16px] font-medium tracking-[-0.03em]">{usd(link.amount, { trim: true })}</span>
                 </Link>
               </li>
             ))

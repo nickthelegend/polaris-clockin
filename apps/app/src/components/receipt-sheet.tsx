@@ -25,10 +25,10 @@ const KIND_LABEL: Record<ActivityItem["kind"], string> = {
 
 export function ReceiptRows({ rows }: { rows: Array<[string, ReactNode]> }) {
   return (
-    <dl className="divide-y divide-divider rounded-group bg-surface-2 px-4">
+    <dl className="divide-y divide-divider rounded-card bg-surface px-[16.5px] shadow-surface">
       {rows.map(([term, value]) => (
-        <div key={term} className="flex items-center justify-between gap-4 py-3 text-[15px]">
-          <dt className="text-muted">{term}</dt>
+        <div key={term} className="flex items-center justify-between gap-4 py-3 text-[15px] tracking-[-0.02em]">
+          <dt className="text-meta">{term}</dt>
           <dd className="text-right font-medium">{value}</dd>
         </div>
       ))}

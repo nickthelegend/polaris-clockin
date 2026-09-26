@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { getAddress, isAddress } from "viem";
 import { CardThumb, Coin } from "@/components/art";
 import { Avatar } from "@/components/avatar";
@@ -11,6 +10,7 @@ import { HelpButton } from "@/components/help";
 import { Icon } from "@/components/icon";
 import { Keypad } from "@/components/keypad";
 import { LocalEquivalent } from "@/components/money";
+import { ChangePill, PartyCard, PartyRow } from "@/components/party";
 import { QrCode } from "@/components/qr";
 import { Sheet } from "@/components/sheet";
 import { Button, Card, cx, SCREEN_TOP, ScreenHeader } from "@/components/ui";
@@ -30,38 +30,6 @@ type Recipient =
   | { kind: "account"; person: Person & { address: `0x${string}` } };
 
 const SCREEN = "flex min-h-dvh flex-col px-[15px] pb-[calc(20.5px+env(safe-area-inset-bottom))]";
-
-/** The grey "Change" pill on the Send to and From cards. */
-function ChangePill({ onClick, href, label }: { onClick?: () => void; href?: string; label: string }) {
-  const cls =
-    "press mr-1 inline-flex h-[34px] shrink-0 items-center rounded-full bg-pill-soft px-[10.5px] text-[15px] tracking-[-0.02em] text-fg";
-  if (href) {
-    return (
-      <Link href={href} className={cls} aria-label={label}>
-        Change
-      </Link>
-    );
-  }
-  return (
-    <button type="button" onClick={onClick} className={cls} aria-label={label}>
-      Change
-    </button>
-  );
-}
-
-/** Avatar, name and a meta line, centred on the avatar: the Send to row. */
-function PartyRow({ avatar, name, meta, action }: { avatar: ReactNode; name: string; meta: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="flex items-center gap-[14.5px]">
-      {avatar}
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[16px] leading-[22px] font-medium tracking-[-0.03em]">{name}</p>
-        <p className="mt-[3px] truncate text-[14px] leading-[18px] tracking-[-0.02em] text-meta">{meta}</p>
-      </div>
-      {action}
-    </div>
-  );
-}
 
 /** Send money, laid out on the reference's third screen. */
 export function Send() {
@@ -110,36 +78,30 @@ export function Send() {
       <ScreenHeader title="Send money" back="/" right={<HelpButton />} />
 
       {/* Send to */}
-      <Card className="mt-[21px] px-[16.5px] pt-[16.5px] pb-[14.5px]">
-        <div className="flex h-6 items-center gap-[10px]">
-          <h2 className="text-[18px] font-medium tracking-[-0.04em]">Send to</h2>
-          <span aria-hidden className="h-px flex-1 bg-divider" />
-        </div>
-        <div className="mt-[16.5px]">
-          {recipient.kind === "link" ? (
-            <PartyRow
-              avatar={<Avatar name="Link" kind="polaris" icon="link" size={57.5} />}
-              name="Anyone with the link"
-              meta="They claim it with Face ID, anywhere"
-              action={change}
-            />
-          ) : (
-            <PartyRow
-              avatar={
-                <Avatar
-                  name={recipient.person.name}
-                  country={recipient.kind === "contact" ? recipient.person.country : undefined}
-                  photo={recipient.kind === "contact"}
-                  size={57.5}
-                />
-              }
-              name={recipient.person.name}
-              meta={recipient.kind === "contact" ? recipient.person.handle : "Polaris account"}
-              action={change}
-            />
-          )}
-        </div>
-      </Card>
+      <PartyCard label="Send to" className="mt-[21px]">
+        {recipient.kind === "link" ? (
+          <PartyRow
+            avatar={<Avatar name="Link" kind="polaris" icon="link" size={57.5} />}
+            name="Anyone with the link"
+            meta="They claim it with Face ID, anywhere"
+            action={change}
+          />
+        ) : (
+          <PartyRow
+            avatar={
+              <Avatar
+                name={recipient.person.name}
+                country={recipient.kind === "contact" ? recipient.person.country : undefined}
+                photo={recipient.kind === "contact"}
+                size={57.5}
+              />
+            }
+            name={recipient.person.name}
+            meta={recipient.kind === "contact" ? recipient.person.handle : "Polaris account"}
+            action={change}
+          />
+        )}
+      </PartyCard>
 
       {/* Amount */}
       <section className="relative flex flex-1 items-center justify-center py-6" aria-live="polite">
