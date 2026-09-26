@@ -5,6 +5,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 
 import {ScoreManager} from "./ScoreManager.sol";
 
@@ -28,16 +31,25 @@ interface IMerchantChecks {
  *      installment is drawn with transferFrom. That is what lets a keeper
  *      collect on schedule without the borrower being online.
  *
- *      There are two ways money comes in, and they differ in who may call them:
+ *      There are three ways money comes in, and they differ in who decides:
  *        collectInstallment(loanId)   anyone; takes no amount, draws exactly
  *                                     the instalment that has fallen due
  *        repay(loanId, amount)        the borrower only; any amount, any time
+ *        repayWithSig(loanId, amount, deadline, sig)
+ *                                     anyone, carrying the borrower's signed
+ *                                     RepayIntent for that loan and amount
  *      The keeper path is permissionless because the schedule, not the caller,
  *      decides what moves and when, so a stranger can only ever do what the
  *      borrower already agreed to. `repay` takes an arbitrary amount, and that
  *      is why it is the borrower's alone: open to anyone, it let a stranger
  *      drain the whole standing allowance the moment a plan opened. See its
- *      note.
+ *      note. `repayWithSig` is the same payment for a borrower who holds no
+ *      gas, which on Monad is every borrower: the signature, not the sender,
+ *      is the borrower's consent.
+ *
+ *      Paying on time raises the score, but slowly and only for real plans:
+ *      at most one on-time bonus per borrower per BONUS_PERIOD, and none from
+ *      a plan under MIN_SCORED_PRINCIPAL. See `_applyPayment`.
  *
  *      Two functions exist purely for the keeper and are the reason this
  *      protocol maps cleanly onto KeeperHub's check-and-execute:
@@ -47,7 +59,7 @@ interface IMerchantChecks {
  *      which a borrower repaying at the last second could still be liquidated
  *      on a stale read.
  */
-contract PolarisLoanEngine is Ownable, ReentrancyGuard {
+contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     using SafeERC20 for IERC20;
 
     /// Annualised interest, in basis points.
@@ -85,6 +97,34 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
      */
     uint64 public immutable minInterval;
 
+    /**
+     * @notice The least time between two on-time bonuses for one borrower.
+     * @dev The bonus used to land on every call that completed an instalment,
+     *      however small the plan and however early the payment, so a wallet
+     *      could open a 24-base-unit plan, prepay it one unit at a time and
+     *      reach 850 in 24 transactions. A per-instalment rule cannot fix that:
+     *      whatever makes one instalment count, a farmer opens twenty of them
+     *      in parallel and pays them all at once. What a farmer cannot
+     *      parallelise is time, so the bonus is rationed per borrower in
+     *      wall-clock time: +12 a week at most, the way a bureau reads a
+     *      monthly statement rather than every card swipe. A Pay in 4 plan
+     *      on a two-week schedule still earns on every instalment.
+     */
+    uint256 public constant BONUS_PERIOD = 7 days;
+
+    /**
+     * @notice The smallest plan whose instalments can raise a score.
+     * @dev A plan below this still opens, still collects and still costs a
+     *      late payment or a liquidation; it just earns no bonus. Repaying a
+     *      few cents says nothing about how a borrower handles credit, and with
+     *      no floor the bonus was free: interest on a dust plan rounds to zero.
+     */
+    uint256 public constant MIN_SCORED_PRINCIPAL = 20e6;
+
+    /// EIP-712 typehash for the borrower's signed payment.
+    bytes32 public constant REPAY_INTENT_TYPEHASH =
+        keccak256("RepayIntent(uint256 loanId,uint256 amount,uint256 nonce,uint256 deadline)");
+
     enum LoanStatus {
         Active,
         Repaid,
@@ -111,6 +151,8 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
     mapping(uint256 => Loan) public loans;
     mapping(address => uint256) public activeDebtOf;
     mapping(address => bool) public isOriginator;
+    /// When each borrower last earned an on-time bonus. See BONUS_PERIOD.
+    mapping(address => uint64) public lastBonusAt;
 
     uint256 public loanCount;
     uint256 public protocolFeesAccrued;
@@ -141,6 +183,10 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
     /// collectInstallment, so an indexer can tell a keeper's collection from a
     /// payment the borrower made themselves.
     event InstallmentCollected(uint256 indexed loanId, address indexed caller, uint256 amount);
+    /// An instalment completed on time but earned no bonus: the plan is under
+    /// MIN_SCORED_PRINCIPAL, or the borrower already earned one within
+    /// BONUS_PERIOD. Emitted so the app can say why the score did not move.
+    event OnTimeBonusWithheld(uint256 indexed loanId, address indexed borrower);
     event LoanFullyRepaid(uint256 indexed loanId, address indexed borrower);
     event LoanLiquidated(
         uint256 indexed loanId,
@@ -166,6 +212,8 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
     error InsufficientBalance(uint256 have, uint256 need);
     error NotDue();
     error NotBorrower();
+    error SignatureExpired();
+    error InvalidSignature();
     error InvalidInterval();
     error MerchantNotEligible();
     error ZeroAddress();
@@ -183,7 +231,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         address _treasury,
         uint256 _gracePeriod,
         uint64 _minInterval
-    ) Ownable(initialOwner) {
+    ) Ownable(initialOwner) EIP712("PolarisLoanEngine", "1") {
         if (_gracePeriod > MAX_GRACE_PERIOD) revert InvalidGracePeriod();
         gracePeriod = _gracePeriod == 0 ? DEFAULT_GRACE_PERIOD : _gracePeriod;
         if (_minInterval != 0 && (_minInterval < MIN_ALLOWED_INTERVAL || _minInterval > 30 days)) {
@@ -439,6 +487,46 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         Loan storage l = loans[loanId];
         if (l.borrower == address(0)) revert InvalidLoan();
         if (msg.sender != l.borrower) revert NotBorrower();
+        _repay(loanId, l, amount);
+    }
+
+    /**
+     * @notice `repay`, for a borrower who holds no gas: anyone may submit the
+     *         borrower's signed RepayIntent.
+     * @dev Making `repay` the borrower's alone closed the allowance drain, but
+     *      on Monad the borrower is a Mera account that never holds MON, so on
+     *      its own it also closed the only way such a borrower could prepay, or
+     *      cure a missed instalment inside the grace period before anyone
+     *      could liquidate. The signature restores both without reopening the
+     *      drain: it names the loan and the amount, so whoever relays it can
+     *      move exactly what the borrower chose, into this loan, and nothing
+     *      else. The nonce stops a relayer replaying it, and the deadline
+     *      stops one holding it back for later.
+     */
+    function repayWithSig(
+        uint256 loanId,
+        uint256 amount,
+        uint256 deadline,
+        bytes calldata signature
+    ) external nonReentrant {
+        Loan storage l = loans[loanId];
+        if (l.borrower == address(0)) revert InvalidLoan();
+        if (block.timestamp > deadline) revert SignatureExpired();
+
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(REPAY_INTENT_TYPEHASH, loanId, amount, _useNonce(l.borrower), deadline)
+            )
+        );
+        (address signer, ECDSA.RecoverError err, ) = ECDSA.tryRecover(digest, signature);
+        if (err != ECDSA.RecoverError.NoError || signer != l.borrower) revert InvalidSignature();
+
+        _repay(loanId, l, amount);
+    }
+
+    /// What `repay` and `repayWithSig` share once the borrower's consent is
+    /// established.
+    function _repay(uint256 loanId, Loan storage l, uint256 amount) private {
         if (l.status != LoanStatus.Active) revert LoanNotActive();
         if (amount == 0) revert ZeroAmount();
         if (l.installmentsPaid >= l.installmentCount) revert LoanNotActive();
@@ -452,9 +540,9 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
     /**
      * @notice Draw `requested` from the borrower and book what arrives against
      *         the loan.
-     * @dev The one place a payment is accounted for. `repay` and
-     *      `collectInstallment` differ only in who may call them and how the
-     *      amount is chosen; sharing this means a keeper's collection and a
+     * @dev The one place a payment is accounted for. `repay`, `repayWithSig`
+     *      and `collectInstallment` differ only in who may call them and how
+     *      the amount is chosen; sharing this means a keeper's collection and a
      *      borrower's own payment can never be credited, scored, charged a fee
      *      or closed differently.
      * @return amount What the token actually delivered.
@@ -530,11 +618,26 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard {
         // Score only moves when an instalment actually completed. A partial
         // payment is progress, not a payment event, and scoring it would let a
         // borrower farm their score with dust.
+        //
+        // A late instalment always costs, whatever the plan's size: trust is
+        // fast to lose. An on-time one earns only on a plan of at least
+        // MIN_SCORED_PRINCIPAL, and only if this borrower has not earned a
+        // bonus within BONUS_PERIOD, so neither dust, nor prepaying a plan one
+        // unit at a time, nor twenty plans at once can buy a tier. A withheld
+        // bonus writes nothing to the score record; the event says why.
         if (completedOne) {
-            if (onTime) {
-                scoreManager.recordOnTimePayment(l.borrower);
+            address borrower = l.borrower;
+            if (!onTime) {
+                scoreManager.recordLatePayment(borrower);
+            } else if (
+                l.principal >= MIN_SCORED_PRINCIPAL &&
+                (lastBonusAt[borrower] == 0 ||
+                    block.timestamp >= uint256(lastBonusAt[borrower]) + BONUS_PERIOD)
+            ) {
+                lastBonusAt[borrower] = uint64(block.timestamp);
+                scoreManager.recordOnTimePayment(borrower);
             } else {
-                scoreManager.recordLatePayment(l.borrower);
+                emit OnTimeBonusWithheld(loanId, borrower);
             }
         }
 

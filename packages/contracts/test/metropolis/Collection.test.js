@@ -8,16 +8,35 @@
  * tests prove the EVM port of that fix: a stranger can collect only what the
  * schedule says is due, only once it is due, and a shortfall comes back as an
  * error the dunning ladder can act on.
+ *
+ * They also prove the two things that fix must not cost: a borrower who holds
+ * no gas can still pay early, in part, or cure inside the grace period, through
+ * a relayer carrying their signature; and paying on time earns score at a pace
+ * no dust plan, prepayment or pile of parallel plans can speed up.
  */
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
+const { MAX_UINT, signTyped, signPermit } = require("../helpers/sign");
+
 const AUSD = (n) => BigInt(Math.round(n * 1e6));
-const DAY = 24 * 60 * 60;
+const HOUR = 60 * 60;
+const DAY = 24 * HOUR;
 const GRACE = 3 * DAY;
 const INTERVAL = 14 * DAY;
+const BONUS_PERIOD = 7 * DAY;
+const MIN_SCORED_PRINCIPAL = AUSD(20);
+
+const REPAY_TYPES = {
+  RepayIntent: [
+    { name: "loanId", type: "uint256" },
+    { name: "amount", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+};
 
 const ACTIVE = 0;
 const REPAID = 1;
@@ -427,6 +446,296 @@ describe("collection", () => {
       expect(closed.totalRepaid).to.equal(loan.totalOwed);
       // Four minutes and a few blocks, start to finish.
       expect(BigInt(await time.latest()) - loan.startedAt).to.be.lessThan(5n * 60n);
+    });
+  });
+
+  describe("what paying on time earns", () => {
+    it("a plan one unit under MIN_SCORED_PRINCIPAL earns no bonus, and one at it does", async () => {
+      expect(await engine.MIN_SCORED_PRINCIPAL()).to.equal(MIN_SCORED_PRINCIPAL);
+
+      const small = await openPlan(MIN_SCORED_PRINCIPAL - 1n, 4, INTERVAL, borrower);
+      const tx = engine.connect(borrower).repay(small, await engine.installmentAmount(small));
+      await expect(tx).to.emit(engine, "OnTimeBonusWithheld").withArgs(small, borrower.address);
+      await expect(tx).not.to.emit(scores, "ScoreChanged");
+      // Earning nothing, it leaves no record behind either.
+      expect((await scores.profileOf(borrower.address)).initialized).to.equal(false);
+
+      const real = await openPlan(MIN_SCORED_PRINCIPAL, 4, INTERVAL, other);
+      await expect(engine.connect(other).repay(real, await engine.installmentAmount(real)))
+        .to.emit(scores, "ScoreChanged")
+        .withArgs(other.address, 600, 612, "on-time payment");
+    });
+
+    it("prepaying a plan one instalment at a time earns one bonus, not one per instalment", async () => {
+      // The farming shape: 24 hourly instalments, each completed by its own call.
+      const id = await openPlan(AUSD(240), 24, HOUR);
+      let withheld = 0;
+      for (let i = 0; i < 24; i++) {
+        const receipt = await (
+          await engine.connect(borrower).repay(id, await engine.installmentAmount(id))
+        ).wait();
+        withheld += receipt.logs.filter(
+          (log) => log.fragment && log.fragment.name === "OnTimeBonusWithheld"
+        ).length;
+      }
+
+      expect((await engine.getLoan(id)).status).to.equal(REPAID);
+      expect(withheld).to.equal(23);
+      const p = await scores.profileOf(borrower.address);
+      expect(p.score).to.equal(612);
+      expect(p.onTimePayments).to.equal(1);
+    });
+
+    it("twenty plans paid at once earn one bonus: the score rises at most once per BONUS_PERIOD", async () => {
+      expect(await engine.BONUS_PERIOD()).to.equal(BigInt(BONUS_PERIOD));
+
+      // Parallel plans are what defeats any per-instalment rule: twenty real
+      // plans, each one instalment, all paid in the same hour.
+      const ids = [];
+      for (let i = 0; i < 20; i++) ids.push(await openPlan(MIN_SCORED_PRINCIPAL, 1, HOUR));
+      for (const id of ids) {
+        await engine.connect(borrower).repay(id, await engine.installmentAmount(id));
+      }
+      expect(await scores.scoreOf(borrower.address)).to.equal(612);
+      const earnedAt = await engine.lastBonusAt(borrower.address);
+      expect(earnedAt).to.be.greaterThan(0n);
+
+      // One second short of a week: still withheld.
+      const next = await openPlan(MIN_SCORED_PRINCIPAL, 2, INTERVAL);
+      await time.setNextBlockTimestamp(earnedAt + BigInt(BONUS_PERIOD) - 1n);
+      await expect(engine.connect(borrower).repay(next, await engine.installmentAmount(next)))
+        .to.emit(engine, "OnTimeBonusWithheld")
+        .withArgs(next, borrower.address);
+      expect(await scores.scoreOf(borrower.address)).to.equal(612);
+
+      // A week to the second: the next one counts.
+      await time.setNextBlockTimestamp(earnedAt + BigInt(BONUS_PERIOD));
+      await expect(engine.connect(borrower).repay(next, await engine.installmentAmount(next)))
+        .to.emit(scores, "ScoreChanged")
+        .withArgs(borrower.address, 612, 624, "on-time payment");
+      expect(await engine.lastBonusAt(borrower.address)).to.equal(earnedAt + BigInt(BONUS_PERIOD));
+    });
+
+    it("a late instalment costs on any plan, however small", async () => {
+      // Trust is fast to lose: the scoring floor and the weekly ration only
+      // ever withhold a bonus, never a penalty.
+      const dust = await openPlan(2n, 1, HOUR);
+      await time.increaseTo((await engine.installmentDueAt(dust, 0)) + BigInt(GRACE) + 1n);
+      await expect(engine.connect(keeper).collectInstallment(dust))
+        .to.emit(scores, "ScoreChanged")
+        .withArgs(borrower.address, 600, 560, "late payment");
+
+      // Nor does a recent bonus shield the next late one.
+      const real = await openPlan(AUSD(100), 2, INTERVAL);
+      await engine.connect(borrower).repay(real, await engine.installmentAmount(real));
+      expect(await scores.scoreOf(borrower.address)).to.equal(572);
+      await time.increaseTo((await engine.installmentDueAt(real, 1)) + BigInt(GRACE) + 1n);
+      await expect(engine.connect(keeper).collectInstallment(real))
+        .to.emit(scores, "ScoreChanged")
+        .withArgs(borrower.address, 572, 532, "late payment");
+    });
+
+    it("a Pay in 4 on a two-week schedule still earns on every instalment", async () => {
+      // The honest path is untouched: instalments a fortnight apart are always
+      // more than a BONUS_PERIOD apart.
+      const id = await openPlan();
+      for (let i = 0; i < 4; i++) {
+        await time.increaseTo(await engine.installmentDueAt(id, i));
+        await expect(engine.connect(keeper).collectInstallment(id))
+          .to.emit(scores, "ScoreChanged")
+          .withArgs(borrower.address, 600 + 12 * i, 612 + 12 * i, "on-time payment");
+      }
+      const p = await scores.profileOf(borrower.address);
+      expect(p.score).to.equal(648);
+      expect(p.onTimePayments).to.equal(4);
+    });
+  });
+
+  describe("a borrower who holds no gas", () => {
+    let wallet;
+
+    /// A Mera-style account: an EOA that never holds MON. Its allowance comes
+    /// from a relayed ERC-2612 permit, exactly as PolarisCheckout will do it.
+    beforeEach(async () => {
+      wallet = ethers.Wallet.createRandom().connect(ethers.provider);
+      await ausd.mint(wallet.address, AUSD(2_000));
+      const engineAddr = await engine.getAddress();
+      const p = await signPermit(ausd, wallet, engineAddr, AUSD(2_000));
+      await ausd
+        .connect(stranger)
+        .permit(wallet.address, engineAddr, p.value, p.deadline, p.v, p.r, p.s);
+      expect(await ethers.provider.getBalance(wallet.address)).to.equal(0n);
+    });
+
+    async function signRepay(signer, loanId, amount, { deadline = MAX_UINT, nonce } = {}) {
+      const n = nonce ?? (await engine.nonces(signer.address));
+      const { signature } = await signTyped(signer, engine, REPAY_TYPES, {
+        loanId,
+        amount,
+        nonce: n,
+        deadline,
+      });
+      return signature;
+    }
+
+    it("a gasless borrower prepays through a relayer with a signed RepayIntent", async () => {
+      const id = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      const due = await engine.installmentAmount(id);
+      const before = await ausd.balanceOf(wallet.address);
+
+      const sig = await signRepay(wallet, id, due);
+      const tx = engine.connect(keeper).repayWithSig(id, due, MAX_UINT, sig);
+      await expect(tx)
+        .to.emit(engine, "InstallmentPaid")
+        .withArgs(id, wallet.address, 0, due, true)
+        .and.to.emit(scores, "ScoreChanged")
+        .withArgs(wallet.address, 600, 612, "on-time payment");
+      // It is the borrower's own payment, not a keeper's collection.
+      await expect(tx).not.to.emit(engine, "InstallmentCollected");
+
+      expect(await ausd.balanceOf(wallet.address)).to.equal(before - due);
+      expect((await engine.getLoan(id)).installmentsPaid).to.equal(1);
+      expect(await engine.nonces(wallet.address)).to.equal(1n);
+      expect(await ethers.provider.getBalance(wallet.address)).to.equal(0n);
+
+      // And pays the rest off early the same way.
+      const rest = await engine.outstandingOf(id);
+      await expect(
+        engine.connect(keeper).repayWithSig(id, rest, MAX_UINT, await signRepay(wallet, id, rest))
+      )
+        .to.emit(engine, "LoanFullyRepaid")
+        .withArgs(id, wallet.address);
+    });
+
+    it("a relayer cannot redirect a signed repayment to another loan, or change its amount", async () => {
+      const first = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      const second = await openPlan(AUSD(100), 4, INTERVAL, wallet);
+      const theirs = await openPlan(AUSD(100), 4, INTERVAL, other);
+      const due = await engine.installmentAmount(first);
+      const sig = await signRepay(wallet, first, due, { deadline: MAX_UINT });
+
+      for (const [loanId, amount, deadline] of [
+        [second, due, MAX_UINT], // another of the borrower's loans
+        [theirs, due, MAX_UINT], // somebody else's loan
+        [first, due + 1n, MAX_UINT], // more than was signed
+        [first, due - 1n, MAX_UINT], // less than was signed
+        [first, due, MAX_UINT - 1n], // a different deadline
+      ]) {
+        await expect(
+          engine.connect(keeper).repayWithSig(loanId, amount, deadline, sig)
+        ).to.be.revertedWithCustomError(engine, "InvalidSignature");
+      }
+
+      const untouched = await ausd.balanceOf(wallet.address);
+      await engine.connect(keeper).repayWithSig(first, due, MAX_UINT, sig);
+      expect(await ausd.balanceOf(wallet.address)).to.equal(untouched - due);
+      expect((await engine.getLoan(second)).totalRepaid).to.equal(0n);
+      expect((await engine.getLoan(theirs)).totalRepaid).to.equal(0n);
+    });
+
+    it("a signed repayment cannot be replayed", async () => {
+      const id = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      const amount = AUSD(10);
+      const sig = await signRepay(wallet, id, amount);
+
+      await engine.connect(keeper).repayWithSig(id, amount, MAX_UINT, sig);
+      const after = await ausd.balanceOf(wallet.address);
+
+      for (const relayer of [keeper, stranger]) {
+        await expect(
+          engine.connect(relayer).repayWithSig(id, amount, MAX_UINT, sig)
+        ).to.be.revertedWithCustomError(engine, "InvalidSignature");
+      }
+      expect(await ausd.balanceOf(wallet.address)).to.equal(after);
+      expect((await engine.getLoan(id)).totalRepaid).to.equal(amount);
+    });
+
+    it("an expired RepayIntent is refused", async () => {
+      const id = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      const amount = AUSD(10);
+      const deadline = BigInt(await time.latest()) + 100n;
+      const sig = await signRepay(wallet, id, amount, { deadline });
+
+      await time.setNextBlockTimestamp(deadline + 1n);
+      await expect(
+        engine.connect(keeper).repayWithSig(id, amount, deadline, sig)
+      ).to.be.revertedWithCustomError(engine, "SignatureExpired");
+
+      // Signed afresh, it lands on its deadline's own second.
+      const later = deadline + 200n;
+      const fresh = await signRepay(wallet, id, amount, { deadline: later });
+      await time.setNextBlockTimestamp(later);
+      await expect(engine.connect(keeper).repayWithSig(id, amount, later, fresh)).to.not.be.reverted;
+    });
+
+    it("nobody but the borrower can sign a repayment of their loan", async () => {
+      const id = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      const due = await engine.installmentAmount(id);
+      const before = await ausd.balanceOf(wallet.address);
+
+      // A stranger's signature, the relayer's own, and bytes that are no
+      // signature at all: each is refused with the same typed error.
+      for (const signer of [stranger, keeper]) {
+        const forged = await signRepay(signer, id, due, { nonce: await engine.nonces(wallet.address) });
+        await expect(
+          engine.connect(keeper).repayWithSig(id, due, MAX_UINT, forged)
+        ).to.be.revertedWithCustomError(engine, "InvalidSignature");
+      }
+      for (const junk of ["0x", "0x1234", "0x" + "00".repeat(65)]) {
+        await expect(
+          engine.connect(keeper).repayWithSig(id, due, MAX_UINT, junk)
+        ).to.be.revertedWithCustomError(engine, "InvalidSignature");
+      }
+      await expect(
+        engine.connect(keeper).repayWithSig(999, due, MAX_UINT, "0x")
+      ).to.be.revertedWithCustomError(engine, "InvalidLoan");
+
+      expect(await ausd.balanceOf(wallet.address)).to.equal(before);
+    });
+
+    it("a gasless borrower cures a missed instalment inside the grace period, so nobody can liquidate them", async () => {
+      const id = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      // Nobody collected on the due date, and the grace clock is running.
+      await time.increaseTo((await engine.installmentDueAt(id, 0)) + BigInt(DAY));
+      const due = await engine.installmentAmount(id);
+
+      await expect(
+        engine
+          .connect(stranger)
+          .repayWithSig(id, due, MAX_UINT, await signRepay(wallet, id, due))
+      )
+        .to.emit(engine, "InstallmentPaid")
+        .withArgs(id, wallet.address, 0, due, true);
+
+      // The moment the grace period ends, there is nothing to liquidate.
+      await time.increaseTo((await engine.installmentDueAt(id, 0)) + BigInt(GRACE) + 1n);
+      expect(await engine.checkLiquidatable(id)).to.equal(false);
+      await expect(engine.connect(keeper).liquidate(id)).to.be.revertedWithCustomError(
+        engine,
+        "NotLiquidatable"
+      );
+      expect(await scores.scoreOf(wallet.address)).to.equal(612);
+    });
+
+    it("a gasless borrower pays the part of an instalment they can afford, and collection takes only the shortfall", async () => {
+      const id = await openPlan(AUSD(200), 4, INTERVAL, wallet);
+      const due = await engine.installmentAmount(id);
+      const partial = (due * 76n) / 100n;
+
+      // What the dunning ladder's "collect partial" needs: the borrower's
+      // consent to an amount, carried by a relayer.
+      await engine
+        .connect(keeper)
+        .repayWithSig(id, partial, MAX_UINT, await signRepay(wallet, id, partial));
+      const loan = await engine.getLoan(id);
+      expect(loan.totalRepaid).to.equal(partial);
+      expect(loan.installmentsPaid).to.equal(0);
+
+      await time.increaseTo(await engine.installmentDueAt(id, 0));
+      await expect(engine.connect(keeper).collectInstallment(id))
+        .to.emit(engine, "InstallmentCollected")
+        .withArgs(id, keeper.address, due - partial);
+      expect((await engine.getLoan(id)).installmentsPaid).to.equal(1);
     });
   });
 });
