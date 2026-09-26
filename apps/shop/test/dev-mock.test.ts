@@ -1,12 +1,13 @@
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER } from "next/constants";
+import { MONAD_TESTNET } from "polarispay-sdk";
+import { encodePacked, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import nextConfig from "../next.config";
 import { devMockEnabled } from "@/lib/dev-polaris/guard";
-import { MOCK_DOMAIN, completeSession, createSession, relayPayment, resetMockState } from "@/lib/dev-polaris/mock";
+import { MOCK_DOMAIN, MOCK_PAYMENTS, completeSession, createSession, relayPayment, resetMockState, type RelayRequest } from "@/lib/dev-polaris/mock";
 import { browserConfig, resolvePolarisConfig } from "@/lib/polaris";
-import { MONAD_TESTNET, ZERO_ADDRESS, paymentIdFor, receiveAuthorizationTypedData } from "@/lib/polaris-sdk/browser";
 
 const buyer = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 const merchant = "0x4a1c000000000000000000000000000000000000" as const;
@@ -20,8 +21,7 @@ describe("the dev mock can't exist in production", () => {
     expect(dev.pageExtensions).toContain("dev.ts");
     expect(dev.pageExtensions).toContain("dev.tsx");
     for (const phase of [PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER]) {
-      const prod = nextConfig(phase);
-      expect(prod.pageExtensions).toEqual(["tsx", "ts"]);
+      expect(nextConfig(phase).pageExtensions).toEqual(["tsx", "ts"]);
     }
   });
 
@@ -62,94 +62,107 @@ describe("the dev mock can't exist in production", () => {
   });
 });
 
-describe("dev mock sessions", () => {
-  const params = {
+describe("dev mock sessions speak the real API", () => {
+  const body = {
     amount: "349.00",
     currency: "USD",
     description: "Halcyon order",
+    lineItems: [{ name: "Halcyon One, Graphite", quantity: 1, unitAmount: "349.00" }],
     modes: ["later", "now"],
+    subscription: null,
     successUrl: "http://localhost:3600/orders/hc_1",
-    lineItems: [{ name: "Halcyon One", quantity: 1, unitAmount: "349.00" }],
-    metadata: { orderId: "hc_1" },
+    cancelUrl: null,
+    orderId: "hc_1",
+    metadata: { orderNumber: "HC-10001" },
   };
 
-  it("implements idempotency like the real API", () => {
-    const a = createSession(params, "key_1", "http://localhost:3600");
-    const b = createSession(params, "key_1", "http://localhost:3600");
+  it("returns a CheckoutSession, and implements idempotency", () => {
+    const a = createSession(body, "key_1", "http://localhost:3600");
     expect(a.status).toBe(200);
+    expect(a.body).toMatchObject({ object: "checkout.session", status: "open", paymentStatus: "unpaid", orderId: "hc_1", lineItems: [{ amount: "349.00" }] });
+    const b = createSession(body, "key_1", "http://localhost:3600");
     expect((b.body as { id: string }).id).toBe((a.body as { id: string }).id);
     expect(b.replayed).toBe(true);
-    const c = createSession({ ...params, amount: "348.00", lineItems: [{ name: "x", quantity: 1, unitAmount: "348.00" }] }, "key_1", "http://localhost:3600");
+    const c = createSession({ ...body, amount: "348.00", lineItems: [{ name: "x", quantity: 1, unitAmount: "348.00" }] }, "key_1", "http://localhost:3600");
     expect(c.status).toBe(409);
   });
 
   it("validates like the real API", () => {
-    expect(createSession({ ...params, amount: "-1" }, null, "http://x").status).toBe(400);
-    expect(createSession({ ...params, modes: [] }, null, "http://x").status).toBe(400);
-    expect(createSession({ ...params, successUrl: "/relative" }, null, "http://x").status).toBe(400);
-    expect(createSession({ ...params, lineItems: [{ name: "x", quantity: 1, unitAmount: "1.00" }] }, null, "http://x").status).toBe(400);
+    expect(createSession({ ...body, amount: "-1" }, null, "http://x").status).toBe(400);
+    expect(createSession({ ...body, modes: [] }, null, "http://x").status).toBe(400);
+    expect(createSession({ ...body, successUrl: "/relative" }, null, "http://x").status).toBe(400);
+    expect(createSession({ ...body, lineItems: [{ name: "x", quantity: 1, unitAmount: "1.00" }] }, null, "http://x").status).toBe(400);
+    expect(createSession({ ...body, modes: ["subscribe"] }, null, "http://x").status).toBe(400);
   });
 
-  it("completing a Pay in 4 session produces plan.opened, payment.succeeded and the first instalment", () => {
-    const created = createSession(params, null, "http://localhost:3600").body as { id: string };
+  it("completing Pay in 4 sends plan.opened for the order, and answers the store with the protocol's details", () => {
+    const created = createSession(body, null, "http://localhost:3600").body as { id: string };
     const done = completeSession(created.id, "later");
     expect(done.ok).toBe(true);
     if (!done.ok) return;
-    expect(done.events.map((e) => e.type)).toEqual(["plan.opened", "payment.succeeded", "installment.collected"]);
-    expect(done.events[1]!.data).toMatchObject({ amount: "349.00", metadata: { orderId: "hc_1" } });
+    expect(done.events.map((e) => e.type)).toEqual(["plan.opened"]);
+    expect(done.events[0]!.data).toMatchObject({ orderId: "hc_1", principal: "349.00", installments: 4, sessionId: created.id });
+    expect(done.result).toMatchObject({ mode: "later", orderId: "hc_1" });
+    expect(done.session).toMatchObject({ status: "complete", paymentStatus: "paid" });
     expect(completeSession(created.id, "later")).toMatchObject({ ok: false, status: 409 });
   });
 });
 
-describe("dev mock relayer", () => {
-  async function authorization(orderId: string, signer = buyer, amountUnits = 349_000_000n) {
-    const validBefore = BigInt(Math.floor(Date.now() / 1000) + 3600);
-    const typed = receiveAuthorizationTypedData({
+describe("dev mock relayer (polarispay-sdk's RelayPayRequest)", () => {
+  async function request(orderId: string, signer = buyer, units = 349_000_000n): Promise<RelayRequest> {
+    const validBefore = BigInt(Math.floor(Date.now() / 1000) + 900);
+    const nonce = keccak256(encodePacked(["address", "string"], [merchant, orderId]));
+    const signature = await signer.signTypedData({
       domain: { ...MOCK_DOMAIN, chainId: MONAD_TESTNET.chainId, verifyingContract: MONAD_TESTNET.stablecoin },
-      from: buyer.address,
-      to: ZERO_ADDRESS,
-      value: amountUnits,
-      validAfter: 0n,
-      validBefore,
-      nonce: paymentIdFor(merchant, orderId),
+      types: {
+        ReceiveWithAuthorization: [
+          { name: "from", type: "address" },
+          { name: "to", type: "address" },
+          { name: "value", type: "uint256" },
+          { name: "validAfter", type: "uint256" },
+          { name: "validBefore", type: "uint256" },
+          { name: "nonce", type: "bytes32" },
+        ],
+      },
+      primaryType: "ReceiveWithAuthorization",
+      message: { from: buyer.address, to: MOCK_PAYMENTS, value: units, validAfter: 0n, validBefore, nonce },
     });
-    const { EIP712Domain: _domain, ...types } = typed.types;
-    void _domain;
-    const signature = await signer.signTypedData({ domain: typed.domain, types, primaryType: "ReceiveWithAuthorization", message: typed.message });
     return {
+      type: "payWithAuthorization",
+      chainId: MONAD_TESTNET.chainId,
+      contract: MOCK_PAYMENTS,
       payer: buyer.address,
       merchant,
-      amount: "349.00",
-      value: amountUnits.toString(),
+      amount: units.toString(),
       orderId,
       validAfter: "0",
       validBefore: validBefore.toString(),
+      nonce,
       signature,
-      chainId: MONAD_TESTNET.chainId,
     };
   }
 
   it("accepts the buyer's ERC-3009 signature and emits payment.succeeded for the order", async () => {
-    const result = await relayPayment(await authorization("hc_direct_1"));
+    const result = await relayPayment(await request("hc_direct_1"));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.paymentId).toBe(paymentIdFor(merchant, "hc_direct_1"));
-    expect(result.event.data).toMatchObject({ orderId: "hc_direct_1", amount: "349.00", mode: "direct", payer: buyer.address });
+    expect(result.event.type).toBe("payment.succeeded");
+    expect(result.event.data).toMatchObject({ orderId: "hc_direct_1", amount: "349.00", mode: "now", sessionId: null, payer: buyer.address });
   });
 
   it("rejects a signature from someone other than the payer", async () => {
     const stranger = privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a");
-    const result = await relayPayment(await authorization("hc_direct_2", stranger));
-    expect(result).toMatchObject({ ok: false, code: "invalid_signature" });
+    expect(await relayPayment(await request("hc_direct_2", stranger))).toMatchObject({ ok: false, code: "invalid_signature" });
   });
 
   it("rejects an authorization moved to another order", async () => {
-    const auth = await authorization("hc_direct_3");
-    expect(await relayPayment({ ...auth, orderId: "hc_direct_other" })).toMatchObject({ ok: false, code: "invalid_signature" });
+    const auth = await request("hc_direct_3");
+    expect(await relayPayment({ ...auth, orderId: "hc_direct_other" })).toMatchObject({ ok: false, code: "nonce_mismatch" });
   });
 
-  it("refuses to pay the same order twice", async () => {
-    const auth = await authorization("hc_direct_4");
+  it("refuses any contract but PolarisPayments, and a second payment of the same order", async () => {
+    const auth = await request("hc_direct_4");
+    expect(await relayPayment({ ...auth, contract: merchant })).toMatchObject({ ok: false, code: "wrong_contract" });
     expect((await relayPayment(auth)).ok).toBe(true);
     expect(await relayPayment(auth)).toMatchObject({ ok: false, code: "duplicate_payment" });
   });

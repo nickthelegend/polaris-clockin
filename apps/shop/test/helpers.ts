@@ -1,19 +1,32 @@
-import { generateTestHeader } from "@/lib/polaris-sdk/webhooks";
-import type { PolarisEvent, PolarisEventDataMap, PolarisEventType } from "@/lib/polaris-sdk/types";
+import type { WebhookEvent, WebhookEventDataMap, WebhookEventType } from "polarispay-sdk";
+import { signWebhookPayload } from "polarispay-sdk/server";
+
 import { parseCheckoutRequest, type PricedCheckout } from "@/lib/orders/checkout-request";
 import type { Order } from "@/lib/orders/types";
 
 export const SECRET = "whsec_test_secret_for_the_shop";
 
 let counter = 0;
-export function event<K extends PolarisEventType>(type: K, data: PolarisEventDataMap[K], created = Math.floor(Date.now() / 1000)): PolarisEvent {
+/** A webhook event exactly as polarispay-sdk 0.3.0 types it. */
+export function event<K extends WebhookEventType>(type: K, data: WebhookEventDataMap[K], createdAt = new Date().toISOString()): WebhookEvent {
   counter += 1;
-  return { id: `evt_test_${counter}_${Math.random().toString(36).slice(2, 8)}`, object: "event", type, created, livemode: false, data } as PolarisEvent;
+  return {
+    id: `evt_test_${counter}_${Math.random().toString(36).slice(2, 8)}`,
+    object: "event",
+    type,
+    createdAt,
+    livemode: false,
+    merchantId: "mer_test",
+    data,
+  } as WebhookEvent;
 }
 
 export function signed(body: string, secret = SECRET, timestamp = Math.floor(Date.now() / 1000)) {
-  return generateTestHeader({ payload: body, secret, timestamp });
+  return signWebhookPayload(body, secret, timestamp);
 }
+
+export const TX = `0x${"ab".repeat(32)}` as const;
+export const ADDR = `0x${"12".repeat(20)}` as const;
 
 export const BUYER = {
   contact: { email: "lena@example.com" },

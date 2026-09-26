@@ -30,7 +30,7 @@ function polarisFetch(respond?: (call: Call) => Response | undefined) {
 
 function post(body: unknown, key?: string) {
   return POST(
-    new Request("http://shop.test/api/checkout", {
+    new Request("https://shop.test/api/checkout", {
       method: "POST",
       headers: { "content-type": "application/json", ...(key ? { "idempotency-key": key } : {}) },
       body: JSON.stringify(body),
@@ -70,21 +70,24 @@ describe("POST /api/checkout (Polaris)", () => {
     expect(call!.method).toBe("POST");
     expect(call!.headers.authorization).toBe("Bearer sk_test_shopsecret123");
     expect(call!.headers["idempotency-key"]).toBe(`${json.order.id}:session:0`);
-    expect(call!.body).toMatchObject({
+    // Exactly polarispay-sdk's POST /api/v1/checkout/sessions body.
+    expect(call!.body).toEqual({
       amount: "349.00",
       currency: "USD",
+      description: expect.stringMatching(/^Halcyon order HC-\d{5}$/),
+      lineItems: [{ name: "Halcyon One, Graphite", quantity: 1, unitAmount: "349.00" }],
       modes: ["later", "now"],
-      successUrl: `http://shop.test/orders/${json.order.id}?via=polaris`,
-      cancelUrl: `http://shop.test/checkout?order=${json.order.id}&canceled=1`,
-      metadata: { orderId: json.order.id },
+      subscription: null,
+      successUrl: `https://shop.test/orders/${json.order.id}?via=polaris`,
+      cancelUrl: `https://shop.test/checkout?order=${json.order.id}&canceled=1`,
+      orderId: json.order.id,
+      metadata: { orderNumber: expect.stringMatching(/^HC-\d{5}$/) },
     });
-    const lineItems = call!.body!.lineItems as { unitAmount: string; quantity: number }[];
-    const sum = lineItems.reduce((n, i) => n + Number(i.unitAmount) * 100 * i.quantity, 0);
-    expect(sum).toBe(34900);
 
     const stored = (await orderStore().read()).orders[json.order.id]!;
     expect(stored.payment.sessionId).toBe(json.checkout.sessionId);
     expect(stored.sdkLog[0]?.call).toBe("polaris.checkout.sessions.create");
+    expect(call!.headers["polaris-client"]).toBe("polarispay-sdk/0.3.0");
     // The drawer's log never carries a key.
     expect(JSON.stringify(stored.sdkLog)).not.toContain("sk_test");
   });
@@ -166,6 +169,7 @@ describe("POST /api/checkout (Polaris)", () => {
     const ok = await post(checkoutBody({ method: "polaris", mode: "subscribe" }, club), "hc_attempt_sub_4");
     expect(ok.status).toBe(200);
     expect(calls[0]!.body).toMatchObject({ amount: "18.00", modes: ["subscribe"], subscription: { interval: "month", intervalCount: 1 } });
+    expect(calls[0]!.body!.lineItems).toEqual([{ name: "Halcyon Coffee Club, Filter", quantity: 1, unitAmount: "18.00" }]);
   });
 });
 

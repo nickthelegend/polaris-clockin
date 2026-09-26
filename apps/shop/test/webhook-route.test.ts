@@ -3,14 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/webhooks/polaris/route";
 import { createMemoryStore, orderStore, setOrderStore } from "@/lib/orders/store";
 import { createOrder } from "@/lib/orders/service";
-import type { PolarisEvent } from "@/lib/polaris-sdk/types";
+import type { WebhookEvent } from "polarispay-sdk";
 
-import { SECRET, event, priced, signed } from "./helpers";
+import { ADDR, SECRET, TX, event, priced, signed } from "./helpers";
 
-function deliver(e: PolarisEvent | string, header?: string | null) {
+function deliver(e: WebhookEvent | string, header?: string | null) {
   const body = typeof e === "string" ? e : JSON.stringify(e);
   return POST(
-    new Request("http://shop.test/api/webhooks/polaris", {
+    new Request("https://shop.test/api/webhooks/polaris", {
       method: "POST",
       headers: { "content-type": "application/json", ...(header === null ? {} : { "polaris-signature": header ?? signed(body) }) },
       body,
@@ -35,8 +35,22 @@ beforeEach(async () => {
 
 afterEach(() => vi.unstubAllEnvs());
 
-const paid = () =>
-  event("payment.succeeded", { orderId, metadata: { orderId }, sessionId: "cs_test_1", paymentId: "pay_1", amount: "349.00", currency: "USD", mode: "later" });
+const paidEvent = (overrides: { orderId?: string; sessionId?: string | null; amount?: string } = {}) =>
+  event("payment.succeeded", {
+    txHash: TX,
+    chainId: 10143,
+    orderId: overrides.orderId ?? orderId,
+    sessionId: overrides.sessionId === undefined ? "cs_test_1" : overrides.sessionId,
+    metadata: {},
+    paymentId: TX,
+    mode: "now",
+    merchant: ADDR,
+    payer: ADDR,
+    amount: overrides.amount ?? "349.00",
+    fee: "1.745",
+    currency: "USD",
+  });
+const paid = () => paidEvent();
 
 async function status() {
   return (await orderStore().read()).orders[orderId]!.status;
@@ -83,7 +97,9 @@ describe("POST /api/webhooks/polaris", () => {
   });
 
   it("answers 409 to an instalment that beats its plan, so Polaris redelivers it", async () => {
-    const res = await deliver(event("installment.collected", { orderId, metadata: { orderId }, planId: "plan_1", index: 1, amount: "87.25" }));
+    const res = await deliver(
+      event("installment.collected", { txHash: TX, chainId: 10143, planId: "42", orderId, installment: 2, installments: 4, amount: "87.25", remaining: "174.50" }),
+    );
     expect(res.status).toBe(409);
     const data = await orderStore().read();
     expect(Object.keys(data.events)).toHaveLength(0);
@@ -93,15 +109,15 @@ describe("POST /api/webhooks/polaris", () => {
     await orderStore().update((d) => {
       d.orders[orderId]!.payment.sessionId = "cs_by_session";
     });
-    const e = event("payment.succeeded", { sessionId: "cs_by_session", paymentId: "pay_2", amount: "349.00", currency: "USD", mode: "now" });
+    const e = paidEvent({ orderId: "cs_by_session", sessionId: "cs_by_session" });
     expect((await deliver(e)).status).toBe(200);
     expect(await status()).toBe("paid");
   });
 
   it("acknowledges events about other orders, and payouts, without touching this one", async () => {
-    const other = event("payment.succeeded", { orderId: "hc_unknown", paymentId: "p", amount: "1.00", currency: "USD", mode: "now" });
+    const other = paidEvent({ orderId: "hc_unknown", sessionId: null, amount: "1.00" });
     expect(await (await deliver(other)).json()).toMatchObject({ outcome: "ignored" });
-    const payout = event("payout.paid", { payoutId: "po_1", amount: "100.00", currency: "USD", destination: "0x1111111111111111111111111111111111111111" });
+    const payout = event("payout.paid", { txHash: TX, chainId: 10143, payoutId: "po_1", amount: "100.00", destination: ADDR, automatic: true });
     expect(await (await deliver(payout)).json()).toMatchObject({ outcome: "ignored" });
     expect(await status()).toBe("awaiting_payment");
   });
@@ -111,7 +127,7 @@ describe("POST /api/webhooks/polaris", () => {
     expect(Object.keys(route).filter((k) => ["POST", "PUT", "PATCH", "DELETE"].includes(k))).toEqual([]);
     const log = await import("@/app/api/orders/[id]/log/route");
     const res = await log.POST(
-      new Request(`http://shop.test/api/orders/${orderId}/log`, { method: "POST", body: JSON.stringify([{ call: "polaris.pay", result: { status: "paid" } }, { call: "markPaid" }]) }),
+      new Request(`https://shop.test/api/orders/${orderId}/log`, { method: "POST", body: JSON.stringify([{ call: "polaris.pay", result: { status: "paid" } }, { call: "markPaid" }]) }),
       { params: Promise.resolve({ id: orderId }) },
     );
     expect(await res.json()).toMatchObject({ recorded: 1 });

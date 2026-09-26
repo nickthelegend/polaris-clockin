@@ -2,50 +2,90 @@ import { describe, expect, it } from "vitest";
 
 import { applyEvent, orderIdForEvent } from "@/lib/orders/transitions";
 
-import { baseOrder, event } from "./helpers";
+import { ADDR, TX, baseOrder, event } from "./helpers";
 
-const ref = { orderId: "hc_testorder000000000001", sessionId: "cs_test_1", metadata: { orderId: "hc_testorder000000000001" } };
+const ORDER = "hc_testorder000000000001";
+const chain = { txHash: TX, chainId: 10143 };
 
-function plan(amount = "349.00") {
-  return event("plan.opened", {
-    ...ref,
-    planId: "plan_1",
+function paid(amount = "349.00", sessionId: string | null = "cs_test_1") {
+  return event("payment.succeeded", {
+    ...chain,
+    orderId: ORDER,
+    sessionId,
+    metadata: {},
+    paymentId: TX,
+    mode: "now",
+    merchant: ADDR,
+    payer: ADDR,
     amount,
+    fee: "1.745",
     currency: "USD",
-    intervalSeconds: 604800,
-    installments: [1, 2, 3, 4].map((index) => ({
-      index,
-      amount: "87.25",
-      dueAt: new Date(Date.now() + (index - 1) * 604800_000).toISOString(),
-      status: index === 1 ? ("due" as const) : ("upcoming" as const),
-    })),
   });
 }
 
+function planOpened(principal = "349.00", createdAt = new Date().toISOString()) {
+  const opened = new Date(createdAt).getTime();
+  return event(
+    "plan.opened",
+    {
+      ...chain,
+      orderId: ORDER,
+      sessionId: "cs_test_1",
+      metadata: {},
+      planId: "42",
+      mode: "later",
+      merchant: ADDR,
+      borrower: ADDR,
+      principal,
+      interest: "0.00",
+      total: principal,
+      installments: 4,
+      intervalSeconds: 604800,
+      schedule: [1, 2, 3, 4].map((index) => ({ index, amount: "87.25", dueAt: new Date(opened + (index - 1) * 604_800_000).toISOString() })),
+      currency: "USD",
+    },
+    createdAt,
+  );
+}
+
+const collected = (installment: number) =>
+  event("installment.collected", { ...chain, planId: "42", orderId: ORDER, installment, installments: 4, amount: "87.25", remaining: "0.00" });
+
 describe("order status transitions", () => {
   it("awaiting_payment → paid on a payment.succeeded that matches the order", () => {
-    const r = applyEvent(baseOrder(), event("payment.succeeded", { ...ref, paymentId: "p1", amount: "349.00", currency: "USD", mode: "later", txHash: "0xabc" }));
+    const r = applyEvent(baseOrder(), paid());
     expect(r.outcome).toBe("applied");
     expect(r.order.status).toBe("paid");
-    expect(r.order.payment.mode).toBe("later");
+    expect(r.order.payment.mode).toBe("now");
     expect(r.order.payment.paidAt).toBeTruthy();
     expect(r.order.events).toHaveLength(1);
   });
 
+  it("records a direct wallet payment (no session) as direct", () => {
+    const wallet = baseOrder({ payment: { method: "wallet", sessionAttempt: 0 } });
+    expect(applyEvent(wallet, paid("349.00", null)).order.payment.mode).toBe("direct");
+  });
+
   it("→ needs_review, never paid, when the amount doesn't match", () => {
-    const r = applyEvent(baseOrder(), event("payment.succeeded", { ...ref, paymentId: "p1", amount: "0.01", currency: "USD", mode: "now" }));
+    const r = applyEvent(baseOrder(), paid("0.01"));
     expect(r.outcome).toBe("flagged");
     expect(r.order.status).toBe("needs_review");
     expect(r.order.statusReason).toMatch(/doesn't match/);
   });
 
   it("→ needs_review when the currency isn't USD", () => {
-    const e = event("payment.succeeded", { ...ref, paymentId: "p1", amount: "349.00", currency: "EUR" as "USD", mode: "now" });
+    const e = paid();
+    (e.data as { currency: string }).currency = "EUR";
     expect(applyEvent(baseOrder(), e).order.status).toBe("needs_review");
   });
 
+  it("reads AUSD's six decimals: 349.000000 is $349.00, 349.000001 is not", () => {
+    expect(applyEvent(baseOrder(), paid("349.000000")).order.status).toBe("paid");
+    expect(applyEvent(baseOrder(), paid("349.000001")).order.status).toBe("needs_review");
+  });
+
   it("a redelivered event changes nothing", () => {
-    const e = event("payment.succeeded", { ...ref, paymentId: "p1", amount: "349.00", currency: "USD", mode: "now" });
+    const e = paid();
     const once = applyEvent(baseOrder(), e).order;
     const twice = applyEvent(once, e);
     expect(twice.outcome).toBe("duplicate");
@@ -54,79 +94,91 @@ describe("order status transitions", () => {
   });
 
   it("a paid order never goes back, even if a mismatched event follows", () => {
-    const paid = applyEvent(baseOrder(), event("payment.succeeded", { ...ref, paymentId: "p1", amount: "349.00", currency: "USD", mode: "now" })).order;
-    const r = applyEvent(paid, event("payment.succeeded", { ...ref, paymentId: "p2", amount: "5.00", currency: "USD", mode: "now" }));
+    const done = applyEvent(baseOrder(), paid()).order;
+    const r = applyEvent(done, paid("5.00"));
     expect(r.outcome).toBe("flagged");
     expect(r.order.status).toBe("paid");
   });
 
-  it("does not mark paid from plan.opened alone, but records the four-payment schedule", () => {
-    const r = applyEvent(baseOrder(), plan());
-    expect(r.order.status).toBe("awaiting_payment");
+  it("Pay in 4: plan.opened pays the store and records the schedule, with the first payment taken today", () => {
+    const r = applyEvent(baseOrder(), planOpened());
+    expect(r.order.status).toBe("paid");
+    expect(r.order.payment.mode).toBe("later");
     expect(r.order.plan?.installments.map((i) => i.amount)).toEqual([8725, 8725, 8725, 8725]);
+    expect(r.order.plan?.installments.map((i) => i.status)).toEqual(["paid", "upcoming", "upcoming", "upcoming"]);
     expect(r.order.plan?.status).toBe("active");
   });
 
   it("walks a Pay in 4 plan to completion", () => {
-    let order = applyEvent(baseOrder(), plan()).order;
-    order = applyEvent(order, event("payment.succeeded", { ...ref, paymentId: "p1", amount: "349.00", currency: "USD", mode: "later" })).order;
-    for (const index of [1, 2, 3]) {
-      order = applyEvent(order, event("installment.collected", { ...ref, planId: "plan_1", index, amount: "87.25" })).order;
-    }
+    let order = applyEvent(baseOrder(), planOpened()).order;
+    for (const index of [1, 2, 3]) order = applyEvent(order, collected(index)).order;
     expect(order.plan?.installments.filter((i) => i.status === "paid")).toHaveLength(3);
     expect(order.plan?.status).toBe("active");
-    order = applyEvent(order, event("installment.collected", { ...ref, planId: "plan_1", index: 4, amount: "87.25" })).order;
+    order = applyEvent(order, collected(4)).order;
     expect(order.plan?.status).toBe("completed");
-    order = applyEvent(order, event("plan.completed", { ...ref, planId: "plan_1" })).order;
+    order = applyEvent(order, event("plan.completed", { ...chain, planId: "42", orderId: ORDER, total: "349.00" })).order;
     expect(order.plan?.status).toBe("completed");
     expect(order.status).toBe("paid");
   });
 
   it("marks a missed instalment, and keeps the order paid if Polaris later liquidates the plan", () => {
-    let order = applyEvent(baseOrder(), plan()).order;
-    order = applyEvent(order, event("payment.succeeded", { ...ref, paymentId: "p1", amount: "349.00", currency: "USD", mode: "later" })).order;
-    order = applyEvent(order, event("installment.failed", { ...ref, planId: "plan_1", index: 2, amount: "87.25", reason: "Balance too low" })).order;
+    let order = applyEvent(baseOrder(), planOpened()).order;
+    order = applyEvent(
+      order,
+      event("installment.failed", { planId: "42", orderId: ORDER, installment: 2, amount: "87.25", reason: "insufficient_funds", attempt: 1, nextAttemptAt: null, chainId: 10143 }),
+    ).order;
     expect(order.plan?.status).toBe("past_due");
     expect(order.plan?.installments[1]?.status).toBe("failed");
-    order = applyEvent(order, event("plan.liquidated", { ...ref, planId: "plan_1" })).order;
+    order = applyEvent(order, event("plan.liquidated", { ...chain, planId: "42", orderId: ORDER, outstanding: "261.75", recovered: "0.00" })).order;
     expect(order.plan?.status).toBe("liquidated");
     expect(order.status).toBe("paid");
   });
 
   it("asks for a retry when an instalment arrives before its plan, recording nothing", () => {
     const order = baseOrder();
-    const r = applyEvent(order, event("installment.collected", { ...ref, planId: "plan_1", index: 1, amount: "87.25" }));
+    const r = applyEvent(order, collected(2));
     expect(r.outcome).toBe("retry");
     expect(r.order).toBe(order);
     expect(order.events).toHaveLength(0);
   });
 
   it("flags a plan whose principal doesn't match the order", () => {
-    expect(applyEvent(baseOrder(), plan("300.00")).outcome).toBe("flagged");
+    expect(applyEvent(baseOrder(), planOpened("300.00")).outcome).toBe("flagged");
   });
 
   it("starts a subscription on its first charge, and moves the next charge date on renewals", () => {
     const sub = baseOrder({ kind: "subscription", total: 1800, subtotal: 1800, payment: { method: "polaris", requestedMode: "subscribe", sessionAttempt: 0 } });
+    const charge = (period: number, nextChargeAt: string) =>
+      event("subscription.charged", {
+        ...chain,
+        subscriptionId: "7",
+        planId: "1",
+        merchant: ADDR,
+        subscriber: ADDR,
+        amount: "18.00",
+        fee: "0.09",
+        period,
+        nextChargeAt,
+        orderId: ORDER,
+        sessionId: "cs_test_1",
+      });
     const next = new Date(Date.now() + 30 * 86400_000).toISOString();
-    let order = applyEvent(
-      sub,
-      event("subscription.charged", { ...ref, subscriptionId: "sub_1", amount: "18.00", currency: "USD", period: 1, interval: "month", intervalCount: 1, nextChargeAt: next }),
-    ).order;
+    let order = applyEvent(sub, charge(1, next)).order;
     expect(order.status).toBe("paid");
     expect(order.subscription).toMatchObject({ status: "active", periodsCharged: 1, nextChargeAt: next });
     const later = new Date(Date.now() + 60 * 86400_000).toISOString();
-    order = applyEvent(
-      order,
-      event("subscription.charged", { ...ref, subscriptionId: "sub_1", amount: "18.00", currency: "USD", period: 2, interval: "month", intervalCount: 1, nextChargeAt: later }),
-    ).order;
+    order = applyEvent(order, charge(2, later)).order;
     expect(order.subscription).toMatchObject({ periodsCharged: 2, nextChargeAt: later });
-    order = applyEvent(order, event("subscription.canceled", { ...ref, subscriptionId: "sub_1", canceledAt: new Date().toISOString() })).order;
+    order = applyEvent(order, event("subscription.canceled", { ...chain, subscriptionId: "7", planId: "1", merchant: ADDR, subscriber: ADDR, canceledBy: "subscriber" })).order;
     expect(order.subscription?.status).toBe("canceled");
     expect(order.status).toBe("paid");
   });
 
-  it("finds the order from metadata.orderId first, then the on-chain order id", () => {
-    expect(orderIdForEvent(event("payment.succeeded", { orderId: "chain_id", metadata: { orderId: "hc_meta" }, paymentId: "p", amount: "1.00", currency: "USD", mode: "now" }))).toBe("hc_meta");
-    expect(orderIdForEvent(event("payment.succeeded", { orderId: "hc_direct", paymentId: "p", amount: "1.00", currency: "USD", mode: "direct" }))).toBe("hc_direct");
+  it("finds the order from the orderId the store gave Polaris, then metadata", () => {
+    expect(orderIdForEvent(paid())).toBe(ORDER);
+    const e = paid();
+    (e.data as { orderId: string; metadata: Record<string, string> }).orderId = "";
+    (e.data as { metadata: Record<string, string> }).metadata = { orderId: "hc_meta" };
+    expect(orderIdForEvent(e)).toBe("hc_meta");
   });
 });
