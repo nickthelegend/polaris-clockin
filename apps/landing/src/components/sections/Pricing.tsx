@@ -23,7 +23,7 @@ import { formatUsd, formatUsdWhole } from "@/lib/format";
  */
 export function Pricing() {
   return (
-    <section id="pricing" aria-labelledby="pricing-heading" className="py-28 md:py-36 lg:py-[150px]">
+    <section id="pricing" aria-labelledby="pricing-heading" className="py-28 md:py-36 lg:pb-[100px] lg:pt-[182px]">
       <div className="shell-narrow grid items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,493px)] lg:gap-16">
         <div>
           <BlurWords id="pricing-heading" as="h2" text={pricing.heading} className="heading text-h2 text-olive" />
@@ -79,7 +79,7 @@ function Calculator() {
     <Grow
       from={0.07}
       duration={1.15}
-      className="relative overflow-hidden rounded-card bg-lime px-6 pb-8 pt-7 text-olive md:px-[31px] md:pb-[36px] md:pt-[31px] lg:min-h-[523px]"
+      className="relative overflow-hidden rounded-card bg-lime px-6 pb-8 pt-7 text-olive md:px-[31px] md:pb-[30px] md:pt-[27px] lg:min-h-[523px]"
     >
       <GrowAnchor className="pointer-events-none absolute inset-0">
         <motion.div
@@ -96,22 +96,21 @@ function Calculator() {
       {/* Everything in the card belongs to its top edge and rides up with it */}
       <div ref={ref}>
         <GrowAnchor>
-
-          <BlurWords as="h3" text={c.title} delay={0.45} play={inView} className="text-[22px] tracking-[-0.03em] lg:text-[24px]" />
+          <BlurWords as="h3" text={c.title} delay={0.45} play={inView} className="text-[22px] tracking-[-0.03em] lg:text-[28px]" />
           <DrawLine
             play={inView}
             delay={0.55}
             className="mt-[24px] h-px w-full bg-[linear-gradient(90deg,rgba(45,58,2,0.16),rgba(45,58,2,0.16)_70%,rgba(45,58,2,0))]"
           />
 
-          <label htmlFor={inputId} className="mt-8 block lg:mt-[34px]">
-            <BlurWords text={c.salesLabel} delay={0.6} play={inView} className="text-[18px] tracking-[-0.025em] lg:text-[20px]" />
+          <label htmlFor={inputId} className="mt-8 block lg:mt-[28px]">
+            <BlurWords text={c.salesLabel} delay={0.6} play={inView} className="text-[18px] tracking-[-0.025em] lg:text-[24px]" />
           </label>
           <Rise y={10} blur={10} delay={0.75} play={inView}>
             <RollingNumber
               value={sales}
               format={formatUsd}
-              className="mt-3 block text-[48px] font-medium leading-none tracking-[-0.05em] lg:mt-[14px] lg:text-[clamp(48px,4.25vw,61px)]"
+              className="mt-3 block text-[48px] font-medium leading-none tracking-[-0.05em] lg:mt-[20px] lg:text-[clamp(48px,4.25vw,61px)]"
             />
           </Rise>
 
@@ -128,20 +127,24 @@ function Calculator() {
 
           <div className="mt-7 grid grid-cols-2 gap-5 lg:mt-[32px]">
             <div>
-              <BlurWords text={c.keep} delay={0.8} play={inView} className="text-[17px] tracking-[-0.025em] lg:text-[20px]" />
-              <RollingNumber
-                value={keep}
-                format={formatUsdWhole}
-                className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
-              />
+              <BlurWords text={c.keep} delay={0.8} play={inView} className="text-[17px] tracking-[-0.025em] lg:text-[24px]" />
+              <Rise y={10} blur={10} delay={0.85} play={inView}>
+                <RollingNumber
+                  value={keep}
+                  format={formatUsdWhole}
+                  className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
+                />
+              </Rise>
             </div>
             <div>
-              <BlurWords text={c.cards} delay={0.88} play={inView} className="text-[17px] tracking-[-0.025em] text-olive/60 lg:text-[20px]" />
-              <RollingNumber
-                value={cards}
-                format={formatUsdWhole}
-                className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] text-olive/45 lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
-              />
+              <BlurWords text={c.cards} delay={0.88} play={inView} className="text-[17px] tracking-[-0.025em] text-olive/60 lg:text-[24px]" />
+              <Rise y={10} blur={10} delay={0.93} play={inView}>
+                <RollingNumber
+                  value={cards}
+                  format={formatUsdWhole}
+                  className="mt-2 block text-[30px] font-medium leading-none tracking-[-0.045em] text-olive/45 lg:mt-3 lg:text-[clamp(30px,2.9vw,42px)]"
+                />
+              </Rise>
             </div>
           </div>
           <BlurLines text={c.footnote} delay={1} play={inView} className="mt-5 text-[12px] tracking-[-0.01em] text-olive/55" />

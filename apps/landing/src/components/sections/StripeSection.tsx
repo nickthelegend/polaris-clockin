@@ -26,7 +26,7 @@ const AVATARS = ["avatar-1.jpg", "avatar-2.jpg", "avatar-3.jpg"] as const;
  */
 export function StripeSection({ assets }: { assets: Assets }) {
   return (
-    <section id="product" aria-labelledby="stripe-heading" className="pt-24 md:pt-32 lg:pt-[168px]">
+    <section id="product" aria-labelledby="stripe-heading" className="pt-24 md:pt-32 lg:pt-[133px]">
       <div className="shell grid gap-12 md:grid-cols-2 md:gap-x-[18px] md:gap-y-14 xl:grid-cols-[minmax(0,560fr)_minmax(0,391fr)_minmax(0,341fr)] xl:items-end xl:gap-y-0">
         <div className="md:col-span-2 xl:col-span-1 xl:pr-8">
           <BlurWords id="stripe-heading" as="h2" text={stripe.heading} className="heading text-h2 text-olive" />
