@@ -610,6 +610,10 @@ flowchart LR
 
 ### 5.6 The Polaris app: PWA, Mera, checkout
 
+> **Visual design:** the app follows [`docs/design/mobile.md`](design/mobile.md)
+> and its reference image exactly. It supersedes the old Polaris brand for the
+> consumer app.
+
 - **One Next.js PWA serves `app.` and `pay.polarispay.app`.** Checkout works
   without installing anything, and *Add to Home Screen* comes after the first
   payment.
