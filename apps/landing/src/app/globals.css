@@ -138,10 +138,10 @@ html.lenis body {
   }
 
   /* A word in a blur reveal: inline-block so transforms apply, but it keeps
-     the space after it. */
+     the space after it. No permanent will-change: there are hundreds of
+     these, and each would keep its own compositor layer. */
   .reveal-word {
     display: inline-block;
-    will-change: transform, filter, opacity;
   }
 }
 
