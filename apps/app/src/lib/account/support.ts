@@ -27,8 +27,12 @@ export async function checkAccountSupport(): Promise<AccountSupport> {
   };
   if (typeof PKC.getClientCapabilities === "function") {
     try {
-      const caps = await PKC.getClientCapabilities();
-      if (caps["extension:prf"] === false) return { ok: false, reason: "no-prf" };
+      // Some browsers take their time (or never answer); a hint isn't worth a stuck button.
+      const caps = await Promise.race([
+        PKC.getClientCapabilities(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 800)),
+      ]);
+      if (caps?.["extension:prf"] === false) return { ok: false, reason: "no-prf" };
     } catch {
       /* treat as unknown */
     }

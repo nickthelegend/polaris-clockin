@@ -11,13 +11,26 @@ export function useAccountState(): AccountState {
 
 export type SupportState = { status: "checking" } | ({ status: "done" } & AccountSupport);
 
+// Checked once per page load; every later mount (a sheet, the next screen) gets the answer at once.
+let supportResult: SupportState | null = null;
+let supportPending: Promise<SupportState> | null = null;
+
+function loadSupport(): Promise<SupportState> {
+  supportPending ??= checkAccountSupport().then((result) => {
+    supportResult = { status: "done", ...result };
+    return supportResult;
+  });
+  return supportPending;
+}
+
 /** Whether this browser can hold an account. Reads only; never starts a ceremony. */
 export function useAccountSupport(): SupportState {
-  const [state, setState] = useState<SupportState>({ status: "checking" });
+  const [state, setState] = useState<SupportState>(() => supportResult ?? { status: "checking" });
   useEffect(() => {
+    if (supportResult) return;
     let live = true;
-    void checkAccountSupport().then((result) => {
-      if (live) setState({ status: "done", ...result });
+    void loadSupport().then((result) => {
+      if (live) setState(result);
     });
     return () => {
       live = false;
