@@ -15,6 +15,6 @@
   "liquidate": true,
   "maxTasksPerReport": 25,
   "checkBatch": 72,
-  "gas": { "overhead": "80000", "headroomBps": 1500, "min": "200000", "max": "8000000" },
+  "gas": { "overhead": "30000", "headroomBps": 1500, "min": "150000", "max": "8000000" },
   "callback": null
 }
