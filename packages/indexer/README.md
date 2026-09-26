@@ -46,8 +46,10 @@ ln -sfn ~/.local/opt/node-v22.23.3-linux-x64 ~/.local/opt/node22   # scripts/wsl
 ~/.local/opt/node22/bin/npm install -g pnpm@10
 ```
 
-Working from `/mnt/c` or `/mnt/e` is slow (installs take minutes); a clone
-inside the WSL filesystem is much faster.
+Under WSL the Windows drives are slow, so when the repo is on `/mnt/c` or
+`/mnt/e`, `wsl.sh` works in a copy on the Linux filesystem
+(`~/.cache/polaris-indexer`: this package, the contract ABIs and deployment
+records) and a run takes seconds. `POLARIS_INDEXER_IN_PLACE=1` turns that off.
 
 The client's tests run anywhere, from the repo root:
 `pnpm --filter @polarispay/indexer-client test`.

@@ -16,6 +16,21 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# Under WSL, the Windows drives (/mnt/c, /mnt/e) are slow enough that an
+# install takes many minutes. Work in a copy on the Linux filesystem instead:
+# this package plus the contract ABIs and deployment records it reads. Set
+# POLARIS_INDEXER_IN_PLACE=1 to work where the files are.
+if [[ "$PWD" == /mnt/* ]] && [ -z "${POLARIS_INDEXER_IN_PLACE:-}" ] && command -v rsync >/dev/null 2>&1; then
+  SOURCE="$PWD"
+  MIRROR="${POLARIS_INDEXER_MIRROR:-$HOME/.cache/polaris-indexer}"
+  mkdir -p "$MIRROR/packages/contracts/abi" "$MIRROR/packages/contracts/deployments"
+  rsync -a --delete --exclude node_modules --exclude .envio --exclude envio-env.d.ts "$SOURCE/" "$MIRROR/packages/indexer/"
+  rsync -a --delete "$SOURCE/../contracts/abi/" "$MIRROR/packages/contracts/abi/"
+  rsync -a --delete "$SOURCE/../contracts/deployments/" "$MIRROR/packages/contracts/deployments/"
+  echo "Working in $MIRROR (a copy on the Linux filesystem; POLARIS_INDEXER_IN_PLACE=1 to work in place)." >&2
+  cd "$MIRROR/packages/indexer"
+fi
+
 PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '^/mnt/' | paste -sd: -)"
 for dir in "$HOME/.local/opt/node22/bin" "$HOME/.local/share/pnpm"; do
   [ -d "$dir" ] && PATH="$dir:$PATH"
