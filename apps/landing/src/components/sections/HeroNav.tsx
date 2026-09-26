@@ -94,7 +94,7 @@ export function HeroNav() {
             animate={go ? { clipPath: "inset(-20% 0% -20% 0%)", filter: "blur(0px)", opacity: 1 } : undefined}
             transition={{ delay: 0.12, duration: 1.0, ease: EASE_REVEAL }}
           >
-            <PolarisWordmark height={34} className="h-[28px] w-auto lg:h-[34px]" />
+            <PolarisWordmark className="h-[26px] md:h-[30px] lg:h-[34px]" />
           </motion.span>
         </a>
 
@@ -117,13 +117,13 @@ export function HeroNav() {
                 {nav.login.label}
               </motion.a>
               {/* Reserves the room "Get the app" sits in. */}
-              <span aria-hidden="true" className="invisible ml-[14px] px-[22px] text-[17px] tracking-[-0.02em]">
+              <span aria-hidden="true" className="invisible ml-[14px] whitespace-nowrap px-[22px] text-[17px] tracking-[-0.02em]">
                 {nav.cta.label}
               </span>
             </motion.div>
             <motion.a
               href={nav.cta.href}
-              className="rv relative z-10 inline-flex h-[42px] items-center rounded-full bg-white px-4 text-[15px] tracking-[-0.02em] text-olive transition-colors hover:bg-lime lg:absolute lg:inset-y-[2px] lg:right-[2px] lg:h-auto lg:px-[22px] lg:text-[17px]"
+              className="rv relative z-10 inline-flex h-[42px] items-center whitespace-nowrap rounded-full bg-white px-4 text-[15px] tracking-[-0.02em] text-olive transition-colors hover:bg-lime lg:absolute lg:inset-y-[2px] lg:right-[2px] lg:h-auto lg:px-[22px] lg:text-[17px]"
               initial={{ scale: 0.35, opacity: 0 }}
               animate={go ? { scale: 1, opacity: 1 } : undefined}
               transition={{ delay: 0.04, type: "spring", stiffness: 300, damping: 20 }}
