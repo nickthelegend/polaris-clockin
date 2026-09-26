@@ -122,7 +122,9 @@ into it) and `envio` is pinned exactly. Cloud needs no API token.
 Free-plan limits to plan around: a deployment is deleted after 30 days, or 7
 days after it last served a request, or at 100,000 events; 3 deployments per
 indexer. Make the final deployment at the feature freeze (9 Oct), and keep it
-queried (the CRE cron does; otherwise a daily `_meta` query). The endpoint is
+queried: the CRE cron does while it runs, and
+`.github/workflows/indexer-keepalive.yml` sends a daily `_meta` query once the
+repository variable `POLARIS_INDEXER_URL` is set. The endpoint is
 public on the free plan: nothing indexed is secret, and order ids must not
 carry personal data.
 
