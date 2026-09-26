@@ -86,7 +86,7 @@ function MintCard() {
         ))}
       </ul>
       <div className="mt-[18px]">
-        <Button href={mint.cta.href} size="sm" arrow reveal={{ delay: 0.8 }}>
+        <Button href={mint.cta.href} size="md" arrow reveal={{ delay: 0.8 }}>
           {mint.cta.label}
         </Button>
       </div>

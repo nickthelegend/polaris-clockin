@@ -78,7 +78,7 @@ export function Hero({ assets }: { assets: Assets }) {
             text={hero.sub}
             play={ready}
             delay={0.78}
-            className="mt-5 max-w-[590px] text-[17px] leading-[1.25] tracking-[-0.02em] text-white/90 lg:mt-[22px] lg:text-[clamp(17px,1.39vw,20px)]"
+            className="mt-5 max-w-[590px] text-[17px] leading-[1.25] tracking-[-0.02em] text-white/90 lg:mt-[22px] lg:text-[clamp(17px,1.5vw,22px)]"
           />
           <div className="mt-7 lg:mt-[40px]">
             <Button

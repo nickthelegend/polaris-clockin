@@ -33,7 +33,7 @@ export function Blog({ assets }: { assets: Assets }) {
           <Rise y={10} delay={0.3} className="shrink-0 pb-2 lg:pb-3">
             <a
               href={blog.showAll.href}
-              className="text-[16px] tracking-[-0.02em] text-olive underline decoration-1 underline-offset-[5px] transition-opacity hover:opacity-70 lg:text-[18px]"
+              className="text-[16px] tracking-[-0.02em] text-olive underline decoration-1 underline-offset-[5px] transition-opacity hover:opacity-70 lg:text-[22px]"
             >
               {blog.showAll.label}
             </a>

@@ -98,7 +98,7 @@ function ChipsCard({ assets }: { assets: Assets }) {
           text={chips.title}
           delay={0.5}
           lineClassName=""
-          className="px-[30px] text-[22px] font-medium leading-[1.15] tracking-[-0.035em] text-olive"
+          className="px-[30px] text-[26px] font-medium leading-[1.15] tracking-[-0.035em] text-olive"
         />
         <div className="mt-[40px] space-y-2">
           <Marquee speed={CHIP_SPEED} direction="right" gap={8}>
@@ -151,7 +151,7 @@ function CreditLineCard() {
         />
       </GrowAnchor>
       <Rise y={70} delay={0.4} duration={0.95} className="mt-auto">
-        <div ref={ref} className="flex h-[250px] flex-col rounded-[18px] bg-white px-5 pb-6 pt-[22px] text-olive">
+        <div ref={ref} className="flex h-[250px] flex-col rounded-[18px] bg-white px-[25px] pb-6 pt-[22px] text-olive">
           <p className="text-[13px] tracking-[-0.01em]">{line.label}</p>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
             <span className="text-[38px] font-medium leading-none tracking-[-0.045em]">

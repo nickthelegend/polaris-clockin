@@ -53,7 +53,7 @@ export function Footer() {
 
           {/* Top right: nav */}
           <nav aria-label="Footer" className="lg:col-start-2 lg:row-start-1">
-            <ul className="flex flex-wrap gap-x-10 gap-y-3 text-[17px] tracking-[-0.02em] lg:gap-x-[40px] lg:pt-1 lg:text-[18px]">
+            <ul className="flex flex-wrap gap-x-10 gap-y-3 text-[16px] tracking-[-0.02em] lg:gap-x-[40px] lg:pt-1">
               {footer.links.map((link, i) => (
                 <Rise as="li" key={link.label} {...item(1 + i)}>
                   <a href={link.href} className="text-white/90 transition-opacity hover:opacity-70">
@@ -67,7 +67,7 @@ export function Footer() {
           {/* Middle right: contact */}
           <div className="lg:col-start-2 lg:row-start-2 lg:self-end lg:pb-[34px]">
             <Rise {...item(4)}>
-              <h2 className="text-[20px] tracking-[-0.03em] lg:text-[22px]">{footer.contact.title}</h2>
+              <h2 className="text-[20px] tracking-[-0.03em]">{footer.contact.title}</h2>
               <ul className="mt-3 space-y-1 text-[15px] tracking-[-0.01em] text-footer-muted">
                 {footer.contact.lines.map((line) => (
                   <li key={line}>{line}</li>
@@ -108,7 +108,7 @@ export function Footer() {
           {/* Bottom right: location + languages */}
           <div className="flex flex-wrap items-end justify-between gap-8 lg:col-start-2 lg:row-start-3">
             <Rise {...item(8)}>
-              <h2 className="text-[20px] tracking-[-0.03em] lg:text-[22px]">{footer.location.title}</h2>
+              <h2 className="text-[20px] tracking-[-0.03em]">{footer.location.title}</h2>
               <ul className="mt-3 space-y-1 text-[15px] tracking-[-0.01em] text-footer-muted">
                 {footer.location.lines.map((line) => (
                   <li key={line}>{line}</li>
