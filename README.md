@@ -31,6 +31,7 @@ Track 02: Consumer Products & Payments. The plan is in
 | Path | What it is |
 |---|---|
 | `apps/app` | The Polaris app: the buyer's PWA (Face ID accounts with Mera, checkout, send by link). See its [README](apps/app/README.md) |
+| `apps/shop` | Halcyon, a demo store that takes payment through the Polaris SDK: Pay now, Pay in 4 on Polaris credit, a subscription, and direct wallet payment, with signed webhooks. See its [README](apps/shop/README.md) |
 | `packages/contracts` | Solidity: loan engine, payments, score manager, collateral vault, merchant registry, batch settlement, plus the Metropolis additions |
 | `packages/underwriting` | Wallet-history underwriting signals |
 | `packages/sdk` | `polarispay-sdk` |
