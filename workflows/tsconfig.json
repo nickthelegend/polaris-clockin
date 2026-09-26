@@ -1,0 +1,23 @@
+// Typechecks the tests and the e2e run, on Bun's types. Each workflow's own
+// tsconfig (collections/, underwriting/) is the stricter one `cre workflow
+// build` uses: no Node, DOM or Bun types, and @polarispay/underwriting/core
+// checked from source. Here the underwriting package resolves to its built
+// declarations (`pnpm typecheck` builds them), because the CRE SDK types Node
+// built-ins as `never` program-wide and the package's Node half uses them.
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": false,
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "collections/main.ts", "underwriting/main.ts"]
+}

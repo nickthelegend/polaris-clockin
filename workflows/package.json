@@ -1,0 +1,44 @@
+{
+  "name": "@polaris/cre-workflows",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Polaris's Chainlink CRE workflows: collections (cron) and underwriting (HTTP), the orchestration layer of the Pay in 4 credit engine on Monad.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "exports": {
+    "./callback": "./src/shared/callback.ts",
+    "./events": "./src/collections/outcomes.ts",
+    "./trigger": "./src/trigger.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "cre:install": "node scripts/install-cre.mjs",
+    "cre": "node scripts/cre.mjs",
+    "build": "node scripts/cre.mjs workflow build ./collections && node scripts/cre.mjs workflow build ./underwriting",
+    "typecheck": "node scripts/cre.mjs --deps && tsc -p collections/tsconfig.json && tsc -p underwriting/tsconfig.json && tsc -p tsconfig.json",
+    "test": "node scripts/bun.mjs --conditions=source test ./test",
+    "e2e:local": "node scripts/e2e-local.mjs",
+    "chain:local": "node scripts/local-chain.mjs",
+    "configure": "node scripts/configure.mjs",
+    "simulate:collections": "node scripts/cre.mjs workflow simulate ./collections --non-interactive --trigger-index 0 --broadcast -T",
+    "simulate:underwriting": "node scripts/cre.mjs workflow simulate ./underwriting --non-interactive --trigger-index 0 --http-payload ./underwriting/payload.example.json --broadcast -T"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "1.22.0",
+    "@noble/curves": "1.9.1",
+    "@noble/hashes": "1.8.0",
+    "@polarispay/contracts": "workspace:*",
+    "@polarispay/underwriting": "workspace:*",
+    "viem": "2.56.9",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/bun": "1.3.8",
+    "@types/node": "^22.20.1",
+    "bun": "1.4.2",
+    "typescript": "5.9.3"
+  }
+}
