@@ -11,13 +11,13 @@ import { SmartImage } from "@/components/ui/SmartImage";
 import { hero } from "@/content";
 import type { Assets } from "@/lib/assets";
 import { HeroCard } from "./HeroCard";
-import { HeroNav } from "./HeroNav";
 
 /**
- * 1. Hero: a full-bleed photo under a dark gradient, the nav, the headline
- * at the bottom left and the Payments card at the bottom right. Everything
- * plays its load sequence once the page has mounted; the photo moves at
- * about 0.85x the scroll speed.
+ * 1. Hero: a full-bleed photo under a dark gradient, the headline at the
+ * bottom left and the Payments card at the bottom right (the nav, HeroNav,
+ * sits over it from outside <main>). Everything plays its load sequence
+ * once the page has mounted; the photo moves at about 0.85x the scroll
+ * speed.
  */
 export function Hero({ assets }: { assets: Assets }) {
   const sectionRef = useRef<HTMLElement>(null);
@@ -64,8 +64,6 @@ export function Hero({ assets }: { assets: Assets }) {
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-40 bg-[linear-gradient(180deg,rgba(14,12,8,0.35),rgba(14,12,8,0))]"
       />
-
-      <HeroNav ready={ready} />
 
       <div className="relative flex min-h-[100svh] flex-col justify-end px-4 pb-8 pt-28 md:px-8 md:pb-10 lg:min-h-[max(720px,100svh)] lg:flex-row lg:items-end lg:justify-between lg:gap-10 lg:px-12 lg:pb-12">
         <div className="max-w-[820px]">

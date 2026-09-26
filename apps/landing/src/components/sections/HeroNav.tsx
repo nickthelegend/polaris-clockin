@@ -9,16 +9,24 @@ import { PolarisMark } from "@/components/ui/Logo";
 import { nav, site } from "@/content";
 
 /**
- * The hero's navigation, with its load sequence: the mark scales in, the
- * wordmark writes on letter by letter behind a clip mask, the link pill fades
- * in with its links blurring in, "Get the app" pops in and "Log in" slides
- * out from behind it, and the menu button fades up last.
+ * The page's banner: the navigation over the top of the hero, with its load
+ * sequence. The mark scales in, the wordmark writes on letter by letter
+ * behind a clip mask, the link pill fades in with its links blurring in,
+ * "Get the app" pops in and "Log in" slides out from behind it, and the menu
+ * button fades up last. It sits outside <main>, positioned over the hero.
  */
-export function HeroNav({ ready }: { ready: boolean }) {
+export function HeroNav() {
   const reduced = useReduced();
+  const [ready, setReady] = useState(false);
   const go = ready || reduced;
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Start on the first frame after mount, in step with the hero.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;

@@ -18,7 +18,7 @@ export function Footer() {
   const item = (i: number) => ({ play: inView, delay: 0.25 + i * 0.06, y: 10, blur: 6, duration: 0.7 });
 
   return (
-    <footer role="contentinfo" className="px-[var(--gutter)] pb-6 pt-24 md:pb-10 md:pt-28 lg:pt-[120px]">
+    <footer className="px-[var(--gutter)] pb-6 pt-24 md:pb-10 md:pt-28 lg:pt-[120px]">
       <Rise
         y={50}
         duration={0.9}
