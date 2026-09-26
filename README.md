@@ -32,7 +32,8 @@ Track 02: Consumer Products & Payments. The plan is in
 |---|---|
 | `apps/app` | The Polaris app: the buyer's PWA (Face ID accounts with Mera, checkout, send by link). See its [README](apps/app/README.md) |
 | `packages/contracts` | Solidity: loan engine, payments, score manager, collateral vault, merchant registry, batch settlement, plus the Metropolis additions |
-| `packages/underwriting` | Wallet-history underwriting signals |
+| `packages/underwriting` | Nansen-powered underwriting: provider clients, the Facts the DON attests, the score and Pay in 4 decision, plain-language reasons. See its [README](packages/underwriting/README.md) |
+| `apps/gateway` | Serves the underwriting API on port 3510. See its [README](apps/gateway/README.md) |
 | `packages/sdk` | `polarispay-sdk` |
 | `docs/plan.md` | The hackathon plan: positioning, sponsors, scope, schedule |
 
@@ -46,6 +47,8 @@ pnpm install
 
 ```bash
 pnpm contracts:test
+pnpm --filter @polarispay/underwriting test   # runs on labelled fixtures; no keys needed
+pnpm --filter @polarispay/gateway start       # the underwriting API on :3510
 ```
 
 *TBD: deployment to Monad testnet, the apps and services.*
