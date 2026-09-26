@@ -30,7 +30,7 @@
   /* Labels ("Your dollar balance"), "see more". */
   --muted: #62666b;
   /* Row meta ("Sep 24 · 10:42"): a step darker than labels, as in the reference. */
-  --meta: #45484c;
+  --meta: #3f4145;
   /* Grey pills on the ground ("Credit available") and on surfaces ("Change", "+ Add"). */
   --pill: #e3e5e6;
   --pill-soft: #ebedec;
@@ -45,7 +45,7 @@
   --cta: #111111;
   --on-cta: #ffffff;
   --focus: #111111;
-  --grid-line: rgb(0 0 0 / 0.05);
+  --grid-line: rgb(0 0 0 / 0.04);
   /* Surfaces sit on the ground with a white hairline and the softest lift. */
   --shadow-surface: 0 0 0 1px rgb(255 255 255 / 0.7), 0 6px 14px -8px rgb(0 0 0 / 0.1);
   --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.55), 0 10px 30px rgb(0 0 0 / 0.18);
@@ -192,15 +192,16 @@ button:disabled {
 
 /* ── Signature details ─────────────────────────────────────────────────── */
 
-/* The faint square grid behind the balance, fading out around it. */
+/* The faint square grid behind the header and balance (37.8px cells from the
+   gutter, as measured), fading out around the balance. */
 .balance-grid {
   background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: center center;
-  -webkit-mask-image: radial-gradient(ellipse 62% 70% at 50% 45%, #000 20%, transparent 78%);
-  mask-image: radial-gradient(ellipse 62% 70% at 50% 45%, #000 20%, transparent 78%);
+  background-size: 37.8px 37.8px;
+  background-position: 15.2px 35.1px;
+  -webkit-mask-image: radial-gradient(ellipse 60% 56% at 50% 46%, #000 20%, transparent 88%);
+  mask-image: radial-gradient(ellipse 60% 56% at 50% 46%, #000 20%, transparent 88%);
 }
 
 /* The giant embossed wordmark on cards: card-coloured, lit from the top left. */

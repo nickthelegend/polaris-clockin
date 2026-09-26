@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getAddress, isAddress } from "viem";
-import { Coin, MiniCard } from "@/components/art";
+import { CardThumb, Coin } from "@/components/art";
 import { Avatar } from "@/components/avatar";
 import { FaceIdAction } from "@/components/face-id-action";
 import { HelpButton } from "@/components/help";
@@ -116,7 +116,7 @@ export function Send() {
 
       {/* From */}
       <Card className="mb-3 flex items-center gap-3 p-4">
-        <MiniCard className="h-9 w-14" />
+        <CardThumb />
         <div className="min-w-0 flex-1">
           <p className="text-[16px] font-medium">Dollar account</p>
           <p className="tabular text-[14px] text-muted">

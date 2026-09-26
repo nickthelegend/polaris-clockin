@@ -5,7 +5,10 @@ import { type Micros, toNumber, usd, usdParts } from "@/lib/money";
 import { useLocalCurrency } from "@/lib/prefs";
 import { cx } from "./ui";
 
-/** "+ $1,000.00" in green or "− $60.46" in red; the sign carries it, not only colour. */
+/**
+ * "+ $1,000" in green or "- $60.46" in red, as the reference writes them. The
+ * sign carries the meaning, not only the colour.
+ */
 export function SignedAmount({
   amount,
   direction,
@@ -16,8 +19,10 @@ export function SignedAmount({
   className?: string;
 }) {
   return (
-    <span className={cx("tabular font-medium whitespace-nowrap", direction === "in" ? "text-positive" : "text-negative", className)}>
-      {direction === "in" ? "+" : "−"} {usd(amount)}
+    <span className={cx("tabular whitespace-nowrap", direction === "in" ? "text-positive" : "text-negative", className)}>
+      <span className="sr-only">{direction === "in" ? "plus" : "minus"} </span>
+      <span aria-hidden>{direction === "in" ? "+" : "-"} </span>
+      {usd(amount, { trim: true })}
     </span>
   );
 }
@@ -39,8 +44,8 @@ export function LocalEquivalent({ amount, className }: { amount: Micros; classNa
 const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 
 /**
- * The balance, counting up on first paint (600ms, ease-out). The cents sit a
- * step quieter. Reduced motion shows the figure straight away.
+ * The balance, counting up on first paint (600ms, ease-out), set as tight as
+ * the reference's. Reduced motion shows the figure straight away.
  */
 export function BalanceFigure({ amount, className }: { amount: Micros; className?: string }) {
   const target = toNumber(amount);
@@ -69,11 +74,11 @@ export function BalanceFigure({ amount, className }: { amount: Micros; className
   const value = shown === null ? amount : BigInt(Math.round(shown * 1e6));
   const { whole, cents } = usdParts(value);
   return (
-    <span className={cx("tabular font-display font-bold tracking-[-0.045em]", className)}>
+    <span className={cx("font-display font-[680] tracking-[-0.065em]", className)}>
       <span className="sr-only">{usd(amount)}</span>
       <span aria-hidden>
         {whole}
-        <span className="opacity-90">{cents}</span>
+        {cents}
       </span>
     </span>
   );

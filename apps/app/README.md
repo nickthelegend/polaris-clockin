@@ -96,7 +96,7 @@ is always offered before creating a second account.
 
 | Route | What it is |
 |---|---|
-| `/` | Home: dollar balance with a local-currency equivalent, the Pay later line and next payment, Send / Receive, Send again, History |
+| `/` | Home: dollar balance with a local-currency equivalent, credit available, Send / Receive, the send-abroad promo, Send again, History |
 | `/onboard?next=…` | Create your account with Face ID, then back to `next` |
 | `/pay` | The raised Pay tab: scan a code (where the browser can), paste a link, or try a sample |
 | `/pay/[id]` | Checkout for a merchant link: Pay now, Pay in 4 (schedule and total interest shown), Subscribe; the limit and its reasons; Raise your limit; one Face ID; the receipt |
@@ -121,6 +121,17 @@ because it is for people who already have one.
 | `src/lib/relayer.ts` | The typed relayer client. **A stub for now**: it returns a made-up receipt |
 | `src/lib/data/` | The data interface every screen reads; `mock.ts` is placeholder data behind it |
 | `src/components/` | The design system: buttons, cards, sheets, keypad, QR, tab bar |
+| `public/assets/` | Generated images, picked up as soon as they exist (see below) |
+
+## Images
+
+Two kinds of generated image are read from fixed paths, each with a drawn
+stand-in, so dropping the files in needs no code change:
+
+| Path | What it is | Until it exists |
+|---|---|---|
+| `public/assets/coin.png` | The 3D silver coin on the promo and claim cards (transparent PNG) | The drawn SVG coin |
+| `public/assets/avatars/<first name>.jpg` | A person's portrait, e.g. `marisol.jpg`, `tomas.jpg` (lower case, no accents) | Tinted initials |
 
 ## Not built yet
 

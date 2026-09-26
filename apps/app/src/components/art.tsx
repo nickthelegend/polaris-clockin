@@ -1,17 +1,58 @@
-import { type ReactNode, useId } from "react";
+"use client";
+
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { cx } from "./ui";
 
 const STAR =
   "M60 20C63.9 46.6 73.4 56.1 100 60 73.4 63.9 63.9 73.4 60 100 56.1 73.4 46.6 63.9 20 60 46.6 56.1 56.1 46.6 60 20Z";
 
+/** The generated 3D coin. Until the file exists, the drawn one stands in. */
+export const COIN_ASSET = "/assets/coin.png";
+
 /**
- * The silver coin from the promo card: a tilted disc with the Polaris star
- * struck into it. Drawn, so it stays sharp and themable.
+ * The silver coin from the promo card. It shows `public/assets/coin.png`
+ * when that file is there, and the drawn coin underneath until (or unless)
+ * it loads, so dropping the file in needs no code change.
  */
 export function Coin({ size = 76, className }: { size?: number; className?: string }) {
+  const img = useRef<HTMLImageElement>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  // A load or error that happened before hydration never reaches React's handlers.
+  useEffect(() => {
+    const el = img.current;
+    if (!el || !el.complete) return;
+    if (el.naturalWidth > 0) setLoaded(true);
+    else setFailed(true);
+  }, []);
+
+  return (
+    <span className={cx("relative inline-block", className)} style={{ width: size, height: size }} aria-hidden>
+      {loaded ? null : <CoinDrawn size={size} />}
+      {failed ? null : (
+        // eslint-disable-next-line @next/next/no-img-element -- a static asset that may not exist yet; next/image would 404 loudly
+        <img
+          ref={img}
+          src={COIN_ASSET}
+          alt=""
+          width={size}
+          height={size}
+          decoding="async"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={cx("absolute inset-0 size-full object-contain", loaded ? "opacity-100" : "opacity-0")}
+        />
+      )}
+    </span>
+  );
+}
+
+/** The drawn coin: a tilted disc with the Polaris star struck into it. */
+function CoinDrawn({ size }: { size: number }) {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   return (
-    <svg viewBox="0 0 124 124" width={size} height={size} className={className} aria-hidden>
+    <svg viewBox="0 0 124 124" width={size} height={size} className="absolute inset-0" aria-hidden>
       <defs>
         <radialGradient id={`face${id}`} cx="34%" cy="28%" r="80%">
           <stop offset="0" stopColor="#ffffff" />
@@ -113,24 +154,26 @@ export function PolarisCard({
   );
 }
 
-/** A tiny lime card for "From: Dollar account" rows and the balance chip. */
-export function MiniCard({ className, tone = "lime" }: { className?: string; tone?: CardTone }) {
+/** The lime chip beside "Your dollar balance": a card seen from across the room. */
+export function CardChip({ className }: { className?: string }) {
   return (
-    <span
-      aria-hidden
-      className={cx(
-        "relative inline-block overflow-hidden rounded-[6px]",
-        tone === "lime" ? "bg-lime" : tone === "ink" ? "bg-ink-card" : "bg-[#fbfbfb] ring-1 ring-black/10",
-        className,
-      )}
-    >
-      {/* A hint of the card's embossed wordmark: a highlight line over a shade. */}
-      <span
-        className={cx(
-          "absolute right-[18%] bottom-[22%] left-[12%] h-[18%] rounded-full",
-          tone === "lime" ? "bg-lime-deep/35 shadow-[0_-1px_0_rgb(255_255_255/0.5)]" : "bg-white/10",
-        )}
-      />
+    <span aria-hidden className={cx("relative inline-block h-[18.5px] w-[28px] overflow-hidden rounded-[3.5px] bg-lime", className)}>
+      <span className="absolute top-[3px] right-[3px] h-[3px] w-[5px] rounded-[1px] bg-white/45" />
+      <span className="absolute right-[4px] bottom-[3px] left-[3px] h-[5px] rounded-[2px] bg-lime-deep/15 shadow-[0_-0.5px_0_rgb(255_255_255/0.55)]" />
+    </span>
+  );
+}
+
+/**
+ * A card thumbnail for "From" rows: the real card, scaled down, so its
+ * wordmark and details read as the same object in miniature.
+ */
+export function CardThumb({ tone = "lime", className }: { tone?: CardTone; className?: string }) {
+  return (
+    <span aria-hidden className={cx("relative block h-[34px] w-[57px] shrink-0 overflow-hidden rounded-[4px]", className)}>
+      <span className="absolute top-0 left-0 block w-[372px] origin-top-left scale-[0.1532]">
+        <PolarisCard tone={tone} label="Dollar account" amount="$0.00" last4="2451" />
+      </span>
     </span>
   );
 }

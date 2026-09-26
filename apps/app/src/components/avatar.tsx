@@ -155,8 +155,24 @@ export function initials(name: string): string {
 }
 
 /**
- * People get tinted initials and a flag badge; merchants a monogram on grey;
- * Polaris itself (money added, a link) a lime disc with an icon.
+ * Where a person's portrait lives: `public/assets/avatars/<first name>.jpg`,
+ * lower-case and without accents ("Tomás García" → `tomas.jpg`). Drop a file
+ * there and it shows; until then the tinted initials underneath do.
+ */
+export function avatarPhoto(name: string): string {
+  const first = name.trim().split(/\s+/)[0] ?? "";
+  const slug = first
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-");
+  return `/assets/avatars/${slug || "someone"}.jpg`;
+}
+
+/**
+ * People get their portrait (tinted initials until there is one) and a flag
+ * badge; merchants and Polaris itself an outline icon in a grey well, like
+ * the reference's history rows.
  */
 export function Avatar({
   name,
@@ -164,6 +180,7 @@ export function Avatar({
   country,
   icon,
   size = 48,
+  photo = true,
   className,
 }: {
   name: string;
@@ -171,39 +188,40 @@ export function Avatar({
   country?: CountryCode | undefined;
   icon?: IconName;
   size?: number;
+  /** Look for a portrait in `public/assets/avatars`. */
+  photo?: boolean;
   className?: string;
 }) {
-  const badge = Math.round(size * 0.36);
+  const badge = Math.round(size * 0.39);
   return (
     <span className={cx("relative inline-grid shrink-0", className)} style={{ width: size, height: size }} aria-hidden>
-      {kind === "polaris" ? (
-        <span className="grid size-full place-items-center rounded-full bg-lime text-on-lime">
-          <Icon name={icon ?? "star"} size={Math.round(size * 0.44)} />
-        </span>
-      ) : kind === "merchant" ? (
+      {kind === "person" ? (
         <span
-          className="grid size-full place-items-center rounded-full bg-pill font-display font-bold tracking-[-0.03em] text-fg"
-          style={{ fontSize: size * 0.4 }}
-        >
-          {name.trim()[0]?.toUpperCase()}
-        </span>
-      ) : (
-        <span
-          className="grid size-full place-items-center rounded-full font-semibold tracking-[-0.02em] text-fg"
+          className="relative grid size-full place-items-center overflow-hidden rounded-full font-medium tracking-[-0.03em] text-fg"
           style={{
             fontSize: size * 0.34,
-            background: `color-mix(in oklab, ${tintFor(name)} 34%, var(--surface))`,
+            background: `color-mix(in oklab, ${tintFor(name)} 30%, var(--well))`,
           }}
         >
           {initials(name)}
+          {photo ? (
+            <span
+              className="absolute inset-0 rounded-full bg-cover bg-center"
+              style={{ backgroundImage: `url("${avatarPhoto(name)}")` }}
+            />
+          ) : null}
+        </span>
+      ) : (
+        <span className="grid size-full place-items-center rounded-full bg-well text-[#77797c]">
+          <Icon name={icon ?? (kind === "polaris" ? "star" : "store")} size={Math.round(size * 0.46)} strokeWidth={1.5} />
         </span>
       )}
       {country ? (
         <span
-          className="absolute -right-0.5 -bottom-0.5 grid place-items-center rounded-full bg-surface p-[2px]"
-          style={{ width: badge + 4, height: badge + 4 }}
+          className="absolute -right-px -bottom-px grid place-items-center rounded-full bg-white"
+          style={{ width: badge, height: badge }}
         >
-          <Flag code={country} size={badge} />
+          <Flag code={country} size={badge - 5} />
         </span>
       ) : null}
     </span>

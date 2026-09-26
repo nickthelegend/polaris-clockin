@@ -150,7 +150,7 @@ export function ChipLink({ href, icon, children, sparkle }: { href: string; icon
   return (
     <Link
       href={href}
-      className="press relative inline-flex h-10 items-center gap-[7px] rounded-full bg-chip pr-[15px] pl-[13px] text-[16px] font-medium tracking-[-0.02em] text-on-chip shadow-[0_0_0_1.5px_rgb(255_255_255/0.9)]"
+      className="press relative inline-flex h-10 items-center gap-[7px] rounded-full bg-chip pr-[15px] pl-[13px] text-[16px] font-[450] tracking-[-0.02em] text-on-chip shadow-[0_0_0_1.5px_rgb(255_255_255/0.9)]"
     >
       <Icon name={icon} size={18} strokeWidth={1.6} />
       {children}
@@ -204,7 +204,7 @@ export function Card({ className, children, ...rest }: ComponentProps<"section">
 /** "Send again", "History": 18px medium, tight, with one action on the right. */
 export function CardTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex min-h-7 items-center justify-between gap-3">
+    <div className="flex min-h-[27px] items-center justify-between gap-3">
       <h2 className="text-[18px] leading-none font-medium tracking-[-0.04em] text-fg">{children}</h2>
       {action}
     </div>
@@ -216,7 +216,7 @@ export function SoftPill({ className, children, ...rest }: ComponentProps<typeof
   return (
     <Link
       className={cx(
-        "press inline-flex h-7 items-center gap-1 rounded-full bg-pill-faint px-3 text-[15px] tracking-[-0.02em] text-fg",
+        "press inline-flex h-[27px] items-center gap-1 rounded-full bg-pill-faint px-3 text-[15px] tracking-[-0.02em] text-fg",
         className,
       )}
       {...rest}

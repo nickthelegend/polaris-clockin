@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { type ReactNode, useId, useState } from "react";
 import { Avatar } from "@/components/avatar";
 import { HelpButton } from "@/components/help";
@@ -8,7 +9,7 @@ import { InstallHint } from "@/components/install-hint";
 import { Sheet } from "@/components/sheet";
 import { TabBarSpacer } from "@/components/tab-bar";
 import { TabHeader } from "@/components/tab-header";
-import { Button, ButtonLink, Card, Skeleton } from "@/components/ui";
+import { Button, Card, Skeleton } from "@/components/ui";
 import { DEV_SIGNER, signOut } from "@/lib/account";
 import { useAccountState } from "@/lib/account/hooks";
 import { getProfile } from "@/lib/data";
@@ -49,9 +50,16 @@ export function Profile() {
       </Card>
 
       {account.status === "none" ? (
-        <ButtonLink href="/onboard?next=/profile" block icon="faceId" className="mt-3">
-          Create your account with Face ID
-        </ButtonLink>
+        <Link href="/onboard?next=/profile" className="press mt-3 flex items-center gap-3 rounded-card bg-surface p-3.5 pr-4 shadow-surface">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-lime text-on-lime">
+            <Icon name="faceId" size={22} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[16px] font-medium tracking-[-0.03em]">This is a sample account</span>
+            <span className="block text-[14px] text-muted">Create yours with Face ID. It takes a second.</span>
+          </span>
+          <Icon name="chevronRight" size={20} className="text-muted" />
+        </Link>
       ) : null}
 
       {/* Security */}
