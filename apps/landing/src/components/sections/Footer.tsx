@@ -36,7 +36,7 @@ export function Footer() {
               </a>
             </Rise>
             <Rise {...item(1)}>
-              <p className="mt-8 max-w-[380px] text-[16px] leading-[1.35] tracking-[-0.02em] text-footer-muted lg:mt-[48px] lg:text-[17px]">
+              <p className="mt-8 max-w-[440px] text-[15px] leading-[1.4] tracking-[-0.015em] text-footer-muted lg:mt-[48px] lg:text-[16px]">
                 {footer.blurb}
               </p>
             </Rise>
