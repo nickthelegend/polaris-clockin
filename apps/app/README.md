@@ -43,6 +43,16 @@ inlined at build time, and public.
 | `NEXT_PUBLIC_POLARIS_API_URL` | unset | Polaris for Business (e.g. `http://localhost:3100`): the relayer (`POST /api/relay`), checkout sessions and payment links (`/api/public/…`), and the network's contracts and EIP-712 domains (`/api/public/network`). Unset: the stub relayer and sample links. |
 | `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
 
+## With Polaris for Business (the real relayer)
+
+Set `NEXT_PUBLIC_POLARIS_API_URL` to the business app (`http://localhost:3100`
+locally) and every Confirm goes to its relayer, `POST /api/relay`; checkout
+links (`/pay/cs_test_…` from a merchant's `polarispay-sdk` session,
+`/pay/pl_…` from a dashboard payment link) load from its public API. Against
+a local Hardhat node also set `NEXT_PUBLIC_CHAIN_ID=31337` and
+`NEXT_PUBLIC_RPC_URL=http://127.0.0.1:<node port>`: the app refuses to sign
+for a network other than the one it was built for.
+
 ## Face ID accounts
 
 [Mera](https://mera.category.xyz) is the entire account layer: no seed phrase,
