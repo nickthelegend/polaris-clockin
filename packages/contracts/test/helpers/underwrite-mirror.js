@@ -15,6 +15,15 @@
 const UNDERWRITE_FLOOR = 520n;
 const MIN_SCORE = 300n;
 const MAX_UNDERWRITTEN_SCORE = 739n;
+
+// The cap on each signal. The contract exposes the same numbers as public
+// constants, and the suite checks the two agree.
+const MAX_AGE_POINTS = 60n;
+const MAX_ACTIVITY_POINTS = 50n;
+const MAX_BALANCE_POINTS = 50n;
+const MAX_DEFI_POINTS = 30n;
+const EXCHANGE_FUNDED_POINTS = 10n;
+
 const USD = 1_000_000n; // AUSD has 6 decimals
 
 const min = (a, b) => (a < b ? a : b);
@@ -32,11 +41,11 @@ const min = (a, b) => (a < b ? a : b);
  * @returns {{ score: number, declined: boolean }}
  */
 function scoreFromFacts(f) {
-  const age = min((BigInt(f.walletAgeDays) / 30n) * 2n, 60n);
-  const activity = min(BigInt(f.txCount) / 25n, 50n);
-  const balance = min(BigInt(f.stableBalance) / (100n * USD), 50n);
-  const defi = min(BigInt(f.defiTenureDays) / 30n, 30n);
-  const funding = f.exchangeFunded ? 10n : 0n;
+  const age = min((BigInt(f.walletAgeDays) / 30n) * 2n, MAX_AGE_POINTS);
+  const activity = min(BigInt(f.txCount) / 25n, MAX_ACTIVITY_POINTS);
+  const balance = min(BigInt(f.stableBalance) / (100n * USD), MAX_BALANCE_POINTS);
+  const defi = min(BigInt(f.defiTenureDays) / 30n, MAX_DEFI_POINTS);
+  const funding = f.exchangeFunded ? EXCHANGE_FUNDED_POINTS : 0n;
 
   const related = BigInt(f.relatedWallets);
   const cluster = related > 3n ? min((related - 3n) * 2n, 80n) : 0n;
@@ -57,5 +66,10 @@ module.exports = {
   UNDERWRITE_FLOOR,
   MIN_SCORE,
   MAX_UNDERWRITTEN_SCORE,
+  MAX_AGE_POINTS,
+  MAX_ACTIVITY_POINTS,
+  MAX_BALANCE_POINTS,
+  MAX_DEFI_POINTS,
+  EXCHANGE_FUNDED_POINTS,
   scoreFromFacts,
 };

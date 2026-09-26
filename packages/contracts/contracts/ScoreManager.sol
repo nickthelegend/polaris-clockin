@@ -14,9 +14,8 @@ interface ICollateralBoost {
  *
  * @dev Scores move on facts the protocol observes itself -- an installment
  *      paid on time, an installment paid late, a liquidation -- so credit
- *      history is earned rather than attested. Only registered writers
- *      (the LoanEngine, and the receiver for underwriting reports) may record
- *      events.
+ *      history is earned rather than attested. Only registered writers (the
+ *      LoanEngine) may record those events.
  *
  *      The one exception is the first line, which has no repayment history to
  *      read. `underwrite` takes facts about the wallet's life elsewhere, as
@@ -25,6 +24,13 @@ interface ICollateralBoost {
  *      re-derive a borrower's opening score from the report that produced it,
  *      and nobody, including us, can hand a wallet a number the formula would
  *      not give it.
+ *
+ *      The two kinds of write are two roles. A writer records repayment
+ *      events; an underwriter (the receiver that verifies DON reports) opens
+ *      first lines. Sharing one role meant the receiver could also call
+ *      `recordOnTimePayment` for any wallet and lift it past the $1,000
+ *      underwriting cap, so a bug in the receiver became unlimited credit.
+ *      Split, neither key can do the other's job.
  */
 contract ScoreManager is Ownable {
     uint16 public constant MIN_SCORE = 300;
@@ -50,6 +56,15 @@ contract ScoreManager is Ownable {
     /// be held back and replayed after the wallet's history has turned.
     uint256 public constant MAX_EVIDENCE_AGE = 15 minutes;
 
+    /// The most each signal in `scoreFromFacts` can earn. Public so the
+    /// ceiling argument can be checked rather than trusted: the floor plus
+    /// every cap must stay at or under MAX_UNDERWRITTEN_SCORE.
+    uint16 public constant MAX_AGE_POINTS = 60;
+    uint16 public constant MAX_ACTIVITY_POINTS = 50;
+    uint16 public constant MAX_BALANCE_POINTS = 50;
+    uint16 public constant MAX_DEFI_POINTS = 30;
+    uint16 public constant EXCHANGE_FUNDED_POINTS = 10;
+
     struct Profile {
         uint16 score;
         uint32 onTimePayments;
@@ -60,6 +75,10 @@ contract ScoreManager is Ownable {
         /// Set by underwriting when a fact disqualifies the wallet outright.
         /// A declined wallet gets no unsecured line; collateral still works.
         bool declined;
+        /// Set only by `underwrite`. `initialized` says the wallet has a
+        /// record; this says the DON has looked at it. While
+        /// `requireUnderwriting` is on, only this opens an unsecured line.
+        bool underwritten;
     }
 
     /**
@@ -81,25 +100,37 @@ contract ScoreManager is Ownable {
     }
 
     mapping(address => Profile) private _profiles;
+    /// May record repayment events. The LoanEngine.
     mapping(address => bool) public isWriter;
+    /// May open a first line from attested facts. The DON report receiver.
+    mapping(address => bool) public isUnderwriter;
 
     /// Optional. Unset means the protocol runs as pure credit, no collateral.
     ICollateralBoost public collateralVault;
 
     /**
-     * @notice When true, a wallet with no record gets no unsecured line.
+     * @notice When true, no wallet gets an unsecured line until it has been
+     *         underwritten.
      * @dev Off by default so a deployment behaves as it always has: a stranger
      *      reads at STARTING_SCORE and may borrow the tier that implies. On
      *      Monad that default is a faucet, since a fresh Face ID account costs
      *      nothing to create, so the deployment turns this on and every
-     *      unsecured line starts from an underwriting report instead. A record
-     *      earned by repaying still counts: that history is observed on chain,
-     *      not attested, and it is how the secured path graduates.
+     *      unsecured line starts from an underwriting report instead.
+     *
+     *      "Has a record" is not the same as "was underwritten". Every record
+     *      starts life at STARTING_SCORE, whether it was created by an on-time
+     *      payment, a late one or a liquidation, so gating on the record let a
+     *      wallet skip the DON by repaying a dust plan on the secured path, and
+     *      a secured-path default opened a $200 line a clean stranger could not
+     *      get. The gate reads `underwritten`, which only `underwrite` sets.
+     *      History earned on the secured path is not thrown away: it is folded
+     *      into the opening score when the wallet is underwritten.
      */
     bool public requireUnderwriting;
 
     event ScoreChanged(address indexed user, uint16 oldScore, uint16 newScore, string reason);
     event WriterSet(address indexed writer, bool allowed);
+    event UnderwriterSet(address indexed underwriter, bool allowed);
     event CollateralVaultSet(address indexed vault);
     event Underwritten(address indexed user, uint16 score, bool declined, uint64 observedAt);
     event RequireUnderwritingSet(bool required);
@@ -107,6 +138,7 @@ contract ScoreManager is Ownable {
     error VaultNotAContract(address vault);
 
     error NotWriter();
+    error NotUnderwriter();
     error AlreadyHasRecord();
     error StaleEvidence();
 
@@ -115,11 +147,21 @@ contract ScoreManager is Ownable {
         _;
     }
 
+    modifier onlyUnderwriter() {
+        if (!isUnderwriter[msg.sender]) revert NotUnderwriter();
+        _;
+    }
+
     constructor(address initialOwner) Ownable(initialOwner) {}
 
     function setWriter(address writer, bool allowed) external onlyOwner {
         isWriter[writer] = allowed;
         emit WriterSet(writer, allowed);
+    }
+
+    function setUnderwriter(address underwriter, bool allowed) external onlyOwner {
+        isUnderwriter[underwriter] = allowed;
+        emit UnderwriterSet(underwriter, allowed);
     }
 
     /**
@@ -141,8 +183,8 @@ contract ScoreManager is Ownable {
         emit CollateralVaultSet(address(vault));
     }
 
-    /// @notice Require an underwriting report, or earned history, before any
-    ///         unsecured line opens. See `requireUnderwriting`.
+    /// @notice Require an underwriting report before any unsecured line
+    ///         opens. See `requireUnderwriting`.
     function setRequireUnderwriting(bool required) external onlyOwner {
         requireUnderwriting = required;
         emit RequireUnderwritingSet(required);
@@ -168,15 +210,16 @@ contract ScoreManager is Ownable {
      *      ("get to 700 and your limit doubles") instead of a smooth curve
      *      nobody can reason about.
      *
-     *      Zero, whatever the score, for a wallet underwriting declined, and for
-     *      a wallet with no record at all while `requireUnderwriting` is on.
-     *      Both still reach the collateral boost through `creditLimitOf`, so the
-     *      secured path stays open to them.
+     *      Zero, whatever the score, for a wallet underwriting declined, and,
+     *      while `requireUnderwriting` is on, for any wallet not yet
+     *      underwritten, however its record came about. Both still reach the
+     *      collateral boost through `creditLimitOf`, so the secured path stays
+     *      open to them.
      */
     function baseLimitOf(address user) public view returns (uint256) {
         Profile storage p = _profiles[user];
         if (p.declined) return 0;
-        if (!p.initialized && requireUnderwriting) return 0;
+        if (requireUnderwriting && !p.underwritten) return 0;
 
         uint16 s = p.initialized ? p.score : STARTING_SCORE;
         if (s >= 800) return 5_000e6;
@@ -224,9 +267,10 @@ contract ScoreManager is Ownable {
      *
      *      Every signal is capped, so no single one can carry an approval, and
      *      a missing data source (a zero) neither rewards nor punishes. The
-     *      caps sum to 720, under MAX_UNDERWRITTEN_SCORE, and the ceiling clamp
-     *      stays anyway so that retuning a weight can never open a line above
-     *      $1,000.
+     *      floor plus every cap is 720, under MAX_UNDERWRITTEN_SCORE, so no
+     *      input reaches the ceiling clamp today. It stays anyway, so that
+     *      retuning a weight can never open a line above $1,000, and the caps
+     *      are public constants so a test can hold that sum under the ceiling.
      *
      *      Arithmetic runs in uint256 and int256 on values widened from at most
      *      64 bits, so no input can overflow: the largest possible penalty,
@@ -239,11 +283,11 @@ contract ScoreManager is Ownable {
      *      borrower asking for many credit lines.
      */
     function scoreFromFacts(Facts calldata f) public pure returns (uint16 score, bool declined) {
-        uint256 age = _min((uint256(f.walletAgeDays) / 30) * 2, 60);
-        uint256 activity = _min(uint256(f.txCount) / 25, 50);
-        uint256 balance = _min(uint256(f.stableBalance) / 100e6, 50);
-        uint256 defi = _min(uint256(f.defiTenureDays) / 30, 30);
-        uint256 funding = f.exchangeFunded ? 10 : 0;
+        uint256 age = _min((uint256(f.walletAgeDays) / 30) * 2, MAX_AGE_POINTS);
+        uint256 activity = _min(uint256(f.txCount) / 25, MAX_ACTIVITY_POINTS);
+        uint256 balance = _min(uint256(f.stableBalance) / 100e6, MAX_BALANCE_POINTS);
+        uint256 defi = _min(uint256(f.defiTenureDays) / 30, MAX_DEFI_POINTS);
+        uint256 funding = f.exchangeFunded ? EXCHANGE_FUNDED_POINTS : 0;
 
         uint256 cluster = f.relatedWallets > 3
             ? _min((uint256(f.relatedWallets) - 3) * 2, 80)
@@ -263,14 +307,24 @@ contract ScoreManager is Ownable {
 
     /**
      * @notice Open a wallet's first line from attested facts.
-     * @dev Writer-only: the receiver that verifies the DON's report calls this.
+     * @dev Underwriter-only: the receiver that verifies the DON's report calls
+     *      this.
      *
-     *      Refuses any wallet that already has a record, however it was made:
-     *      by an earlier underwrite, by a payment, or by a liquidation.
-     *      Underwriting is for the cold start only. If it could run over an
-     *      existing record, a borrower who defaulted could fetch a fresh report
-     *      of a clean-looking wallet and have the liquidation written over: a
-     *      bad record laundered through an oracle.
+     *      Runs once per wallet, and never over a record that holds a late
+     *      payment or a liquidation. If it could, a borrower who defaulted
+     *      could fetch a fresh report of a clean-looking wallet and have the
+     *      liquidation written over: a bad record laundered through an oracle.
+     *      While `requireUnderwriting` is off it also refuses any record at
+     *      all, since that record already gives the wallet a line and
+     *      underwriting is for the cold start only.
+     *
+     *      That leaves one record it accepts: while underwriting is required, a
+     *      wallet whose only history is on-time payments on the secured path.
+     *      Such a wallet has no unsecured line, and refusing it would leave it
+     *      without one for good. Its earned points are kept, added to what the
+     *      facts give, and the sum is still capped at MAX_UNDERWRITTEN_SCORE,
+     *      so however much secured history came first, a report never opens a
+     *      line above $1,000.
      *
      *      Refuses facts observed more than MAX_EVIDENCE_AGE ago, or stamped in
      *      the future. An old report is a snapshot of a wallet that may since
@@ -279,11 +333,16 @@ contract ScoreManager is Ownable {
      */
     function underwrite(address user, Facts calldata f)
         external
-        onlyWriter
+        onlyUnderwriter
         returns (uint16 score)
     {
         Profile storage p = _profiles[user];
-        if (p.initialized) revert AlreadyHasRecord();
+        if (
+            p.initialized &&
+            (p.underwritten || !requireUnderwriting || p.latePayments != 0 || p.liquidations != 0)
+        ) {
+            revert AlreadyHasRecord();
+        }
         if (f.observedAt > block.timestamp || block.timestamp - f.observedAt > MAX_EVIDENCE_AGE) {
             revert StaleEvidence();
         }
@@ -291,13 +350,26 @@ contract ScoreManager is Ownable {
         bool declined;
         (score, declined) = scoreFromFacts(f);
 
-        p.initialized = true;
+        uint16 old = STARTING_SCORE;
+        if (p.initialized) {
+            // Clean secured-path history: on-time payments only, so the score
+            // has only ever risen from STARTING_SCORE. Guarded anyway, so the
+            // fold can never underflow into a revert that locks a wallet out.
+            old = p.score;
+            uint256 earned = old > STARTING_SCORE ? old - STARTING_SCORE : 0;
+            uint256 folded = uint256(score) + earned;
+            score = folded > MAX_UNDERWRITTEN_SCORE ? MAX_UNDERWRITTEN_SCORE : uint16(folded);
+        } else {
+            p.initialized = true;
+            p.firstSeenAt = uint64(block.timestamp);
+        }
+
         p.score = score;
-        p.firstSeenAt = uint64(block.timestamp);
         p.declined = declined;
+        p.underwritten = true;
 
         emit Underwritten(user, score, declined, f.observedAt);
-        emit ScoreChanged(user, STARTING_SCORE, score, "underwritten");
+        emit ScoreChanged(user, old, score, "underwritten");
     }
 
     // -----------------------------------------------------------------
