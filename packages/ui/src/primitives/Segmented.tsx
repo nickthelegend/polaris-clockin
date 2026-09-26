@@ -5,8 +5,10 @@ import { motion, useReducedMotion } from "motion/react";
 import {
   createContext,
   useContext,
+  useEffect,
   useId,
   useRef,
+  useState,
   type HTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
@@ -306,6 +308,27 @@ export type TabListProps = HTMLAttributes<HTMLDivElement> & { block?: boolean };
 export function TabList({ className, children, block = false, ...props }: TabListProps) {
   const { variant, value, select } = useTabs();
   const ref = useRef<HTMLDivElement>(null);
+  // When the tabs overflow (a phone), fade the edge that has more to scroll to.
+  const [edge, setEdge] = useState<"none" | "end" | "start" | "both">("none");
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () => {
+      const more = el.scrollWidth - el.clientWidth;
+      if (more <= 1) return setEdge("none");
+      const atStart = el.scrollLeft <= 1;
+      const atEnd = el.scrollLeft >= more - 1;
+      setEdge(atStart ? "end" : atEnd ? "start" : "both");
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    el.addEventListener("scroll", update, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", update);
+    };
+  }, []);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const tabs = Array.from(ref.current?.querySelectorAll<HTMLElement>("[role=tab]:not([disabled])") ?? []);
     const values = tabs.map((t) => t.dataset.value ?? "");
@@ -324,6 +347,9 @@ export function TabList({ className, children, block = false, ...props }: TabLis
         variant === "segmented" && !block && "inline-flex",
         block && "w-full",
         "ui-no-scrollbar overflow-x-auto",
+        edge === "end" && "[mask-image:linear-gradient(to_right,#000_calc(100%-40px),transparent)]",
+        edge === "start" && "[mask-image:linear-gradient(to_left,#000_calc(100%-40px),transparent)]",
+        edge === "both" && "[mask-image:linear-gradient(to_right,transparent,#000_40px,#000_calc(100%-40px),transparent)]",
         className,
       )}
       {...props}
