@@ -34,10 +34,11 @@ export const env = {
       : process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID?.trim()) || undefined,
   chainId: Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "10143"),
   rpcUrl: process.env.NEXT_PUBLIC_RPC_URL?.trim() || undefined,
-  explorerUrl: (process.env.NEXT_PUBLIC_EXPLORER_URL?.trim() || "https://testnet.monadvision.com").replace(
-    /\/+$/,
-    "",
-  ),
+  /** The block explorer. A local Hardhat node (chain 31337) has none unless one is set. */
+  explorerUrl: (
+    process.env.NEXT_PUBLIC_EXPLORER_URL?.trim() ||
+    (Number(process.env.NEXT_PUBLIC_CHAIN_ID ?? "10143") === 31337 ? "" : "https://testnet.monadvision.com")
+  ).replace(/\/+$/, ""),
   /**
    * Polaris for Business, which runs the relayer (`/api/relay`) and serves
    * checkout sessions (`/api/public/sessions/{id}`), e.g. http://localhost:3100.

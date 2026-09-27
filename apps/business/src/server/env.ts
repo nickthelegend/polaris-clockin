@@ -146,7 +146,8 @@ const DEFAULT_RPC: Record<number, string> = {
 const DEFAULT_EXPLORER: Record<number, string> = {
   10143: "https://testnet.monadvision.com",
   143: "https://monadvision.com",
-  31337: "http://localhost:8545",
+  // A local Hardhat node has no explorer: receipts carry no link.
+  31337: "",
 };
 const CHAIN_NAME: Record<number, string> = { 10143: "Monad Testnet", 143: "Monad", 31337: "Local Hardhat" };
 

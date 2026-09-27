@@ -202,7 +202,7 @@ export function SettingsDesktop() {
                 wrapperClassName="mt-5 max-w-[480px]"
               />
             </PanelCard>
-            <PanelCard title="Local currency" subtitle="Shown next to dollars, for reference. You always pay in dollars.">
+            <PanelCard title="Local currency" subtitle="Shown next to dollars at sample exchange rates, for reference only. You always pay in dollars.">
               <Select
                 variant="filled"
                 label="Local currency"

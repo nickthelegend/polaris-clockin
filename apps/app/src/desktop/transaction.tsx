@@ -157,9 +157,9 @@ export function TransactionDrawerContent({ id }: { id: string }) {
         ) : null}
       </Sheet.Body>
       <Sheet.Footer className="[&>*]:flex-1">
-        {waiting ? null : (
+        {waiting || !receiptUrl(item.txHash) ? null : (
           <SecondaryButton asChild size="lg" iconRight={<ExternalLink />} className={ON_DRAWER}>
-            <a href={receiptUrl(item.txHash)} target="_blank" rel="noopener noreferrer">
+            <a href={receiptUrl(item.txHash)!} target="_blank" rel="noopener noreferrer">
               View receipt
             </a>
           </SecondaryButton>

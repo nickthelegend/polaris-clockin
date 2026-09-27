@@ -84,11 +84,13 @@ export function TransactionSheet({ id }: { id: string }) {
         />
       </Sheet.Body>
       <Sheet.Footer className="lg:[&>*]:flex-1">
-        <Button asChild variant="outline" size="lg" iconRight={<ExternalLink />}>
-          <a href={receiptUrl(item.txHash)} target="_blank" rel="noopener noreferrer">
-            View receipt
-          </a>
-        </Button>
+        {receiptUrl(item.txHash) ? (
+          <Button asChild variant="outline" size="lg" iconRight={<ExternalLink />}>
+            <a href={receiptUrl(item.txHash)!} target="_blank" rel="noopener noreferrer">
+              View receipt
+            </a>
+          </Button>
+        ) : null}
         {cancellable ? (
           <Button variant="dark" size="lg" icon={<Undo2 />} className="text-ui-down" onClick={() => setCancelling(true)}>
             Cancel link

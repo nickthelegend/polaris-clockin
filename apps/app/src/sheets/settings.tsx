@@ -40,7 +40,7 @@ export function SettingsSheet() {
         <Select
           variant="filled"
           label="Local currency"
-          hint="Shown next to dollars, for reference. You always pay in dollars."
+          hint="Shown next to dollars at sample exchange rates, for reference only. You always pay in dollars."
           value={prefs.currency ?? "auto"}
           onValueChange={(v) => setPrefs({ currency: v === "auto" ? null : v })}
           options={[

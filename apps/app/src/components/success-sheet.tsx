@@ -13,7 +13,7 @@ export type SuccessSheetProps = {
   subtitle?: ReactNode;
   rows?: KeyValue[];
   /** The explorer page: the only road there is "View receipt". */
-  receiptUrl?: string;
+  receiptUrl?: string | null;
   /** Replaces "Done" (a merchant's return, say). */
   primary?: { label: string; onClick: () => void };
   /** Extra content under the rows (a link to share). */

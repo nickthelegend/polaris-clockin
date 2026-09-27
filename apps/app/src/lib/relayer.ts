@@ -154,7 +154,8 @@ async function relay(body: Record<string, unknown>): Promise<RelayReceipt> {
     txHash: out.txHash,
     submittedAt: out.submittedAt,
     finalizedAt: out.confirmedAt ?? Date.now(),
-    explorerUrl: out.explorerUrl ?? receiptUrl(out.txHash),
+    // The server's own explorer link; null (a local chain) means there is none to show.
+    explorerUrl: out.explorerUrl === undefined ? receiptUrl(out.txHash) : out.explorerUrl,
     paymentId: out.paymentId,
     planId: out.planId,
     subscriptionId: out.subscriptionId,

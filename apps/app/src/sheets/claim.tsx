@@ -244,7 +244,7 @@ function ClaimedHere({
 }: {
   subtitle: ReactNode;
   rows: { label: string; value: string }[];
-  receiptUrl: string;
+  receiptUrl: string | null;
   onDone: () => void;
 }) {
   return (
@@ -258,11 +258,13 @@ function ClaimedHere({
         <DetailsList size="sm" items={rows} className="mt-3 w-full text-left" />
       </Sheet.Body>
       <Sheet.Footer className="[&>*]:flex-1">
-        <SecondaryButton asChild size="lg" iconRight={<ExternalLink />} className="bg-ui-surface-2 hover:bg-ui-surface-3">
-          <a href={receiptUrl} target="_blank" rel="noopener noreferrer">
-            View receipt
-          </a>
-        </SecondaryButton>
+        {receiptUrl ? (
+          <SecondaryButton asChild size="lg" iconRight={<ExternalLink />} className="bg-ui-surface-2 hover:bg-ui-surface-3">
+            <a href={receiptUrl} target="_blank" rel="noopener noreferrer">
+              View receipt
+            </a>
+          </SecondaryButton>
+        ) : null}
         <PrimaryButton size="lg" onClick={onDone}>
           Done
         </PrimaryButton>
