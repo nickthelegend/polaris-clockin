@@ -153,6 +153,23 @@ describe("chain events nobody here sent arrive through the chain sync", () => {
 });
 
 describe("subscriptions", () => {
+  it("the Subscribe permit keeps what the buyer's other subscriptions need: allowance + this plan's 12 periods", async () => {
+    const { GET: publicGet } = await import("@/app/api/public/sessions/[id]/route");
+    const session = await newSession(merchant, { amount: "9.99", modes: ["subscribe"], subscription: { interval: "month" } });
+    // The buyer already subscribes elsewhere: 30.00 still authorised to PolarisPayments.
+    env.chain.reads.allowance = (args) => {
+      const [owner, spender] = args as [string, string];
+      return owner.toLowerCase() === buyer.address.toLowerCase() && spender.toLowerCase() === ADDR.payments.toLowerCase() ? 30_000_000n : 0n;
+    };
+    const pub = (await json(await publicGet(request("GET", `/x?buyer=${buyer.address}`), params({ id: session.id })))).body.data;
+    expect(pub.buyer.subscription).toEqual({ allowance: "30000000", periodsAuthorised: 12, permitValue: String(30_000_000n + 9_990_000n * 12n) });
+
+    // A checkout without a subscription has no such block.
+    const plain = await newSession(merchant, { modes: ["now"] });
+    const other = (await json(await publicGet(request("GET", `/x?buyer=${buyer.address}`), params({ id: plain.id })))).body.data;
+    expect(other.buyer.subscription).toBeNull();
+  });
+
   it("publishes the plan on chain, subscribes, and sends subscription.charged then subscription.canceled", async () => {
     await syncChain();
     const session = await newSession(merchant, { amount: "9.99", modes: ["subscribe"], subscription: { interval: "month" } });

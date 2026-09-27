@@ -61,6 +61,13 @@ type BuyerState = {
   tokenNonce: bigint;
   /** PolarisCheckout.quotePlan(...).permitValue: what the buyer owes in total once this plan opens. */
   permitValue: bigint | null;
+  /**
+   * The Subscribe permit's value, from Polaris for Business: the buyer's
+   * current allowance to PolarisPayments (every other subscription renews
+   * from it) plus this plan's authorised periods. A permit replaces the
+   * allowance, so signing only this plan's periods would starve the others.
+   */
+  subscriptionPermitValue: bigint | null;
 };
 
 /**
@@ -69,19 +76,34 @@ type BuyerState = {
  */
 async function buyerState(link: PaymentLink, buyer: Address): Promise<BuyerState> {
   if (link.session && apiConfigured()) {
-    const s = await api<{ buyer: { checkoutNonce: string; tokenNonce: string; quote: { permitValue: string } | null } | null }>(
-      `/api/public/sessions/${encodeURIComponent(link.id)}?buyer=${buyer}`,
-    );
+    const s = await api<{
+      buyer: { checkoutNonce: string; tokenNonce: string; quote: { permitValue: string } | null; subscription?: { permitValue: string } | null } | null;
+    }>(`/api/public/sessions/${encodeURIComponent(link.id)}?buyer=${buyer}`);
     if (s.buyer) {
       return {
         checkoutNonce: BigInt(s.buyer.checkoutNonce),
         tokenNonce: BigInt(s.buyer.tokenNonce),
         permitValue: s.buyer.quote ? BigInt(s.buyer.quote.permitValue) : null,
+        subscriptionPermitValue: s.buyer.subscription ? BigInt(s.buyer.subscription.permitValue) : null,
       };
     }
   }
   const [checkoutNonce, tokenNonce] = await Promise.all([readNonce("checkout", buyer), readNonce("ausd", buyer)]);
-  return { checkoutNonce, tokenNonce, permitValue: null };
+  return { checkoutNonce, tokenNonce, permitValue: null, subscriptionPermitValue: null };
+}
+
+const allowanceAbi = parseAbi(["function allowance(address owner, address spender) view returns (uint256)"]);
+
+/** AUSD `allowance(owner, spender)`, or 0 when it isn't reachable. */
+async function readAllowance(owner: Address, spender: Address): Promise<bigint> {
+  if (!isConfigured("ausd")) return 0n;
+  try {
+    const address = await resolveContract("ausd");
+    if (address === zeroAddress) return 0n;
+    return await publicClient().readContract({ address, abi: allowanceAbi, functionName: "allowance", args: [owner, spender] });
+  } catch {
+    return 0n;
+  }
 }
 
 /** Signs a payload from one of the builders (which type-check it against viem). */
@@ -167,12 +189,15 @@ export async function payLink(
       deadline,
     }),
   );
+  // One allowance to PolarisPayments backs every subscription the buyer has: keep what the others need, add this one.
+  const permitValue =
+    state.subscriptionPermitValue ?? (await readAllowance(account.address, payments)) + offer.price * BigInt(offer.periodsAuthorised);
   const permit = await sign(
     account,
     buildPermit(tokenDomain, {
       owner: account.address,
       spender: payments,
-      value: offer.price * BigInt(offer.periodsAuthorised),
+      value: permitValue,
       nonce: state.tokenNonce,
       deadline: t + 30n * MINUTE,
     }),

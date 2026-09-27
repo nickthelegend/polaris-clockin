@@ -302,7 +302,9 @@ export async function publicSession(id: string, options: { buyer?: Address | nul
   }
 
   const successUrl = resolveUrl(session.successUrl, session.id) as string;
-  const buyer = options.buyer && session.status === "open" ? await buyerState(options.buyer, amountUnits, session.modes.includes("later"), config.payIn4) : null;
+  const subscribing = session.modes.includes("subscribe") && session.subscription ? { pricePerPeriod: amountUnits, periods: SUBSCRIPTION_PERIODS_AUTHORISED } : null;
+  const buyer =
+    options.buyer && session.status === "open" ? await buyerState(options.buyer, amountUnits, session.modes.includes("later"), config.payIn4, subscribing) : null;
   return {
     id: session.id,
     object: "checkout.session.public" as const,
@@ -330,7 +332,7 @@ export async function publicSession(id: string, options: { buyer?: Address | nul
           pricePerPeriod: formatUnits(amountUnits),
           pricePerPeriodUnits: amountUnits.toString(),
           /** Periods the buyer's permit covers up front ("a year of periods", plan §5.3). */
-          periodsAuthorised: 12,
+          periodsAuthorised: SUBSCRIPTION_PERIODS_AUTHORISED,
         }
       : null,
     chain: {
@@ -361,11 +363,35 @@ export async function publicSession(id: string, options: { buyer?: Address | nul
   };
 }
 
-/** What a buyer's signatures depend on right now: their checkout and token nonces, and the loan engine's quote. */
-async function buyerState(buyer: Address, principal: bigint, later: boolean, payIn4: ServerConfig["payIn4"]) {
+/** Periods a subscription permit covers up front ("a year of periods", plan §5.3). */
+export const SUBSCRIPTION_PERIODS_AUTHORISED = 12;
+
+const MAX_UINT256 = 2n ** 256n - 1n;
+
+/**
+ * What a buyer's signatures depend on right now: their checkout and token
+ * nonces, the loan engine's quote, and for a subscription the permit value.
+ *
+ * Every subscription a buyer has, with any merchant, draws on one allowance
+ * to PolarisPayments, and an ERC-2612 permit replaces that allowance rather
+ * than adding to it. A permit for "this plan's price x 12" would leave the
+ * buyer's earlier subscriptions with nothing to renew from (they would lapse
+ * after MAX_MISSES). So the permit value is what they have already
+ * authorised plus this plan's periods: `allowance(buyer, PolarisPayments) +
+ * price x periods`. If a renewal lands between this read and the permit, the
+ * permit restores that one period, which only ever errs towards the buyer's
+ * other subscriptions keeping going.
+ */
+async function buyerState(
+  buyer: Address,
+  principal: bigint,
+  later: boolean,
+  payIn4: ServerConfig["payIn4"],
+  subscribing: { pricePerPeriod: bigint; periods: number } | null = null,
+) {
   const chain = requireChain();
   const client = publicClient();
-  const [checkoutNonce, tokenNonce, quote] = await Promise.all([
+  const [checkoutNonce, tokenNonce, quote, allowance] = await Promise.all([
     client.readContract({ address: chain.contracts.checkout, abi: polarisCheckoutAbi, functionName: "nonces", args: [buyer] }) as Promise<bigint>,
     client.readContract({ address: chain.contracts.stablecoin, abi: iausdAbi, functionName: "nonces", args: [buyer] }) as Promise<bigint>,
     later
@@ -376,11 +402,24 @@ async function buyerState(buyer: Address, principal: bigint, later: boolean, pay
           args: [buyer, principal, payIn4.installments, BigInt(payIn4.intervalSeconds)],
         }) as Promise<{ totalOwed: bigint; interest: bigint; installmentAmount: bigint; permitValue: bigint; creditLimit: bigint; activeDebt: bigint; available: bigint; withinLimit: boolean }>).catch(() => null)
       : Promise.resolve(null),
+    subscribing
+      ? (client.readContract({ address: chain.contracts.stablecoin, abi: iausdAbi, functionName: "allowance", args: [buyer, chain.contracts.payments] }) as Promise<bigint>)
+      : Promise.resolve(null),
   ]);
+  const newPeriods = subscribing ? subscribing.pricePerPeriod * BigInt(subscribing.periods) : 0n;
   return {
     address: buyer,
     checkoutNonce: checkoutNonce.toString(),
     tokenNonce: tokenNonce.toString(),
+    /** The Subscribe permit to PolarisPayments: what the buyer already allows (their other subscriptions) plus this plan's periods. */
+    subscription:
+      subscribing && allowance !== null
+        ? {
+            allowance: allowance.toString(),
+            periodsAuthorised: subscribing.periods,
+            permitValue: (allowance > MAX_UINT256 - newPeriods ? MAX_UINT256 : allowance + newPeriods).toString(),
+          }
+        : null,
     quote: quote
       ? {
           totalOwed: quote.totalOwed.toString(),
