@@ -33,10 +33,16 @@ export function LocalEquivalent({ amount, className }: { amount: Micros; classNa
       className={cn("ui-figure text-ui-muted", className)}
       title={`Indicative only, at the Chainlink exchange rate updated ${local.age}. You always pay and get paid in dollars.`}
     >
-      <span className="sr-only">About </span>
-      <span aria-hidden>≈ </span>
-      {local.text}
-      <span className="text-[0.85em] whitespace-nowrap"> · Chainlink rate, {local.age} · indicative</span>
+      {/* Three pieces that each stay whole, so a narrow column wraps between them, never inside. */}
+      <span className="whitespace-nowrap">
+        <span className="sr-only">About </span>
+        <span aria-hidden>≈{"\u00a0"}</span>
+        {local.text}
+      </span>
+      <span className="text-[0.85em]">
+        {" "}
+        <span className="whitespace-nowrap">· Chainlink rate, {local.age}</span> <span className="whitespace-nowrap">· indicative</span>
+      </span>
     </span>
   );
 }

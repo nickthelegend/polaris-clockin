@@ -173,14 +173,17 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
         className="-mt-2 shrink-0 px-5"
       />
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-3 pt-1">
-        <Card variant="raised" radius="tile" padding="md" className="flex items-center gap-4">
-          <MerchantAvatar name={link.merchant.name} size="lg" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] text-ui-muted">Total</p>
-            <Money value={n(link.amount)} dim="cents" className="mt-1 text-[36px] leading-none font-semibold tracking-[-0.03em]" />
-            <LocalEquivalent amount={link.amount} className="mt-2 block text-[13px]" />
+        <Card variant="raised" radius="tile" padding="md">
+          <div className="flex items-center gap-4">
+            <MerchantAvatar name={link.merchant.name} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] text-ui-muted">Total</p>
+              <Money value={n(link.amount)} dim="cents" className="mt-1 text-[36px] leading-none font-semibold tracking-[-0.03em]" />
+            </div>
+            {later ? <Badge tone="lime">Pay in 4</Badge> : sub ? <Badge tone="purple">Monthly</Badge> : null}
           </div>
-          {later ? <Badge tone="lime">Pay in 4</Badge> : sub ? <Badge tone="purple">Monthly</Badge> : null}
+          {/* Under the whole row: the badge leaves the figure's column too narrow for it. */}
+          <LocalEquivalent amount={link.amount} className="mt-3 block text-[13px]" />
         </Card>
 
         {modes.length > 1 ? (
