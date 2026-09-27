@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
-import { encodeErrorResult, type Hex, parseAbi } from "viem";
+import { type AbiError, encodeErrorResult, type Hex, parseAbi, parseAbiItem, zeroAddress } from "viem";
 import { packCandidates, parseIndexerCandidates, unpackCandidates } from "../src/collections/candidates.ts";
 import { classifySkip, eventsFor, INSTALLMENT_FAILURE_REASONS } from "../src/collections/outcomes.ts";
 import { ACTION } from "../src/collections/tasks.ts";

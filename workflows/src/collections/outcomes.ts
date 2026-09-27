@@ -12,12 +12,16 @@
  *   InsufficientBalance(have, need)     → insufficient_funds   installment.failed (add money)
  *   NotDue / LoanNotActive / InvalidLoan / NotLiquidatable /
  *   SubscriptionNotActive               → stale                (nobody's fault, no event)
+ *   Error("...allowance...") / Error("...balance...")
+ *                                       → allowance_lost / insufficient_funds (a token that reverts with a message)
  *   anything else                       → other                installment.failed (reviewed by a person)
  *
  * The reasons are polarispay-sdk's `InstallmentFailureReason`, word for word,
  * so the API passes them to the merchant's `installment.failed` webhook as
  * they are. Subscriptions pull through the token, so their shortfalls arrive
- * as the token's ERC-20 errors and map the same way.
+ * as the token's ERC-20 errors and map the same way. The Envio indexer
+ * (packages/indexer/src/lib/revert.ts) classifies the same `TaskSkipped`
+ * reasons with the same words; test/dunning.test.ts holds the two together.
  */
 
 import { polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
@@ -77,6 +81,12 @@ export function classifySkip(reason: Hex): SkipReason {
         return { class: "allowance_lost", error: d.errorName, have: args[1] as bigint, need: args[2] as bigint };
       case "ERC20InsufficientBalance":
         return { class: "insufficient_funds", error: d.errorName, have: args[1] as bigint, need: args[2] as bigint };
+      case "Error": {
+        // A token that reverts with a message (OpenZeppelin 4's "ERC20: transfer amount exceeds allowance").
+        const message = String(args[0] ?? "").toLowerCase();
+        const cls: SkipClass = message.includes("allowance") ? "allowance_lost" : message.includes("balance") ? "insufficient_funds" : "other";
+        return { class: cls, error: d.errorName, have: null, need: null };
+      }
       default:
         return { class: STALE.has(d.errorName) ? "stale" : "other", error: d.errorName, have: null, need: null };
     }

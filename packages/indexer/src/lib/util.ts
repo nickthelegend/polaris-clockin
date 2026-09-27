@@ -49,12 +49,12 @@ export function cursorOf(blockNumber: number, logIndex: number, slot = 0): bigin
 /**
  * polarispay-sdk's InstallmentFailureReason, from what a skipped collection
  * asks of the buyer: top up (insufficient_funds) or sign again
- * (allowance_lost). The API, the SDK and the webhooks use this vocabulary.
+ * (allowance_lost). The API, the SDK, the webhooks and the CRE workflow use
+ * this vocabulary; a skip's `reasonAction` is already in it, or `stale`.
  */
 export type FailureReason = "insufficient_funds" | "allowance_lost" | "other";
 export function failureReasonOf(action: string | undefined): FailureReason {
-  if (action === "TOP_UP") return "insufficient_funds";
-  if (action === "RESIGN") return "allowance_lost";
+  if (action === "insufficient_funds" || action === "allowance_lost") return action;
   return "other";
 }
 

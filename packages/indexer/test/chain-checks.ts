@@ -142,8 +142,8 @@ export function chainChecks(get: () => TestIndexer, fixture: Fixture): void {
     const skipped = tasks.filter((t) => !t.executed).map((t) => [t.targetId, t.reason, t.reasonAction]);
     expect(skipped).toEqual(
       expect.arrayContaining([
-        [2n, "InsufficientBalance", "TOP_UP"],
-        [1n, "LoanNotActive", "STALE"],
+        [2n, "InsufficientBalance", "insufficient_funds"],
+        [1n, "LoanNotActive", "stale"],
       ]),
     );
     expect((await get().Installment.getOrThrow("2-0")).failedAttempts).toBe(1);

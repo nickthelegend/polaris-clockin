@@ -13,7 +13,8 @@ export type InstallmentStatus = "PENDING" | "PAID" | "WRITTEN_OFF";
 export type SendStatus = "OPEN" | "CLAIMED" | "CANCELLED" | "REFUNDED";
 export type OrderStatus = "QUOTED" | "PAID";
 /** What a skipped collection asks of the buyer. */
-export type ReasonAction = "RESIGN" | "TOP_UP" | "STALE" | "OTHER";
+/** What a skipped task asks of the buyer: the CRE collections workflow's words (polarispay-sdk's InstallmentFailureReason, plus `stale`). */
+export type ReasonAction = "allowance_lost" | "insufficient_funds" | "stale" | "other";
 /** Why a collection failed, in polarispay-sdk's words (its InstallmentFailureReason). */
 export type InstallmentFailureReason = "insufficient_funds" | "allowance_lost" | "other";
 /** Who ended a subscription, in polarispay-sdk's words. */
