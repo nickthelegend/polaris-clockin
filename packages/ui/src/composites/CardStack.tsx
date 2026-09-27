@@ -12,6 +12,10 @@ export type CardStackAction = {
   onClick?: () => void;
   /** `outline` (ref D's "+"), `mint`, `honey`, `lime`, `sky`. */
   tone?: "outline" | "mint" | "honey" | "lime" | "sky";
+  /** Can't be used yet: say why beside the card, and in `title`. */
+  disabled?: boolean;
+  /** The tooltip; defaults to the label. */
+  title?: string;
 };
 
 const ACTION_TONES = {
@@ -115,8 +119,9 @@ export function CardStack({
               key={a.label}
               type="button"
               aria-label={a.label}
-              title={a.label}
+              title={a.title ?? a.label}
               onClick={a.onClick}
+              disabled={a.disabled}
               className={cn(
                 "grid flex-1 place-items-center rounded-[22px] min-h-[76px]",
                 pressable,

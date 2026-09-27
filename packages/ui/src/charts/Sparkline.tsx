@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { useId, type SVGAttributes } from "react";
 
 import { cn } from "../lib/cn";
+import { useReducedMotionSafe } from "../lib/hooks";
 import { linePath, project, smoothPath } from "./geometry";
 
 export type SparklineProps = Omit<SVGAttributes<SVGSVGElement>, "fill"> & {
@@ -50,7 +51,8 @@ export function Sparkline({
   ...props
 }: SparklineProps) {
   const id = useId();
-  const reduced = useReducedMotion();
+  // Hydration-safe: false until mounted, so the draw-in markup matches the server.
+  const reduced = useReducedMotionSafe();
   const W = 200;
   const H = 100;
   const pad = 6;
@@ -82,6 +84,7 @@ export function Sparkline({
         </linearGradient>
         <clipPath id={`${id}-clip`}>
           <motion.rect
+            key={reveal ? "reveal" : "still"}
             x="0"
             y="-20"
             height={H + 40}

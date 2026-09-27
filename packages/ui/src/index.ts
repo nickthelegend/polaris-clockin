@@ -6,7 +6,7 @@
 // Helpers
 export { cn } from "./lib/cn";
 export { formatMoney, formatPercent, formatCompact, moneyParts, currencySymbol, groupTyped } from "./lib/format";
-export { useMediaQuery, useControllable, useScrollLock, useFocusTrap, SHEET_QUERY } from "./lib/hooks";
+export { useMediaQuery, useControllable, useScrollLock, useFocusTrap, useReducedMotionSafe, SHEET_QUERY } from "./lib/hooks";
 export { IconSlot, IconProvider, ICON_STROKE } from "./lib/icon";
 
 // Primitives
@@ -32,6 +32,14 @@ export { Table, CellStack } from "./primitives/Table";
 export type { TableProps, TableColumn, SortState } from "./primitives/Table";
 export { Logo, LogoMark } from "./primitives/Logo";
 export { Keypad, AmountDisplay, applyKey } from "./primitives/Keypad";
+export { Notice, ErrorState } from "./primitives/Notice";
+export type { NoticeProps, NoticeTone, ErrorStateProps } from "./primitives/Notice";
+export { Ticks } from "./primitives/Ticks";
+export type { TicksProps } from "./primitives/Ticks";
+export { CopyButton } from "./primitives/CopyButton";
+export type { CopyButtonProps } from "./primitives/CopyButton";
+export { Menu } from "./primitives/Menu";
+export type { MenuProps, MenuItemProps } from "./primitives/Menu";
 export type { KeypadProps, KeypadKey, AmountDisplayProps } from "./primitives/Keypad";
 
 // Composites
@@ -53,6 +61,14 @@ export { MiniCardCarousel, MINI_CARD_TINTS } from "./composites/MiniCardCarousel
 export type { MiniCardCarouselProps, MiniCard } from "./composites/MiniCardCarousel";
 export { BottomNav, AppHeader, ScreenHeader } from "./composites/Navigation";
 export type { BottomNavProps, NavItem, AppHeaderProps, ScreenHeaderProps } from "./composites/Navigation";
+export { SideNav } from "./composites/SideNav";
+export type { SideNavProps, SideNavItem } from "./composites/SideNav";
+export { PageHeader } from "./composites/PageHeader";
+export type { PageHeaderProps } from "./composites/PageHeader";
+export { CodeBlock } from "./composites/CodeBlock";
+export type { CodeBlockProps, CodeSample } from "./composites/CodeBlock";
+export { PhoneFrame } from "./composites/PhoneFrame";
+export type { PhoneFrameProps } from "./composites/PhoneFrame";
 
 // Charts
 export { Sparkline } from "./charts/Sparkline";

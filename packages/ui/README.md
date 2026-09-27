@@ -37,11 +37,11 @@ screen root `className="ui-root"` (Satoshi, the theme's ground and text).
 
 | Theme | Where | How |
 |---|---|---|
-| Dark | the default; the app, and every analytics panel | `:root` or `data-theme="dark"` |
-| Light | the web dashboard's shell (ref C) | `data-theme="light"` |
+| Dark | the default: the app, the web dashboard, the merchant landing and sign-in | `:root` or `data-theme="dark"` |
+| Light | ref C's light screens, light previews and the gallery toggle | `data-theme="light"` |
 
-Scopes nest: `<ThemeScope theme="light">` for the shell, `<Card theme="dark">`
-for a ref D panel inside it. Sheets, drawers, dialogs and select menus are
+Scopes nest: `<ThemeScope theme="light">` for a light preview, `<Card theme="dark">`
+for a dark panel inside it. Sheets, drawers, dialogs and select menus are
 portalled but take the theme of whatever opened them.
 
 Tokens (`bg-ui-*`, `text-ui-*`, `border-ui-*`): `canvas`, `surface-1..3`,
@@ -98,6 +98,11 @@ wins) and forwards refs where it renders one element.
 | `Keypad`, `applyKey` | `<Keypad onKey={(k) => setAmount((a) => applyKey(a, k))} captureKeyboard />` |
 | `AmountDisplay` | `<AmountDisplay value={amount} hint="Available $1,284.50" invalid={over} />` · shrinks as it grows, shakes when `invalid`, optional `caret` |
 | `Logo`, `LogoMark` | `<Logo height={30} />` (the team's wordmark) · `<LogoMark size={28} />` (the star) |
+| `Notice` | `<Notice tone="warn" title="Showing data from 2 minutes ago" action={<Button size="sm">Retry</Button>}>The last refresh failed.</Notice>` · `info`, `warn`, `down`, `lime`, `neutral`; why a control is disabled, a stale refresh, sample data |
+| `ErrorState` | `<ErrorState title="We couldn't load your payments" description={message} onRetry={reload} />` · announced (`role="alert"`) |
+| `Ticks` | `<Ticks done={2} total={4} />` · instalment ticks, `late` in amber, `size="sm"` for rows |
+| `CopyButton` | `<CopyButton value={address} label="payout address" />` · a fixed-size IconButton (or `variant="button"`) with a check and a toast |
+| `Menu` | `<Menu label="Account" trigger={<Avatar … />}><Menu.Header>…</Menu.Header><Menu.Item icon={<LogOut />} tone="danger" onSelect={signOut}>Sign out</Menu.Item></Menu>` · arrow keys, Home/End, Escape and Tab close, focus returns |
 
 ### Composites
 
@@ -115,10 +120,14 @@ wins) and forwards refs where it renders one element.
 | `KeyValueGrid` | `<KeyValueGrid items={[{ label: "Amount", value: "$120.00" }]} />` · `variant="sunken"` for ref C on white |
 | `DetailsList` | `<DetailsList items={[{ label: "Merchant", value: "Oat & Ember" }]} />` |
 | `TileButton` | `<TileButton tone="purple" icon={<ArrowDownLeft />} label="Receive" />` · `ink`, `purple`, `lime`, `surface` |
-| `BottomNav` | `<BottomNav floating items={tabs} value="home" linkAs={Link} />` · `variant="labelled"` (ref C), `activeTone="white"` (ref B) |
+| `BottomNav` | `<BottomNav floating items={tabs} value="home" linkAs={Link} />` · `variant="labelled"` (ref C), `activeTone="white"` (ref B), `size="sm"` (six 48px items on a phone) |
 | `AppHeader` | `<AppHeader name="Ana Ruiz" unread onBell={open} />` · `variant="greeting"` (ref C) |
 | `ScreenHeader` | `<ScreenHeader title="Send" onBack={back} action={…} />` · `variant="plain" \| "square" \| "arrow"` |
-| `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) |
+| `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) · an action can be `disabled` with a `title` saying why |
+| `SideNav` | `<SideNav items={nav} value="payments" linkAs={Link} brand={<Logo height={30} />} brandCompact={<LogoMark size={30} />} />` · the web sidebar: hidden below 768px, an icon rail with tooltips to 1279px, full from 1280px; the lime active pill slides |
+| `PageHeader` | `<PageHeader eyebrow="Good morning, Oat & Ember" title="Overview" actions={…} trailing={<Menu … />} />` |
+| `CodeBlock` | `<CodeBlock samples={[{ key: "node", label: "Node", filename: "route.ts", code }]} copyable />` · tabs, line numbers, brand-accent syntax colour; leave `copyable` off for code that doesn't run yet |
+| `PhoneFrame` | `<PhoneFrame width={300}>…live components…</PhoneFrame>` · an iPhone around real components, for marketing pages |
 | `StatCard` | `<StatCard tone="sage" icon={<Percent />} label="Sales" delta={23} value={<Money … />} spark={sales} />` · `sage`, `pink`, `honey`, `sky`, `lilac`, `lime`, `surface` |
 
 ### Charts (hand-built SVG)
@@ -157,6 +166,8 @@ the opener on close.
 
 `cn`, `formatMoney`, `formatPercent`, `formatCompact`, `moneyParts`,
 `useMediaQuery`, `useControllable`, `useScrollLock`, `useFocusTrap`,
+`useReducedMotionSafe` (reduced motion that reads `false` until hydrated, so
+server and client markup match; the charts use it for their draw-ins),
 `IconSlot`, `IconProvider`.
 
 ## Gallery

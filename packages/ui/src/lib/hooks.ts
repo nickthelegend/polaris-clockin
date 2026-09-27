@@ -219,3 +219,30 @@ export function useInheritedTheme(open: boolean, explicit?: "dark" | "light"): "
   }, [open, explicit]);
   return explicit ?? theme;
 }
+
+/* ── Reduced motion, hydration-safe ──────────────────────────────────────── */
+
+const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReduced(onChange: () => void) {
+  const mql = window.matchMedia(REDUCED_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
+/**
+ * Whether the person asked for reduced motion, reading `false` on the server
+ * and while hydrating (so the first client render matches the server HTML),
+ * and the real preference right after. Anything whose first render depends on
+ * it (a chart's draw-in `initial`) should key its animated element on the
+ * result, so it remounts in its final state when the preference arrives.
+ * Motion's own `useReducedMotion` reads the preference during hydration,
+ * which makes the server and client markup differ.
+ */
+export function useReducedMotionSafe(): boolean {
+  return useSyncExternalStore(
+    subscribeReduced,
+    () => window.matchMedia(REDUCED_QUERY).matches,
+    () => false,
+  );
+}

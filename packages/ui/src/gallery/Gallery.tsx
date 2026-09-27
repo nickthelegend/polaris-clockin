@@ -11,6 +11,7 @@ import { Toaster } from "../primitives/Toast";
 import { SheetStage } from "../overlays/BottomSheet";
 import { SectionA, SectionB, SectionC, SectionD } from "./sections-refs";
 import { SectionControls, SectionFoundations, SectionPresentation } from "./sections-kit";
+import { SectionShell } from "./sections-shell";
 import { SectionWeb } from "./sections-web";
 
 const NAV = [
@@ -19,13 +20,14 @@ const NAV = [
   { href: "#ref-b", label: "B · Findex" },
   { href: "#ref-c", label: "C · Trading" },
   { href: "#ref-d", label: "D · Sales" },
+  { href: "#shell", label: "Web shell" },
   { href: "#web", label: "Web dashboard" },
   { href: "#controls", label: "Primitives" },
   { href: "#presentation", label: "Presentation" },
 ];
 
 export type GalleryProps = {
-  /** Which app hosts it: the dashboard opens on the light shell, the app on dark. */
+  /** Which app hosts it. Both open dark: the web dashboard is dark, like the app. */
   app?: "business" | "app";
 };
 
@@ -35,11 +37,12 @@ export type GalleryProps = {
  * apps; it needs no session and no data.
  */
 export function Gallery({ app = "business" }: GalleryProps) {
-  const [shell, setShell] = useState<Theme>(app === "business" ? "light" : "dark");
+  const [shell, setShell] = useState<Theme>("dark");
   const web = app === "business";
 
   const sections = web
     ? [
+        <SectionShell key="shell" />,
         <SectionWeb key="web" />,
         <SectionD key="d" />,
         <SectionC key="c" />,
@@ -57,6 +60,7 @@ export function Gallery({ app = "business" }: GalleryProps) {
         <SectionPresentation key="presentation" />,
         <SectionControls key="controls" />,
         <SectionWeb key="web" />,
+        <SectionShell key="shell" />,
         <SectionFoundations key="foundations" />,
       ];
 
@@ -101,8 +105,8 @@ export function Gallery({ app = "business" }: GalleryProps) {
                 The Polaris component gallery
               </h1>
               <p className="mt-4 max-w-[62ch] text-[16px] leading-[1.5] text-ui-muted">
-                Every component in every variant, set out beside the reference it reproduces. The web dashboard uses the light shell
-                with dark analytics panels; the app is dark. Sheets, drawers and dialogs are live.
+                Every component in every variant, set out beside the reference it reproduces. The app and the web dashboard are both
+                dark; the light theme stays for ref C&apos;s light screens. Sheets, drawers and dialogs are live.
               </p>
             </div>
             {sections}
