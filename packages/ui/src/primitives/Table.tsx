@@ -18,8 +18,8 @@ export type TableColumn<T> = {
   /** The cell; defaults to `row[key]`. */
   render?: (row: T, index: number) => ReactNode;
   sortable?: boolean;
-  /** Drop the column on narrow screens. */
-  hideBelow?: "sm" | "md" | "lg";
+  /** Drop the column on narrow screens (`xl`: only from 1280px, e.g. beside a side column). */
+  hideBelow?: "sm" | "md" | "lg" | "xl";
   className?: string;
   headerClassName?: string;
 };
@@ -35,8 +35,9 @@ export type TableProps<T> = {
   /**
    * `lined`: the dashboard ledger, hairline rows on a white card (ref C shell).
    * `rows`: ref D's separate rounded rows on a dark panel.
+   * `plain`: ref E's borderless table straight on the panel (see DataTable).
    */
-  variant?: "lined" | "rows";
+  variant?: "lined" | "rows" | "plain";
   density?: "comfortable" | "compact";
   loading?: boolean;
   loadingRows?: number;
@@ -56,6 +57,7 @@ const HIDE: Record<NonNullable<TableColumn<unknown>["hideBelow"]>, string> = {
   sm: "hidden sm:table-cell",
   md: "hidden md:table-cell",
   lg: "hidden lg:table-cell",
+  xl: "hidden xl:table-cell",
 };
 
 const ALIGN = { left: "text-left", right: "text-right", center: "text-center" } as const;
@@ -91,9 +93,20 @@ export function Table<T>({
 }: TableProps<T>) {
   const [sortState, setSort] = useControllable<SortState>({ value: sort, defaultValue: defaultSort, onChange: onSortChange });
   const lined = variant === "lined";
-  const rowH = density === "compact" ? (lined ? "h-12" : "h-14") : lined ? "h-[60px]" : "h-16";
+  const plain = variant === "plain";
+  const rowH = plain
+    ? density === "compact"
+      ? "h-12"
+      : "h-[54px]"
+    : density === "compact"
+      ? lined
+        ? "h-12"
+        : "h-14"
+      : lined
+        ? "h-[60px]"
+        : "h-16";
 
-  const cellPad = "px-3 first:pl-4 last:pr-4 sm:px-4 sm:first:pl-5 sm:last:pr-5";
+  const cellPad = plain ? "px-3 sm:px-4 first:pl-3 last:pr-3" : "px-3 first:pl-4 last:pr-4 sm:px-4 sm:first:pl-5 sm:last:pr-5";
 
   const toggleSort = (key: string) => {
     if (!sortState || sortState.key !== key) setSort({ key, dir: "desc" });
@@ -112,8 +125,9 @@ export function Table<T>({
     <div className={cn("relative w-full overflow-x-auto font-satoshi", className)}>
       <table
         className={cn(
-          "w-full text-[14px] text-ui-text",
-          lined ? "border-collapse" : "border-separate border-spacing-y-2",
+          "w-full text-ui-text",
+          plain ? "border-separate border-spacing-0 text-[16px]" : "text-[14px]",
+          lined || plain ? (lined ? "border-collapse" : "") : "border-separate border-spacing-y-2",
         )}
       >
         <caption className={cn(showCaption ? "pb-3 text-left text-[15px] font-medium" : "sr-only")}>{caption}</caption>
@@ -128,7 +142,7 @@ export function Table<T>({
                   aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : c.sortable ? "none" : undefined}
                   style={{ width: c.width }}
                   className={cn(
-                    "h-10 text-[13px] font-medium whitespace-nowrap text-ui-muted",
+                    plain ? "h-10 text-[14px] font-medium whitespace-nowrap text-ui-muted" : "h-10 text-[13px] font-medium whitespace-nowrap text-ui-muted",
                     cellPad,
                     lined && "border-b border-ui-hairline",
                     ALIGN[c.align ?? "left"],
@@ -172,7 +186,7 @@ export function Table<T>({
                     key={c.key}
                     className={cn(
                       cellPad,
-                      lined ? "border-b border-ui-hairline" : "bg-ui-surface-2 first:rounded-l-[22px] last:rounded-r-[22px]",
+                      plain ? "" : lined ? "border-b border-ui-hairline" : "bg-ui-surface-2 first:rounded-l-[22px] last:rounded-r-[22px]",
                       c.hideBelow && HIDE[c.hideBelow],
                     )}
                   >
@@ -215,7 +229,13 @@ export function Table<T>({
                       className={cn(
                         "align-middle",
                         cellPad,
-                        lined
+                        plain
+                          ? cn(
+                              "first:rounded-l-[14px] last:rounded-r-[14px]",
+                              clickable && "group-hover/row:bg-ui-surface-1/60",
+                              selected && "bg-ui-surface-1",
+                            )
+                          : lined
                           ? "border-b border-ui-hairline group-last/row:border-b-0"
                           : cn(
                               "bg-ui-surface-2 first:rounded-l-[22px] last:rounded-r-[22px]",

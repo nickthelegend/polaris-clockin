@@ -11,11 +11,11 @@
  * Field order matters: EIP-712 hashes fields in declaration order.
  */
 
-/** PolarisCheckout: open a Pay in 4 plan. `nonce` is `PolarisCheckout.nonces(buyer)`. */
+/** PolarisCheckout: open a Pay in 4 plan. `nonce` is PolarisCheckout.nonces(buyer), shared with SubscribeIntent. */
 export const PLAN_INTENT_TYPE =
   "PlanIntent(address buyer,address merchant,uint256 principal,uint32 installments,uint64 interval,string orderId,uint256 nonce,uint256 deadline)";
 
-/** PolarisCheckout: start a subscription. Shares the buyer's nonce with PlanIntent. */
+/** PolarisCheckout: start a subscription to a merchant's plan, at the plan's own price and period. */
 export const SUBSCRIBE_INTENT_TYPE =
   "SubscribeIntent(address buyer,address merchant,uint256 planId,uint256 pricePerPeriod,uint64 periodSeconds,string orderId,uint256 nonce,uint256 deadline)";
 
@@ -30,7 +30,10 @@ export const TRANSFER_WITH_AUTHORIZATION_TYPE =
 /** ERC-2612. */
 export const PERMIT_TYPE = "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)";
 
-/** PolarisSend: the link's throwaway key names who receives the money, until a deadline. */
+/** PolarisSend: the link's throwaway key opens the link, committing to the sender and amount. */
+export const OPEN_TYPE = "Open(address sender,uint256 amount,uint64 expiresAt)";
+
+/** PolarisSend: the link's throwaway key names who receives the money, briefly. */
 export const CLAIM_TYPE = "Claim(address to,uint256 deadline)";
 
 /** PolarisSend: the sender takes an unclaimed link back. */
@@ -38,6 +41,9 @@ export const CANCEL_TYPE = "Cancel(address linkKey,uint256 deadline)";
 
 /** PolarisPayments: the subscriber leaves without holding gas. */
 export const CANCEL_SUBSCRIPTION_TYPE = "CancelSubscription(uint256 subId,uint256 deadline)";
+
+/** PolarisLoanEngine: pay a plan early. `expectedRepaid` pins the plan's state; `nonce` is PolarisLoanEngine.nonces(borrower). */
+export const REPAY_INTENT_TYPE = "RepayIntent(uint256 loanId,uint256 amount,uint256 expectedRepaid,uint256 nonce,uint256 deadline)";
 
 const AUTHORIZATION_FIELDS = [
   { name: "from", type: "address" },
@@ -92,6 +98,14 @@ export const permitTypes = {
   ],
 } as const;
 
+export const openTypes = {
+  Open: [
+    { name: "sender", type: "address" },
+    { name: "amount", type: "uint256" },
+    { name: "expiresAt", type: "uint64" },
+  ],
+} as const;
+
 export const claimTypes = {
   Claim: [
     { name: "to", type: "address" },
@@ -113,6 +127,17 @@ export const cancelSubscriptionTypes = {
   ],
 } as const;
 
+export const repayIntentTypes = {
+  RepayIntent: [
+    { name: "loanId", type: "uint256" },
+    { name: "amount", type: "uint256" },
+    { name: "expectedRepaid", type: "uint256" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+/** Every struct with the typehash preimage the contract declares for it. */
 /**
  * Every struct with the typehash preimage the app believes the contract
  * declares, and where the contract declares it (`contract`: the Solidity
@@ -156,6 +181,7 @@ export const TYPE_REGISTRY = [
     contract: "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol",
     constant: "PERMIT_TYPEHASH",
   },
+  { primaryType: "Open", types: openTypes, solidity: OPEN_TYPE, contract: "PolarisSend.sol", constant: "OPEN_TYPEHASH" },
   { primaryType: "Claim", types: claimTypes, solidity: CLAIM_TYPE, contract: "PolarisSend.sol", constant: "CLAIM_TYPEHASH" },
   { primaryType: "Cancel", types: cancelTypes, solidity: CANCEL_TYPE, contract: "PolarisSend.sol", constant: "CANCEL_TYPEHASH" },
   {
@@ -164,5 +190,12 @@ export const TYPE_REGISTRY = [
     solidity: CANCEL_SUBSCRIPTION_TYPE,
     contract: "PolarisPayments.sol",
     constant: "CANCEL_SUBSCRIPTION_TYPEHASH",
+  },
+  {
+    primaryType: "RepayIntent",
+    types: repayIntentTypes,
+    solidity: REPAY_INTENT_TYPE,
+    contract: "PolarisLoanEngine.sol",
+    constant: "REPAY_INTENT_TYPEHASH",
   },
 ] as const;

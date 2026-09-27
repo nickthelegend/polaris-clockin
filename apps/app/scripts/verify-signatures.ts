@@ -25,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import {
   type Address,
   concat,
@@ -44,9 +45,11 @@ import {
   buildCancel,
   buildCancelSubscription,
   buildClaim,
+  buildOpen,
   buildPermit,
   buildPlanIntent,
   buildReceiveWithAuthorization,
+  buildRepayIntent,
   buildSubscribeIntent,
   buildTransferWithAuthorization,
   domainFromErc5267,
@@ -204,9 +207,11 @@ const cases = [
     nonce: keccak256(toHex("transfer")),
   }),
   buildPermit(domain, { owner: buyer.address, spender: merchant, value: 201_534_246n, nonce: 3n, deadline: now }),
-  buildClaim(domain, { to: buyer.address, deadline: now + 900n }),
+  buildOpen(domain, { sender: buyer.address, amount: 50_000_000n, expiresAt: now + 604_800n }),
+  buildClaim(domain, { to: buyer.address, deadline: now + 600n }),
   buildCancel(domain, { linkKey: merchant, deadline: now }),
   buildCancelSubscription(domain, { subId: 12n, deadline: now }),
+  buildRepayIntent(domain, { loanId: 3n, amount: 151_150_684n, expectedRepaid: 50_383_562n, nonce: 0n, deadline: now + 600n }),
 ] as const;
 
 for (const typed of cases) {
@@ -254,5 +259,19 @@ await check("ERC-5267 fields 0x0f drop the unused salt", () => {
   );
   assert.deepEqual(Object.keys(d).sort(), ["chainId", "name", "verifyingContract", "version"]);
 });
+
+// The contracts' own struct list, which their suite checks against every typehash on chain.
+const contracts = createRequire(import.meta.url)("../../../packages/contracts/lib/eip712.js") as {
+  TYPES: Record<string, Record<string, { name: string; type: string }[]>>;
+  typeString: (primary: string, fields: { name: string; type: string }[]) => string;
+};
+const onChain: Record<string, { name: string; type: string }[]> = Object.assign({}, ...Object.values(contracts.TYPES));
+for (const entry of TYPE_REGISTRY) {
+  await check(`${entry.primaryType} is the struct packages/contracts signs`, () => {
+    const fields = onChain[entry.primaryType];
+    assert.ok(fields, `packages/contracts/lib/eip712.js defines ${entry.primaryType}`);
+    assert.equal(entry.solidity, contracts.typeString(entry.primaryType, fields));
+  });
+}
 
 console.log(`\n${passed} checks passed`);

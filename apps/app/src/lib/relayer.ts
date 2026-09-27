@@ -1,20 +1,23 @@
 import { type Address, type Hex, isHex, type TypedDataDomain } from "viem";
+import { ApiError, api, apiConfigured } from "./api";
 import { receiptUrl } from "./chain";
 import { mockLedger } from "./data/mock";
 import type { PaymentLink, Person } from "./data/types";
 import type { Micros } from "./money";
-import type { Authorization, Cancel, CancelSubscription, Claim, Permit, PlanIntent, SubscribeIntent } from "./sign";
+import type { Authorization, Cancel, CancelSubscription, Claim, Open, Permit, PlanIntent, RepayIntent, SubscribeIntent } from "./sign";
 
 /**
  * The relayer carries signatures to the chain (plan §5.3). The app signs; the
- * relayer, a policy-locked Privy server wallet, calls the contract and pays
- * the gas. The app never sends a transaction.
+ * relayer, a policy-locked Privy server wallet run by Polaris for Business,
+ * checks each signature, simulates the call and sends it, paying the gas. The
+ * app never sends a transaction and the buyer never holds MON.
  *
- * THIS IS A STUB. It checks each request's shape, waits about as long as
- * Monad takes to finalise, and returns a made-up receipt. It also writes to
- * the placeholder ledger so the rest of the app reflects the action. The real
- * client POSTs the same requests to the relay API, and "Paid" then comes from
- * the indexed chain event, never from the client (§5.6).
+ * With `NEXT_PUBLIC_POLARIS_API_URL` set, every request goes to
+ * `POST {api}/api/relay` (apps/business/src/server/relayer/relay.ts has the
+ * request shapes) and "Paid" comes from the transaction's own events, which
+ * the server reads from the receipt. Without it, a local stub checks shapes,
+ * waits about as long as Monad takes to finalise, and writes to the sample
+ * ledger, so the app still works as a demo offline.
  */
 
 export type Signed<T> = { message: T; signature: Hex; domain: TypedDataDomain };
@@ -26,30 +29,22 @@ export type RelayReceipt = {
   finalizedAt: number;
   /** The explorer page; the only way the buyer ever reaches it is "View receipt". */
   explorerUrl: string;
+  /** From the transaction's events, when the relayer saw them. */
+  paymentId?: string;
+  planId?: string;
+  subscriptionId?: string;
 };
 
-/** PolarisPayments.payWithAuthorization */
-export type PayNowRequest = {
-  link: PaymentLink;
-  payer: Address;
-  authorization: Signed<Authorization>;
-};
+/** PolarisCheckout.pay */
+export type PayNowRequest = { link: PaymentLink; payer: Address; authorization: Signed<Authorization> };
 
 /** PolarisCheckout.openPlan: two signatures, one Confirm. */
-export type OpenPlanRequest = {
-  link: PaymentLink;
-  intent: Signed<PlanIntent>;
-  permit: Signed<Permit>;
-};
+export type OpenPlanRequest = { link: PaymentLink; intent: Signed<PlanIntent>; permit: Signed<Permit> };
 
 /** PolarisCheckout.subscribe */
-export type SubscribeRequest = {
-  link: PaymentLink;
-  intent: Signed<SubscribeIntent>;
-  permit: Signed<Permit>;
-};
+export type SubscribeRequest = { link: PaymentLink; intent: Signed<SubscribeIntent>; permit: Signed<Permit> };
 
-/** PolarisSend.send */
+/** PolarisSend.send: the sender's authorisation, and the link key's Open. */
 export type SendRequest = {
   sender: Address;
   senderName: string;
@@ -57,6 +52,7 @@ export type SendRequest = {
   amount: Micros;
   expiresAt: bigint;
   authorization: Signed<Authorization>;
+  open: Signed<Open>;
 };
 
 /** PolarisSend.claim(linkKey, to, deadline, v, r, s): signed by the link's key, naming the recipient. */
@@ -79,12 +75,8 @@ export type CancelSubscriptionRequest = { cancel: Signed<CancelSubscription> };
 /** AUSD transferWithAuthorization: send to someone who already has Polaris. */
 export type TransferRequest = { to: Person; authorization: Signed<Authorization> };
 
-/**
- * Early repayment. The loan engine's signed early-repayment entry point isn't
- * specified yet (plan §5.2 item 5 covers scheduled collection only), so the
- * request carries the plan and the account; the typed data lands with it.
- */
-export type PayEarlyRequest = { planId: string; loanId: bigint; borrower: Address };
+/** PolarisLoanEngine.repayWithSig: pay a plan early. */
+export type PayEarlyRequest = { planId: string; loanId: bigint; borrower: Address; repay: Signed<RepayIntent> };
 
 export interface Relayer {
   payNow(request: PayNowRequest): Promise<RelayReceipt>;
@@ -98,17 +90,156 @@ export interface Relayer {
   payEarly(request: PayEarlyRequest): Promise<RelayReceipt>;
 }
 
+export type RelayErrorReason = "insufficient-funds" | "over-limit" | "invalid-signature" | "already-settled" | "expired" | "unavailable";
+
 export class RelayError extends Error {
-  readonly reason: "insufficient-funds" | "over-limit" | "invalid-signature" | "already-settled";
-  constructor(reason: RelayError["reason"], message: string) {
+  readonly reason: RelayErrorReason;
+  readonly code: string | undefined;
+  constructor(reason: RelayErrorReason, message: string, code?: string) {
     super(message);
     this.name = "RelayError";
     this.reason = reason;
+    this.code = code;
   }
 }
 
-/** True while the relayer is the stub, so callers can tolerate placeholder domains. */
-export const RELAYER_IS_STUB = true;
+/** True while the relayer is the local stub (no Polaris API configured). */
+export const RELAYER_IS_STUB = !apiConfigured();
+
+/* ── The real relayer: POST /api/relay ──────────────────────────────────── */
+
+const REASONS: Record<string, RelayErrorReason> = {
+  insufficient_funds: "insufficient-funds",
+  over_limit: "over-limit",
+  credit_unavailable: "over-limit",
+  merchant_not_eligible: "over-limit",
+  invalid_signature: "invalid-signature",
+  stale_signature: "invalid-signature",
+  signature_expired: "expired",
+  session_expired: "expired",
+  link_expired: "expired",
+  already_paid: "already-settled",
+  already_used: "already-settled",
+  link_used: "already-settled",
+  payment_in_progress: "already-settled",
+};
+
+type RelayResponse = {
+  txHash: Hex;
+  status: "submitted" | "confirmed";
+  explorerUrl: string | null;
+  submittedAt: number;
+  confirmedAt: number | null;
+  paymentId?: string;
+  planId?: string;
+  subscriptionId?: string;
+};
+
+async function relay(body: Record<string, unknown>): Promise<RelayReceipt> {
+  let out: RelayResponse;
+  try {
+    out = await api<RelayResponse>("/api/relay", { method: "POST", body });
+  } catch (error) {
+    if (error instanceof ApiError) throw new RelayError(REASONS[error.code] ?? "unavailable", error.message, error.code);
+    throw error;
+  }
+  return {
+    txHash: out.txHash,
+    submittedAt: out.submittedAt,
+    finalizedAt: out.confirmedAt ?? Date.now(),
+    explorerUrl: out.explorerUrl ?? receiptUrl(out.txHash),
+    paymentId: out.paymentId,
+    planId: out.planId,
+    subscriptionId: out.subscriptionId,
+  };
+}
+
+const str = (v: bigint | number) => v.toString();
+
+function permitBody(permit: Signed<Permit>) {
+  return { value: str(permit.message.value), deadline: str(permit.message.deadline), signature: permit.signature };
+}
+
+const httpRelayer: Relayer = {
+  payNow: ({ link, payer, authorization }) =>
+    relay({
+      type: "pay",
+      sessionId: link.id,
+      buyer: payer,
+      amount: str(authorization.message.value),
+      validAfter: str(authorization.message.validAfter),
+      validBefore: str(authorization.message.validBefore),
+      signature: authorization.signature,
+    }),
+  openPlan: ({ link, intent, permit }) =>
+    relay({
+      type: "openPlan",
+      sessionId: link.id,
+      intent: {
+        buyer: intent.message.buyer,
+        principal: str(intent.message.principal),
+        installments: str(intent.message.installments),
+        interval: str(intent.message.interval),
+        nonce: str(intent.message.nonce),
+        deadline: str(intent.message.deadline),
+      },
+      signature: intent.signature,
+      permit: permitBody(permit),
+    }),
+  subscribe: ({ link, intent, permit }) =>
+    relay({
+      type: "subscribe",
+      sessionId: link.id,
+      intent: {
+        buyer: intent.message.buyer,
+        planId: str(intent.message.planId),
+        pricePerPeriod: str(intent.message.pricePerPeriod),
+        periodSeconds: str(intent.message.periodSeconds),
+        nonce: str(intent.message.nonce),
+        deadline: str(intent.message.deadline),
+      },
+      signature: intent.signature,
+      permit: permitBody(permit),
+    }),
+  send: ({ sender, linkKey, amount, expiresAt, authorization, open }) =>
+    relay({
+      type: "send",
+      sender,
+      linkKey,
+      amount: str(amount),
+      expiresAt: str(expiresAt),
+      validAfter: str(authorization.message.validAfter),
+      validBefore: str(authorization.message.validBefore),
+      signature: authorization.signature,
+      linkSignature: open.signature,
+    }),
+  claim: ({ linkKey, claim }) => relay({ type: "claim", linkKey, to: claim.message.to, deadline: str(claim.message.deadline), signature: claim.signature }),
+  cancelSend: ({ cancel }) => relay({ type: "cancelSend", linkKey: cancel.message.linkKey, deadline: str(cancel.message.deadline), signature: cancel.signature }),
+  cancelSubscription: ({ cancel }) =>
+    relay({ type: "cancelSubscription", subId: str(cancel.message.subId), deadline: str(cancel.message.deadline), signature: cancel.signature }),
+  transfer: ({ authorization }) =>
+    relay({
+      type: "transfer",
+      from: authorization.message.from,
+      to: authorization.message.to,
+      value: str(authorization.message.value),
+      validAfter: str(authorization.message.validAfter),
+      validBefore: str(authorization.message.validBefore),
+      nonce: authorization.message.nonce,
+      signature: authorization.signature,
+    }),
+  payEarly: ({ repay }) =>
+    relay({
+      type: "repay",
+      loanId: str(repay.message.loanId),
+      amount: str(repay.message.amount),
+      expectedRepaid: str(repay.message.expectedRepaid),
+      deadline: str(repay.message.deadline),
+      signature: repay.signature,
+    }),
+};
+
+/* ── The stub: shapes only, sample ledger, no network ───────────────────── */
 
 const FINALITY_MS = 800;
 
@@ -139,7 +270,7 @@ function needBalance(amount: Micros): void {
   }
 }
 
-export const relayer: Relayer = {
+const stubRelayer: Relayer = {
   async payNow({ link, authorization }) {
     assertSignature(authorization);
     needBalance(authorization.message.value);
@@ -162,8 +293,9 @@ export const relayer: Relayer = {
     needBalance(link.modes.subscription?.price ?? link.amount);
     return settle((tx) => mockLedger.subscribe(link, tx));
   },
-  async send({ linkKey, amount, senderName, expiresAt, authorization }) {
+  async send({ linkKey, amount, senderName, expiresAt, authorization, open }) {
     assertSignature(authorization);
+    assertSignature(open);
     needBalance(amount);
     return settle((tx) => mockLedger.send(linkKey, amount, senderName, Number(expiresAt) * 1000, tx));
   },
@@ -187,7 +319,10 @@ export const relayer: Relayer = {
     needBalance(authorization.message.value);
     return settle((tx) => mockLedger.transfer(to, authorization.message.value, tx));
   },
-  async payEarly({ planId }) {
+  async payEarly({ planId, repay }) {
+    assertSignature(repay);
     return settle((tx) => mockLedger.payEarly(planId, tx));
   },
 };
+
+export const relayer: Relayer = RELAYER_IS_STUB ? stubRelayer : httpRelayer;

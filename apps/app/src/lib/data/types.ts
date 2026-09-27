@@ -156,6 +156,28 @@ export type PaymentLink = {
   /** Where "Done" returns to, if the merchant sent the buyer here. */
   successUrl: string | null;
   status: "open" | "paid" | "expired";
+  /**
+   * Set when this is a real checkout session from Polaris for Business
+   * (`/api/public/sessions/{id}`); absent for sample links.
+   */
+  session?: CheckoutSessionInfo;
+};
+
+export type CheckoutSessionInfo = {
+  /** The merchant page that opened the checkout, for `postMessage` (never "*"). */
+  returnOrigin: string;
+  cancelUrl: string | null;
+  expiresAt: number;
+  /** Why Pay in 4 isn't offered, in the buyer's words, when it isn't. */
+  payLaterUnavailable: string | null;
+  /** How it was paid, once the chain says so. */
+  payment: {
+    mode: "now" | "later" | "subscribe";
+    txHash: Hex;
+    paymentId: Hex | null;
+    planId: string | null;
+    subscriptionId: string | null;
+  } | null;
 };
 
 export type SendLinkStatus = {

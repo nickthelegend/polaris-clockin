@@ -206,10 +206,10 @@ export function SectionWeb() {
     <Section
       id="web"
       eyebrow="Web dashboard"
-      title="The merchant dashboard: a light shell with dark analytics"
-      description="Ref C's light shell with ref D's dark panels: the sales cards, customers this week, sales by mode, daily volume candles, recent sales, the payments table (rows open a Drawer), a new-link Dialog, and the payouts card."
+      title="The merchant dashboard, dark like the app"
+      description="Ref C's layout and density on the app's dark ground, with ref D's panels: the sales cards, customers this week, sales by mode, daily volume candles, recent sales, the payments table (rows open a Drawer), a new-link Dialog, and the payouts card."
     >
-      <ThemeScope theme="light" className="overflow-hidden rounded-[32px] bg-ui-canvas p-3 ring-1 ring-black/5 md:rounded-[40px] md:p-6">
+      <ThemeScope theme="dark" className="overflow-hidden rounded-[32px] bg-ui-canvas p-3 ring-1 ring-white/5 md:rounded-[40px] md:p-6">
         {/* top bar */}
         <div className="flex flex-wrap items-center gap-3 rounded-full bg-ui-surface-1 p-2 pl-5 shadow-ui-card">
           <Logo height={28} />
@@ -279,12 +279,12 @@ export function SectionWeb() {
 
         {/* analytics */}
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <Card theme="dark" variant="canvas" padding="lg" className="xl:col-span-5">
+          <Card theme="dark" padding="lg" className="xl:col-span-5">
             <SectionHeader title="Customers this week" size="lg" actionLabel="See all" onAction={() => {}} />
             <div className="ui-figure mt-2 text-[40px] leading-none font-bold tracking-[-0.03em]">+ 2.1%</div>
             <BarChart className="mt-7" label="Customers this week" data={weekCustomers} height={190} formatValue={(v) => `$ ${v.toLocaleString("en-US")}`} />
           </Card>
-          <Card theme="dark" variant="canvas" padding="lg" className="xl:col-span-7">
+          <Card theme="dark" padding="lg" className="xl:col-span-7">
             <SectionHeader title="Sales by mode" subtitle="Total growth of 26%" size="lg" />
             <div className="mt-4 flex flex-col items-center gap-8 md:flex-row md:items-center">
               <DonutChart label="Sales by mode" data={salesByMode} size={280} />
@@ -317,7 +317,7 @@ export function SectionWeb() {
               className="rounded-ui-card"
             />
           </div>
-          <Card theme="dark" variant="canvas" padding="lg" className="xl:col-span-4">
+          <Card theme="dark" padding="lg" className="xl:col-span-4">
             <SectionHeader title="Recent sales" size="lg" actionLabel="See all" onAction={() => {}} />
             <div className="mt-4 flex flex-col gap-2.5">
               {recentSales.map((s) => (
@@ -389,7 +389,7 @@ export function SectionWeb() {
 
         {/* payouts */}
         <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <Card theme="dark" variant="canvas" padding="lg" className="xl:col-span-5">
+          <Card theme="dark" padding="lg" className="xl:col-span-5">
             <CardStack
               name="Oat & Ember"
               last4="2431"

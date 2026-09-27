@@ -493,9 +493,13 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     }
 
     /// @notice True when this subscription is collectable right now.
+    /// @dev An id never subscribed reads as an Active slot due at time zero,
+    ///      so the zero subscriber is checked first. Without it this said
+    ///      "due" for every unused id, and a keeper or CRE workflow trusting it
+    ///      sent charges that could only fail.
     function isChargeDue(uint256 subId) public view returns (bool) {
         Subscription storage s = subscriptions[subId];
-        if (s.status != SubStatus.Active) return false;
+        if (s.subscriber == address(0) || s.status != SubStatus.Active) return false;
         return block.timestamp >= s.nextChargeAt;
     }
 
@@ -505,7 +509,9 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      */
     function chargeDue(uint256 subId) external nonReentrant {
         Subscription storage s = subscriptions[subId];
-        if (s.status != SubStatus.Active) revert SubscriptionNotActive();
+        // An unwritten slot reads as Active; refused here rather than panicking
+        // on its plan's zero period below.
+        if (s.subscriber == address(0) || s.status != SubStatus.Active) revert SubscriptionNotActive();
         if (block.timestamp < s.nextChargeAt) revert NotDue();
 
         Plan storage p = plans[s.planId];

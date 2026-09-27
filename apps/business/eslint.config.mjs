@@ -18,7 +18,12 @@ const config = [
     },
   },
   {
-    ignores: [".next/**", "node_modules/**", "next-env.d.ts"],
+    // Tests read JSON responses; typing every one of them adds nothing.
+    files: ["test/**/*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
+  },
+  {
+    ignores: [".next/**", "node_modules/**", "next-env.d.ts", ".data/**"],
   },
 ];
 

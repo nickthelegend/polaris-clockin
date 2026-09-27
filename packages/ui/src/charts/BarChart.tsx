@@ -1,11 +1,11 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { useRef, useState, type HTMLAttributes, type KeyboardEvent } from "react";
 
 import { cn } from "../lib/cn";
 import { formatCompact } from "../lib/format";
-import { useControllable } from "../lib/hooks";
+import { useControllable, useReducedMotionSafe } from "../lib/hooks";
 import { niceTicks } from "./geometry";
 
 export type Bar = { label: string; value: number; color?: string };
@@ -31,11 +31,11 @@ export type BarChartProps = Omit<HTMLAttributes<HTMLDivElement>, "children" | "o
   label: string;
 };
 
-/** Ref D's fills on the dark panel. */
+/** Ref D's fills on the dark panel; a theme can recolour them (ref E: olive bars, the lime selection). */
 export const BAR_COLORS = {
-  fill: "#4a6f5e",
-  low: "#6f6e48",
-  selected: "var(--ui-pink)",
+  fill: "var(--ui-bar-fill, #4a6f5e)",
+  low: "var(--ui-bar-low, #6f6e48)",
+  selected: "var(--ui-bar-selected, var(--ui-pink))",
   track: "var(--ui-track)",
 };
 
@@ -64,7 +64,8 @@ export function BarChart({
   className,
   ...props
 }: BarChartProps) {
-  const reduced = useReducedMotion();
+  // Hydration-safe: false until mounted, so the draw-in markup matches the server.
+  const reduced = useReducedMotionSafe();
   const biggest = data.reduce((best, d, i) => (d.value > (data[best]?.value ?? -Infinity) ? i : best), 0);
   const [sel, setSel] = useControllable<number>({ value: selected, defaultValue: defaultSelected ?? biggest, onChange: onSelect });
   const [hover, setHover] = useState<number | null>(null);
@@ -137,6 +138,7 @@ export function BarChart({
                   style={{ background: BAR_COLORS.track }}
                 >
                   <motion.span
+                    key={reveal ? "reveal" : "still"}
                     className="absolute inset-x-0 bottom-0 shadow-[inset_0_1px_0_rgb(255_255_255/0.12)]"
                     style={{ background: fill }}
                     initial={reveal ? { height: "0%" } : false}
@@ -154,8 +156,8 @@ export function BarChart({
                   <>
                     <span
                       aria-hidden
-                      className="absolute left-1/2 z-[1] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ui-pink"
-                      style={{ top: `${(1 - share) * 100}%` }}
+                      className="absolute left-1/2 z-[1] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+                      style={{ top: `${(1 - share) * 100}%`, background: BAR_COLORS.selected }}
                     />
                     <span
                       aria-hidden

@@ -38,6 +38,12 @@ export const env = {
     /\/+$/,
     "",
   ),
+  /**
+   * Polaris for Business, which runs the relayer (`/api/relay`) and serves
+   * checkout sessions (`/api/public/sessions/{id}`), e.g. http://localhost:3100.
+   * Unset: the relayer is a local stub and checkout links are sample data.
+   */
+  apiUrl: (process.env.NEXT_PUBLIC_POLARIS_API_URL?.trim() || "").replace(/\/+$/, "") || undefined,
   contracts: {
     ausd: address(process.env.NEXT_PUBLIC_AUSD_ADDRESS, AUSD_TESTNET),
     payments: address(process.env.NEXT_PUBLIC_PAYMENTS_ADDRESS),

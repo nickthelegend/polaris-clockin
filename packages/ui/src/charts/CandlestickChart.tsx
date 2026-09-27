@@ -41,8 +41,9 @@ export type CandlestickChartProps = Omit<HTMLAttributes<HTMLDivElement>, "childr
   animate?: boolean;
 };
 
-const UP = "var(--ui-lime-bright)";
-const DOWN = "var(--ui-purple-deep)";
+// A theme can recolour the bodies (ref E: lime up, orange down).
+const UP = "var(--ui-candle-up, var(--ui-lime-bright))";
+const DOWN = "var(--ui-candle-down, var(--ui-purple-deep))";
 const AXIS_W = 52;
 const CHIP_ROW = 52;
 
@@ -335,7 +336,7 @@ export function CandlestickChart({
             {(["o", "h", "l", "c"] as const).map((k) => (
               <span key={k} className="ui-figure">
                 <span className="mr-1 text-white/50 uppercase">{k}</span>
-                <span className={k === "c" ? (active.c >= active.o ? "text-ui-lime-bright" : "text-[#a883ff]") : "text-white"}>
+                <span className={k === "c" ? (active.c >= active.o ? "text-[var(--ui-candle-up,var(--ui-lime-bright))]" : "text-[var(--ui-candle-down,#a883ff)]") : "text-white"}>
                   {formatPrice(active[k])}
                 </span>
               </span>

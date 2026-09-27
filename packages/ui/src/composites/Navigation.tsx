@@ -29,6 +29,8 @@ export type BottomNavProps = Omit<HTMLAttributes<HTMLElement>, "onChange"> & {
   floating?: boolean;
   /** The link component for items with `href` (Next.js Link). */
   linkAs?: ElementType;
+  /** `sm` fits six 48px items on a 360px phone (the web dashboard); `md` is ref A's 56px. */
+  size?: "md" | "sm";
 };
 
 const SPRING = { type: "spring", stiffness: 480, damping: 38 } as const;
@@ -49,6 +51,7 @@ export function BottomNav({
   activeTone = "lime",
   floating = false,
   linkAs: Link = "a",
+  size = "md",
   className,
   ...props
 }: BottomNavProps) {
@@ -71,7 +74,7 @@ export function BottomNav({
           "flex items-center",
           labelled
             ? "h-[68px] w-full max-w-[360px] justify-between gap-1 rounded-full bg-[#13141f] p-2 shadow-ui-nav"
-            : "gap-1.5 rounded-full bg-ui-glass p-1.5 shadow-ui-nav backdrop-blur-xl",
+            : cn("rounded-full bg-ui-glass p-1.5 shadow-ui-nav backdrop-blur-xl", size === "sm" ? "gap-1" : "gap-1.5"),
         )}
       >
         {items.map((it) => {
@@ -100,14 +103,14 @@ export function BottomNav({
                 />
               ) : null}
               <span className={cn("relative", active ? "text-[#0f1011]" : "text-ui-muted")}>
-                <IconSlot size={22}>{it.icon}</IconSlot>
+                <IconSlot size={size === "sm" ? 20 : 22}>{it.icon}</IconSlot>
               </span>
               <span className="sr-only">{it.label}</span>
             </>
           );
           const cls = cn(
             "relative grid place-items-center rounded-full transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus",
-            labelled ? (active ? "h-[52px] px-5" : "h-[52px] px-4 hover:text-white") : cn("size-14", !active && "bg-ui-canvas/70 hover:bg-ui-surface-2"),
+            labelled ? (active ? "h-[52px] px-5" : "h-[52px] px-4 hover:text-white") : cn(size === "sm" ? "size-12" : "size-14", !active && "bg-ui-canvas/70 hover:bg-ui-surface-2"),
           );
           return (
             <li key={it.key}>

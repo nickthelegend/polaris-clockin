@@ -1,9 +1,10 @@
 # @polaris/ui
 
 The Polaris component library, shared by the consumer app (`apps/app`) and the
-merchant dashboard (`apps/business`). It reproduces the four references in
-[`docs/design/refs-v2`](../../docs/design/refs-v2) component by component; the
-contract is [`docs/design/system.md`](../../docs/design/system.md).
+merchant dashboard (`apps/business`). It reproduces the references in
+[`docs/design/refs-v2`](../../docs/design/refs-v2) component by component (refs
+A to D for the app, ref E, `ref-e-lumatrade.png`, for the merchant web app);
+the contract is [`docs/design/system.md`](../../docs/design/system.md).
 
 Open **`/gallery`** in either app to see every component in every variant,
 set out beside the reference it comes from. Captures live in
@@ -37,11 +38,12 @@ screen root `className="ui-root"` (Satoshi, the theme's ground and text).
 
 | Theme | Where | How |
 |---|---|---|
-| Dark | the default; the app, and every analytics panel | `:root` or `data-theme="dark"` |
-| Light | the web dashboard's shell (ref C) | `data-theme="light"` |
+| Dark | the default: the consumer app and every analytics panel (refs A, B, D) | `:root` or `data-theme="dark"` |
+| Light | ref C's light screens, light previews and the gallery toggle | `data-theme="light"` |
+| Ref E | the merchant web app (`apps/business`: landing, sign-in, dashboard): a dark panel on a lime canvas | `data-theme="ref-e"` on `<html>` |
 
-Scopes nest: `<ThemeScope theme="light">` for the shell, `<Card theme="dark">`
-for a ref D panel inside it. Sheets, drawers, dialogs and select menus are
+Scopes nest: `<ThemeScope theme="light">` for a light preview, `<Card theme="dark">`
+for a dark panel inside it. Sheets, drawers, dialogs and select menus are
 portalled but take the theme of whatever opened them.
 
 Tokens (`bg-ui-*`, `text-ui-*`, `border-ui-*`): `canvas`, `surface-1..3`,
@@ -52,6 +54,17 @@ button), `track`, `up`, `down`, `warn`, `info`, `purple-text`, `focus`,
 `blue`, `yellow`, `lilac`, `salmon`, `cyan`, `mint`, `teal`, `pink`, `sage`,
 `sky`, `honey`, `mint-soft`. The light theme prints gains in purple-deep and
 losses in red, as ref C does (and for AA contrast on white).
+
+Ref E adds its sampled colours as constants (so its components render in any
+theme): `frame` (the #E9FF9B canvas), `lime-button` (#B0C956), `lime-text`,
+`lime-active`, `lime-chip`, `lime-chip-strong`, `axis`, `square`, `swap`, the
+pills `pill-lime`, `pill-purple`, `pill-teal`, `pill-amber`, `pill-red`,
+`pill-neutral` (each with `-text`), the chart's `chart-top` to `chart-bottom`,
+and `shadow-ui-frame`. The `ref-e` theme itself sets the #121418 panel,
+#1D2129 cards and inputs, #37393D hairlines, white text, #8E9199 muted labels (AA on every surface),
+lime deltas, and recolours candles (lime up, orange down) and bars (olive,
+lime selected). Radii `rounded-ui-frame` 32 (the panel), `rounded-ui-swap` 30
+(the stacked cards), `rounded-ui-panel` 26 (outlined cards).
 
 Radii: `rounded-ui-card` 28, `rounded-ui-tile` 20, `rounded-ui-row` 18,
 `rounded-ui-key` 22, `rounded-ui-sheet` 32, `rounded-ui-field` 16. Shadows:
@@ -74,7 +87,7 @@ wins) and forwards refs where it renders one element.
 | `Button` | `<Button variant="lime" size="xl" block>Send</Button>` · variants `lime`, `lime-bright`, `white`, `dark`, `purple`, `violet`, `outline`, `ghost`; sizes `sm`–`xl`; `shape="rounded"` (ref B); `icon`, `iconRight`, `loading`, `asChild` |
 | `IconButton` | `<IconButton label="Notifications" icon={<Bell />} tone="surface" dot />` · tones `surface`, `ink`, `outline`, `white`, `lime`, `purple`, `glass`, `ghost`, `black`; `shape="square"` |
 | `Pill` | `<Pill tone="black" chevron onClick={open}>Main account</Pill>` · tones `ink`, `black`, `surface`, `white`, `glass`, `outline`, `lime` |
-| `Chip` | `<Chip selected={tf === "5h"} onClick={…}>5h</Chip>` · `variant="plain" \| "outline" \| "solid"`, `count` |
+| `Chip` | `<Chip selected={tf === "5h"} onClick={…}>5h</Chip>` · `variant="plain" \| "outline" \| "solid" \| "pill"` (ref E's option chip: selected is the lime button's fill with a check; hovering an unselected one only brightens its hairline), `count` |
 | `DeltaBadge` | `<DeltaBadge value={3.25} />` · `variant="chip"` with `amount` on colour, `soft`, `note="From last week"`, `tone="current"` (white on ref A's purple) |
 | `Badge` | `<Badge tone="up" dot>Paid</Badge>` · `neutral`, `lime`, `purple`, `up`, `down`, `warn`, `info`, `ink` |
 | `Avatar` | `<Avatar name="Ana Ruiz" size="lg" badge={<FlagBadge code="MX" />} />` · photo, initials on a pastel, or a brand circle (`color`, `icon`) |
@@ -95,13 +108,18 @@ wins) and forwards refs where it renders one element.
 | `EmptyState` | `<EmptyState icon={<Link2 />} title="No links yet" description="…" action={<Button>New link</Button>} />` |
 | `IconDisc` | `<IconDisc icon={<ScanFace />} />` · the round icon well that leads a confirm, status or empty state; `size="sm" \| "md" \| "lg"` (48, 56, 64) |
 | `Toaster`, `toast` | mount `<Toaster />` once; `toast({ title: "Link copied", tone: "success" })` |
-| `Table`, `CellStack` | `<Table caption="Payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · `variant="lined" \| "rows"`, sorting, loading, `empty`, `hideBelow` |
+| `Table`, `CellStack` | `<Table caption="Payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · `variant="lined" \| "rows"`, sorting, loading, `empty`, `hideBelow` (`sm` to `xl`) · `variant="plain"` is ref E's (see `DataTable`) |
 | `Keypad`, `applyKey` | `<Keypad onKey={(k) => setAmount((a) => applyKey(a, k))} captureKeyboard />` |
 | `AmountDisplay` | `<AmountDisplay value={amount} hint="Available $1,284.50" invalid={over} />` · shrinks as it grows, shakes when `invalid`, optional `caret` |
 | `Logo`, `LogoMark` | `<Logo height={30} />` (the team's wordmark) · `<LogoMark size={28} />` (the star) |
 | `SuccessCheck` | `<SuccessCheck label="Paid" />` · a disc that springs in, a ring that pulses once, a check that draws itself; `tone="lime" \| "up" \| "purple"`, `size` |
 | `PageDots` | `<PageDots count={3} index={page} onSelect={setPage} />` · ref B's onboarding dots: the current page a white bar |
 | `ScanFrame` | `<ScanFrame><video className="absolute inset-0 size-full object-cover" />…</ScanFrame>` · the 4:3 camera well with lime corner marks for a QR scanner |
+| `Notice` | `<Notice tone="warn" title="Showing data from 2 minutes ago" action={<Button size="sm">Retry</Button>}>The last refresh failed.</Notice>` · `info`, `warn`, `down`, `lime`, `neutral`; why a control is disabled, a stale refresh, sample data |
+| `ErrorState` | `<ErrorState title="We couldn't load your payments" description={message} onRetry={reload} />` · announced (`role="alert"`) |
+| `Ticks` | `<Ticks done={2} total={4} />` · instalment ticks, `late` in amber, `size="sm"` for rows |
+| `CopyButton` | `<CopyButton value={address} label="payout address" />` · a fixed-size IconButton (or `variant="button"`) with a check and a toast |
+| `Menu` | `<Menu label="Account" trigger={<Avatar … />}><Menu.Header>…</Menu.Header><Menu.Item icon={<LogOut />} tone="danger" onSelect={signOut}>Sign out</Menu.Item></Menu>` · arrow keys, Home/End, Escape and Tab close, focus returns |
 
 ### Composites
 
@@ -119,12 +137,40 @@ wins) and forwards refs where it renders one element.
 | `KeyValueGrid` | `<KeyValueGrid items={[{ label: "Amount", value: "$120.00" }]} />` · `variant="sunken"` for ref C on white |
 | `DetailsList` | `<DetailsList items={[{ label: "Merchant", value: "Oat & Ember" }]} />` |
 | `TileButton` | `<TileButton tone="purple" icon={<ArrowDownLeft />} label="Receive" />` · `ink`, `purple`, `lime`, `surface` |
-| `BottomNav` | `<BottomNav floating items={tabs} value="home" linkAs={Link} />` · `variant="labelled"` (ref C), `activeTone="white"` (ref B) |
+| `BottomNav` | `<BottomNav floating items={tabs} value="home" linkAs={Link} />` · `variant="labelled"` (ref C), `activeTone="white"` (ref B), `size="sm"` (six 48px items on a phone) |
 | `AppHeader` | `<AppHeader name="Ana Ruiz" unread onBell={open} />` · `mark` (the star before the wordmark, ref A), `logoHref` + `linkAs`, `variant="greeting"` (ref C) |
 | `ScreenHeader` | `<ScreenHeader title="Send" onBack={back} action={…} />` · `variant="plain" \| "square" \| "arrow"` |
-| `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) |
+| `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) · an action can be `disabled` with a `title` saying why |
 | `ListRow`, `ListGroup` | `<ListGroup label="Account"><ListRow icon={<Bell />} title="Notifications" description="Payments due" href="/notifications" linkAs={Link} /></ListGroup>` · settings, menus and feeds: an icon well (`tone` `surface`, `lime`, `purple`, `down`), a value, toggle or chevron; `variant="card"` (ref D) |
+| `SideNav` | `<SideNav items={nav} value="payments" linkAs={Link} brand={<Logo height={30} />} brandCompact={<LogoMark size={30} />} />` · the web sidebar: hidden below 768px, an icon rail with tooltips to 1279px, full from 1280px; the lime active pill slides |
+| `PageHeader` | `<PageHeader eyebrow="Good morning, Oat & Ember" title="Overview" actions={…} trailing={<Menu … />} />` |
+| `CodeBlock` | `<CodeBlock samples={[{ key: "node", label: "Node", filename: "route.ts", code }]} copyable />` · tabs, line numbers, brand-accent syntax colour; the right edge fades while a line runs past it; the note hides in a narrow panel so Copy stays on the tab row; leave `copyable` off for code that doesn't run yet |
+| `PhoneFrame` | `<PhoneFrame width={300}>…live components…</PhoneFrame>` · an iPhone around real components, for marketing pages |
 | `StatCard` | `<StatCard tone="sage" icon={<Percent />} label="Sales" delta={23} value={<Money … />} spark={sales} />` · `sage`, `pink`, `honey`, `sky`, `lilac`, `lime`, `surface` |
+
+### Ref E: the merchant web app (`src/trade`)
+
+The reference's own components, sized as it is at 1440 wide. The gallery opens
+with them composed into the reference itself.
+
+| Component | Usage |
+|---|---|
+| `AppFrame` | `<AppFrame><TopNav … /><main>…</main></AppFrame>` · a dark panel (a big soft shadow) floating on the lime canvas: from 1024px in 16px of lime with 24px corners, from 1280px in 32px with 32px corners; full bleed below. `floatFrom="xl"` to float only from 1280px, `"always"` for a preview |
+| `TopNav`, `NavLink`, `NavDropdown` | `<TopNav brand={<Logo />} items={nav} more={{ label: "More", items: [developers, settings] }} value="overview" linkAs={Link} actions={…} compactActions={…} sheetFooter={…} />` · the text links with the reference's "Market ⌄" dropdown; below 1024px a compact bar whose menu is a `BottomSheet` that opens tall enough for every link and the footer; `contained` holds the bar to a 1280px content column |
+| `WalletPill` | `<WalletPill address={wallet} label="payout wallet address" />` · the dark pill with an icon and the truncated 0x address; pressing it copies |
+| `PrimaryButton`, `SecondaryButton` | `<PrimaryButton size="lg" block icon={<ArrowUpFromLine />}>Withdraw $1,250.00</PrimaryButton>` · #B0C956 with a near-black label; the dark #1D2129 one with its icon after; `sm` is the nav's pill, `lg` the widget's 50px buttons |
+| `IconSquareButton` | `<IconSquareButton label="Refresh" icon={<RefreshCw />} />` · the 40px outline squares (refresh, QR, settings); `tone="solid" active` for the chart toggle's raised lime one |
+| `DeltaChip` | `<DeltaChip value={3.27} suffix="today" />` · lime on the dark lime chip, coral when negative, `variant="strong"` in the balance card, `label` for "New" |
+| `StatusPill` | `<StatusPill tone="purple">Pay in 4</StatusPill>` · `lime`, `purple`, `teal` (the reference's), `amber` (retrying, at risk), `red`, `neutral`; `icon`, `size="sm"` |
+| `TimeframeChips` | `<TimeframeChips options={["1h", "24h", "1w", "1m"]} value={tf} onValueChange={setTf} />` · a radio group; the active chip on #1D2129; options can carry labels (`All 638`) |
+| `ChartTypeToggle` | `<ChartTypeToggle value={type} onValueChange={setType} />` · line and candles |
+| `TextTabs` | `<TextTabs aria-label="Move money" options={[{ value: "withdraw", label: "Withdraw" }, …]} value={tab} onValueChange={setTab} />` · BUY / SELL: uppercase, the active one lime; a real tablist; `size="auto"` fits phones |
+| `PairHeader`, `Coin`, `CoinPair`, `PolarisCoin`, `DollarCoin` | `<PairHeader coins={[<PolarisCoin key="p" />, <DollarCoin key="d" />]} title="Sales / USD" options={metrics} value={metric} onValueChange={setMetric} trailing={<ChartTypeToggle … />} />` · overlapping round coins, the first in front; the title opens a menu when it has options; `as="h1"` for a page head; `titleClassName` (e.g. `max-sm:text-[20px]`) |
+| `GradientLineChart` | `<GradientLineChart label="Sales, last 24 hours" data={points} height={380} formatValue={usd} formatBubbleNote={null} lastLabel="Now" />` · the line runs lime yellow to orange with a warm fill; a white bubble, a glowing dot and a dashed crosshair on hover, drag and arrow keys; four round y labels from under the lowest point to over the highest (`spanTicks`); x labels on round times (`tickZone` local or UTC) as many as fit; below `compactBelow` (480px) a 48px axis with short labels (`compactNumber`: "2.5k"); all zero: a dashed baseline and `empty` (which can hold buttons) |
+| `DataTable`, `TableName` | `<DataTable caption="Recent payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · borderless on the panel, muted headers, 54px rows; `TableName` is the small round icon and the name |
+| `SwapCard`, `SwapToggle`, `SwapStack` | `<SwapStack top={<SwapCard coin={<PolarisCoin size={42} />} symbol="AUSD" caption="You send" value={amount} onValueChange={setAmount} metaLabel="Balance" meta="3,196.97" />} bottom={…} toggle={<SwapToggle label="Switch" onClick={swap} />} />` · the stacked #1D2129 cards with the round button over the seam; the figure can be an input |
+| `BalanceSummaryCard` | `<BalanceSummaryCard label="Available balance" value="$3,196.97" delta={7.45} stats={[{ label: "Network fee", value: "$0.00" }, …]} />` · the outlined card with its chip and the stats row |
+| `PanelCard` | `<PanelCard title="Customers this week" action={<SeeAll />}>…</PanelCard>` · ref E's card for what the reference doesn't show: `variant="outline"` (the summary card's border) or `filled` (#1D2129) |
 
 ### Charts (hand-built SVG)
 
@@ -162,6 +208,8 @@ the opener on close.
 
 `cn`, `formatMoney`, `formatPercent`, `formatCompact`, `moneyParts`,
 `useMediaQuery`, `useControllable`, `useScrollLock`, `useFocusTrap`,
+`useReducedMotionSafe` (reduced motion that reads `false` until hydrated, so
+server and client markup match; the charts use it for their draw-ins),
 `IconSlot`, `IconProvider`.
 
 ## Gallery
