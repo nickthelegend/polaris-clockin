@@ -178,7 +178,7 @@ export function getIndexedEvents({ sample, payments, plans }: { sample: boolean;
   if (sample) return { source: "placeholder", data: placeholderIndexedEvents(payments, plans) };
   return {
     source: "not_connected",
-    reason: "Payments, plans and payouts stream in here as the Envio indexer picks them up from Monad, a second or so after they settle.",
+    reason: "The Envio indexer for Polaris isn't streaming to this dashboard yet. Your payments and plans already come straight from Monad, through this server's own chain sync.",
   };
 }
 

@@ -82,7 +82,7 @@ export function TxLink({ hash, sample }: { hash: string | null; sample: boolean 
       </a>
     );
   }
-  return <span className="text-ui-muted">{sample ? "Sample: no transaction" : "Waiting for the indexer"}</span>;
+  return <span className="text-ui-muted">{sample ? "Sample: no transaction" : "Not on chain yet"}</span>;
 }
 
 /** Download rows as a CSV file (quoted, with a header). */
