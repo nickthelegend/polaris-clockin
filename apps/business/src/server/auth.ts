@@ -348,15 +348,20 @@ export function withPublic<Ctx = unknown>(handler: Handler<null, Ctx>) {
   return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit: LIMITS.publicPerIp });
 }
 
+/** Whether the request carries `Authorization: Bearer <CRON_SECRET>` (constant time; false when unset). */
+export function hasCronSecret(req: Request): boolean {
+  const secret = getConfig().cronSecret;
+  if (!secret) return false;
+  const a = Buffer.from(bearer(req) ?? "");
+  const b = Buffer.from(secret);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /** Scheduler routes: `Authorization: Bearer <CRON_SECRET>`. Closed when unset. */
 export function withCron<Ctx = unknown>(handler: Handler<null, Ctx>) {
   return wrap<null, Ctx>(async (req) => {
-    const secret = getConfig().cronSecret;
-    const given = bearer(req);
-    if (!secret) throw new HttpError(503, "not_configured", "CRON_SECRET isn't set, so scheduled jobs are closed.");
-    const a = Buffer.from(given ?? "");
-    const b = Buffer.from(secret);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) throw new HttpError(401, "unauthenticated", "Wrong cron secret.");
+    if (!getConfig().cronSecret) throw new HttpError(503, "not_configured", "CRON_SECRET isn't set, so scheduled jobs are closed.");
+    if (!hasCronSecret(req)) throw new HttpError(401, "unauthenticated", "Wrong cron secret.");
     return null;
   }, handler);
 }

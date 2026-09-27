@@ -3,7 +3,7 @@
  * starts the background loops (chain sync, late receipts, webhook retries,
  * automatic payouts) unless POLARIS_WORKERS=0; serverless deployments use
  * `/api/cron/tick` instead. A misconfiguration is logged, never fatal: the
- * dashboard and the API still start, and /api/health says what's missing.
+ * dashboard and the API still start, and /api/health tells the operator what is missing.
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;

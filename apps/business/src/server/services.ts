@@ -372,6 +372,7 @@ export async function setAutoPayouts(auth: AuthedMerchant, input: AutoPayoutsInp
     try {
       policyId = await createPayoutPolicy(merchant.id, payoutAddress);
     } catch (error) {
+      if (error instanceof HttpError) throw error;
       console.error("[payouts] policy creation failed", error);
       throw new HttpError(502, "privy_unavailable", "We couldn't set up the payout policy with Privy. Try again.");
     }

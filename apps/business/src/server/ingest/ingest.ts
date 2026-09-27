@@ -145,12 +145,57 @@ export async function ingestLogs(logs: readonly Log[]): Promise<IngestSummary> {
         summary.events += await handle(log, ctx);
         summary.handled++;
       } catch (error) {
+        if (await deadLetter(log, error)) {
+          // Left claimed: skipped from now on, so the logs behind it (and the cursor) move on.
+          summary.skipped++;
+          continue;
+        }
         await getDb().processedLogs.delete(`${log.txHash}:${log.logIndex}`);
         throw error;
       }
     }
   }
   return summary;
+}
+
+/** How many times a log's handler may fail before the log is set aside. */
+export const MAX_LOG_ATTEMPTS = 5;
+
+/**
+ * Count a failed attempt at a log. Returns true once it has failed
+ * MAX_LOG_ATTEMPTS times: it is then dead-lettered (recorded in
+ * `failedLogs` with `deadAt`) instead of holding the chain sync forever.
+ * Until then the caller releases its claim and the sync retries it.
+ */
+async function deadLetter(log: Decoded, error: unknown): Promise<boolean> {
+  const db = getDb();
+  const id = `${log.txHash}:${log.logIndex}`;
+  const at = new Date().toISOString();
+  const message = error instanceof Error ? error.message : String(error);
+  let record = await db.failedLogs.update(id, (f) => ({ ...f, attempts: f.attempts + 1, lastError: message, lastFailedAt: at }));
+  if (!record) {
+    try {
+      record = await db.failedLogs.insert({
+        id,
+        txHash: log.txHash,
+        logIndex: log.logIndex,
+        blockNumber: log.blockNumber,
+        event: `${log.contract}.${log.eventName}`,
+        attempts: 1,
+        lastError: message,
+        firstFailedAt: at,
+        lastFailedAt: at,
+        deadAt: null,
+      });
+    } catch (e) {
+      if (!isDuplicateKeyError(e)) throw e;
+      record = await db.failedLogs.update(id, (f) => ({ ...f, attempts: f.attempts + 1, lastError: message, lastFailedAt: at }));
+    }
+  }
+  if (!record || record.attempts < MAX_LOG_ATTEMPTS) return false;
+  await db.failedLogs.update(id, (f) => ({ ...f, deadAt: f.deadAt ?? at }));
+  console.error(`[ingest] ${record.event} at ${id} failed ${record.attempts} times: set aside (failed_logs). Last error: ${message}`);
+  return true;
 }
 
 async function claim(log: Decoded): Promise<boolean> {

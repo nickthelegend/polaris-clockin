@@ -78,6 +78,13 @@ export type ServerConfig = {
   /** Per-merchant Pay in 4 cap set on activation, in AUSD base units. */
   activationCapUnits: bigint;
   payoutSigner: { signerId: string; authorizationKey: string } | null;
+  /**
+   * The offline admin key quorum that owns our Privy policies
+   * (PRIVY_ADMIN_QUORUM_ID, from setup-relayer). Without it a merchant's
+   * payout policy is owned by the app, and the app secret alone could
+   * rewrite its destination: production refuses to create one.
+   */
+  adminQuorumId: string | null;
   privyDisabled: boolean;
   keyPepper: string | undefined;
   dbUrl: string;
@@ -326,6 +333,7 @@ function build(): ServerConfig {
     activator: activatorFrom(chain),
     activationCapUnits: BigInt(int("MERCHANT_ACTIVATION_CAP_USD", 1_000)) * 1_000_000n,
     payoutSigner: signerId && signerKey ? { signerId, authorizationKey: signerKey } : null,
+    adminQuorumId: env("PRIVY_ADMIN_QUORUM_ID") ?? null,
     privyDisabled: flag("POLARIS_DISABLE_PRIVY"),
     keyPepper: env("POLARIS_KEY_PEPPER"),
     dbUrl: env("POLARIS_DB_URL") ?? `sqlite:${join(/*turbopackIgnore: true*/ process.cwd(), ".data", "polaris.db")}`,
@@ -370,6 +378,9 @@ export function productionProblems(config = getConfig()): string[] {
   if (!config.keyPepper) problems.push("POLARIS_KEY_PEPPER is not set: secret keys would be stored as plain SHA-256.");
   if (!config.cronSecret) problems.push("CRON_SECRET is not set: the cron routes are closed.");
   if (config.relayer.mode === "local") problems.push("The relayer signs with a raw key.");
+  if (config.payoutSigner && !config.adminQuorumId) {
+    problems.push("PRIVY_ADMIN_QUORUM_ID is not set: automatic payout policies would be owned by the app, and the app secret alone could redirect them (they are refused until it is set).");
+  }
   if (config.trustedProxies === 0) {
     problems.push("POLARIS_TRUSTED_PROXIES is not set: per-IP rate limits can't tell a client's own X-Forwarded-For from the one our proxy wrote.");
   }

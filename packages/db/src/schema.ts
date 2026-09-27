@@ -437,6 +437,24 @@ export type WebhookDeliveryRecord = {
 export type ChainCursorRecord = { id: string; block: number; updatedAt: IsoDate };
 /** A chain log we have handled: `<txHash>:<logIndex>`. Claimed before handling, released if handling fails. */
 export type ProcessedLogRecord = { id: string; txHash: Hex; blockNumber: number; at: IsoDate };
+/**
+ * A chain log whose handler failed: `<txHash>:<logIndex>`. After a few
+ * failures it is dead-lettered (`deadAt`), left claimed and skipped, so one
+ * bad log can't hold the chain-sync cursor (and every event behind it) for
+ * good. Kept for someone to look at and replay.
+ */
+export type FailedLogRecord = {
+  id: string;
+  txHash: Hex;
+  logIndex: number;
+  blockNumber: number;
+  event: string;
+  attempts: number;
+  lastError: string;
+  firstFailedAt: IsoDate;
+  lastFailedAt: IsoDate;
+  deadAt: IsoDate | null;
+};
 export type CollectorRunRecord = {
   id: string;
   lastRunAt: IsoDate | null;
@@ -585,6 +603,11 @@ export const COLLECTIONS = {
     id: (d: CollectorRunRecord) => d.id,
     indexes: {},
   } satisfies CollectionSpec<CollectorRunRecord>,
+  failedLogs: {
+    name: "failed_logs",
+    id: (d: FailedLogRecord) => d.id,
+    indexes: { blockNumber: (d: FailedLogRecord) => d.blockNumber, dead: (d: FailedLogRecord) => d.deadAt !== null },
+  } satisfies CollectionSpec<FailedLogRecord>,
 } as const;
 
 /** Every collection, typed, over one store. */
@@ -607,6 +630,7 @@ export function collections(store: Store) {
     cursors: store.collection(COLLECTIONS.cursors),
     processedLogs: store.collection(COLLECTIONS.processedLogs),
     collectorRuns: store.collection(COLLECTIONS.collectorRuns),
+    failedLogs: store.collection(COLLECTIONS.failedLogs),
   };
 }
 

@@ -47,6 +47,29 @@ export function newRequestId(): string {
 
 const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 
+/**
+ * The body as text, reading no more than `maxBytes`: a chunked body carries
+ * no Content-Length, and `req.text()` would buffer all of it before we could
+ * measure it. The stream is cancelled as soon as it runs over.
+ */
+async function readLimited(req: Request, maxBytes: number): Promise<string> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new HttpError(413, "too_large", "The request body is too large.");
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 /** Parse a JSON object body, refusing anything large, malformed or not an object. */
 export async function readJson(req: Request, { maxBytes = DEFAULT_MAX_BODY_BYTES } = {}): Promise<Record<string, unknown>> {
   const type = req.headers.get("content-type") ?? "";
@@ -56,8 +79,7 @@ export async function readJson(req: Request, { maxBytes = DEFAULT_MAX_BODY_BYTES
   const declared = Number(req.headers.get("content-length") ?? "0");
   if (declared > maxBytes) throw new HttpError(413, "too_large", "The request body is too large.");
 
-  const text = await req.text();
-  if (Buffer.byteLength(text) > maxBytes) throw new HttpError(413, "too_large", "The request body is too large.");
+  const text = await readLimited(req, maxBytes);
 
   let parsed: unknown;
   try {
