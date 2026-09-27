@@ -134,7 +134,11 @@ SubscriptionStarted(bytes32 indexed orderKey, address indexed merchant, address 
 NonceInvalidated(address indexed buyer, uint256 nonce)
 ```
 
-Instalment *i* (0-based) of a plan is due at `firstDueAt + i * interval`. Errors: `InvalidSignature`,
+Instalment *i* (0-based) of a plan is due at `firstDueAt + i * interval`, and `firstDueAt` is one
+interval after the plan opens: **nothing is taken from the buyer at checkout** (no down payment), so a
+Pay in 4 screen or receipt must not show a "paid today" row. Each instalment is a step of the engine's
+ceiling ladder, `thresholdFor(k) - thresholdFor(k - 1)` with `thresholdFor(k) = ceil(totalOwed * k / n)`
+($200 weekly: 50.383562, 50.383561, 50.383562, 50.383561). Errors: `InvalidSignature`,
 `InvalidAccountNonce(account, current)`, `SignatureExpired`, `SignatureWindowTooLong`,
 `OrderAlreadySettled(orderKey)`, `WrongAmount(quoted, offered)`, `PlanMismatch(planId)`, `EmptyOrderId`,
 `ZeroAddress`, `EnforcedPause`; the engine's `ExceedsCreditLimit`, `InsufficientAllowance(have, need)`,

@@ -182,6 +182,28 @@ describe("PolarisCheckout", () => {
       expect(q3.withinLimit).to.equal(false);
     });
 
+    it("takes nothing from the buyer at checkout: the first of four instalments falls due one interval later", async () => {
+      // What the app and the SDK must disclose. There is no down payment, so
+      // no "paid today" row: instalment i falls due at start + (i + 1) * interval,
+      // and the amounts follow the engine's ceiling ladder, not floor plus a
+      // remainder on the last.
+      const before = await s.ausd.balanceOf(s.buyer.address);
+      const { tx } = await openPlan();
+      const receipt = await (await tx).wait();
+      const startedAt = BigInt((await ethers.provider.getBlock(receipt.blockNumber)).timestamp);
+      expect(await s.ausd.balanceOf(s.buyer.address)).to.equal(before, "nothing collected at checkout");
+
+      const opened = receipt.logs.map((l) => { try { return s.checkout.interface.parseLog(l); } catch { return null; } }).find((e) => e?.name === "PlanOpened");
+      expect(opened.args.firstDueAt).to.equal(startedAt + BigInt(WEEK));
+      for (let i = 0; i < 4; i++) {
+        expect(await s.engine.installmentDueAt(1, i)).to.equal(startedAt + BigInt((i + 1) * WEEK));
+      }
+      const steps = [];
+      for (let k = 1; k <= 4; k++) steps.push((await s.engine.thresholdFor(1, k)) - (await s.engine.thresholdFor(1, k - 1)));
+      expect(steps).to.deep.equal([50_383_562n, 50_383_561n, 50_383_562n, 50_383_561n]);
+      expect(await s.engine.isInstallmentDue(1)).to.equal(false);
+    });
+
     it("a second plan opens with a permit sized for both, and the first keeps its allowance", async () => {
       const first = await openPlan();
       await first.tx;
