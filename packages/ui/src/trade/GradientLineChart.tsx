@@ -213,8 +213,8 @@ export function GradientLineChart({
               </clipPath>
             </defs>
 
-            {/* y axis */}
-            {ticks.map((t) => (
+            {/* y axis (none over an all-zero line: there is no scale to read) */}
+            {(allZero ? [] : ticks).map((t) => (
               <text
                 key={t}
                 x={0}
