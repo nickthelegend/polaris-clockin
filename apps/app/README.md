@@ -129,10 +129,10 @@ out again even when the browser's Back removed it.
 
 | Route | Presentation | What it is |
 |---|---|---|
-| `/` | tab | Home (ref A): the lime balance card, quick transfer, recent transactions |
+| `/` | tab | Home (ref A): the lime balance card, quick transfer, recent activity |
 | `/insights` | tab | My spending, Expenses by category, and `?view=plans`: Pay in 4, subscriptions, paid off |
 | `/cards` | tab | Ref D's balance card with side squares, the three accounts, details |
-| `/activity` | tab | Every transaction, grouped by day, with filter chips and Filters |
+| `/activity` | tab | All activity, grouped by day, with filter chips and Filters |
 | `/profile` | tab | Who you are, how you sign in, settings, log out |
 | `/send` | full sheet | Ref A's transfer: who, from which account, the amount, the keypad; a link (`/claim#k=…`) or straight to a Polaris account |
 | `/receive` | half sheet | Your code and link for getting paid |
@@ -141,7 +141,7 @@ out again even when the browser's Back removed it.
 | `/pay/[id]` | full sheet | Checkout (ref C): Pay now, Pay in 4 or Subscribe, the limit, Raise your limit |
 | `/claim` | full sheet | Reads the link's fragment, which never reaches a server; claim with one Face ID |
 | `/accounts` | half sheet | Select account (the card carousel); which one Home shows |
-| `/activity/[id]` | half sheet | Transaction detail and *View receipt* |
+| `/activity/[id]` | half sheet | Payment details and *View receipt*; an unclaimed send link can be cancelled here |
 | `/plans/[id]` | half, drags to full | Plan detail and *Pay early* |
 | `/credit` | full sheet | Credit line (ref B): active plans, upcoming payments |
 | `/credit/score` | full sheet | Credit score, line or candles, week by week |
@@ -156,8 +156,15 @@ opened over another stacks above it, with its own dimmed backdrop.
 
 The buyer never reads *wallet, address, seed phrase, passkey, sign, approve,
 transaction, gas, MON, AUSD, USDC, token, blockchain, on-chain* or *Monad*. The
-only exception is the optional *Raise your limit* step, which says "wallet"
-because it is for people who already have one.
+exceptions are the optional *Raise your limit* step, which says "wallet"
+because it is for people who already have one, and Home's small "USD · AUSD"
+tag, which names what the dollars are held in (plan.md, "Words the buyer never
+sees").
+
+Pay in 4 charges nothing at checkout, as the contracts do: the merchant is paid
+from the credit pool, and payment 1 is due one interval after the plan opens
+(`PolarisLoanEngine.installmentDueAt(i) = startedAt + (i + 1) × interval`).
+$200 at 10% a year over four weeks is 4 × $50.38, $1.53 of interest.
 
 ## Code map
 

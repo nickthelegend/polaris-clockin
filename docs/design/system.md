@@ -144,7 +144,8 @@ teal `#63B59C`, pink `#F8D2D1`, sage `#B0CCC0`, sky `#C5DBF2`.
         two pins)
    - Then Face ID account creation (Mera).
 2. **Home (ref A screen 1).**
-   - `AppHeader` with the Polaris mark and wordmark, the bell and the avatar.
+   - `AppHeader` with the Polaris wordmark (it carries its own star, so no
+     separate `LogoMark`), the bell and the avatar.
    - A lime `BalanceCard`:
      - a "Main account ▾" dark pill, and bolt and pencil round buttons
      - "USD · AUSD" labels, then `$1,284.50` with a +2.1% delta
