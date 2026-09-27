@@ -111,12 +111,15 @@ export const developers = {
       code: `"use client";
 import { PolarisCheckoutButton } from "polarispay-sdk/react";
 
+// Your /api/checkout route creates the session (Node tab) and returns it.
 export function Checkout({ cart }: { cart: { id: string; title: string; total: string } }) {
   return (
     <PolarisCheckoutButton
       publishableKey={process.env.NEXT_PUBLIC_POLARIS_KEY!}
       amount={cart.total}
-      createSession={() => fetch("/api/checkout", { method: "POST", body: JSON.stringify(cart) }).then((r) => r.json())}
+      createSession={() =>
+        fetch("/api/checkout", { method: "POST", body: JSON.stringify(cart) }).then((r) => r.json())
+      }
       onSuccess={() => location.assign("/thanks")}
     />
   );
@@ -130,19 +133,24 @@ export function Checkout({ cart }: { cart: { id: string; title: string; total: s
       code: `import express from "express";
 import { createPolarisServer } from "polarispay-sdk/server";
 
-const polaris = createPolarisServer({ secretKey: process.env.POLARIS_SECRET_KEY!, baseUrl: process.env.POLARIS_BASE_URL! });
+const polaris = createPolarisServer({
+  secretKey: process.env.POLARIS_SECRET_KEY!, // sk_test_… from Developers
+  baseUrl: process.env.POLARIS_BASE_URL!, // this dashboard's URL
+});
 const app = express();
 
 app.post("/checkout", express.urlencoded({ extended: false }), async (req, res) => {
+  const { id, title, total } = req.body;
   const session = await polaris.checkout.sessions.create(
-    { amount: req.body.total, description: req.body.title, modes: ["now", "later"], successUrl: "https://your.shop/thanks", orderId: req.body.id },
-    { idempotencyKey: req.body.id },
+    { amount: total, description: title, orderId: id, successUrl: "https://your.shop/thanks" },
+    { idempotencyKey: id },
   );
   res.redirect(303, session.url);
 });
 
 app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
-  const event = polaris.webhooks.verify(req.body, req.headers["polaris-signature"], process.env.POLARIS_WEBHOOK_SECRET!);
+  const signature = req.headers["polaris-signature"];
+  const event = polaris.webhooks.verify(req.body, signature, process.env.POLARIS_WEBHOOK_SECRET!);
   if (event.type === "payment.succeeded" || event.type === "plan.opened") fulfil(event.data.orderId);
   res.sendStatus(204);
 });`,
@@ -152,7 +160,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
       label: "HTML",
       filename: "checkout.html",
       language: "html",
-      code: `<!-- Posts to the /checkout route in the Node tab, which redirects to Polaris -->
+      code: `<!-- Posts to /checkout in the Node tab, which redirects to Polaris -->
 <form action="/checkout" method="post">
   <input type="hidden" name="id" value="INV-2041" />
   <input type="hidden" name="title" value="Brand identity package" />

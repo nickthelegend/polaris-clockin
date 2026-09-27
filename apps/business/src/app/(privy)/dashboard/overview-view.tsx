@@ -324,7 +324,7 @@ function RecentSales({ payments, sample, className }: { payments?: Payment[]; sa
       ) : recent.length === 0 ? (
         <PanelEmpty icon={<Activity />} title="No sales yet" description="Your latest payments land here the second they settle." />
       ) : (
-        <div className="mt-5 grid gap-2.5">
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-2.5">
           {recent.map((p) => (
             <TxRow
               key={p.id}

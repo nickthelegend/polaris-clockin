@@ -50,12 +50,16 @@ function checkAddress(raw: string, own: string | null): { address: Hex } | { err
   return { address };
 }
 
+/** Payouts shown at a time in the history. */
+const HISTORY_PAGE = 8;
+
 export function PayoutsView() {
   const { merchant } = useMerchant();
   const sample = useSample();
   const ready = useReadiness();
   const payouts = useQuery((d) => d.getPayouts(), { refreshMs: 30_000 });
   const [open, setOpen] = useState<Payout | null>(null);
+  const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const withdrawRef = useRef<HTMLDivElement>(null);
   const autoRef = useRef<HTMLDivElement>(null);
   const state = payouts.data;
@@ -151,7 +155,7 @@ export function PayoutsView() {
             <EmptyState size="sm" icon={<Landmark />} title="No payouts yet" description="Withdrawals and daily payouts show here with their status." />
           ) : (
             <ul className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-2">
-              {state.history.map((p) => (
+              {state.history.slice(0, historyLimit).map((p) => (
                 <li key={p.id}>
                   <TxRow
                     variant="card"
@@ -172,6 +176,16 @@ export function PayoutsView() {
               ))}
             </ul>
           )}
+          {state && state.history.length > historyLimit ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[13px] text-ui-muted">
+                Showing {historyLimit} of {state.history.length}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => setHistoryLimit((l) => l + HISTORY_PAGE)}>
+                Show {Math.min(HISTORY_PAGE, state.history.length - historyLimit)} more
+              </Button>
+            </div>
+          ) : null}
         </Panel>
       </div>
 

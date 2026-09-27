@@ -65,7 +65,7 @@ describe("responses", () => {
   });
 
   it("answer an unknown /api path with a JSON 404, behind sign-in", async () => {
-    const res = await json(await unknownPath(request("GET", "/api/nope"), params({ path: ["nope"] })));
+    const res = await json(await unknownPath(request("GET", "/api/nope"), { params: Promise.resolve({ path: ["nope"] }) }));
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("not_found");
   });

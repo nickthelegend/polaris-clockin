@@ -3,6 +3,7 @@
 import {
   Badge,
   Button,
+  Card,
   Chip,
   CodeBlock,
   CopyButton,
@@ -17,7 +18,7 @@ import {
   toast,
   type BadgeTone,
 } from "@polaris/ui";
-import { KeyRound, MoreHorizontal, Plus, RotateCcw, Send, ShoppingBag, Store, Trash2, TriangleAlert, Webhook } from "lucide-react";
+import { Check, KeyRound, MoreHorizontal, Plus, RotateCcw, Send, ShoppingBag, Store, Trash2, TriangleAlert, Webhook } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 
 import { LoadError, Panel, SampleBadge, StaleNotice, useNow } from "@/components/dashboard/common";
@@ -56,12 +57,10 @@ export function DevelopersView() {
         <IntegrationPanel sample={sample} />
         <ApiKeysPanel sample={sample} />
         <WebhooksPanel sample={sample} />
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-          <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="xl:col-span-8">
-            <CodeBlock className="mt-5" aria-label="SDK example" note={sdk.note} copyable defaultKey="node" samples={sdk.samples.map((s) => ({ ...s }))} />
-          </Panel>
-          <DemoShopPanel className="xl:col-span-4" />
-        </div>
+        <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0">
+          <CodeBlock className="mt-5" aria-label="SDK example" note={sdk.note} copyable defaultKey="node" samples={sdk.samples.map((s) => ({ ...s }))} />
+        </Panel>
+        <DemoShopPanel />
       </div>
     </>
   );
@@ -132,23 +131,35 @@ function IntegrationPanel({ sample }: { sample: boolean }) {
   );
 }
 
-function DemoShopPanel({ className }: { className?: string }) {
+const SHOP_POINTS = [
+  "Pay now: paid in full in about a second",
+  "Pay in 4: a $200 order is 4 × $50.38 for the buyer",
+  "Straight from a wallet, gasless through the SDK relay",
+  "Each order moves to Paid on its signed webhook",
+];
+
+function DemoShopPanel() {
   return (
-    <Panel title="See it in a shop" subtitle="Halcyon, a demo store on polarispay-sdk" className={className}>
-      <div className="mt-5 grid flex-1 content-between gap-5 rounded-ui-tile bg-ui-surface-2 p-5">
-        <div className="grid gap-3">
-          <span className="grid size-12 place-items-center rounded-full bg-ui-lime text-ui-on-lime">
-            <ShoppingBag aria-hidden size={22} strokeWidth={1.75} />
-          </span>
-          <p className="text-[15px] leading-relaxed text-ui-muted">
-            Buy anything with <span className="text-ui-text">Pay now</span>, <span className="text-ui-text">Pay in 4</span> on
-            Polaris credit or straight from a wallet, and watch the order follow its webhooks.
-          </p>
-          <code className="truncate font-mono text-[13px] text-ui-muted">{DEMO_SHOP_URL}</code>
-        </div>
-        <DemoShopButton label="Open the demo shop" variant="lime" size="md" className="justify-self-start" />
+    <Card padding="lg" className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
+      <span className="grid size-14 place-items-center rounded-full bg-ui-lime text-ui-on-lime">
+        <ShoppingBag aria-hidden size={24} strokeWidth={1.75} />
+      </span>
+      <div className="min-w-0">
+        <h2 className="text-[20px] leading-tight font-medium tracking-[-0.02em]">See it in a shop</h2>
+        <p className="mt-1 text-[14px] text-ui-muted">
+          Halcyon, a demo store on polarispay-sdk, at <code className="font-mono text-[13px] text-ui-text">{DEMO_SHOP_URL}</code>
+        </p>
+        <ul className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+          {SHOP_POINTS.map((point) => (
+            <li key={point} className="flex items-start gap-2.5 text-[14px]">
+              <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime" />
+              {point}
+            </li>
+          ))}
+        </ul>
       </div>
-    </Panel>
+      <DemoShopButton label="Open the demo shop" variant="lime" size="md" className="justify-self-start" />
+    </Card>
   );
 }
 

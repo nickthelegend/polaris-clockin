@@ -135,7 +135,7 @@ function ProductVisual() {
 
         {/* The phone with the checkout, overlapping the panel on wide screens. */}
         <div className="relative z-10 lg:absolute lg:top-[64px] lg:left-[40px]">
-          <Glass art="card-lime" size={220} className="float-slower absolute -top-[70px] -left-[90px] -z-10 hidden w-[200px] rotate-[-14deg] opacity-80 xl:block" />
+          <Glass art="card-lime" size={220} priority className="float-slower absolute -top-[70px] -left-[90px] -z-10 hidden w-[200px] rotate-[-14deg] opacity-80 xl:block" />
           <PhoneFrame width={290} className="shadow-[0_40px_120px_-30px_rgb(0_0_0/0.9)]">
             <CheckoutPreview compact onPaid={() => setPaid((n) => n + 1)} />
           </PhoneFrame>

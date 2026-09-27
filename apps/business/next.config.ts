@@ -7,6 +7,8 @@ const MOVED = ["payments", "links", "plans", "payouts", "developers"];
 
 const config: NextConfig = {
   reactStrictMode: true,
+  // No floating dev badge over the sidebar (it only exists in `next dev`).
+  devIndicators: false,
   poweredByHeader: false,
   // The component library, the brand and @polaris/db ship TypeScript source.
   transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/db"],
