@@ -33,7 +33,7 @@ const HOW = [
   { icon: <ScanFace />, title: "Your account is your Face ID", body: "No password, nothing to write down. Or use your email: the same account on any device." },
   { icon: <WalletCards />, title: "Pay now, in four, or every month", body: "Pay in 4 shows every payment and the total interest before you confirm." },
   { icon: <Link2 />, title: "Send dollars with a link", body: "Share it anywhere. Whoever opens it gets the dollars in under a second." },
-  { icon: <ShieldCheck />, title: "Only you can move your money", body: "Every payment needs your confirmation. Polaris covers the network costs." },
+  { icon: <ShieldCheck />, title: "Only you can move your money", body: "Every payment needs your confirmation. Polaris covers the cost of every payment." },
 ];
 
 /** Profile, on ref D's account card: who you are, how you sign in, settings, and sign out. */

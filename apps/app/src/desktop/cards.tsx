@@ -4,6 +4,7 @@ import {
   BalanceSummaryCard,
   CardStack,
   DataTable,
+  DeltaChip,
   DollarCoin,
   FigureRow,
   KeyValueGrid,
@@ -21,7 +22,7 @@ import { useData } from "@/lib/data/hooks";
 import { monthYear } from "@/lib/dates";
 import { usd } from "@/lib/money";
 import { balanceChange, n } from "@/lib/view";
-import { PageCoin, PageGrid, PageHead, SectionTitle, SideNote } from "./bits";
+import { PageCoin, PageGrid, PageHead, SectionTitle, SideNote, withSample } from "./bits";
 
 const ABOUT: Record<AccountView["id"], string> = {
   dollar: "Get paid, pay in full, send",
@@ -54,6 +55,7 @@ export function CardsDesktop() {
               value={balance && credit ? <Money value={n(balance.available) + n(credit.available)} /> : undefined}
               deltaLabel={credit ? `${usd(credit.available)} of it is Pay later` : undefined}
               deltaTitle="Your dollar account plus what your Pay later line can spend"
+              badge={withSample()}
             />
             <SectionTitle className="mt-10">Accounts</SectionTitle>
             <DataTable
@@ -135,8 +137,7 @@ export function CardsDesktop() {
                 className="mt-1"
                 label="Dollar account"
                 value={<Money value={n(balance.available)} />}
-                delta={delta ?? null}
-                deltaSuffix="today"
+                badge={withSample(<DeltaChip value={delta ?? null} suffix="today" variant="strong" />)}
                 stats={[
                   { label: "Pay later", value: usd(credit.available) },
                   { label: "Boost", value: "$0.00" },

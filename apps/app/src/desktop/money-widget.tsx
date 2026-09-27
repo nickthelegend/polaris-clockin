@@ -47,6 +47,7 @@ import { creditFreed } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
 import { n } from "@/lib/view";
 import { firstName, LinkReady, type Recipient } from "@/sheets/send";
+import { withSample } from "./bits";
 
 export type MoneyTab = "send" | "receive";
 
@@ -349,11 +350,11 @@ export function CreditSummary({ className }: { className?: string }) {
       <BalanceSummaryCard
         label="Available to spend"
         value={<Money value={n(c.available)} />}
-        badge={
+        badge={withSample(
           freed > 0 ? (
             <DeltaChip value={null} label={`+${usd(BigInt(Math.round(freed * 1e6)), { trim: true })} this week`} variant="strong" title="Paid back to your line this week" />
-          ) : undefined
-        }
+          ) : undefined,
+        )}
         stats={[
           { label: "Next payment", value: c.nextPayment ? `${usd(c.nextPayment.amount)} · ${shortDate(c.nextPayment.dueAt)}` : "None due" },
           { label: "Active plans", value: active },
@@ -434,9 +435,9 @@ function ReceivePanel() {
           className="mt-1"
           label="Money in this week"
           value={<Money value={n(week.total)} />}
-          badge={
-            <DeltaChip value={null} label={<span className="inline-flex items-center gap-1"><ArrowDownLeft aria-hidden size={14} strokeWidth={2} />No fees</span>} variant="strong" />
-          }
+          badge={withSample(
+            <DeltaChip value={null} label={<span className="inline-flex items-center gap-1"><ArrowDownLeft aria-hidden size={14} strokeWidth={2} />No fees</span>} variant="strong" />,
+          )}
           stats={[
             { label: "From people", value: usd(week.people) },
             { label: "Claimed links", value: usd(week.links) },

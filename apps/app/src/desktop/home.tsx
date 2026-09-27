@@ -23,13 +23,13 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useAccounts } from "@/components/accounts";
 import { useOwner } from "@/lib/account/hooks";
-import { getActivity, getPlans, SAMPLE_DATA } from "@/lib/data";
+import { getActivity, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { toNumber } from "@/lib/money";
 import { type HomeAccount, setPrefs } from "@/lib/prefs";
 import { balanceSeries, creditSeries, emptySeries, type Frame, FRAMES, type Series } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
-import { activityColumns, SampleBadge } from "./bits";
+import { activityColumns, withSample } from "./bits";
 import { MoneyWidget } from "./money-widget";
 
 const ACCOUNTS: { value: HomeAccount; label: string; description: string }[] = [
@@ -114,7 +114,7 @@ function BalanceChart({ className }: { className?: string }) {
         deltaSuffix={f.suffix}
         deltaLabel={chip?.label}
         deltaTitle={series ? `From ${dollars(series.start)} at the start of ${f.title}` : undefined}
-        badge={SAMPLE_DATA ? <SampleBadge /> : undefined}
+        badge={withSample()}
         valueTitle={`${what}, now`}
         right={<TimeframeChips options={["1h", "24h", "1w", "1m"] as const} value={frame} onValueChange={setFrame} aria-label="Timeframe" />}
       />

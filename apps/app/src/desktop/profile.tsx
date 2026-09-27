@@ -31,13 +31,13 @@ import { monthYear } from "@/lib/dates";
 import { currencyForLocale, LOCAL_CURRENCIES } from "@/lib/money";
 import { setPrefs, useLocale, usePrefs } from "@/lib/prefs";
 import { n } from "@/lib/view";
-import { PageCoin, PageGrid, PageHead, SectionTitle, SideNote } from "./bits";
+import { PageCoin, PageGrid, PageHead, SectionTitle, SideNote, withSample } from "./bits";
 
 const HOW: { icon: ReactNode; tone: "lime" | "purple" | "teal" | "orange"; title: string; body: string }[] = [
   { icon: <ScanFace />, tone: "lime", title: "Your account is your Face ID", body: "No password, nothing to write down. Or use your email: the same account on any device." },
   { icon: <WalletCards />, tone: "purple", title: "Pay now, in four, or every month", body: "Pay in 4 shows every payment and the total interest before you confirm." },
   { icon: <Link2 />, tone: "teal", title: "Send dollars with a link", body: "Share it anywhere. Whoever opens it gets the dollars in under a second." },
-  { icon: <ShieldCheck />, tone: "orange", title: "Only you can move your money", body: "Every payment needs your confirmation. Polaris covers the network costs." },
+  { icon: <ShieldCheck />, tone: "orange", title: "Only you can move your money", body: "Every payment needs your confirmation. Polaris covers the cost of every payment." },
 ];
 
 /** Who you are, how you sign in: shared by Profile and Settings. */
@@ -138,6 +138,7 @@ export function ProfileDesktop() {
               <BalanceSummaryCard
                 label="Dollar account"
                 value={<Money value={n(balance.available)} />}
+                badge={withSample()}
                 stats={[
                   { label: "Score", value: credit.score },
                   { label: "Plans", value: plans.value.plans.filter((p) => p.status === "active").length },

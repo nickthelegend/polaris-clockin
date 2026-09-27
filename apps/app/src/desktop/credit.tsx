@@ -41,7 +41,7 @@ import type { RelayReceipt } from "@/lib/relayer";
 import { creditSeries, type Frame, FRAMES } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
 import { n, planProgress, scoreHistory, weeklyCandles } from "@/lib/view";
-import { PageCoin, PageGrid, SectionTitle, SideNote } from "./bits";
+import { PageCoin, PageGrid, SectionTitle, SideNote, withSample } from "./bits";
 
 const axis = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dollars = (v: number) => `$${axis(v)}`;
@@ -107,6 +107,7 @@ export function CreditDesktop() {
               caption="Available to spend"
               value={c ? <Money value={n(c.available)} /> : undefined}
               deltaLabel={c ? `of ${usd(c.limit, { trim: true })} · ${c.aprBps / 100}% APR` : undefined}
+              badge={withSample()}
               right={<TimeframeChips options={["24h", "1w", "1m"] as const} value={frame as "24h" | "1w" | "1m"} onValueChange={setFrame} aria-label="Timeframe" />}
             />
             <div className="mt-6">
@@ -182,7 +183,7 @@ export function CreditDesktop() {
               <BalanceSummaryCard
                 label="Credit score"
                 value={<span className="ui-figure">{c.score}</span>}
-                badge={<StatusPill tone="lime" size="sm">{band(c.score)}</StatusPill>}
+                badge={withSample(<StatusPill tone="lime" size="sm">{band(c.score)}</StatusPill>)}
                 stats={[
                   { label: "Paid on time", value: plans.value.plans.reduce((s, p) => s + p.instalments.filter((i) => i.paidAt !== null).length, 0) },
                   { label: "Your line", value: usd(c.limit, { trim: true }) },
@@ -284,6 +285,7 @@ export function ScoreDesktop() {
               delta={c && start ? (change / start) * 100 : undefined}
               deltaLabel={c && start !== undefined ? `${change >= 0 ? "+" : "−"}${Math.abs(change)} points` : undefined}
               deltaTitle={`Over the last ${days} days`}
+              badge={withSample()}
               right={<TimeframeChips options={RANGES.map((r) => r.value)} value={range} onValueChange={setRange} aria-label="Range" />}
             />
             <div className="mt-6">
@@ -345,7 +347,7 @@ export function ScoreDesktop() {
               <BalanceSummaryCard
                 label="Your Pay later line"
                 value={<Money value={n(c.limit)} />}
-                badge={<StatusPill tone="lime" size="sm">{c.aprBps / 100}% APR</StatusPill>}
+                badge={withSample(<StatusPill tone="lime" size="sm">{c.aprBps / 100}% APR</StatusPill>)}
                 stats={[
                   { label: "Available", value: usd(c.available) },
                   { label: "In use", value: usd(c.used) },

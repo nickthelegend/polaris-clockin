@@ -3,7 +3,7 @@
 import { Coin, cn, type CoinTone, Money, PairHeader, StatusPill, type StatusPillTone, TableName, type TableColumn } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { ActivityAvatar } from "@/components/avatars";
-import type { ActivityItem } from "@/lib/data";
+import { type ActivityItem, SAMPLE_DATA } from "@/lib/data";
 import { shortDate, time } from "@/lib/dates";
 import { movesBalance, n, signed, when } from "@/lib/view";
 
@@ -179,6 +179,20 @@ export function SampleBadge({ className }: { className?: string }) {
 /** One of a stacked `PageGrid`'s two side columns (one above the other from 1280px). */
 export function SideColumn({ children }: { children: ReactNode }) {
   return <div className="grid min-w-0 content-start gap-3">{children}</div>;
+}
+
+/**
+ * A card's chips with the Sample pill after them while the sample book is on
+ * screen (pass as a FigureRow's or BalanceSummaryCard's `badge`).
+ */
+export function withSample(chips?: ReactNode): ReactNode {
+  if (!SAMPLE_DATA) return chips;
+  return (
+    <>
+      {chips}
+      <SampleBadge />
+    </>
+  );
 }
 
 /** A muted note under a column's buttons. */

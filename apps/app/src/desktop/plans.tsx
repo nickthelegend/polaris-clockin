@@ -36,7 +36,7 @@ import { dollars, type Micros, usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
 import { SubscriptionSheet } from "@/screens/plans-view";
 import { n, planProgress } from "@/lib/view";
-import { PageGrid, PageHead, SectionTitle, SideColumn, SideNote } from "./bits";
+import { PageGrid, PageHead, SectionTitle, SideColumn, SideNote, withSample } from "./bits";
 
 type Show = "all" | "open" | "done";
 
@@ -85,6 +85,7 @@ export function PlansDesktop() {
               caption="Still to pay"
               value={plans.value ? <Money value={n(left)} /> : undefined}
               deltaLabel={plans.value ? `${open.length} open ${open.length === 1 ? "plan" : "plans"}` : undefined}
+              badge={withSample()}
               right={
                 <TimeframeChips<Show>
                   aria-label="Show"
@@ -213,7 +214,7 @@ export function PlansDesktop() {
                 <BalanceSummaryCard
                   label="Pay later line"
                   value={<Money value={n(credit.value.available)} />}
-                  badge={<StatusPill tone="lime" size="sm">{credit.value.aprBps / 100}% APR</StatusPill>}
+                  badge={withSample(<StatusPill tone="lime" size="sm">{credit.value.aprBps / 100}% APR</StatusPill>)}
                   stats={[
                     { label: "Your line", value: usd(credit.value.limit, { trim: true }) },
                     { label: "In use", value: usd(credit.value.used) },
