@@ -5,7 +5,8 @@ import { Clock, Globe, ShieldCheck, Wallet } from "lucide-react";
 import { useState } from "react";
 import type { CreditLine } from "@/lib/data";
 import { usd } from "@/lib/money";
-import { bringHistory } from "@/lib/underwriting";
+import { bringHistory, LOCAL_HISTORY_WALLET } from "@/lib/underwriting";
+import { ReasonLabel } from "./reason-label";
 
 /**
  * "Raise your limit": the one optional step that may say "wallet", because
@@ -20,12 +21,16 @@ export function BringHistorySheet({
   onOpenChange: (open: boolean) => void;
   credit: CreditLine | undefined;
 }) {
-  const [state, setState] = useState<"idle" | "working" | "done">("idle");
+  const [state, setState] = useState<"idle" | "working" | "done" | "reviewing">("idle");
+  const [error, setError] = useState<string | null>(null);
   // Each opening starts fresh.
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setState("idle");
+    if (open) {
+      setState("idle");
+      setError(null);
+    }
   }
 
   const done = state === "done" && credit;
@@ -46,9 +51,16 @@ export function BringHistorySheet({
             <p className="-mt-2 text-[15px] text-ui-muted">is your Pay later limit now.</p>
             <DetailsList
               size="sm"
-              items={credit.reasons.slice(-3).map((r) => ({ label: r.label, value: <span className="text-ui-up">+{r.points}</span> }))}
+              items={credit.reasons
+                .filter((r) => r.points > 0)
+                .slice(0, 3)
+                .map((r) => ({ label: <ReasonLabel reason={r} />, value: <span className="text-ui-up">+{r.points}</span> }))}
             />
           </>
+        ) : state === "reviewing" ? (
+          <p role="status" className="text-[15px] leading-[1.45] text-ui-muted">
+            Your review is still running. Your limit updates here by itself when it lands; nothing else to do.
+          </p>
         ) : (
           <>
             <ListGroup label="What we look at">
@@ -61,11 +73,21 @@ export function BringHistorySheet({
                 New limits start at $200 and go up to {usd(credit.openingCap, { trim: true })}. Paying on time raises them from there.
               </p>
             ) : null}
+            {LOCAL_HISTORY_WALLET ? (
+              <p className="text-[13px] leading-[1.45] text-ui-warn">
+                Local demo: with no wallet in this browser, a stand-in wallet signs, and a sample history (fixtures, not Nansen) is read for it.
+              </p>
+            ) : null}
+            {error ? (
+              <p role="alert" className="text-[14px] leading-[1.45] text-ui-down">
+                {error}
+              </p>
+            ) : null}
           </>
         )}
       </Sheet.Body>
       <Sheet.Footer>
-        {done ? (
+        {done || state === "reviewing" ? (
           <Button variant="lime" size="lg" onClick={() => onOpenChange(false)}>
             Done
           </Button>
@@ -78,10 +100,11 @@ export function BringHistorySheet({
             disabled={credit?.historyLinked}
             onClick={async () => {
               setState("working");
+              setError(null);
               try {
-                await bringHistory();
-                setState("done");
-              } catch {
+                setState((await bringHistory()) === "applied" ? "done" : "reviewing");
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "We couldn't raise your limit this time.");
                 setState("idle");
               }
             }}

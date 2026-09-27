@@ -39,6 +39,7 @@ import { inDays, relativeDay, shortDate } from "@/lib/dates";
 import { usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
 import { creditSeries, type Frame, FRAMES, restIndex } from "@/lib/series";
+import { ReasonLabel } from "@/components/reason-label";
 import { useNow } from "@/lib/use-now";
 import { n, planProgress, scoreHistory, weeklyCandles } from "@/lib/view";
 import { PageCoin, PageGrid, SectionTitle, SideNote, withSample } from "./bits";
@@ -331,7 +332,7 @@ export function ScoreDesktop() {
               rows={c?.reasons ?? []}
               rowKey={(r) => r.label}
               columns={[
-                { key: "fact", header: "Fact", render: (r) => <span className="text-[16px]">{r.label}</span> },
+                { key: "fact", header: "Fact", render: (r) => <span className="text-[16px]"><ReasonLabel reason={r} /></span> },
                 {
                   key: "points",
                   header: "Points",
@@ -391,7 +392,7 @@ export function ScoreDesktop() {
             <DetailsList
               size="sm"
               items={c.reasons.map((r) => ({
-                label: r.label,
+                label: <ReasonLabel reason={r} />,
                 value: <span className={r.points >= 0 ? "text-ui-up" : "text-ui-down"}>{r.points >= 0 ? `+${r.points}` : r.points}</span>,
               }))}
             />

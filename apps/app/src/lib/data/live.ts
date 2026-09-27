@@ -80,6 +80,12 @@ type BuyerBook = {
   payments: Array<{ id: string; kind: "now" | "later"; merchant: ApiMerchant; amountUnits: string; txHash: Hex; createdAt: string }>;
 };
 
+/** How the underwriting package names its providers. */
+const PROVIDER_NAMES: Record<string, string> = { nansen: "Nansen", zerion: "Zerion", etherscan: "Etherscan", rpc: "the chain" };
+
+/** The most an opening line can be (ScoreManager's opening cap). */
+const OPENING_CAP = 1_000_000_000n;
+
 /** Polaris Pay in 4's rate (PolarisLoanEngine.INTEREST_RATE_BPS). */
 const APR_BPS = 1000;
 
@@ -180,7 +186,12 @@ export const liveData: PolarisData = {
       const due = plan.instalments.find((i) => i.paidAt === null);
       if (due && (!nextPayment || due.dueAt < nextPayment.dueAt)) nextPayment = { amount: due.amount, dueAt: due.dueAt, merchant: plan.merchant.name, planId: plan.id };
     }
-    const reasons = (status.decision?.explanation?.reasons ?? []).map((r) => ({ label: r.text.replace(/ · [+\-−]?\d+$/, ""), points: r.points ?? 0 }));
+    // The CRE decision's reasons, explained by @polarispay/underwriting, each with the provider behind it.
+    const reasons = (status.decision?.explanation?.reasons ?? []).map((r) => ({
+      label: r.text.replace(/ · [+\-−]?\d+$/, ""),
+      points: r.points ?? 0,
+      source: r.provider ? (PROVIDER_NAMES[r.provider] ?? r.provider) : null,
+    }));
     return {
       limit,
       available: limit > used ? limit - used : 0n,
@@ -190,7 +201,8 @@ export const liveData: PolarisData = {
       nextPayment,
       reasons,
       historyLinked: Boolean(status.decision?.linkedWallet),
-      openingCap: limit,
+      // ScoreManager caps an opening line at $1,000; paying on time raises it from there.
+      openingCap: limit > OPENING_CAP ? limit : OPENING_CAP,
     };
   },
 

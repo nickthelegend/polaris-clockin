@@ -32,6 +32,7 @@ import { useData } from "@/lib/data/hooks";
 import { relativeDay, shortDate } from "@/lib/dates";
 import { usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
+import { ReasonLabel } from "@/components/reason-label";
 import { useNow } from "@/lib/use-now";
 import { scoreHistory, weeklyCandles } from "@/lib/view";
 
@@ -187,7 +188,7 @@ export function ScoreSheet() {
             <DetailsList
               size="sm"
               items={credit.value.reasons.map((r) => ({
-                label: r.label,
+                label: <ReasonLabel reason={r} />,
                 value: <span className={r.points >= 0 ? "text-ui-up" : "text-ui-down"}>{r.points >= 0 ? `+${r.points}` : r.points}</span>,
               }))}
             />

@@ -1,6 +1,8 @@
 import { type Address, getAddress, type Hex, isAddress, stringToHex } from "viem";
+import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { authorize } from "./account";
 import { ApiError, api, apiConfigured } from "./api";
+import { env } from "./env";
 import { mockLedger } from "./data/mock";
 import { notifyDataChanged } from "./data/changes";
 
@@ -33,16 +35,34 @@ export type CreditRequestResult = { requestId: string; decision: CreditDecision 
 
 type Eip1193 = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
 
+type HistoryWallet = { address: Address; signMessage(message: string): Promise<Hex> };
+
+/**
+ * `pnpm demo:local` on a local chain (NEXT_PUBLIC_LOCAL_DEMO=1, chain 31337)
+ * with no wallet in the browser: a throwaway key stands in for the buyer's
+ * old wallet. The local CRE trigger gives it a sample persona's history
+ * (fixtures, not Nansen), and the app says so. Never on any other chain.
+ */
+export const LOCAL_HISTORY_WALLET = process.env.NEXT_PUBLIC_LOCAL_DEMO === "1" && env.chainId === 31337;
+
 /** The wallet the buyer already uses, from the browser (an extension, or a wallet app's own browser). */
-async function connectHistoryWallet(): Promise<{ address: Address; provider: Eip1193 }> {
+async function connectHistoryWallet(): Promise<HistoryWallet> {
   const provider = (globalThis as { ethereum?: Eip1193 }).ethereum;
   if (!provider) {
+    if (LOCAL_HISTORY_WALLET) {
+      const stand = privateKeyToAccount(generatePrivateKey());
+      return { address: stand.address, signMessage: (message) => stand.signMessage({ message }) };
+    }
     throw new Error("Open this page in your wallet app's browser, or in a browser with your wallet's extension, to connect it.");
   }
   const accounts = (await provider.request({ method: "eth_requestAccounts" })) as unknown[];
   const first = accounts[0];
   if (typeof first !== "string" || !isAddress(first)) throw new Error("Your wallet didn't share an account.");
-  return { address: getAddress(first), provider };
+  const address = getAddress(first);
+  return {
+    address,
+    signMessage: async (message) => (await provider.request({ method: "personal_sign", params: [stringToHex(message), address] })) as Hex,
+  };
 }
 
 async function waitForDecision(account: Address, timeoutMs: number): Promise<CreditDecision | null> {
@@ -69,7 +89,7 @@ export async function requestCredit(opts: { withHistory?: boolean; waitMs?: numb
   const consentSignature = await account.signMessage({ message: m.consent });
   let linked: { wallet: Address; issuedAt: number; nonce: string; signature: Hex } | undefined;
   if (history && m.link) {
-    const signature = (await history.provider.request({ method: "personal_sign", params: [stringToHex(m.link), history.address] })) as Hex;
+    const signature = await history.signMessage(m.link);
     linked = { wallet: history.address, issuedAt: m.issuedAt, nonce: m.nonce, signature };
   }
   const queued = await api<{ request: { id: string } }>("/api/credit/underwrite", {
@@ -81,17 +101,24 @@ export async function requestCredit(opts: { withHistory?: boolean; waitMs?: numb
   return { requestId: queued.request.id, decision };
 }
 
-/** "Raise your limit": bring the history of a wallet the buyer already uses. */
-export async function bringHistory(): Promise<void> {
+/**
+ * "Raise your limit": bring the history of a wallet the buyer already uses.
+ * "applied" once the line is open on chain; "pending" while the review is
+ * still running (the credit screens update when it lands).
+ */
+export async function bringHistory(): Promise<"applied" | "pending"> {
   if (!apiConfigured()) {
     // Offline demo: the sample ledger pretends a review happened. Nothing is underwritten.
     await new Promise((resolve) => setTimeout(resolve, 1400));
     mockLedger.linkHistory();
-    return;
+    return "applied";
   }
   try {
     const { decision } = await requestCredit({ withHistory: true });
-    if (decision && decision.status !== "applied") throw new Error(decision.reason ?? "We couldn't raise your limit this time.");
+    if (!decision) return "pending";
+    if (decision.status === "thin") throw new Error(decision.reason ?? "That wallet doesn't have enough history yet to open a line.");
+    if (decision.status !== "applied") throw new Error(decision.reason ?? "We couldn't raise your limit this time.");
+    return "applied";
   } catch (error) {
     if (error instanceof ApiError) throw new Error(error.message);
     throw error;

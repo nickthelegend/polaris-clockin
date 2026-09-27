@@ -38,6 +38,8 @@ export type CreditReason = {
   label: string;
   /** Score points this fact adds (or removes). */
   points: number;
+  /** Where the fact came from, when a provider supplied it: "Nansen", "Zerion". */
+  source?: string | null;
 };
 
 export type CreditLine = {
