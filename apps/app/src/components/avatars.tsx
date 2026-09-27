@@ -2,15 +2,20 @@ import { Avatar, type AvatarProps, LogoMark } from "@polaris/ui";
 import {
   ArrowDownLeft,
   AudioLines,
+  BookOpen,
+  CarTaxiFront,
   Coffee,
   Dumbbell,
   Link2,
   Plus,
   Shapes,
+  ShoppingBasket,
+  Smartphone,
   Store,
   Sun,
   TrainFront,
   Undo2,
+  UtensilsCrossed,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { ActivityItem } from "@/lib/data";
@@ -27,6 +32,11 @@ const BRANDS: Record<string, Brand> = {
   "Nómada Coffee": { color: "#8a5a3c", icon: <Coffee /> },
   "Kinetik Gym": { color: "#e11d48", icon: <Dumbbell /> },
   Figura: { color: "#a855f7", icon: <Shapes /> },
+  Frischmarkt: { color: "#15803d", icon: <ShoppingBasket /> },
+  Rota: { color: "#d97706", icon: <CarTaxiFront /> },
+  "Kiez Kitchen": { color: "#c2410c", icon: <UtensilsCrossed /> },
+  "Kapitel Books": { color: "#0e7490", icon: <BookOpen /> },
+  "Welle Mobile": { color: "#4f46e5", icon: <Smartphone /> },
 };
 
 export function merchantBrand(name: string): Brand {

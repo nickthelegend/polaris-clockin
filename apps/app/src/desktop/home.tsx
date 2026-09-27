@@ -23,13 +23,13 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useAccounts } from "@/components/accounts";
 import { useOwner } from "@/lib/account/hooks";
-import { getActivity, getPlans } from "@/lib/data";
+import { getActivity, getPlans, SAMPLE_DATA } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { toNumber } from "@/lib/money";
 import { type HomeAccount, setPrefs } from "@/lib/prefs";
 import { balanceSeries, creditSeries, emptySeries, type Frame, FRAMES, type Series } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
-import { activityColumns } from "./bits";
+import { activityColumns, SampleBadge } from "./bits";
 import { MoneyWidget } from "./money-widget";
 
 const ACCOUNTS: { value: HomeAccount; label: string; description: string }[] = [
@@ -93,6 +93,7 @@ function BalanceChart({ className }: { className?: string }) {
   const time = timeLabel(frame);
   const f = FRAMES[frame];
   const what = account === "dollar" ? "Your balance" : account === "later" ? "What your Pay later line can spend" : "Your Boost";
+  const chip = series && !series.empty ? chipFor(series, f.suffix) : null;
 
   return (
     <section aria-label={`${meta.label.replace(" / USD", "")} chart`} className={cn("min-w-0", className)}>
@@ -109,10 +110,11 @@ function BalanceChart({ className }: { className?: string }) {
       <FigureRow
         className="mt-6"
         value={series ? <Money value={series.end} /> : undefined}
-        delta={series && !series.empty ? series.deltaPct : undefined}
+        delta={chip ? chip.delta : undefined}
         deltaSuffix={f.suffix}
-        deltaLabel={series && !series.empty ? changeLabel(series, f.suffix) : undefined}
+        deltaLabel={chip?.label}
         deltaTitle={series ? `From ${dollars(series.start)} at the start of ${f.title}` : undefined}
+        badge={SAMPLE_DATA ? <SampleBadge /> : undefined}
         valueTitle={`${what}, now`}
         right={<TimeframeChips options={["1h", "24h", "1w", "1m"] as const} value={frame} onValueChange={setFrame} aria-label="Timeframe" />}
       />
@@ -130,6 +132,7 @@ function BalanceChart({ className }: { className?: string }) {
             formatAxis={axis}
             formatTime={time}
             formatBubbleNote={null}
+            defaultIndex={restIndex(series)}
             lastLabel={f.last}
             empty={
               account === "boost" ? (
@@ -145,8 +148,12 @@ function BalanceChart({ className }: { className?: string }) {
             label={`${what} over ${f.title}, as candles`}
             data={series.candles}
             height={380}
-            formatPrice={(v) => (v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${Math.round(v)}`)}
+            formatPrice={dollars}
+            formatAxis={axis}
+            axisWidth={88}
             formatTime={time}
+            timeAxis
+            lastLabel={f.last}
             className="rounded-[20px]"
           />
         )}
@@ -156,14 +163,39 @@ function BalanceChart({ className }: { className?: string }) {
 }
 
 /**
- * The chip reads in percent, like the reference, until the frame starts near
- * zero (a first deposit): then "+13,000%" says nothing and dollars say it all.
+ * The chip reads in percent, like the reference ("+3.27% today"), until the
+ * frame starts near zero (a first deposit): then "+13,000%" says nothing and
+ * dollars say it all ("+$1,279.70 this month"). Nothing moved: a grey "No
+ * change today". FigureRow adds the suffix only to a figure (`delta` a
+ * number), so a finished label passes `delta: null`.
  */
-function changeLabel(series: Series, suffix: string): string | undefined {
+function chipFor(series: Series, suffix: string): { delta: number | null; label?: string } {
   const change = series.end - series.start;
-  if (series.deltaPct !== null && Math.abs(series.deltaPct) < 1000) return undefined;
-  if (Math.abs(change) < 0.005) return "No change";
-  return `${change > 0 ? "+" : "−"}${dollars(Math.abs(change))} ${suffix}`;
+  if (Math.abs(change) < 0.005) return { delta: 0, label: "No change" };
+  if (series.deltaPct !== null && Math.abs(series.deltaPct) < 1000) return { delta: series.deltaPct };
+  return { delta: null, label: `${change > 0 ? "+" : "−"}${dollars(Math.abs(change))} ${suffix}` };
+}
+
+/**
+ * Where the bubble rests: on the latest payment that landed inside the plot
+ * (between 15% and 85% of the width), like the reference's "550.24", never
+ * pinned to an edge. A line that never moved rests on its last point.
+ */
+function restIndex(series: Series): number | null {
+  const pts = series.points;
+  const n = pts.length;
+  if (n < 2) return null;
+  if (pts.every((p) => p.value === pts[0]!.value)) return n - 1;
+  const t0 = pts[0]!.t;
+  const span = pts[n - 1]!.t - t0 || 1;
+  const lo = Math.round((n - 1) * 0.15);
+  const hi = Math.round((n - 1) * 0.85);
+  for (let i = series.moves.length - 1; i >= 0; i--) {
+    // The first point at or after the move, so the bubble shows where it landed.
+    const k = Math.min(n - 1, Math.ceil(((series.moves[i]! - t0) / span) * (n - 1)));
+    if (k >= lo && k <= hi) return k;
+  }
+  return hi;
 }
 
 function BoostEmpty() {

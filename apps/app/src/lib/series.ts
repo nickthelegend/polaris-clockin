@@ -5,8 +5,9 @@ import { movesBalance, signed } from "./view";
 /**
  * Time series for the desktop charts (ref E's line and candles), rebuilt from
  * the same reads the phone screens use. A balance moves in steps, one per
- * payment; drawn as one smooth continuous curve, each step eases in over the
- * hours before it lands, so the line always ends exactly on today's figure.
+ * payment; drawn as one smooth continuous curve, each step eases in over a
+ * short while before it lands (a visible wiggle per payment, never a long
+ * ramp), so the line always ends exactly on today's figure.
  */
 
 export type Frame = "1h" | "24h" | "1w" | "1m";
@@ -27,6 +28,8 @@ export type SeriesCandle = { t: number; o: number; h: number; l: number; c: numb
 
 export type Series = {
   points: SeriesPoint[];
+  /** When each move in the frame landed, oldest first (where the bubble can rest). */
+  moves: number[];
   candles: SeriesCandle[];
   /** The figure at the start of the frame and now (exact, not smoothed). */
   start: number;
@@ -52,9 +55,13 @@ function ease(t: number, from: number, to: number): number {
 function build(end: number, steps: Step[], frame: Frame, now: number): Series {
   const { span, points: count, candle } = FRAMES[frame];
   const from = now - span;
-  // Each step eases in over this long before it lands: wide enough that the
-  // steps run together into one line, still a clear move on the hour.
-  const ramp = span / 7;
+  // Each step eases in over about the average time between moves in the
+  // frame, so the line runs on from one payment to the next (a wiggle per
+  // payment, no long flat plateaus), but never more than an eighth of the
+  // frame (one payment isn't smeared into a day-long slope) nor under 15
+  // minutes.
+  const moving = steps.filter((s) => s.at > from && s.at <= now).length;
+  const ramp = Math.max(15 * MIN, Math.min(span / 8, span / (moving + 1)));
 
   const exact = (t: number) => end - steps.filter((s) => s.at > t).reduce((sum, s) => sum + s.delta, 0);
   const smooth = (t: number) => end - steps.reduce((sum, s) => sum + s.delta * (1 - ease(t, s.at - ramp, s.at)), 0);
@@ -85,6 +92,7 @@ function build(end: number, steps: Step[], frame: Frame, now: number): Series {
   const start = exact(from);
   return {
     points,
+    moves: steps.filter((s) => s.at > from && s.at <= now && s.delta !== 0).map((s) => s.at).sort((a, b) => a - b),
     candles,
     start: round2(start),
     end: round2(end),

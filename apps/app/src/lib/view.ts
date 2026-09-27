@@ -87,6 +87,10 @@ export type SpendingCategory = (typeof SPENDING_CATEGORIES)[number];
 const MERCHANT_CATEGORY: Record<string, SpendingCategory> = {
   Café: "Food",
   Restaurant: "Food",
+  Groceries: "Food",
+  Books: "Shopping",
+  Rides: "Travel",
+  "Phone plan": "Bills",
   "Audio gear": "Shopping",
   "Design studio": "Shopping",
   "Design software": "Shopping",
@@ -115,7 +119,7 @@ export function spendingByCategory(
     if (a.direction !== "out" || !movesBalance(a) || !inPeriod(a, period)) continue;
     let category: SpendingCategory = "Other";
     if (a.kind === "subscription") category = "Subscriptions";
-    else if (a.counterparty.kind === "merchant") category = MERCHANT_CATEGORY[categoryOf(a.counterparty.name) ?? ""] ?? "Other";
+    else if (a.counterparty.kind === "merchant") category = MERCHANT_CATEGORY[a.counterparty.category ?? categoryOf(a.counterparty.name) ?? ""] ?? "Other";
     totals.set(category, (totals.get(category) ?? 0) + toNumber(a.amount));
   }
   const sum = [...totals.values()].reduce((s, v) => s + v, 0);

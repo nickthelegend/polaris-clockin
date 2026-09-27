@@ -14,6 +14,13 @@ export { DAY, describeDuration, describeInterval, dueAt, quotePlan, WEEK } from 
  */
 export const data: PolarisData = mockData;
 
+/**
+ * Whether the balances, plans and activity on screen are the sample book
+ * (`mock.ts`), not the signed-in person's own. The desktop marks every card
+ * that shows them with a Sample pill, like the merchant web.
+ */
+export const SAMPLE_DATA: boolean = data === mockData;
+
 /** Sample payment links for the Pay screen. Empty once real links exist. */
 export { DEMO_LINK_IDS as SAMPLE_LINK_IDS } from "./mock";
 

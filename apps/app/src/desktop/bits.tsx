@@ -165,6 +165,15 @@ export function PageGrid({ main, side, stack = false, className }: { main: React
   );
 }
 
+/** The amber "Sample" pill on every card that shows the sample book, as on the merchant web. */
+export function SampleBadge({ className }: { className?: string }) {
+  return (
+    <StatusPill tone="amber" size="sm" className={cn("h-6 px-2.5 text-[12px]", className)} title="Sample data, not your own account's">
+      Sample
+    </StatusPill>
+  );
+}
+
 /** A muted note under a column's buttons. */
 export function SideNote({ children }: { children: ReactNode }) {
   return <p className="px-1 text-[13px] leading-relaxed text-ui-muted">{children}</p>;

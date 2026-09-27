@@ -110,7 +110,8 @@ export type ActivityItem = {
   direction: "in" | "out";
   amount: Micros;
   at: number;
-  counterparty: { kind: "merchant" | "person" | "polaris"; name: string; country?: CountryCode };
+  /** `category` is the merchant's ("Groceries", "Café"), for spending by category. */
+  counterparty: { kind: "merchant" | "person" | "polaris"; name: string; country?: CountryCode; category?: string };
   /** Opens the explorer from "View receipt". */
   txHash: Hex;
   /** Only indexed chain events are "settled" (plan §5.6). */
