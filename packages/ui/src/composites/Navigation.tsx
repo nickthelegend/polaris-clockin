@@ -8,7 +8,7 @@ import { cn } from "../lib/cn";
 import { IconSlot } from "../lib/icon";
 import { Avatar } from "../primitives/Avatar";
 import { IconButton } from "../primitives/Button";
-import { Logo } from "../primitives/Logo";
+import { Logo, LogoMark } from "../primitives/Logo";
 
 /* ── BottomNav ───────────────────────────────────────────────────────────── */
 
@@ -153,6 +153,12 @@ export type AppHeaderProps = Omit<HTMLAttributes<HTMLElement>, "children"> & {
   onAvatar?: () => void;
   /** Replace the right-hand side. */
   trailing?: ReactNode;
+  /** `brand` only: the star mark before the wordmark, like ref A's logo and name. */
+  mark?: boolean;
+  /** `brand` only: wrap the logo (a Next.js Link home, say). */
+  logoHref?: string;
+  /** The link component for `logoHref`. */
+  linkAs?: ElementType;
 };
 
 /**
@@ -160,6 +166,7 @@ export type AppHeaderProps = Omit<HTMLAttributes<HTMLElement>, "children"> & {
  *
  * ```tsx
  * <AppHeader name="Ana Ruiz" unread onBell={openNotifications} />
+ * <AppHeader mark name="Ana Ruiz" logoHref="/" linkAs={Link} />
  * <AppHeader variant="greeting" name="Ana Ruiz" />
  * ```
  */
@@ -172,9 +179,20 @@ export function AppHeader({
   unread = false,
   onAvatar,
   trailing,
+  mark = false,
+  logoHref,
+  linkAs: LinkComp = "a",
   className,
   ...props
 }: AppHeaderProps) {
+  const brand = mark ? (
+    <span className="flex items-center gap-2">
+      <LogoMark size={32} title="" />
+      <Logo height={28} />
+    </span>
+  ) : (
+    <Logo height={30} />
+  );
   const avatar = onAvatar ? (
     <button type="button" onClick={onAvatar} aria-label="Account" className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus">
       <Avatar name={name} src={avatarSrc} size="md" decorative />
@@ -186,7 +204,17 @@ export function AppHeader({
     <header className={cn("flex h-16 items-center justify-between gap-3 font-satoshi", className)} {...props}>
       {variant === "brand" ? (
         <>
-          <Logo height={30} />
+          {logoHref ? (
+            <LinkComp
+              href={logoHref}
+              aria-label="Polaris, home"
+              className="rounded-[10px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus"
+            >
+              {brand}
+            </LinkComp>
+          ) : (
+            brand
+          )}
           <div className="flex items-center gap-2.5">
             {trailing ?? (
               <>

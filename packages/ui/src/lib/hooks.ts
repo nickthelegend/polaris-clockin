@@ -153,6 +153,9 @@ export function useFocusTrap(
         return;
       }
       if (event.key !== "Tab") return;
+      // Stacked layers (a confirm sheet over a checkout): only the top one keeps focus.
+      const layers = document.querySelectorAll("[data-ui-layer]");
+      if (node.hasAttribute("data-ui-layer") && layers[layers.length - 1] !== node) return;
       const items = focusables(node);
       if (items.length === 0) {
         event.preventDefault();

@@ -98,6 +98,8 @@ wins) and forwards refs where it renders one element.
 | `Keypad`, `applyKey` | `<Keypad onKey={(k) => setAmount((a) => applyKey(a, k))} captureKeyboard />` |
 | `AmountDisplay` | `<AmountDisplay value={amount} hint="Available $1,284.50" invalid={over} />` · shrinks as it grows, shakes when `invalid`, optional `caret` |
 | `Logo`, `LogoMark` | `<Logo height={30} />` (the team's wordmark) · `<LogoMark size={28} />` (the star) |
+| `SuccessCheck` | `<SuccessCheck label="Paid" />` · a disc that springs in, a ring that pulses once, a check that draws itself; `tone="lime" \| "up" \| "purple"`, `size` |
+| `PageDots` | `<PageDots count={3} index={page} onSelect={setPage} />` · ref B's onboarding dots: the current page a white bar |
 
 ### Composites
 
@@ -116,9 +118,10 @@ wins) and forwards refs where it renders one element.
 | `DetailsList` | `<DetailsList items={[{ label: "Merchant", value: "Oat & Ember" }]} />` |
 | `TileButton` | `<TileButton tone="purple" icon={<ArrowDownLeft />} label="Receive" />` · `ink`, `purple`, `lime`, `surface` |
 | `BottomNav` | `<BottomNav floating items={tabs} value="home" linkAs={Link} />` · `variant="labelled"` (ref C), `activeTone="white"` (ref B) |
-| `AppHeader` | `<AppHeader name="Ana Ruiz" unread onBell={open} />` · `variant="greeting"` (ref C) |
+| `AppHeader` | `<AppHeader name="Ana Ruiz" unread onBell={open} />` · `mark` (the star before the wordmark, ref A), `logoHref` + `linkAs`, `variant="greeting"` (ref C) |
 | `ScreenHeader` | `<ScreenHeader title="Send" onBack={back} action={…} />` · `variant="plain" \| "square" \| "arrow"` |
 | `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) |
+| `ListRow`, `ListGroup` | `<ListGroup label="Account"><ListRow icon={<Bell />} title="Notifications" description="Payments due" href="/notifications" linkAs={Link} /></ListGroup>` · settings, menus and feeds: an icon well (`tone` `surface`, `lime`, `purple`, `down`), a value, toggle or chevron; `variant="card"` (ref D) |
 | `StatCard` | `<StatCard tone="sage" icon={<Percent />} label="Sales" delta={23} value={<Money … />} spark={sales} />` · `sage`, `pink`, `honey`, `sky`, `lilac`, `lime`, `surface` |
 
 ### Charts (hand-built SVG)
@@ -140,8 +143,8 @@ stay still under reduced motion.
 
 | Component | Usage |
 |---|---|
-| `BottomSheet` | `<BottomSheet open={open} onOpenChange={setOpen} snapPoints={["half", "full"]} title="Plan"><Sheet.Body>…</Sheet.Body><Sheet.Footer>…</Sheet.Footer></BottomSheet>` · snaps `compact`, `half`, `full` or px; velocity-based swipe to dismiss; content scrolls without fighting the drag |
-| `SheetStage` | `<SheetStage className="min-h-dvh"><App /></SheetStage>` · scales the page behind an open sheet to 0.96 with rounded corners and makes it inert |
+| `BottomSheet` | `<BottomSheet open={open} onOpenChange={setOpen} snapPoints={["half", "full"]} title="Plan"><Sheet.Body>…</Sheet.Body><Sheet.Footer>…</Sheet.Footer></BottomSheet>` · snaps `compact`, `half`, `full`, `fit` (hugs its content, up to full) or px; velocity-based swipe to dismiss; content scrolls without fighting the drag; a sheet opened over another stacks above it with its own backdrop; `onClosed` fires once the exit animation has finished (route sheets navigate then) |
+| `SheetStage` | `<SheetStage className="min-h-dvh"><App /></SheetStage>` · scales the page behind an open sheet to 0.96 with rounded corners and makes it inert; stacked sheets keep it back until the last one closes |
 | `Sheet.Header`, `Sheet.Body`, `Sheet.Footer` | the parts every overlay shares (also `Drawer.*`, `Dialog.*`) |
 | `Drawer` | `<Drawer open={!!p} onOpenChange={…} title="Payment" description={p.id}><Drawer.Body>…</Drawer.Body></Drawer>` · right side on desktop, a half/full sheet below 768px |
 | `Dialog` | `<Dialog open={open} onOpenChange={setOpen} title="New payment link"><Dialog.Body>…</Dialog.Body><Dialog.Footer>…</Dialog.Footer></Dialog>` · centred on desktop, a sheet below 768px |

@@ -20,6 +20,7 @@ import {
   QrCode,
   Copy,
   Check,
+  LogOut,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -35,6 +36,9 @@ import { Money } from "../primitives/Money";
 import { Badge, Chip, DeltaBadge, Pill } from "../primitives/Pill";
 import { RangeTabs, SegmentedControl, Tab, TabList, Tabs } from "../primitives/Segmented";
 import { toast } from "../primitives/Toast";
+import { SuccessCheck } from "../primitives/SuccessCheck";
+import { DetailsList } from "../composites/Stats";
+import { ListGroup, ListRow } from "../composites/ListRow";
 import { BottomSheet, Sheet, type SnapPoint } from "../overlays/BottomSheet";
 import { Dialog } from "../overlays/Panels";
 import { people, payments } from "./data";
@@ -482,6 +486,20 @@ function Controls({ theme }: { theme: Theme }) {
         </Card>
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <ListGroup label="ListRow · in a ListGroup">
+          <ListRow icon={<Bell />} title="Notifications" description="Payments due and money in" onClick={() => {}} />
+          <ListRow icon={<ScanFace />} title="Face ID" description="Asked for every payment" trailing={<Badge tone="up">On</Badge>} />
+          <ListRow icon={<Mail />} title="Name on links" trailing="Lena Vogel" onClick={() => {}} />
+          <ListRow icon={<LogOut />} tone="down" title="Log out" onClick={() => {}} chevron={false} />
+        </ListGroup>
+        <div className="flex flex-col gap-2">
+          <p className="mb-0 px-1 text-[14px] font-medium text-ui-muted">ListRow · card (ref D)</p>
+          <ListRow variant="card" icon={<Repeat />} tone="purple" title="Figura Pro renews" description="$12.00 on Oct 9" trailing="2h" />
+          <ListRow variant="card" icon={<Check />} tone="lime" title="Marisol claimed your link" description="$50.00 arrived" trailing="1d" />
+        </div>
+      </div>
+
       <Specimen label="Toast">
         <Button variant="outline" size="sm" icon={<Check />} onClick={() => toast({ title: "Link copied", tone: "success" })}>
           Success
@@ -526,6 +544,8 @@ type Demo = { key: string; label: string; snaps: SnapPoint[]; title: string };
 
 const DEMOS: Demo[] = [
   { key: "faceid", label: "Compact · Confirm with Face ID", snaps: ["compact"], title: "Confirm payment" },
+  { key: "faceid-fit", label: "Fit · the same, hugging its content", snaps: ["fit"], title: "Confirm payment" },
+  { key: "success", label: "Half · Success receipt", snaps: ["half"], title: "Receipt" },
   { key: "receive", label: "Half · Receive", snaps: ["half"], title: "Receive" },
   { key: "plan", label: "Half, drag to full · Plan", snaps: ["half", "full"], title: "Oat & Ember plan" },
   { key: "send", label: "Full · Send", snaps: ["full"], title: "Send" },
@@ -543,7 +563,7 @@ export function SectionPresentation() {
       id="presentation"
       eyebrow="Presentation"
       title="Sheets, drawers and dialogs"
-      description="Everything you do slides up as a BottomSheet: snap points (compact, half, full), drag with a velocity-based dismiss, a dimmed and blurred backdrop, the page behind scaled to 0.96 with rounded corners, a focus trap, Escape and a scroll lock. On the web, details open in a right-hand Drawer and create flows in a centred Dialog; below 768px both become sheets."
+      description="Everything you do slides up as a BottomSheet: snap points (compact, half, full, or fit to the content), drag with a velocity-based dismiss, a sheet over a sheet stacking with its own backdrop, a dimmed and blurred backdrop, the page behind scaled to 0.96 with rounded corners, a focus trap, Escape and a scroll lock. On the web, details open in a right-hand Drawer and create flows in a centred Dialog; below 768px both become sheets."
     >
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card padding="lg" className="flex flex-col gap-3 ring-1 ring-ui-hairline">
@@ -582,7 +602,7 @@ export function SectionPresentation() {
         title={active?.title}
         description={active?.key === "plan" ? "Pay in 4 · 2 of 4 paid" : undefined}
       >
-        {active?.key === "faceid" ? (
+        {active?.key === "faceid" || active?.key === "faceid-fit" ? (
           <Sheet.Body className="flex flex-col items-center gap-4 pt-2 text-center">
             <span className="grid size-16 place-items-center rounded-full bg-ui-surface-2">
               <ScanFace aria-hidden size={30} strokeWidth={1.5} />
@@ -594,6 +614,31 @@ export function SectionPresentation() {
               Confirm with Face ID
             </Button>
           </Sheet.Body>
+        ) : active?.key === "success" ? (
+          <>
+            <Sheet.Body className="flex flex-col items-center gap-3 pt-2 text-center">
+              <SuccessCheck label="Paid" />
+              <p className="mt-2 text-[34px] leading-none font-semibold tracking-[-0.03em]">Paid.</p>
+              <p className="text-[15px] text-ui-muted">$32.02 to Oat &amp; Ember. Next payment in two weeks.</p>
+              <DetailsList
+                size="sm"
+                className="mt-2 w-full text-left"
+                items={[
+                  { label: "Paid today", value: "$32.02" },
+                  { label: "Plan", value: "4 × $32.02" },
+                  { label: "Order", value: "#4821" },
+                ]}
+              />
+            </Sheet.Body>
+            <Sheet.Footer>
+              <Button variant="outline" size="lg">
+                View receipt
+              </Button>
+              <Button variant="lime" size="lg" onClick={() => setSheet(null)}>
+                Done
+              </Button>
+            </Sheet.Footer>
+          </>
         ) : active?.key === "receive" ? (
           <Sheet.Body className="flex flex-col items-center gap-4 pt-1">
             <div className="grid size-[176px] place-items-center rounded-[24px] bg-white p-4 text-[#13141f] ring-1 ring-ui-hairline-strong">

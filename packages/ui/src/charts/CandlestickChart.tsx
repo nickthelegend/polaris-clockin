@@ -119,7 +119,8 @@ export function CandlestickChart({
   const vEvery = Math.max(1, Math.round(n / 6));
 
   const tagYs = [last != null ? y(last) : null, reference ? y(reference.value) : null].filter((v): v is number => v !== null);
-  const clashes = (ty: number) => tagYs.some((t) => Math.abs(t - ty) < 14);
+  // A 23px tag hides any axis label within 20px of its middle.
+  const clashes = (ty: number) => tagYs.some((t) => Math.abs(t - ty) < 20);
 
   const locate = (e: PointerEvent<HTMLDivElement>) => {
     const el = ref.current;
@@ -237,7 +238,7 @@ export function CandlestickChart({
 
             {/* axis */}
             {ticks.map((t) =>
-              clashes(y(t)) || (crossY !== null && Math.abs(crossY - y(t)) < 14) ? null : (
+              clashes(y(t)) || (crossY !== null && Math.abs(crossY - y(t)) < 20) ? null : (
                 <text
                   key={`a${t}`}
                   x={plotW + AXIS_W / 2}

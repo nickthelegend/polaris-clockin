@@ -29,7 +29,11 @@ import { OverlayBody, OverlayContext, OverlayFooter, OverlayHeader } from "./par
 
 /* ── Snap points ─────────────────────────────────────────────────────────── */
 
-export type SnapPoint = "compact" | "half" | "full" | number;
+/**
+ * `compact`, `half` and `full` are fixed shares of the screen, a number is px,
+ * and `fit` hugs the content (a Face ID confirm, a short form), up to full.
+ */
+export type SnapPoint = "compact" | "half" | "full" | "fit" | number;
 
 const OPEN_SPRING = { type: "spring", stiffness: 360, damping: 36, mass: 0.9 } as const;
 const SNAP_SPRING = { type: "spring", stiffness: 420, damping: 40 } as const;
@@ -44,13 +48,40 @@ function readSafeTop(): number {
   return h;
 }
 
-function snapHeight(snap: SnapPoint, vh: number, safeTop: number): number {
+function snapHeight(snap: SnapPoint, vh: number, safeTop: number, fit = 0): number {
   const full = vh - safeTop - 24;
   if (typeof snap === "number") return Math.min(snap, full);
   if (snap === "full") return full;
   if (snap === "half") return Math.min(full, Math.round(vh * 0.6));
+  if (snap === "fit" && fit > 0) return Math.min(full, Math.ceil(fit));
   return Math.min(full, Math.round(Math.min(vh * 0.46, 380)));
 }
+
+/** A scroll area's content height (its own box may be stretched taller). */
+function scrollContentHeight(el: HTMLElement): number {
+  const style = getComputedStyle(el);
+  const pt = parseFloat(style.paddingTop) || 0;
+  const pb = parseFloat(style.paddingBottom) || 0;
+  const kids = Array.from(el.children) as HTMLElement[];
+  if (!kids.length) return pt + pb;
+  const top = el.getBoundingClientRect().top;
+  let bottom = top + pt;
+  for (const k of kids) bottom = Math.max(bottom, k.getBoundingClientRect().bottom);
+  return bottom - top + el.scrollTop + pb;
+}
+
+/** The height the sheet's column needs to show everything without scrolling. */
+function naturalHeight(column: HTMLElement): number {
+  let h = 0;
+  for (const child of Array.from(column.children) as HTMLElement[]) {
+    const scroll = child.hasAttribute("data-sheet-scroll") ? child : child.querySelector<HTMLElement>("[data-sheet-scroll]");
+    h += scroll ? child.offsetHeight - scroll.clientHeight + scrollContentHeight(scroll) : child.offsetHeight;
+  }
+  return h;
+}
+
+/** How many sheets are on screen: a sheet opened over another sits above it, backdrop and all. */
+let openSheets = 0;
 
 function rubber(overshoot: number): number {
   return -Math.sqrt(Math.max(0, overshoot)) * 4;
@@ -85,22 +116,33 @@ export function SheetStage({ scale = 0.96, className, style, children, ...props 
   const [frame, setFrame] = useState({ top: 0, bottom: 0, origin: 0, safe: 0 });
   const [open, setOpen] = useState(0);
   const reduced = useReducedMotion();
+  // Every sheet pushing the stage back right now. Stacked sheets (a Face ID
+  // confirm over a checkout) keep it back until the last one has gone.
+  const sheets = useRef(new Set<MotionValue<number>>());
 
   const attach = useCallback(
     (sheetProgress: MotionValue<number>) => {
       const el = stageRef.current;
-      if (el) {
+      // Measure only while nothing is open: once scaled, the rect is the scaled one.
+      if (el && sheets.current.size === 0) {
         const r = el.getBoundingClientRect();
         const vh = window.innerHeight;
         const top = Math.max(0, -r.top);
         setFrame({ top, bottom: Math.max(0, r.height - top - vh), origin: top, safe: readSafeTop() });
       }
+      sheets.current.add(sheetProgress);
+      const update = () => {
+        let max = 0;
+        for (const p of sheets.current) max = Math.max(max, p.get());
+        progress.set(max);
+      };
       setOpen((n) => n + 1);
-      const unsub = sheetProgress.on("change", (v) => progress.set(v));
-      progress.set(sheetProgress.get());
+      const unsub = sheetProgress.on("change", update);
+      update();
       return () => {
         unsub();
-        progress.set(0);
+        sheets.current.delete(sheetProgress);
+        update();
         setOpen((n) => Math.max(0, n - 1));
       };
     },
@@ -151,6 +193,8 @@ export type BottomSheetProps = {
   defaultSnap?: SnapPoint;
   /** Called when it settles on a snap point. */
   onSnapChange?: (snap: SnapPoint) => void;
+  /** Called once the close animation has finished and the sheet has left the page. */
+  onClosed?: () => void;
   /** Swipe down, the backdrop and Escape close it. */
   dismissible?: boolean;
   /** A title renders the standard header; or put <Sheet.Header> in children. */
@@ -186,6 +230,7 @@ export function BottomSheet({
   snapPoints = ["half"],
   defaultSnap,
   onSnapChange,
+  onClosed,
   dismissible = true,
   title,
   description,
@@ -204,12 +249,46 @@ export function BottomSheet({
   const layerTheme = useInheritedTheme(open, theme);
 
   const sheetRef = useRef<HTMLDivElement>(null);
+  const closedRef = useRef(onClosed);
+  useEffect(() => {
+    closedRef.current = onClosed;
+  });
   const titleId = useId();
   const descriptionId = useId();
 
+  // `fit`: the content's own height, measured while the sheet is on screen.
+  const columnRef = useRef<HTMLDivElement>(null);
+  const [fit, setFit] = useState(0);
+  const fits = snapPoints.includes("fit");
+  useIsomorphicLayoutEffect(() => {
+    const column = columnRef.current;
+    if (!fits || !present || !column) return;
+    const measure = () => setFit(naturalHeight(column));
+    measure();
+    const ro = new ResizeObserver(measure);
+    const watch = () => {
+      ro.disconnect();
+      for (const child of Array.from(column.children)) {
+        ro.observe(child);
+        const scroll = child.hasAttribute("data-sheet-scroll") ? child : child.querySelector("[data-sheet-scroll]");
+        if (scroll) for (const k of Array.from(scroll.children)) ro.observe(k);
+      }
+    };
+    watch();
+    const mo = new MutationObserver(() => {
+      watch();
+      measure();
+    });
+    mo.observe(column, { childList: true, subtree: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, [fits, present, mounted]);
+
   const heights = useMemo(
-    () => (vh ? snapPoints.map((s) => snapHeight(s, vh, safeTop)).sort((a, b) => a - b) : []),
-    [snapPoints, vh, safeTop],
+    () => (vh ? snapPoints.map((s) => snapHeight(s, vh, safeTop, fit)).sort((a, b) => a - b) : []),
+    [snapPoints, vh, safeTop, fit],
   );
   const H = heights.length ? heights[heights.length - 1]! : 0;
   const offsets = heights.map((h) => H - h); // translateY at rest, highest snap = 0
@@ -226,7 +305,7 @@ export function BottomSheet({
   const snapPointsKey = snapPoints.join(",");
   const initialIndex = useMemo(() => {
     if (defaultSnap === undefined) return 0;
-    const target = vh ? snapHeight(defaultSnap, vh, safeTop) : 0;
+    const target = vh ? snapHeight(defaultSnap, vh, safeTop, fit) : 0;
     const i = heights.findIndex((h) => h === target);
     return i < 0 ? 0 : i;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -253,12 +332,12 @@ export function BottomSheet({
       const target = offsets[index];
       if (target === undefined) return;
       setSnapIndex(index);
-      onSnapChange?.(snapPoints.slice().sort((a, b) => snapHeight(a, vh, safeTop) - snapHeight(b, vh, safeTop))[index]!);
+      onSnapChange?.(snapPoints.slice().sort((a, b) => snapHeight(a, vh, safeTop, fit) - snapHeight(b, vh, safeTop, fit))[index]!);
       if (reduced) animate(y, target, REDUCED);
       else animate(y, target, { ...SNAP_SPRING, velocity: velocity * 1000 });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [offsets.join(","), reduced, vh, safeTop, snapPointsKey],
+    [offsets.join(","), reduced, vh, safeTop, fit, snapPointsKey],
   );
 
   // Open and close.
@@ -278,7 +357,10 @@ export function BottomSheet({
       const c = animate(y, offsets[start]!, OPEN_SPRING);
       return () => c.stop();
     }
-    const done = () => setPresent(false);
+    const done = () => {
+      setPresent(false);
+      closedRef.current?.();
+    };
     const c = reduced
       ? animate(fade, 0, { ...REDUCED, onComplete: done })
       : animate(y, closedY, { type: "spring", stiffness: 380, damping: 40, restDelta: 1, onComplete: done });
@@ -291,6 +373,17 @@ export function BottomSheet({
     if (open && present && H && y.get() < closedY - 1) y.set(offsets[snapIndex] ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [H]);
+
+  // Stack over any sheet already open: its own backdrop dims the one below.
+  const [depth, setDepth] = useState(0);
+  useIsomorphicLayoutEffect(() => {
+    if (!present) return;
+    setDepth(openSheets);
+    openSheets += 1;
+    return () => {
+      openSheets = Math.max(0, openSheets - 1);
+    };
+  }, [present]);
 
   // Push the stage back.
   useEffect(() => {
@@ -311,9 +404,20 @@ export function BottomSheet({
     pointerId?: number;
   } | null>(null);
 
+  // Never leave the page unselectable if the sheet goes mid-drag.
+  useEffect(
+    () => () => {
+      if (drag.current) document.documentElement.style.userSelect = "";
+    },
+    [],
+  );
+
   const begin = (clientY: number, pointerId?: number) => {
     drag.current = { startY: clientY, startOffset: y.get(), samples: [{ t: performance.now(), y: clientY }], pointerId };
     y.stop();
+    // A mouse drag on the title must move the sheet, not select its text.
+    document.documentElement.style.userSelect = "none";
+    window.getSelection()?.removeAllRanges();
   };
 
   const move = (clientY: number) => {
@@ -330,6 +434,7 @@ export function BottomSheet({
   const release = () => {
     const d = drag.current;
     drag.current = null;
+    document.documentElement.style.userSelect = "";
     if (!d) return;
     const s = d.samples;
     const a = s[0]!;
@@ -413,12 +518,12 @@ export function BottomSheet({
       descriptionId,
       close,
       snapTo: (snap: string | number) => {
-        const h = snapHeight(snap as SnapPoint, vh, safeTop);
+        const h = snapHeight(snap as SnapPoint, vh, safeTop, fit);
         const i = heights.findIndex((x) => x === h);
         if (i >= 0) settle(i);
       },
     }),
-    [titleId, descriptionId, close, vh, safeTop, heights, settle],
+    [titleId, descriptionId, close, vh, safeTop, fit, heights, settle],
   );
 
   if (!mounted || !present) return null;
@@ -428,8 +533,8 @@ export function BottomSheet({
     <OverlayContext.Provider value={ctx}>
       <motion.div
         aria-hidden
-        className="fixed inset-0 z-[900] bg-ui-scrim backdrop-blur-[8px]"
-        style={{ opacity: backdrop }}
+        className="fixed inset-0 bg-ui-scrim backdrop-blur-[8px]"
+        style={{ opacity: backdrop, zIndex: 900 + depth * 2 }}
         onClick={dismissible ? close : undefined}
       />
       <motion.div
@@ -447,14 +552,14 @@ export function BottomSheet({
         onPointerUp={(e) => drag.current?.pointerId === e.pointerId && release()}
         onPointerCancel={(e) => drag.current?.pointerId === e.pointerId && release()}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-[901] mx-auto touch-none rounded-t-ui-sheet bg-ui-surface-1 font-satoshi text-ui-text shadow-[0_-12px_40px_rgb(0_0_0/0.25)] outline-none",
+          "fixed inset-x-0 bottom-0 mx-auto touch-none rounded-t-ui-sheet bg-ui-surface-1 font-satoshi text-ui-text shadow-[0_-12px_40px_rgb(0_0_0/0.25)] outline-none",
           className,
         )}
-        style={{ height: H, maxWidth, y, opacity: fade }}
+        style={{ height: H, maxWidth, y, opacity: fade, zIndex: 901 + depth * 2 }}
       >
         {/* Fills the gap under the sheet when it is pulled past its top snap. */}
         <div aria-hidden className="absolute inset-x-0 top-full h-[120px] bg-ui-surface-1" />
-        <motion.div className="flex flex-col overflow-hidden rounded-t-ui-sheet" style={{ height: innerHeight }}>
+        <motion.div ref={columnRef} className="flex flex-col overflow-hidden rounded-t-ui-sheet" style={{ height: innerHeight }}>
           <div className="flex shrink-0 cursor-grab justify-center pt-2 pb-1.5 active:cursor-grabbing">
             <span aria-hidden className="h-[5px] w-10 rounded-full bg-ui-text/20" />
           </div>
