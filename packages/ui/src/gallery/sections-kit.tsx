@@ -485,7 +485,8 @@ function Controls({ theme }: { theme: Theme }) {
           </div>
           <Skeleton shape="tile" height={64} />
         </Card>
-        <Card variant="raised" className="flex flex-col gap-4">
+        {/* Outline, not raised: the discs are surface-2, like a raised card. */}
+        <Card variant="outline" className="flex flex-col gap-4">
           <p className="text-[13px] font-medium text-ui-muted">IconDisc · sm, md, lg</p>
           <div className="flex items-center gap-3">
             <IconDisc size="sm" icon={<Inbox />} />
