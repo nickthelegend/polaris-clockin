@@ -109,7 +109,8 @@ export function toPlan(p: BuyerBook["plans"][number]): Plan {
   const amounts = instalmentAmounts(total, p.installments);
   const instalments: Instalment[] = amounts.map((amount, i) => {
     const dueAt = (p.startedAt + (i + 1) * p.intervalSeconds) * 1000;
-    return { index: i + 1, amount, dueAt, paidAt: i < p.installmentsPaid ? Math.min(dueAt, Date.now()) : null };
+    // 0-based, as every screen counts them ("1 of 4" is index 0).
+    return { index: i, amount, dueAt, paidAt: i < p.installmentsPaid ? Math.min(dueAt, Date.now()) : null };
   });
   return {
     id: p.id,
