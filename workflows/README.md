@@ -535,16 +535,19 @@ with against what it used:
 
 | Report | Gas used | Limit sent |
 |---|---:|---:|
-| Underwriting, one buyer with a history wallet | 136,222 | 156,655 |
-| Collections, one instalment collected | 150,161 | 193,810 |
+| Underwriting, one buyer with a history wallet (Confidential HTTP on) | 143,938 | 165,528 |
+| Collections, one instalment collected | 150,073 | 193,707 |
 | Collections, one instalment skipped (dunning) | 77,281 | 150,000 (the floor) |
-| Collections, a skip plus a liquidation | 161,813 | 216,110 |
+| Collections, a skip plus a liquidation | 161,835 | 216,137 |
+
+(`e2e:local` on 28 Sep 2026: 7 of 7 pass.)
 
 ## Status
 
 | | |
 |---|---|
-| Both workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed |
+| Both workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed (28 Sep 2026: collections 2.76 MB, underwriting 2.89 MB) |
+| `project.yaml` with the `monad-mainnet` read target | accepted: `cre workflow hash -T <target>` loads the settings of every target (a misspelt chain name is refused: `invalid chain name`); `cre workflow build` does not read them |
 | Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`, `e2e:local`) |
 | `cre workflow simulate --broadcast` on Monad testnet | ready (`evidence`, `collections:loop`); needs `cre login` and a funded `CRE_ETH_PRIVATE_KEY`. Its runs land in [`evidence/`](evidence/) |
 | Monad testnet | waits for `deploy:monad`; `evidence` then fills `config.staging.json` from the record |
