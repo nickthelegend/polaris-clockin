@@ -191,8 +191,9 @@ type Ledger = {
 
 function seed(): Ledger {
   const t = loadedAt;
-  // Opened 15, 9 and 40 days ago; each paid instalment was paid on its due day.
-  const lumen = planFrom("plan-lumen", 41n, merchants.lumen, "Studio headphones", dollars(240), t - 15 * MS_DAY - 4 * MS_HOUR, 2);
+  // Opened about 15, 9 and 40 days ago; each paid instalment was paid on its
+  // due day, so Lumen's second one went out 20 hours ago.
+  const lumen = planFrom("plan-lumen", 41n, merchants.lumen, "Studio headphones", dollars(240), t - 14 * MS_DAY - 20 * MS_HOUR, 2);
   const kora = planFrom("plan-kora", 44n, merchants.kora, "Lisbon to Porto rail pass", dollars(120), t - 9 * MS_DAY - 3 * MS_HOUR, 1);
   const grinder = planFrom("plan-nomada", 29n, merchants.nomada, "Espresso grinder", dollars(180), t - 40 * MS_DAY, 4);
 
