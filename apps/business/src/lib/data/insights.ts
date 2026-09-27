@@ -1,4 +1,4 @@
-import type { Cents, CollectorStatus, IsoDate, Payment, Plan, WebhookEventType } from "./types";
+import type { Cents, CollectorStatus, Insights, IsoDate, Payment, Plan, WebhookEventType } from "./types";
 
 /**
  * The sponsor-backed panels on the Overview, behind one typed function each:
@@ -9,19 +9,19 @@ import type { Cents, CollectorStatus, IsoDate, Payment, Plan, WebhookEventType }
  * | Indexed events | Envio HyperIndex on Monad | `getIndexedEvents` |
  * | Credit exposure reasons | Nansen wallet history (underwriting) | `getUnderwritingReasons` |
  *
- * The collections workflow reports each run to this server (its heartbeat is
- * `Overview.collector`), so that panel is live once the workflow runs; the
- * indexer feed and the underwriting reasons don't report to the dashboard
- * yet. Each function returns `{ source: "not_connected" }` for a live
- * merchant when its service is silent, so the panel says so, and
- * `{ source: "placeholder" }` with realistic data only when sample data is on,
- * so the panel carries a "Sample" chip. The `placeholder*` builders are named
- * for what they are; wiring a service means replacing one with a fetch and
- * returning `{ source: "live" }`.
+ * The collections workflow's runs reach this server through the chain sync
+ * (its heartbeat is `Overview.collector`); the indexer feed and the
+ * underwriting reasons come with the Overview (`Overview.insights`, built by
+ * server/insights.ts from @polarispay/indexer-client and the CRE decisions).
+ * Each function returns `{ source: "not_connected" }` for a live merchant
+ * when its service is silent, so the panel says so, `{ source: "live" }`
+ * with `via` naming where live data came from when it isn't the service
+ * itself, and `{ source: "placeholder" }` with realistic data only when
+ * sample data is on, so the panel carries a "Sample" chip.
  */
 
 export type Sourced<T> =
-  | { source: "live"; data: T }
+  | { source: "live"; data: T; via?: "chain-sync" }
   | { source: "placeholder"; data: T }
   | { source: "not_connected"; reason: string };
 
@@ -174,11 +174,27 @@ export function placeholderIndexedEvents(payments: Payment[], plans: Plan[], now
   return events.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 8);
 }
 
-export function getIndexedEvents({ sample, payments, plans }: { sample: boolean; payments: Payment[]; plans: Plan[] }): Sourced<IndexedEvent[]> {
+export function getIndexedEvents({
+  sample,
+  payments,
+  plans,
+  insights,
+}: {
+  sample: boolean;
+  payments: Payment[];
+  plans: Plan[];
+  insights?: Insights;
+}): Sourced<IndexedEvent[]> {
   if (sample) return { source: "placeholder", data: placeholderIndexedEvents(payments, plans) };
+  const feed = insights?.indexer;
+  if (feed?.source === "envio") return { source: "live", data: feed.events };
+  if (feed?.source === "chain-sync" && feed.events.length) return { source: "live", data: feed.events, via: "chain-sync" };
+  if (feed?.source === "envio-error") {
+    return { source: "not_connected", reason: `The Envio indexer didn't answer (${feed.error}). Your payments and plans still come straight from Monad, through this server's own chain sync.` };
+  }
   return {
     source: "not_connected",
-    reason: "The Envio indexer for Polaris isn't streaming to this dashboard yet. Your payments and plans already come straight from Monad, through this server's own chain sync.",
+    reason: "The Envio indexer for Polaris isn't connected to this server (POLARIS_INDEXER_URL). Your payments and plans already come straight from Monad, through this server's own chain sync.",
   };
 }
 
@@ -240,8 +256,9 @@ export function placeholderUnderwriting(plans: Plan[]): Underwriting {
   };
 }
 
-export function getUnderwritingReasons({ sample, plans }: { sample: boolean; plans: Plan[] }): Sourced<Underwriting> {
+export function getUnderwritingReasons({ sample, plans, insights }: { sample: boolean; plans: Plan[]; insights?: Insights }): Sourced<Underwriting> {
   if (sample) return { source: "placeholder", data: placeholderUnderwriting(plans) };
+  if (insights?.underwriting) return { source: "live", data: insights.underwriting };
   return {
     source: "not_connected",
     reason: "When a buyer picks Pay in 4, Chainlink CRE nodes fetch their wallet history from Nansen and the score is computed on chain. The reasons behind your buyers' lines show here once underwriting reports.",

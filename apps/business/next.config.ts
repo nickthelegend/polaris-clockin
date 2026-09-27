@@ -11,7 +11,7 @@ const config: NextConfig = {
   devIndicators: false,
   poweredByHeader: false,
   // The component library, the brand and @polaris/db ship TypeScript source.
-  transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/db"],
+  transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/db", "@polarispay/indexer-client"],
   // The Privy Node SDK verifies tokens with `jose` and signs wallet requests with
   // node:crypto. Keep it out of the server bundle so it loads as plain Node.
   serverExternalPackages: ["@privy-io/node"],

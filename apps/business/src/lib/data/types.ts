@@ -153,6 +153,23 @@ export type Overview = {
   collector: CollectorStatus;
   autoPayouts: AutoPayouts;
   sample: boolean;
+  /** The sponsor panels' live data (server/insights.ts); absent for a sample book. */
+  insights?: Insights;
+};
+
+/**
+ * What the Overview's Envio and credit panels show for a live merchant.
+ * `indexer.source`: "envio" (the Polaris Envio indexer), "envio-error" (it
+ * is configured but didn't answer), or "chain-sync" (no indexer configured:
+ * this server's own chain sync, labelled as such).
+ */
+export type Insights = {
+  indexer:
+    | { source: "envio"; events: import("./insights").IndexedEvent[]; progressBlock: number | null }
+    | { source: "envio-error"; error: string }
+    | { source: "chain-sync"; events: import("./insights").IndexedEvent[] };
+  /** Null until a CRE underwriting decision with reasons exists for one of this merchant's Pay in 4 buyers. */
+  underwriting: import("./insights").Underwriting | null;
 };
 
 /* ── Payouts ────────────────────────────────────────────────────────────── */

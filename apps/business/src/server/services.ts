@@ -54,6 +54,7 @@ import { createPayoutPolicy } from "./payout-policy";
 import { nextRunAt, runPayoutSweep, walletBalanceUnits, withdrawSigned } from "./payouts/payouts";
 import { dispatchDue } from "./webhooks/dispatcher";
 import { emitEvent } from "./webhooks/events";
+import { merchantInsights } from "./insights";
 
 /**
  * What each dashboard route does once the caller is known. Route handlers are
@@ -202,6 +203,10 @@ async function collectorStatus(merchant: MerchantRecord): Promise<CollectorStatu
 export async function getOverview(auth: AuthedMerchant): Promise<Overview> {
   const merchant = await refreshRegistration(await ensureMerchant(auth));
   const [payments, plans, balance, collector] = await Promise.all([listPayments(auth), listPlans(auth), balanceCents(merchant), collectorStatus(merchant)]);
+  const insights = await merchantInsights({ wallet: merchant.walletAddress, sample: merchant.sample, payments, plans }).catch((error: unknown) => {
+    console.error("[overview] insights failed", error);
+    return undefined;
+  });
 
   const now = Date.now();
   const today = payments.filter((p) => isToday(p.createdAt, now));
@@ -273,6 +278,7 @@ export async function getOverview(auth: AuthedMerchant): Promise<Overview> {
     collector,
     autoPayouts: toAutoPayouts(merchant),
     sample: merchant.sample,
+    insights,
   };
 }
 

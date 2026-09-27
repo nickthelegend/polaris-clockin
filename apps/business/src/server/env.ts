@@ -138,6 +138,11 @@ export type ServerConfig = {
   /** The underwriting gateway (apps/gateway), which explains an attested decision in the buyer's words. */
   underwriting: { gatewayUrl: string | null; apiToken: string | null };
   /**
+   * The Polaris Envio indexer's GraphQL endpoint (POLARIS_INDEXER_URL, and
+   * POLARIS_INDEXER_TOKEN on a paid plan): the Overview's event feed reads it.
+   */
+  indexer: { url: string | null; token: string | null };
+  /**
    * How many proxies we run in front of this server, each appending to
    * X-Forwarded-For: the client's IP is that many entries from the right
    * (http.ts `clientIp`). 0 means Next is exposed directly.
@@ -327,6 +332,19 @@ function origin(value: string, name: string): string {
   }
 }
 
+/** A full http(s) URL (path kept), or null when unset. */
+function httpUrl(value: string | undefined, name: string): string | null {
+  if (!value) return null;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} must be a URL, got ${JSON.stringify(value)}`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error(`${name} must be an http(s) URL`);
+  return url.toString().replace(/\/+$/, "");
+}
+
 function build(): ServerConfig {
   const production = process.env.NODE_ENV === "production";
   const { deployment, problem } = loadDeployment();
@@ -409,6 +427,10 @@ function build(): ServerConfig {
     underwriting: {
       gatewayUrl: (env("UNDERWRITING_GATEWAY_URL") ?? "").replace(/\/+$/, "") || null,
       apiToken: env("UNDERWRITING_API_TOKEN") ?? null,
+    },
+    indexer: {
+      url: httpUrl(env("POLARIS_INDEXER_URL"), "POLARIS_INDEXER_URL"),
+      token: env("POLARIS_INDEXER_TOKEN") ?? null,
     },
     // POLARIS_TRUST_PROXY=1 (the older setting) means one proxy.
     trustedProxies: Math.max(0, int("POLARIS_TRUSTED_PROXIES", flag("POLARIS_TRUST_PROXY") ? 1 : 0)),

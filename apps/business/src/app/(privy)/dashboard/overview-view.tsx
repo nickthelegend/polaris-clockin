@@ -35,7 +35,7 @@ import { RegistrationNotice } from "@/components/dashboard/registration";
 import { customersThisWeek, salesByMode, salesSeries, SERIES_FRAMES, type SeriesFrame } from "@/lib/data/analytics";
 import { formatAgo, MODE_LABEL, money, shortAddress } from "@/lib/data/format";
 import { getCollectionsRun, getIndexedEvents, getUnderwritingReasons, placeholderNextEvent, type IndexedEvent } from "@/lib/data/insights";
-import type { Overview, PayMode, Payment, Plan } from "@/lib/data/types";
+import type { Insights, Overview, PayMode, Payment, Plan } from "@/lib/data/types";
 import { useMerchant } from "@/lib/merchant-context";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
 
@@ -80,7 +80,7 @@ export function OverviewView() {
             <ModesPanel payments={list} sample={sample.on} />
             <ExposurePanel overview={overview.data} plans={plans.data} sample={sample.on} className="md:col-span-2 xl:col-span-1" />
             <CollectionsPanel plans={plans.data} collector={overview.data?.collector} sample={sample.on} />
-            <EnvioFeed payments={list} plans={plans.data} sample={sample.on} className="xl:col-span-2" />
+            <EnvioFeed payments={list} plans={plans.data} insights={overview.data?.insights} sample={sample.on} className="xl:col-span-2" />
           </div>
         </>
       )}
@@ -448,7 +448,8 @@ function ModesPanel({ payments, sample }: { payments?: Payment[]; sample: boolea
 
 function ExposurePanel({ overview, plans, sample, className }: { overview?: Overview; plans?: Plan[]; sample: boolean; className?: string }) {
   const e = overview?.exposure;
-  const reasons = useMemo(() => (plans ? getUnderwritingReasons({ sample, plans }) : null), [plans, sample]);
+  const insights = overview?.insights;
+  const reasons = useMemo(() => (plans ? getUnderwritingReasons({ sample, plans, insights }) : null), [plans, sample, insights]);
   return (
     <Panel title="Credit exposure" subtitle="Pay in 4 plans still collecting" sample={sample} action={<SeeAll href="/dashboard/plans">Ledger</SeeAll>} className={className}>
       {!e || !reasons ? (
@@ -595,9 +596,22 @@ function eventTone(type: string): StatusPillTone {
   return "lime";
 }
 
-function EnvioFeed({ payments, plans, sample, className }: { payments?: Payment[]; plans?: Plan[]; sample: boolean; className?: string }) {
+function EnvioFeed({
+  payments,
+  plans,
+  insights,
+  sample,
+  className,
+}: {
+  payments?: Payment[];
+  plans?: Plan[];
+  insights?: Insights;
+  sample: boolean;
+  className?: string;
+}) {
   const now = useNow(10_000);
-  const feed = useMemo(() => (payments && plans ? getIndexedEvents({ sample, payments, plans }) : null), [payments, plans, sample]);
+  const feed = useMemo(() => (payments && plans ? getIndexedEvents({ sample, payments, plans, insights }) : null), [payments, plans, sample, insights]);
+  const viaSync = feed?.source === "live" && feed.via === "chain-sync";
   const [live, setLive] = useState<IndexedEvent[]>([]);
 
   // Sample mode: a new sample event every few seconds, so the feed moves as it will live.
@@ -615,12 +629,16 @@ function EnvioFeed({ payments, plans, sample, className }: { payments?: Payment[
   return (
     <Panel
       title="Indexed by Envio"
-      subtitle="Chain events as they settle"
+      subtitle={viaSync ? "Envio isn't connected: from this server's chain sync" : "Chain events as they settle"}
       sample={sample}
       className={className}
       action={
         // "Streaming" only when it is: sample events carry the Sample chip instead.
-        feed?.source === "live" ? (
+        viaSync ? (
+          <StatusPill tone="neutral" size="sm">
+            Chain sync
+          </StatusPill>
+        ) : feed?.source === "live" ? (
           <StatusPill tone="lime" size="sm" icon={<span className="block size-2 rounded-full bg-current" />}>
             Streaming
           </StatusPill>
@@ -654,7 +672,9 @@ function EnvioFeed({ payments, plans, sample, className }: { payments?: Payment[
                     {ev.title}
                   </span>
                   <span className="ui-figure block truncate text-[12.5px] text-ui-muted">
-                    Block {ev.block.toLocaleString("en-US")} · {shortAddress(ev.txHash, 6, 4)} · {formatAgo(ev.at, now)}
+                    {[ev.block > 0 ? `Block ${ev.block.toLocaleString("en-US")}` : null, ev.txHash ? shortAddress(ev.txHash, 6, 4) : null, formatAgo(ev.at, now)]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </span>
                 <span className="ui-figure shrink-0 text-[15px] font-medium">{money(ev.amountCents)}</span>
