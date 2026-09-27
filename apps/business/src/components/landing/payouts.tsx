@@ -55,6 +55,7 @@ export function Payouts() {
           <div className="mx-auto grid max-w-[460px] gap-3 rounded-[32px] border border-ui-hairline-strong p-4 sm:p-6">
             <div className="mb-2 flex min-h-10 items-center justify-between gap-3">
               <TextTabs
+                size="auto"
                 aria-label="How you withdraw"
                 options={[
                   { value: "once", label: "Withdraw" },

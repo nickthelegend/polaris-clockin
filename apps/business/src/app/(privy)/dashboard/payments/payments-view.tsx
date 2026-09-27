@@ -114,7 +114,7 @@ export function PaymentsView() {
       <StaleNotice queries={[payments as QueryState<unknown>]} />
       <DataModeNotice empty={list !== undefined && list.length === 0} />
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px]">
         <section aria-label="All payments" className="min-w-0">
           <FigureRow
             caption="Gross, last 30 days"
@@ -209,7 +209,7 @@ export function PaymentsView() {
           </div>
         </section>
 
-        <aside aria-label="Payments summary" className="grid min-w-0 content-start gap-3">
+        <aside aria-label="Payments summary" className="grid min-w-0 content-start gap-3 md:grid-cols-2 xl:grid-cols-1">
           {summary ? (
             <BalanceSummaryCard
               label={
@@ -239,13 +239,13 @@ export function PaymentsView() {
               <Skeleton shape="tile" height={140} className="mt-4" />
             )}
           </PanelCard>
-          <PrimaryButton asChild size="lg" block icon={<Link2 />} className="mt-1">
+          <PrimaryButton asChild size="lg" block icon={<Link2 />} className="xl:mt-1">
             <Link href="/dashboard/links?new=1">New payment link</Link>
           </PrimaryButton>
           <SecondaryButton size="lg" block iconRight={<Download />} onClick={exportCsv} disabled={!filtered.length}>
             Export CSV
           </SecondaryButton>
-          <p className="px-1 text-[13px] leading-relaxed text-ui-muted">
+          <p className="px-1 text-[13px] leading-relaxed text-ui-muted md:col-span-2 xl:col-span-1">
             Pay now and subscriptions cost 0.5% per payment. Pay in 4 costs you nothing: the buyer pays 10% APR to Polaris, and you are paid in full at
             checkout.
           </p>

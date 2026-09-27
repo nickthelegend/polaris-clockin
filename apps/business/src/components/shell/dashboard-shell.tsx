@@ -5,15 +5,12 @@ import {
   Avatar,
   IconSquareButton,
   Menu,
-  PageHeader,
   PrimaryButton,
   SecondaryButton,
   StatusPill,
   TopNav,
   WalletPill,
-  cn,
   toast,
-  type PageHeaderProps,
 } from "@polaris/ui";
 import {
   ArrowLeftRight,
@@ -38,7 +35,6 @@ import { BusinessLogo } from "@/components/app/brand";
 import { useAuth } from "@/lib/auth-context";
 import { shortAddress } from "@/lib/data/format";
 import type { Merchant } from "@/lib/data/types";
-import { useMerchant } from "@/lib/merchant-context";
 import { useSample } from "@/lib/session";
 import { markExplicitSignOut } from "@/lib/sign-out";
 
@@ -216,24 +212,4 @@ export function AccountMenu({ merchant }: { merchant: Merchant }) {
       </Menu.Item>
     </Menu>
   );
-}
-
-/**
- * A dashboard page's header in ref E's rhythm: the title at the pair
- * header's weight, a muted line under it, and the page's actions on the
- * right. (The account menu lives in the top nav.)
- */
-export function DashboardHeader({ className, ...props }: Omit<PageHeaderProps, "trailing">) {
-  return (
-    <PageHeader
-      actionsAlign="title"
-      {...props}
-      className={cn("mb-7 pt-2 md:mb-8 [&_h1]:text-[30px] md:[&_h1]:text-[34px] [&_h1]:tracking-[-0.03em]", className)}
-    />
-  );
-}
-
-export function greeting(date = new Date()) {
-  const h = date.getHours();
-  return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 }

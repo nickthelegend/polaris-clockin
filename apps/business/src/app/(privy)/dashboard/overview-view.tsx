@@ -201,7 +201,7 @@ function RecentPayments({ payments, sample, className }: { payments: QueryState<
         empty={<PanelEmpty icon={<Layers />} title="No payments yet" description="Your latest payments land here the second they settle." />}
         columns={[
           { key: "customer", header: "Customer", render: (p) => <PaymentName p={p} /> },
-          { key: "item", header: "Item", hideBelow: "md", render: (p) => <span className="block max-w-[220px] truncate" title={p.description}>{p.description}</span> },
+          { key: "item", header: "Item", hideBelow: "xl", render: (p) => <span className="block max-w-[220px] truncate" title={p.description}>{p.description}</span> },
           {
             key: "amount",
             header: "Amount",

@@ -69,16 +69,16 @@ export function DevelopersView() {
           />
         }
       />
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-4 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-4 xl:grid-cols-[minmax(0,1fr)_404px]">
         <div className="grid min-w-0 content-start gap-4">
           <ApiKeysPanel sample={sample} />
           <WebhooksPanel sample={sample} />
         </div>
-        <div className="grid min-w-0 content-start gap-4">
+        <div className="grid min-w-0 content-start gap-4 md:grid-cols-2 xl:grid-cols-1">
           <IntegrationPanel sample={sample} />
           <DemoShopPanel />
         </div>
-        <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="lg:col-span-2">
+        <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="xl:col-span-2">
           <CodeBlock className="mt-5" aria-label="SDK example" note={sdk.note} copyable defaultKey="node" samples={sdk.samples.map((s) => ({ ...s }))} />
         </Panel>
       </div>

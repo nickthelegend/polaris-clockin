@@ -52,7 +52,7 @@ export function SettingsView() {
         ]}
       />
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-4 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-4 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_404px]">
         <div className="grid min-w-0 content-start gap-4">
           <BusinessPanel />
           <WalletPanel />

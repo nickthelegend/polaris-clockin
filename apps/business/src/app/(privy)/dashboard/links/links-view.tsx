@@ -140,7 +140,7 @@ export function LinksView() {
         </Notice>
       ) : null}
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px]">
         <section aria-label="Your payment links" className="min-w-0">
           <FigureRow
             caption="Collected through your links"
@@ -188,7 +188,7 @@ export function LinksView() {
           </div>
         </section>
 
-        <aside aria-label="Request a payment" className="grid min-w-0 content-start gap-3">
+        <aside aria-label="Request a payment" className="grid min-w-0 content-start gap-3 md:max-w-[480px] xl:max-w-none">
           <MoneyWidget
             defaultTab="request"
             onLinkCreated={(link) => {

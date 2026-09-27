@@ -93,7 +93,7 @@ export function PlansView() {
       <StaleNotice queries={[plans as QueryState<unknown>]} />
       <DataModeNotice empty={list !== undefined && list.length === 0} />
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px]">
         <section aria-label="The Pay in 4 ledger" className="min-w-0">
           <FigureRow
             caption="Still owed by buyers"
@@ -157,7 +157,7 @@ export function PlansView() {
           </div>
         </section>
 
-        <aside aria-label="Pay in 4 summary" className="grid min-w-0 content-start gap-3">
+        <aside aria-label="Pay in 4 summary" className="grid min-w-0 content-start gap-3 md:grid-cols-2 xl:grid-cols-1">
           {s ? (
             <BalanceSummaryCard
               label={
@@ -245,7 +245,7 @@ const COLUMNS: TableColumn<Plan>[] = [
       </span>
     ),
   },
-  { key: "state", header: "State", hideBelow: "md", render: (p) => <PlanStateBadge state={p.state} size="md" /> },
+  { key: "state", header: "State", hideBelow: "sm", render: (p) => <PlanStateBadge state={p.state} size="md" /> },
   {
     key: "outstanding",
     header: "Outstanding",

@@ -198,6 +198,7 @@ export function CheckoutWidgetPreview({ onPaid, className }: { onPaid?: (cents: 
     <div className={cn("grid min-w-0 content-start gap-3", className)}>
       <div className="mb-2 flex min-h-10 items-center justify-between gap-3">
         <TextTabs
+          size="auto"
           aria-label="How the buyer pays"
           options={[
             { value: "now", label: "Pay now" },

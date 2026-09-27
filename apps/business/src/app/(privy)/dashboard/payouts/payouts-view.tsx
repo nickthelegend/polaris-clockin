@@ -77,7 +77,7 @@ export function PayoutsView() {
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const state = payouts.data;
   const wallet = state?.walletAddress ?? merchant.walletAddress;
-  const history = state?.history ?? [];
+  const history = useMemo(() => state?.history ?? [], [state]);
   const paidOut = useMemo(() => history.filter((p) => p.status === "paid").reduce((s, p) => s + p.amountCents, 0), [history]);
 
   return (
