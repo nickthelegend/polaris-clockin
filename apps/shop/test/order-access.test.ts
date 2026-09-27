@@ -35,13 +35,13 @@ beforeEach(async () => {
     "fetch",
     vi.fn(async () => {
       retrieves += 1;
-      return Response.json({ id: "cs_test_1", object: "checkout.session", status: "open", payment: null });
+      return Response.json({ id: "cs_test_a1b2c3d4e5f6", object: "checkout.session", status: "open", payment: null });
     }),
   );
   const created = await createOrder(priced(), "hc_access_test");
   if (!created.ok) throw new Error("no order");
   await orderStore().update((d) => {
-    d.orders[created.order.id]!.payment.sessionId = "cs_test_1";
+    d.orders[created.order.id]!.payment.sessionId = "cs_test_a1b2c3d4e5f6";
   });
   order = (await orderStore().read()).orders[created.order.id]!;
   cookie = `hc_o_${order.id}=${order.accessToken}`;
