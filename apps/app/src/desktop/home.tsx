@@ -111,7 +111,7 @@ function BalanceChart({ className }: { className?: string }) {
         value={series ? <Money value={series.end} /> : undefined}
         delta={series && !series.empty ? series.deltaPct : undefined}
         deltaSuffix={f.suffix}
-        deltaLabel={series && !series.empty && series.deltaPct === null ? "New" : undefined}
+        deltaLabel={series && !series.empty ? changeLabel(series, f.suffix) : undefined}
         deltaTitle={series ? `From ${dollars(series.start)} at the start of ${f.title}` : undefined}
         valueTitle={`${what}, now`}
         right={<TimeframeChips options={["1h", "24h", "1w", "1m"] as const} value={frame} onValueChange={setFrame} aria-label="Timeframe" />}
@@ -153,6 +153,17 @@ function BalanceChart({ className }: { className?: string }) {
       </div>
     </section>
   );
+}
+
+/**
+ * The chip reads in percent, like the reference, until the frame starts near
+ * zero (a first deposit): then "+13,000%" says nothing and dollars say it all.
+ */
+function changeLabel(series: Series, suffix: string): string | undefined {
+  const change = series.end - series.start;
+  if (series.deltaPct !== null && Math.abs(series.deltaPct) < 1000) return undefined;
+  if (Math.abs(change) < 0.005) return "No change";
+  return `${change > 0 ? "+" : "−"}${dollars(Math.abs(change))} ${suffix}`;
 }
 
 function BoostEmpty() {

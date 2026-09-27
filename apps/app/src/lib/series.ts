@@ -54,7 +54,7 @@ function build(end: number, steps: Step[], frame: Frame, now: number): Series {
   const from = now - span;
   // Each step eases in over this long before it lands: wide enough that the
   // steps run together into one line, still a clear move on the hour.
-  const ramp = span / 5;
+  const ramp = span / 7;
 
   const exact = (t: number) => end - steps.filter((s) => s.at > t).reduce((sum, s) => sum + s.delta, 0);
   const smooth = (t: number) => end - steps.reduce((sum, s) => sum + s.delta * (1 - ease(t, s.at - ramp, s.at)), 0);

@@ -1,10 +1,11 @@
 "use client";
 
-import { AssetRow, CardStack, DetailsList, IconButton, ScreenHeader, SectionHeader, Skeleton } from "@polaris/ui";
+import { AssetRow, CardStack, DetailsList, IconButton, ScreenHeader, SectionHeader, Skeleton, useIsDesktop } from "@polaris/ui";
 import { ArrowDownToLine, ArrowUpFromLine, Bell, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAccounts } from "@/components/accounts";
 import { TabScreen } from "@/components/screen";
+import { CardsDesktop } from "@/desktop/cards";
 import { useNotices } from "@/components/use-notices";
 import { useOwner } from "@/lib/account/hooks";
 import { getActivity, getProfile } from "@/lib/data";
@@ -15,6 +16,10 @@ import { balanceChange } from "@/lib/view";
 
 /** Cards, on ref D's balance card with side squares: your account, its three faces, and its details. */
 export function Cards() {
+  return useIsDesktop() ? <CardsDesktop /> : <CardsPhone />;
+}
+
+function CardsPhone() {
   const router = useRouter();
   const owner = useOwner();
   const profile = useData(() => getProfile(owner), [owner]);

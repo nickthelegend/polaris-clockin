@@ -1,6 +1,6 @@
 "use client";
 
-import { Coin, cn, type CoinTone, Money, StatusPill, type StatusPillTone, TableName, type TableColumn } from "@polaris/ui";
+import { Coin, cn, type CoinTone, Money, PairHeader, StatusPill, type StatusPillTone, TableName, type TableColumn } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { ActivityAvatar } from "@/components/avatars";
 import type { ActivityItem } from "@/lib/data";
@@ -84,9 +84,16 @@ export function activityColumns({ hide = [], whenStyle = "relative" }: { hide?: 
       header: "When",
       align: "right",
       render: (a) => (
-        <span className="ui-figure whitespace-nowrap text-ui-text" title={`${shortDate(a.at)}, ${time(a.at)}`}>
-          {whenStyle === "full" ? `${shortDate(a.at)}, ${time(a.at)}` : when(a.at)}
-        </span>
+        whenStyle === "full" ? (
+          <span className="ui-figure block whitespace-nowrap">
+            <span className="block text-ui-text">{shortDate(a.at)}</span>
+            <span className="block text-[13px] text-ui-muted">{time(a.at)}</span>
+          </span>
+        ) : (
+          <span className="ui-figure whitespace-nowrap text-ui-text" title={`${shortDate(a.at)}, ${time(a.at)}`}>
+            {when(a.at)}
+          </span>
+        )
       ),
     },
   ];
@@ -115,4 +122,35 @@ export function SectionTitle({ children, action, className }: { children: ReactN
       {action}
     </div>
   );
+}
+
+/**
+ * Every desktop page opens like ref E's chart: overlapping coins, the page's
+ * name at the pair's size (the page's h1), and square icon actions on the right.
+ */
+export function PageHead({ title, coins, actions, className }: { title: string; coins: ReactNode[]; actions?: ReactNode; className?: string }) {
+  return (
+    <PairHeader
+      as="h1"
+      className={cn("mb-6", className)}
+      coins={coins}
+      title={title}
+      trailing={actions ? <div className="flex items-center gap-2">{actions}</div> : undefined}
+    />
+  );
+}
+
+/** Ref E's two columns: the page on the left, the widget or summary on the right (sticky from 1280px). */
+export function PageGrid({ main, side, className }: { main: ReactNode; side: ReactNode; className?: string }) {
+  return (
+    <div className={cn("grid grid-cols-[minmax(0,1fr)_356px] items-start gap-x-10 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px] xl:gap-x-11", className)}>
+      <section className="min-w-0">{main}</section>
+      <aside className="grid min-w-0 content-start gap-3 xl:sticky xl:top-6">{side}</aside>
+    </div>
+  );
+}
+
+/** A muted note under a column's buttons. */
+export function SideNote({ children }: { children: ReactNode }) {
+  return <p className="px-1 text-[13px] leading-relaxed text-ui-muted">{children}</p>;
 }

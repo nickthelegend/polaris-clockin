@@ -107,7 +107,7 @@ export function TransactionSheet({ id }: { id: string }) {
           ]}
         />
       </Sheet.Body>
-      <Sheet.Footer>
+      <Sheet.Footer className="lg:[&>*]:flex-1">
         <Button asChild variant="outline" size="lg" iconRight={<ExternalLink />}>
           <a href={receiptUrl(item.txHash)} target="_blank" rel="noopener noreferrer">
             View receipt
@@ -150,7 +150,7 @@ export function TransactionSheet({ id }: { id: string }) {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function TransactionRoute({ id, cold }: { cold?: boolean } & { id: string }) {
   return (
-    <RouteSheet label="Payment details" cold={cold} fallback="/activity">
+    <RouteSheet label="Payment details" cold={cold} fallback="/activity" desktop={{ as: "drawer", title: "Payment details" }}>
       <TransactionSheet id={id} />
     </RouteSheet>
   );

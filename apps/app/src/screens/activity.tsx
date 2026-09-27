@@ -1,6 +1,6 @@
 "use client";
 
-import { Chip, EmptyState, IconButton, ScreenHeader, SectionHeader, Skeleton, TxRow } from "@polaris/ui";
+import { Chip, EmptyState, IconButton, ScreenHeader, SectionHeader, Skeleton, TxRow, useIsDesktop } from "@polaris/ui";
 import { ArrowRightLeft, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -8,6 +8,7 @@ import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar } from "@/components/avatars";
 import { FiltersSheet } from "@/components/filters-sheet";
 import { TabScreen } from "@/components/screen";
+import { ActivityDesktop } from "@/desktop/activity";
 import { useOwner } from "@/lib/account/hooks";
 import { type ActivityItem, getActivity } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
@@ -52,8 +53,13 @@ function groupByDay(items: ActivityItem[]): { label: string; items: ActivityItem
   return groups;
 }
 
-/** Activity, on ref D's transactions: filter chips, then rows grouped by day. */
+/** Activity: ref D's transactions on a phone, ref E's table from 1024px. */
 export function Activity() {
+  return useIsDesktop() ? <ActivityDesktop /> : <ActivityPhone />;
+}
+
+/** Activity, on ref D's transactions: filter chips, then rows grouped by day. */
+function ActivityPhone() {
   const router = useRouter();
   const owner = useOwner();
   const activity = useData(() => getActivity(owner), [owner]);
