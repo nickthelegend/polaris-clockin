@@ -4,13 +4,14 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { join } from "node:path";
 import { polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
 import { encodeErrorResult, type Hex, parseAbi } from "viem";
 import { packCandidates, parseIndexerCandidates, unpackCandidates } from "../src/collections/candidates.ts";
-import { classifySkip, eventsFor } from "../src/collections/outcomes.ts";
+import { classifySkip, eventsFor, INSTALLMENT_FAILURE_REASONS } from "../src/collections/outcomes.ts";
 import { ACTION } from "../src/collections/tasks.ts";
 import { signCallback, verifyCallback } from "../src/shared/callback.ts";
-import { crypto } from "./helpers/host.ts";
+import { crypto, fs } from "./helpers/host.ts";
 
 const engine = (name: string, args: readonly unknown[] = []) =>
   encodeErrorResult({ abi: polarisLoanEngineAbi, errorName: name as never, args: args as never });
@@ -22,15 +23,15 @@ const token = parseAbi([
 
 describe("classifySkip: the engine's errors say which rung of the ladder", () => {
   test("a lost allowance means sign again, a short balance means top up", () => {
-    expect(classifySkip(engine("InsufficientAllowance", [1n, 50n]))).toEqual({ class: "reauthorize", error: "InsufficientAllowance", have: 1n, need: 50n });
-    expect(classifySkip(engine("InsufficientBalance", [2n, 50n]))).toEqual({ class: "top_up", error: "InsufficientBalance", have: 2n, need: 50n });
+    expect(classifySkip(engine("InsufficientAllowance", [1n, 50n]))).toEqual({ class: "allowance_lost", error: "InsufficientAllowance", have: 1n, need: 50n });
+    expect(classifySkip(engine("InsufficientBalance", [2n, 50n]))).toEqual({ class: "insufficient_funds", error: "InsufficientBalance", have: 2n, need: 50n });
   });
 
   test("subscriptions pull through the token: its ERC-20 errors map the same way", () => {
     const spender = "0x0000000000000000000000000000000000000001";
-    expect(classifySkip(encodeErrorResult({ abi: token, errorName: "ERC20InsufficientAllowance", args: [spender, 3n, 9n] })).class).toBe("reauthorize");
+    expect(classifySkip(encodeErrorResult({ abi: token, errorName: "ERC20InsufficientAllowance", args: [spender, 3n, 9n] })).class).toBe("allowance_lost");
     expect(classifySkip(encodeErrorResult({ abi: token, errorName: "ERC20InsufficientBalance", args: [spender, 3n, 9n] }))).toEqual({
-      class: "top_up",
+      class: "insufficient_funds",
       error: "ERC20InsufficientBalance",
       have: 3n,
       need: 9n,
@@ -43,9 +44,24 @@ describe("classifySkip: the engine's errors say which rung of the ladder", () =>
   });
 
   test("anything else goes to a person, never silently dropped", () => {
-    expect(classifySkip("0x")).toMatchObject({ class: "unknown" });
-    expect(classifySkip("0xdeadbeef")).toMatchObject({ class: "unknown", error: "unknown(0xdeadbeef)" });
-    expect(classifySkip(engine("ZeroAmount")).class).toBe("unknown");
+    expect(classifySkip("0x")).toMatchObject({ class: "other" });
+    expect(classifySkip("0xdeadbeef")).toMatchObject({ class: "other", error: "unknown(0xdeadbeef)" });
+    expect(classifySkip(engine("ZeroAmount")).class).toBe("other");
+  });
+});
+
+describe("the failure reasons are polarispay-sdk's", () => {
+  // packages/sdk/src/events.ts on metropolis/sdk (7bf424c): the words the merchant's webhook carries.
+  const SDK: string[] = ["insufficient_funds", "allowance_lost", "other"];
+  test("word for word, so the API forwards them as they are", () => {
+    expect<string[]>([...INSTALLMENT_FAILURE_REASONS]).toEqual(SDK);
+  });
+
+  const live = join(import.meta.dir, "..", "..", "packages", "sdk", "src", "events.ts");
+  test.skipIf(!fs.existsSync(live))("and still the SDK's, now that packages/sdk/src/events.ts is here", () => {
+    const m = /export type InstallmentFailureReason\s*=\s*([^;]+);/.exec(fs.readFileSync(live, "utf8"));
+    expect(m).not.toBeNull();
+    expect([...m![1]!.matchAll(/"([a-z_]+)"/g)].map((x) => x[1] as string)).toEqual<string[]>([...INSTALLMENT_FAILURE_REASONS]);
   });
 });
 
@@ -58,21 +74,21 @@ describe("eventsFor", () => {
         { action: ACTION.LIQUIDATE, id: 4n, amount: 0n },
       ],
       skipped: [
-        { action: ACTION.COLLECT_INSTALLMENT, id: 2n, class: "top_up", error: "InsufficientBalance", have: 1n, need: 2n },
+        { action: ACTION.COLLECT_INSTALLMENT, id: 2n, class: "insufficient_funds", error: "InsufficientBalance", have: 1n, need: 2n },
         { action: ACTION.COLLECT_INSTALLMENT, id: 3n, class: "stale", error: "NotDue", have: null, need: null },
-        { action: ACTION.CHARGE_SUBSCRIPTION, id: 7n, class: "reauthorize", error: "ERC20InsufficientAllowance", have: 0n, need: 9n },
+        { action: ACTION.CHARGE_SUBSCRIPTION, id: 7n, class: "allowance_lost", error: "ERC20InsufficientAllowance", have: 0n, need: 9n },
       ],
       tally: { tasks: 5n, executed: 2n, skipped: 3n },
     });
     expect(events).toEqual([
       { id: `${tx}:collect:1`, type: "installment.collected", loanId: "1", amount: "50383562" },
       { id: `${tx}:liquidate:4`, type: "plan.liquidated", loanId: "4" },
-      { id: `${tx}:collect:2`, type: "installment.failed", loanId: "2", reason: "top_up", error: "InsufficientBalance", have: "1", need: "2" },
+      { id: `${tx}:collect:2`, type: "installment.failed", loanId: "2", reason: "insufficient_funds", error: "InsufficientBalance", have: "1", need: "2" },
       {
         id: `${tx}:charge:7`,
         type: "subscription.charge_failed",
         subscriptionId: "7",
-        reason: "reauthorize",
+        reason: "allowance_lost",
         error: "ERC20InsufficientAllowance",
         have: "0",
         need: "9",

@@ -12,7 +12,7 @@
  *      written through the forwarder with a gas limit sized from an estimate
  *      (Monad bills the limit).
  *   4. The receipt is read back. `TaskSkipped` reasons become
- *      `installment.failed` events (reauthorize vs top up) for the dunning
+ *      `installment.failed` events (allowance lost vs insufficient funds) for the dunning
  *      ladder, posted signed to the Polaris API.
  *
  * A configured indexer that fails is never silent: the run reads candidates

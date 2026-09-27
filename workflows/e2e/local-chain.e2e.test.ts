@@ -15,8 +15,8 @@
  *   1. underwriting: the account's consent + a Bring-your-history proof → facts → ScoreManager opens a line
  *   2. a Pay in 4 plan opens on that line (PlanIntent + Permit, relayed)
  *   3. collections, candidates from the indexer: instalment 1 collected, webhook posted
- *   4. the buyer revokes the allowance → installment.failed "reauthorize"
- *   5. the buyer's balance runs dry → installment.failed "top_up"
+ *   4. the buyer revokes the allowance → installment.failed "allowance_lost"
+ *   5. the buyer's balance runs dry → installment.failed "insufficient_funds"
  *   6. past grace → the plan is liquidated
  *   7. a report with an action the receiver does not know is skipped, not fatal
  *
@@ -323,7 +323,7 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     expect(first.source).toBe("chain");
     expect(first.skipped).toBe(1);
     expect(lastEvents(callbacks)).toEqual([
-      expect.objectContaining({ type: "installment.failed", loanId: loanId.toString(), reason: "reauthorize", error: "InsufficientAllowance" }),
+      expect.objectContaining({ type: "installment.failed", loanId: loanId.toString(), reason: "allowance_lost", error: "InsufficientAllowance" }),
     ]);
 
     send(buyer.address, token, mockAUSDAbi, "approve", [engine, maxUint256]);
@@ -331,7 +331,7 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     send(buyer.address, token, mockAUSDAbi, "transfer", [SINK, held]);
     const second = collect(collectionsConfig());
     expect(lastEvents(callbacks)).toEqual([
-      expect.objectContaining({ type: "installment.failed", loanId: loanId.toString(), reason: "top_up", error: "InsufficientBalance", have: "0" }),
+      expect.objectContaining({ type: "installment.failed", loanId: loanId.toString(), reason: "insufficient_funds", error: "InsufficientBalance", have: "0" }),
     ]);
     expect(second.skipped).toBe(1);
     track(record, "collections, 1 skipped (dunning)");
@@ -346,7 +346,7 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
       { action: "liquidate", id: loanId.toString() },
     ]);
     const events = lastEvents(callbacks);
-    expect(events).toContainEqual(expect.objectContaining({ type: "installment.failed", reason: "top_up" }));
+    expect(events).toContainEqual(expect.objectContaining({ type: "installment.failed", reason: "insufficient_funds" }));
     expect(events).toContainEqual(expect.objectContaining({ type: "plan.liquidated", loanId: loanId.toString() }));
     const loan = read(at("PolarisLoanEngine"), polarisLoanEngineAbi, "getLoan", [loanId]) as { status: number };
     expect(loan.status).toBe(2); // Liquidated
@@ -371,7 +371,7 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
       .find((e) => e.eventName === "TaskSkipped");
     expect(skipped).toBeDefined();
     const reason = classifySkip((skipped!.args as { reason: Hex }).reason);
-    expect(reason).toMatchObject({ class: "unknown", error: "UnknownAction" });
+    expect(reason).toMatchObject({ class: "other", error: "UnknownAction" });
     rpcSync(RPC, "evm_mine", []);
   });
 });

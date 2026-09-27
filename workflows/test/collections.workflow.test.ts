@@ -208,8 +208,8 @@ test("turns shortfalls into installment.failed events that say what the buyer mu
   const body = JSON.parse(post.body!);
   const failed = body.events.filter((e: { type: string }) => e.type === "installment.failed");
   expect(failed).toEqual([
-    expect.objectContaining({ loanId: "1", reason: "reauthorize", error: "InsufficientAllowance", have: "10000000", need: "50383562" }),
-    expect.objectContaining({ loanId: "2", reason: "top_up", error: "InsufficientBalance", have: "1000000", need: "50383562" }),
+    expect.objectContaining({ loanId: "1", reason: "allowance_lost", error: "InsufficientAllowance", have: "10000000", need: "50383562" }),
+    expect.objectContaining({ loanId: "2", reason: "insufficient_funds", error: "InsufficientBalance", have: "1000000", need: "50383562" }),
   ]);
   // A stale candidate (NotDue) is nobody's fault: no event for loan 3.
   expect(body.events.some((e: { loanId?: string }) => e.loanId === "3")).toBe(false);

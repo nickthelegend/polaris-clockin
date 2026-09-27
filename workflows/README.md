@@ -24,8 +24,9 @@ Monad: one decides who gets credit, the other collects what is owed.
                          │  one signed report, gas = its own estimate + 15%          │      ├▶ chargeDue
                          │  receipt read back: skip reasons → dunning events         │      └▶ liquidate
                          └───────────────────────────────┬───────────────────────────┘
-                                                         └──▶ signed callback to the Polaris API
-                                                              installment.failed (reauthorize | top_up) …
+                                                         └──▶ signed callback for the Polaris API
+                                                              (no API route receives it yet, see Status)
+                                                              installment.failed (allowance_lost | insufficient_funds) …
 ```
 
 ## Why it is load-bearing
@@ -57,7 +58,7 @@ Monad: one decides who gets credit, the other collects what is owed.
 | Bounty requirement (Chainlink CRE, plan §3) | Where it is met |
 |---|---|
 | Build a CRE workflow | [`collections/main.ts`](collections/main.ts) → [`src/collections/workflow.ts`](src/collections/workflow.ts), [`underwriting/main.ts`](underwriting/main.ts) → [`src/underwriting/workflow.ts`](src/underwriting/workflow.ts); `project.yaml`, `workflow.yaml`, `secrets.yaml`, per-target configs |
-| Used as an orchestration layer | Cron + HTTP triggers; EVM reads (`checkTasks`, `profileOf`, `linkedUserOf`, `balanceOf`, gas estimates, receipts); HTTP with consensus (Envio, Nansen, Zerion, Etherscan, RPC); signed reports written through the forwarder; a signed callback into the Polaris API |
+| Used as an orchestration layer | Cron + HTTP triggers; EVM reads (`checkTasks`, `profileOf`, `linkedUserOf`, `balanceOf`, gas estimates, receipts); HTTP with consensus (Envio, Nansen, Zerion, Etherscan, RPC); signed reports written through the forwarder; a signed callback for the Polaris API (sent and verifiable; the API route that consumes it is not written yet) |
 | Simulate or deploy | `cre workflow simulate … --broadcast` against the local Monad stand-in or Monad testnet (needs `cre login`, see below); `cre workflow build` compiles both to WASM without a login |
 
 ## One command
@@ -220,10 +221,17 @@ action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
 
 | `TaskSkipped` reason | Event | The buyer should |
 |---|---|---|
-| `InsufficientAllowance(have, need)`, `ERC20InsufficientAllowance` | `installment.failed` / `subscription.charge_failed`, `reason: "reauthorize"` | sign again |
-| `InsufficientBalance(have, need)`, `ERC20InsufficientBalance` | `…failed`, `reason: "top_up"` | add money |
+| `InsufficientAllowance(have, need)`, `ERC20InsufficientAllowance` | `installment.failed` / `subscription.charge_failed`, `reason: "allowance_lost"` | sign again |
+| `InsufficientBalance(have, need)`, `ERC20InsufficientBalance` | `…failed`, `reason: "insufficient_funds"` | add money |
 | `NotDue`, `LoanNotActive`, `InvalidLoan`, `NotLiquidatable`, `SubscriptionNotActive` | none (a stale candidate is nobody's fault) | nothing |
-| anything else | `…failed`, `reason: "unknown"` | (a person looks) |
+| anything else | `…failed`, `reason: "other"` | (a person looks) |
+
+The reasons are polarispay-sdk's `InstallmentFailureReason`, word for word
+(`test/dunning.test.ts` holds them to `packages/sdk/src/events.ts`), so the
+API forwards them to the merchant's `installment.failed` webhook unchanged.
+`subscription.charge_failed` is for the API alone, to dun the subscriber: the
+SDK's nine webhook types have no failed renewal, and a merchant hears of a
+subscription that stays unpaid as `subscription.canceled` (`lapsed`).
 
 Executed tasks become `installment.collected`, `subscription.charged` and
 `plan.liquidated`.
@@ -355,7 +363,8 @@ and `credit.thin`.
   becomes facts and ScoreManager opens a line at the mirror's score; a Pay in
   4 plan opens on it; instalment 1 is collected from indexer candidates (the
   workflow's own query run against the indexer's schema); a
-  revoked allowance and an empty balance become `reauthorize` and `top_up`;
+  revoked allowance and an empty balance become `allowance_lost` and
+  `insufficient_funds`;
   past grace the plan is liquidated in the same report; an unknown action is
   skipped, not fatal.
 
@@ -378,7 +387,8 @@ with against what it used:
 | `cre workflow simulate` | needs `cre login` (a CRE account): not run here. The commands are above; `local-settings` keeps `--broadcast` off public chains |
 | Monad testnet | waits for `deploy:monad` (the deployer is unfunded), then `configure staging` |
 | Deploy to the DON | waits for Early Access |
-| The Polaris API side of the callback | `verifyCallback` and the event types are exported; the route that receives them belongs to the API |
+| The Polaris API side of the callback | **not written**: no route in `apps/business` receives it yet. `verifyCallback` and the event types are exported for one (`POST /api/cre/callback` on the API's branch, verifying with the secret the workflows hold as `POLARIS_CALLBACK_SECRET`). Until it exists, the committed configs set `callback: null`; dunning runs on the business app's own chain sync of `TaskSkipped`, and a new credit line reaches the app as `UnderwritingApplied` on chain |
+| Firing `polaris-underwrite` from the product | not wired: `triggerSimulatedUnderwriting` and `underwriteConsentMessage` are exported, but no API route calls them yet (an authenticated `POST /api/credit/underwrite` on the API's branch: the app has the buyer's account sign the consent, the route queues one run per 30 s) |
 | The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` (snapshot at metropolis/indexer 3987062 until that branch merges; then delete `test/fixtures/indexer/`) |
 | Dunning backoff without the indexer | not applied: the chain fallback has no failure history, so it retries a short buyer every run. Keep the indexer configured in production |
 

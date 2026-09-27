@@ -8,14 +8,16 @@
  * workflow can tell a buyer to sign again apart from a buyer who needs to top
  * up (plan §5.4: "it never duns a buyer for our mistake"):
  *
- *   InsufficientAllowance(have, need)   → reauthorize   installment.failed
- *   InsufficientBalance(have, need)     → top_up        installment.failed
+ *   InsufficientAllowance(have, need)   → allowance_lost       installment.failed (sign again)
+ *   InsufficientBalance(have, need)     → insufficient_funds   installment.failed (add money)
  *   NotDue / LoanNotActive / InvalidLoan / NotLiquidatable /
- *   SubscriptionNotActive               → stale         (nobody's fault, no event)
- *   anything else                       → unknown       installment.failed (reviewed by a person)
+ *   SubscriptionNotActive               → stale                (nobody's fault, no event)
+ *   anything else                       → other                installment.failed (reviewed by a person)
  *
- * Subscriptions pull through the token, so their shortfalls arrive as the
- * token's ERC-20 errors and map the same way.
+ * The reasons are polarispay-sdk's `InstallmentFailureReason`, word for word,
+ * so the API passes them to the merchant's `installment.failed` webhook as
+ * they are. Subscriptions pull through the token, so their shortfalls arrive
+ * as the token's ERC-20 errors and map the same way.
  */
 
 import { polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
@@ -23,7 +25,12 @@ import { type Abi, type Address, decodeErrorResult, type Hex, parseAbi } from "v
 import { decodeLogsFrom, type ReceiptView } from "../shared/evm.ts";
 import { ACTION, type Action, ACTION_NAME } from "./tasks.ts";
 
-export type SkipClass = "reauthorize" | "top_up" | "stale" | "unknown";
+/** polarispay-sdk's `InstallmentFailureReason` (packages/sdk/src/events.ts). */
+export type InstallmentFailureReason = "insufficient_funds" | "allowance_lost" | "other";
+export const INSTALLMENT_FAILURE_REASONS: readonly InstallmentFailureReason[] = ["insufficient_funds", "allowance_lost", "other"];
+
+/** A failure reason, or `stale`: a candidate that was not the buyer's to fix. */
+export type SkipClass = InstallmentFailureReason | "stale";
 
 const TOKEN_ERRORS = parseAbi([
   "error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed)",
@@ -57,24 +64,24 @@ export interface SkipReason {
 
 /** Classify a `TaskSkipped.reason`. */
 export function classifySkip(reason: Hex): SkipReason {
-  if (reason === "0x" || reason.length < 10) return { class: "unknown", error: "empty revert", have: null, need: null };
+  if (reason === "0x" || reason.length < 10) return { class: "other", error: "empty revert", have: null, need: null };
   try {
     const d = decodeErrorResult({ abi: TARGET_ERRORS, data: reason });
     const args = (d.args ?? []) as readonly unknown[];
     switch (d.errorName) {
       case "InsufficientAllowance":
-        return { class: "reauthorize", error: d.errorName, have: args[0] as bigint, need: args[1] as bigint };
+        return { class: "allowance_lost", error: d.errorName, have: args[0] as bigint, need: args[1] as bigint };
       case "InsufficientBalance":
-        return { class: "top_up", error: d.errorName, have: args[0] as bigint, need: args[1] as bigint };
+        return { class: "insufficient_funds", error: d.errorName, have: args[0] as bigint, need: args[1] as bigint };
       case "ERC20InsufficientAllowance":
-        return { class: "reauthorize", error: d.errorName, have: args[1] as bigint, need: args[2] as bigint };
+        return { class: "allowance_lost", error: d.errorName, have: args[1] as bigint, need: args[2] as bigint };
       case "ERC20InsufficientBalance":
-        return { class: "top_up", error: d.errorName, have: args[1] as bigint, need: args[2] as bigint };
+        return { class: "insufficient_funds", error: d.errorName, have: args[1] as bigint, need: args[2] as bigint };
       default:
-        return { class: STALE.has(d.errorName) ? "stale" : "unknown", error: d.errorName, have: null, need: null };
+        return { class: STALE.has(d.errorName) ? "stale" : "other", error: d.errorName, have: null, need: null };
     }
   } catch {
-    return { class: "unknown", error: `unknown(${reason.slice(0, 10)})`, have: null, need: null };
+    return { class: "other", error: `unknown(${reason.slice(0, 10)})`, have: null, need: null };
   }
 }
 
@@ -118,6 +125,11 @@ export function outcomeFromReceipt(receipt: ReceiptView, receiver: Address): Run
  * notifications (plan §5.8's names). Amounts are decimal strings in 6-decimal
  * base units. `id` is stable across retries, so delivery can be
  * at-least-once.
+ *
+ * `subscription.charge_failed` is for the API alone, to dun the subscriber:
+ * polarispay-sdk's nine webhook types have no failed renewal, and a merchant
+ * hears of a subscription that stays unpaid as `subscription.canceled` with
+ * `canceledBy: "lapsed"` once PolarisPayments lapses it.
  */
 export type CollectionsEvent =
   | { id: string; type: "installment.collected"; loanId: string; amount: string }
@@ -125,7 +137,7 @@ export type CollectionsEvent =
       id: string;
       type: "installment.failed";
       loanId: string;
-      reason: Exclude<SkipClass, "stale">;
+      reason: InstallmentFailureReason;
       error: string;
       have: string | null;
       need: string | null;
@@ -135,7 +147,7 @@ export type CollectionsEvent =
       id: string;
       type: "subscription.charge_failed";
       subscriptionId: string;
-      reason: Exclude<SkipClass, "stale">;
+      reason: InstallmentFailureReason;
       error: string;
       have: string | null;
       need: string | null;
