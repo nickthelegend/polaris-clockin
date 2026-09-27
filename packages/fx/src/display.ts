@@ -13,6 +13,7 @@ import { FX_MAX_AGE_SECONDS } from "./limits.ts";
 import type { FxLookup, FxRate } from "./service.ts";
 
 export { FX_MAX_AGE_SECONDS };
+export type { FxLookup, FxRate };
 
 /** True while a rate updated at `updatedAt` (unix seconds) may still be shown. */
 export function isFreshRate(updatedAt: number, nowMs: number, maxAgeSeconds: number = FX_MAX_AGE_SECONDS): boolean {
