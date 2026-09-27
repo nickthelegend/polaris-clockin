@@ -684,8 +684,9 @@ export async function relayPayment(
 /* ── Delivery ──────────────────────────────────────────────────────────── */
 
 /**
- * Sign and POST events to the store's webhook endpoint, in order. A 409 (an
- * event that arrived before its plan) or a 5xx is retried, as Polaris would.
+ * Sign and POST events to the store's webhook endpoint, in order. A 404 (an
+ * order the store hasn't stored yet), a 409 (an event that arrived before its
+ * plan), a 429 or a 5xx is retried, as Polaris would.
  */
 export async function deliver(
   events: WebhookEvent[],
@@ -713,7 +714,7 @@ export async function deliver(
           cache: "no-store",
         });
         status = res.status;
-        if (res.ok || (res.status < 500 && res.status !== 409 && res.status !== 429)) break;
+        if (res.ok || (res.status < 500 && ![404, 409, 429].includes(res.status))) break;
       } catch {
         status = null;
       }

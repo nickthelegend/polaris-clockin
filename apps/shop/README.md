@@ -87,13 +87,17 @@ contract as the real API (`POST` and `GET /api/v1/checkout/sessions`, bearer
 secret key, idempotency keys, validation errors, the `CheckoutSession`
 shape), a relayer that takes the SDK's `RelayPayRequest` and checks the
 buyer's ERC-3009 signature, and webhooks in the SDK's event shapes, signed
-with its `signWebhookPayload` and retried on 409 and 5xx. Its checkout page
-is labelled *Polaris test checkout · development mock* on a striped banner;
-it lets you complete a session as Pay now, Pay in 4 or Subscribe, then
-answers the store with the SDK's own `createCheckoutMessage` (`ready`, then
-`completed` or `canceled`), or redirects to the success URL on a phone. In
-the developer drawer, *Collect instalment* and *Charge the next month* fire
-the webhooks Polaris would send a week or a month later.
+with its `signWebhookPayload` and retried on 404, 409 and 5xx. Its
+checkout page is styled after the Polaris app's `/pay/[id]` sheet: Halcyon
+with the order's photos, Pay now / Pay in 4 / Subscribe, the figures (Pay in
+4's interest at 10% APR, its first date, $0.00 due today), the dated
+schedule, a $500 limit with *Why?*, and *Continue with Face ID*. It carries
+a *Test* chip and a one-line note that it is the development mock and moves
+no money. It answers the store with the SDK's own `createCheckoutMessage`
+(`ready`, then `completed` or `canceled`), or redirects to the success URL
+on a phone. In the developer drawer, *Collect instalment* and *Charge the
+next month* fire the webhooks Polaris would send a week or a month later;
+on a subscription receipt, *Cancel (test)* sends `subscription.canceled`.
 
 The mock can't run in production, and can't be abused in development:
 
@@ -129,6 +133,21 @@ money; the mock relayer only checks it. A real browser wallet can't answer
 the reads for that address, so the wallet path works end to end with the
 scripted test wallet the screenshots use, and with a real wallet once the
 contracts are deployed.
+
+## Demo recording
+
+Record against the real hosted checkout, so the Polaris window on camera is
+the Polaris app, not the mock:
+
+1. Run `apps/app` from `metropolis/app-v2` on :3000 and `apps/business` on
+   :3100, and set the keys below in `apps/shop/.env.local`.
+2. `pnpm --filter @polaris/shop dev`, a fresh browser profile, 1440×900.
+3. Home → Halcyon One → Add to bag → Check out → Pay in 4 → *Pay in 4 ·
+   $87.92 a week* → Face ID in Polaris → the receipt (0 of 4 paid, next in
+   a week) → *Built with Polaris* for the code and the webhooks.
+
+With the mock instead (no backend), the same path works end to end; the
+Polaris window is then the mock's test checkout.
 
 ## Run it against the real Polaris backend
 
