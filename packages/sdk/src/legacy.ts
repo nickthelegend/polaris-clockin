@@ -1,42 +1,23 @@
 /**
- * The whole SDK, headless.
+ * The 0.2 wallet methods, unchanged in behaviour: approve-then-call flows
+ * where the buyer holds gas. `createPolaris` loads this module on first use,
+ * so a page that only opens the hosted checkout never downloads ethers.
  *
- * Three payment modes behind one object, each a single call:
+ * On Monad, `pay()` doesn't come here: it's a signature through
+ * PolarisPayments.payWithAuthorization (see pay/direct.ts). The approve-then-
+ * pay path below is what `pay()` does on the 0.2 Sepolia deployment, whose
+ * PolarisPayments predates it.
  *
- *   const polaris = createPolaris({ apiKey });
- *   await polaris.pay({ amount: "25.00", orderId: "ORD-1", merchant });
- *   await polaris.subscribe({ planId: 1 });
- *   await polaris.payLater({ amount: "200.00", orderId: "ORD-2" });
- *
- * The React component in `./components` is a thin shell over this, so anyone
- * who wants their own UI never has to reimplement decimals, approvals, chain
- * switching, or error handling.
- *
- * Decimals are read from the token, never assumed. The previous component
+ * Decimals are read from the token, never assumed. The 0.1 component
  * hardcoded 18 against a 6-decimal stablecoin, which overcharged by 10^12.
  */
 
-import {
-  BrowserProvider,
-  Contract,
-  JsonRpcProvider,
-  formatUnits,
-  parseUnits,
-} from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, formatUnits, parseUnits } from "ethers";
 
-export const SEPOLIA = {
-  chainId: 11155111,
-  name: "Sepolia",
-  rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
-  explorer: "https://sepolia.etherscan.io",
-  stablecoin: "0x49C86277a91002c4943837bf20F6ED41976Db09F",
-  loanEngine: "0x21E9740DDe241f0653F699DAa206AfCE1FA25405",
-  scoreManager: "0x81C333942eaEe7d3d724c6C2ea28100511934f3C",
-  collateralVault: "0xDb6781ed843Ba07Af3321bB8C3952db643324b98",
-  payments: "0x3BD1609abDC915eA9e01A399a26e2B8A2a06243f",
-} as const;
-
-export type PolarisContracts = typeof SEPOLIA;
+import { assertDeployed, explorerTxUrl, type PolarisChain } from "./chains.js";
+import type { Result } from "./pay/direct.js";
+import { buyerMessage, ensureChain, findProvider } from "./pay/wallet.js";
+import type { ContractName } from "./types.js";
 
 const ERC20 = [
   "function allowance(address,address) view returns (uint256)",
@@ -64,28 +45,6 @@ const VAULT = [
   "function creditBoostOf(address) view returns (uint256)",
 ];
 
-export type PolarisOptions = {
-  /** Merchant API key, forwarded to your backend for BNPL origination. */
-  apiKey?: string;
-  /** Your endpoint that calls createLoan. Only needed for `payLater`. */
-  endpoint?: string;
-  contracts?: PolarisContracts;
-  /** Injected provider. Defaults to `window.ethereum`. */
-  provider?: unknown;
-  /**
-   * Read-only RPC. When set, the read methods use it instead of the wallet, so
-   * a merchant can price a "pay in 4" badge before the buyer connects anything.
-   */
-  rpcUrl?: string;
-};
-
-export type Result = {
-  ok: boolean;
-  transactionHash?: string;
-  explorerUrl?: string;
-  error?: string;
-};
-
 export type CreditProfile = {
   address: string;
   score: number;
@@ -97,15 +56,21 @@ export type CreditProfile = {
   symbol: string;
 };
 
-export function createPolaris(options: PolarisOptions = {}) {
-  const c = options.contracts ?? SEPOLIA;
+export type LegacyOptions = {
+  chain: PolarisChain;
+  provider?: unknown;
+  rpcUrl?: string;
+  apiKey?: string;
+  endpoint?: string;
+};
+
+export function createLegacyMethods(options: LegacyOptions) {
+  const c = options.chain;
   const endpoint = options.endpoint ?? "/api/checkout";
 
-  async function connect() {
-    const eth = (options.provider ?? (globalThis as { ethereum?: unknown }).ethereum) as
-      | { request: (a: unknown) => Promise<unknown> }
-      | undefined;
-    if (!eth) throw new Error("No wallet found. Install a browser wallet to pay with Polaris.");
+  async function connect(needs: ContractName[] = []) {
+    assertDeployed(c, ["stablecoin", ...needs]);
+    const eth = findProvider(options.provider);
 
     let provider = new BrowserProvider(eth as never);
     const [address] = (await provider.send("eth_requestAccounts", [])) as string[];
@@ -113,17 +78,10 @@ export function createPolaris(options: PolarisOptions = {}) {
 
     const net = await provider.getNetwork();
     if (net.chainId !== BigInt(c.chainId)) {
-      const hex = `0x${c.chainId.toString(16)}`;
-      try {
-        await provider.send("wallet_switchEthereumChain", [{ chainId: hex }]);
-      } catch (err) {
-        // 4902: the wallet has never heard of this chain. Offer to add it
-        // rather than dead-ending the buyer on "unrecognized chain".
-        if ((err as { code?: number })?.code !== 4902) throw err;
-        await provider.send("wallet_addEthereumChain", [
-          { chainId: hex, chainName: c.name, rpcUrls: [c.rpcUrl], blockExplorerUrls: [c.explorer] },
-        ]);
-      }
+      // The same switch as pay(): add the chain if the wallet has never seen
+      // it (4902), and a declined switch asks the buyer to change network
+      // (`wrong_chain`) rather than reading "You cancelled the request."
+      await ensureChain(eth, c);
       /*
        * A BrowserProvider caches the network it detected on construction, so
        * the instance that just switched still reports the old chain and will
@@ -142,8 +100,7 @@ export function createPolaris(options: PolarisOptions = {}) {
    */
   let decimalsCache: Promise<number> | undefined;
   function tokenDecimals(provider: BrowserProvider | JsonRpcProvider): Promise<number> {
-    decimalsCache ??= (async () =>
-      Number(await new Contract(c.stablecoin, ERC20, provider).decimals()))();
+    decimalsCache ??= (async () => Number(await new Contract(c.stablecoin, ERC20, provider).decimals()))();
     return decimalsCache;
   }
 
@@ -169,34 +126,21 @@ export function createPolaris(options: PolarisOptions = {}) {
   }
 
   function ok(hash?: string): Result {
-    return { ok: true, transactionHash: hash, explorerUrl: hash ? `${c.explorer}/tx/${hash}` : undefined };
+    return { ok: true, transactionHash: hash, explorerUrl: hash ? explorerTxUrl(c, hash) : undefined };
   }
 
   function fail(err: unknown): Result {
-    const raw =
-      (err as { shortMessage?: string })?.shortMessage ?? (err as Error)?.message ?? String(err);
-    if (/user rejected|user denied/i.test(raw)) return { ok: false, error: "You cancelled the request." };
-    if (/insufficient funds/i.test(raw)) return { ok: false, error: "Not enough ETH for the network fee." };
-    if (/ExceedsCreditLimit/i.test(raw)) return { ok: false, error: "This order is above your credit limit." };
-    if (/DuplicatePayment/i.test(raw)) return { ok: false, error: "This order has already been paid." };
-    if (/MerchantNotEligible/i.test(raw)) return { ok: false, error: "This merchant cannot accept the order." };
-    return { ok: false, error: raw.length > 160 ? `${raw.slice(0, 157)}…` : raw };
+    return { ok: false, error: buyerMessage(err, c), cause: err };
   }
 
   const api = {
-    contracts: c,
-
-    /** Pay a merchant in full, now. */
-    async pay(p: { merchant: string; amount: string; orderId: string }): Promise<Result> {
+    /** Pay a merchant in full, now: approve, then PolarisPayments.pay. The 0.2 flow. */
+    async payWithApproval(p: { merchant: string; amount: string; orderId: string }): Promise<Result> {
       try {
-        const { provider, signer, address } = await connect();
+        const { provider, signer, address } = await connect(["payments"]);
         const value = await scale(provider, p.amount);
         await ensureAllowance(signer as never, c.payments, value, address);
-        const tx = await new Contract(c.payments, PAYMENTS, signer).pay(
-          p.merchant,
-          value,
-          p.orderId
-        );
+        const tx = await new Contract(c.payments, PAYMENTS, signer).pay(p.merchant, value, p.orderId);
         await tx.wait();
         return ok(tx.hash);
       } catch (err) {
@@ -207,7 +151,7 @@ export function createPolaris(options: PolarisOptions = {}) {
     /** Start a subscription. The first period is charged immediately. */
     async subscribe(p: { planId: number | bigint }): Promise<Result> {
       try {
-        const { provider, signer, address } = await connect();
+        const { signer, address } = await connect(["payments"]);
         const payments = new Contract(c.payments, PAYMENTS, signer);
         const plan = await payments.getPlan(p.planId);
         if (!plan.active) return { ok: false, error: "This plan is no longer available." };
@@ -220,12 +164,7 @@ export function createPolaris(options: PolarisOptions = {}) {
           return { ok: false, error: "This plan is misconfigured and cannot be started." };
         }
         const periodsPerYear = BigInt(Math.max(1, Math.ceil(31_536_000 / period)));
-        await ensureAllowance(
-          signer as never,
-          c.payments,
-          BigInt(plan.pricePerPeriod) * periodsPerYear,
-          address
-        );
+        await ensureAllowance(signer as never, c.payments, BigInt(plan.pricePerPeriod) * periodsPerYear, address);
 
         const tx = await payments.subscribe(p.planId);
         await tx.wait();
@@ -238,7 +177,7 @@ export function createPolaris(options: PolarisOptions = {}) {
     /** Cancel a subscription. Unilateral -- no merchant cooperation needed. */
     async cancelSubscription(p: { subscriptionId: number | bigint }): Promise<Result> {
       try {
-        const { signer } = await connect();
+        const { signer } = await connect(["payments"]);
         const tx = await new Contract(c.payments, PAYMENTS, signer).cancel(p.subscriptionId);
         await tx.wait();
         return ok(tx.hash);
@@ -248,11 +187,9 @@ export function createPolaris(options: PolarisOptions = {}) {
     },
 
     /**
-     * Split a purchase into instalments.
-     *
-     * The buyer signs one approval covering the full repayment; your backend
-     * opens the plan, because createLoan is originator-gated. The buyer pays no
-     * gas to start it.
+     * Split a purchase into instalments, the 0.2 way: the buyer approves the
+     * loan engine and your backend opens the plan. On Monad, prefer the hosted
+     * checkout's Pay in 4 (a signed intent, no approval transaction).
      */
     async payLater(p: {
       amount: string;
@@ -261,7 +198,7 @@ export function createPolaris(options: PolarisOptions = {}) {
       intervalSeconds?: number;
     }): Promise<Result & { loanId?: string }> {
       try {
-        const { provider, signer, address } = await connect();
+        const { provider, signer, address } = await connect(["loanEngine"]);
         const value = await scale(provider, p.amount);
         // Headroom for interest accrued over the term.
         await ensureAllowance(signer as never, c.loanEngine, (value * 110n) / 100n, address);
@@ -293,7 +230,7 @@ export function createPolaris(options: PolarisOptions = {}) {
     /** Lock collateral to raise the credit limit. */
     async lockCollateral(p: { amount: string }): Promise<Result> {
       try {
-        const { provider, signer, address } = await connect();
+        const { provider, signer, address } = await connect(["collateralVault"]);
         const value = await scale(provider, p.amount);
         await ensureAllowance(signer as never, c.collateralVault, value, address);
         const tx = await new Contract(c.collateralVault, VAULT, signer).lock(value);
@@ -306,10 +243,8 @@ export function createPolaris(options: PolarisOptions = {}) {
 
     async withdrawCollateral(p: { amount: string }): Promise<Result> {
       try {
-        const { provider, signer } = await connect();
-        const tx = await new Contract(c.collateralVault, VAULT, signer).withdraw(
-          await scale(provider, p.amount)
-        );
+        const { provider, signer } = await connect(["collateralVault"]);
+        const tx = await new Contract(c.collateralVault, VAULT, signer).withdraw(await scale(provider, p.amount));
         await tx.wait();
         return ok(tx.hash);
       } catch (err) {
@@ -325,6 +260,7 @@ export function createPolaris(options: PolarisOptions = {}) {
      * borrow the wallet's provider, and connecting is the price of that.
      */
     async getCredit(address?: string): Promise<CreditProfile> {
+      assertDeployed(c, ["stablecoin", "scoreManager", "collateralVault"]);
       const { provider, address: connected } = address
         ? await (async () => {
             const r = await reader();
@@ -376,4 +312,4 @@ export function createPolaris(options: PolarisOptions = {}) {
   return api;
 }
 
-export type Polaris = ReturnType<typeof createPolaris>;
+export type LegacyMethods = ReturnType<typeof createLegacyMethods>;

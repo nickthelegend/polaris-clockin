@@ -24,9 +24,11 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPolaris, SEPOLIA, type CreditProfile } from '../polaris.js';
+import { SEPOLIA, type PolarisChain, type PolarisContracts } from '../chains.js';
+import { createPolaris } from '../client.js';
+import type { CreditProfile } from '../legacy.js';
 
-/** Public Sepolia deployment. Override for your own. */
+/** Public Sepolia deployment (0.2). Override for your own. */
 export const POLARIS_SEPOLIA = SEPOLIA;
 
 export interface PayWithPolarisBNPLProps {
@@ -39,7 +41,7 @@ export interface PayWithPolarisBNPLProps {
   orderId: string;
   installments?: number;
   intervalSeconds?: number;
-  contracts?: typeof SEPOLIA;
+  contracts?: PolarisChain | PolarisContracts;
   /** Read-only RPC, so eligibility can be shown before the buyer connects. */
   rpcUrl?: string;
   onSuccess?: (result: { loanId?: string; transactionHash?: string }) => void;
@@ -91,9 +93,11 @@ export function PayWithPolarisBNPL({
   const schedule = useMemo(() => {
     if (!Number.isFinite(total)) return [];
     const fmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+    // The loan engine collects nothing at checkout: instalment i falls due at
+    // startedAt + (i + 1) * interval (PolarisLoanEngine.installmentDueAt).
     return Array.from({ length: installments }, (_, i) => ({
       key: i,
-      when: i === 0 ? 'Today' : fmt.format(new Date(Date.now() + i * intervalSeconds * 1000)),
+      when: fmt.format(new Date(Date.now() + (i + 1) * intervalSeconds * 1000)),
       amount: (total / installments).toFixed(2),
     }));
   }, [total, installments, intervalSeconds]);
