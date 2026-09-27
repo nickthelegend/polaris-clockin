@@ -27,11 +27,14 @@ export function OrderView({
   fromPolaris,
   fromCheckout,
   devMock,
+  checkoutOrigin,
 }: {
   initial: Order;
   fromPolaris: boolean;
   fromCheckout: boolean;
   devMock: boolean;
+  /** The hosted Polaris app, where the buyer manages plans and subscriptions. null with the dev mock. */
+  checkoutOrigin: string | null;
 }) {
   const [order, setOrder] = useState(initial);
   const [session, setSession] = useState<{ status: string; mode: string | null } | null>(null);
@@ -39,6 +42,11 @@ export function OrderView({
   const reduce = useReducedMotion();
 
   useEffect(() => setCurrentOrderId(initial.id), [initial.id, setCurrentOrderId]);
+
+  // A receipt always opens at its top, with the confirmation in view.
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, []);
 
   // Straight from checkout: the bag was this order, so empty it once the order is paid.
   const paidNow = order.status === "paid";
@@ -167,9 +175,9 @@ export function OrderView({
             </div>
           </dl>
 
-          <Timeline order={order} />
+          <PaymentBlock order={order} devMock={devMock} checkoutOrigin={checkoutOrigin} onChange={setOrder} />
 
-          <PaymentBlock order={order} devMock={devMock} />
+          <Timeline order={order} />
         </div>
 
         <aside className="lg:col-span-5">
@@ -247,7 +255,7 @@ function Timeline({ order }: { order: Order }) {
     { label: "Order placed", detail: `${DATE_SHORT.format(new Date(order.createdAt))}, ${TIME.format(new Date(order.createdAt))}`, done: true },
     {
       label: "Payment confirmed",
-      detail: paid && order.payment.paidAt ? `${TIME.format(new Date(order.payment.paidAt))}, by a signed Polaris webhook` : "Waiting for Polaris",
+      detail: paid && order.payment.paidAt ? `${TIME.format(new Date(order.payment.paidAt))}, confirmed by Polaris` : "Waiting for Polaris",
       done: paid,
     },
     { label: order.kind === "subscription" ? "Roasting your first bag" : "Preparing your order", detail: "Usually within a day", done: false },
@@ -284,8 +292,42 @@ function short(value: string, head = 6, tail = 4) {
   return value.length > head + tail + 1 ? `${value.slice(0, head)}…${value.slice(-tail)}` : value;
 }
 
-function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
+function PaymentBlock({
+  order,
+  devMock,
+  checkoutOrigin,
+  onChange,
+}: {
+  order: Order;
+  devMock: boolean;
+  checkoutOrigin: string | null;
+  onChange: (order: Order) => void;
+}) {
+  const [canceling, setCanceling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const paid = order.status === "paid";
+  const manageUrl = checkoutOrigin ? `${checkoutOrigin}/insights?view=plans` : null;
+
+  /** Dev mock only: what the buyer canceling in Polaris would send the store. */
+  const cancelTest = async () => {
+    setCanceling(true);
+    setCancelError(null);
+    try {
+      const res = await fetch("/api/dev-polaris/test/advance", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, action: "cancel" }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        setCancelError(body.error?.message ?? "Couldn't cancel the test subscription.");
+      }
+      const latest = await fetchOrder(order.id);
+      if (latest) onChange(latest.order);
+    } finally {
+      setCanceling(false);
+    }
+  };
   const mode = order.payment.mode ?? (order.payment.method === "wallet" ? "direct" : order.payment.requestedMode);
   const plan = order.plan;
   const sub = order.subscription;
@@ -294,7 +336,7 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
   const planTotal = plan ? (plan.total ?? plan.installments.reduce((n, i) => n + i.amount, 0)) : 0;
 
   return (
-    <section aria-labelledby="payment-heading" className="mt-12 rounded-2xl bg-paper p-6 shadow-[inset_0_0_0_1px_var(--color-hair)] sm:p-8">
+    <section aria-labelledby="payment-heading" className="mt-8 rounded-2xl bg-paper p-6 shadow-[inset_0_0_0_1px_var(--color-hair)] sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="payment-heading" className="flex items-center gap-2.5 text-[1.05rem]">
           {order.payment.method === "wallet" ? (
@@ -366,6 +408,11 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
             Halcyon was paid {formatUsd(order.total)} in full when you ordered. Nothing was taken from you then; Polaris collects each
             payment automatically, a week apart.
           </p>
+          {manageUrl ? (
+            <a href={manageUrl} target="_blank" rel="noreferrer" className="link mt-3 inline-flex min-h-11 items-center gap-1.5 text-[0.92rem]">
+              See this plan in Polaris <ExternalIcon size={14} />
+            </a>
+          ) : null}
         </div>
       ) : sub ? (
         <dl className="mt-6 grid gap-4 text-[0.95rem] sm:grid-cols-3">
@@ -383,6 +430,28 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
               {sub.periodsCharged} {sub.periodsCharged === 1 ? "month" : "months"}
             </dd>
           </div>
+          {sub.status === "active" && (manageUrl || devMock) ? (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 sm:col-span-3">
+              {manageUrl ? (
+                <a href={manageUrl} target="_blank" rel="noreferrer" className="link inline-flex min-h-11 items-center gap-1.5 text-[0.92rem]">
+                  Skip or cancel in Polaris <ExternalIcon size={14} />
+                </a>
+              ) : null}
+              {devMock ? (
+                <button
+                  type="button"
+                  onClick={cancelTest}
+                  disabled={canceling}
+                  aria-busy={canceling || undefined}
+                  className="link inline-flex min-h-11 items-center gap-2 text-[0.92rem] text-muted"
+                >
+                  {canceling ? <Spinner size={14} /> : null}
+                  Cancel (test)
+                </button>
+              ) : null}
+              {cancelError ? <p className="w-full text-[0.86rem] text-alert">{cancelError}</p> : null}
+            </div>
+          ) : null}
         </dl>
       ) : paid ? (
         <dl className="mt-6 grid gap-4 text-[0.95rem] sm:grid-cols-3">
@@ -406,6 +475,13 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
           <Spinner size={16} /> {order.payment.method === "wallet" ? "Waiting for the payment to land on Monad." : "Waiting for Polaris to confirm."}
         </p>
       )}
+
+      {order.payment.refundDue ? (
+        <p className="mt-5 flex gap-2.5 rounded-lg bg-alert-soft px-3.5 py-3 text-[0.9rem] text-alert" role="status">
+          <AlertIcon size={18} className="mt-px shrink-0" />
+          A second payment arrived for this order after it was paid. Halcyon will refund it to you.
+        </p>
+      ) : null}
 
       {order.payment.txHash ? (
         <p className="mt-5 border-t border-hair pt-4 text-[0.88rem] text-muted">
