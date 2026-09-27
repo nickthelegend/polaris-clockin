@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
-import { Insights } from "@/screens/insights";
+import { PlansBehind } from "@/screens/plans-page";
 import { PlanRoute } from "@/sheets/plan";
 
 type Props = { params: Promise<{ id: string }> };
@@ -11,9 +10,7 @@ export default async function Page({ params }: Props) {
   const { id } = await params;
   return (
     <>
-      <Suspense>
-        <Insights />
-      </Suspense>
+      <PlansBehind />
       <PlanRoute id={id} cold />
     </>
   );

@@ -145,7 +145,7 @@ function nextCharge(at: number): string {
  * Manage a subscription (fit): what it costs and when it next charges, and
  * the one way out, which still asks for Face ID.
  */
-function SubscriptionSheet({ sub, onClose }: { sub: Subscription | null; onClose: () => void }) {
+export function SubscriptionSheet({ sub, onClose }: { sub: Subscription | null; onClose: () => void }) {
   const [cancelling, setCancelling] = useState(false);
   // Keep the last one on screen while the sheet slides away.
   const [shown, setShown] = useState(sub);

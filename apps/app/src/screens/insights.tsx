@@ -13,12 +13,14 @@ import {
   Tab,
   TabList,
   Tabs,
+  useIsDesktop,
 } from "@polaris/ui";
 import { Bell, CalendarDays, PieChart } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { FiltersSheet } from "@/components/filters-sheet";
 import { TabScreen } from "@/components/screen";
+import { InsightsDesktop } from "@/desktop/insights";
 import { useNotices } from "@/components/use-notices";
 import { useOwner } from "@/lib/account/hooks";
 import { getActivity, getPlans } from "@/lib/data";
@@ -36,6 +38,10 @@ const PERIOD_DAYS: Record<Period, number> = { week: 7, month: 30, all: 90 };
 
 /** Insights, on ref A's third screen: the purple spending card, Expenses | Plans, the category bars. */
 export function Insights() {
+  return useIsDesktop() ? <InsightsDesktop /> : <InsightsPhone />;
+}
+
+function InsightsPhone() {
   const router = useRouter();
   const view = useSearchParams().get("view") === "plans" ? "plans" : "expenses";
   const owner = useOwner();

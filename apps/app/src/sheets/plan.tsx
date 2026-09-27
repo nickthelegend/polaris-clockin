@@ -7,6 +7,7 @@ import { MerchantAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
+import { PlanDrawerContent } from "@/desktop/plans";
 import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { describeInterval, dueAt, getPlans } from "@/lib/data";
@@ -141,7 +142,13 @@ export function PlanSheet({ id }: { id: string }) {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function PlanRoute({ id, cold }: { cold?: boolean } & { id: string }) {
   return (
-    <RouteSheet label="Plan details" snapPoints={["half", "full"]} cold={cold} fallback="/insights?view=plans">
+    <RouteSheet
+      label="Plan details"
+      snapPoints={["half", "full"]}
+      cold={cold}
+      fallback="/insights?view=plans"
+      desktop={{ as: "drawer", title: "Plan details", content: <PlanDrawerContent id={id} /> }}
+    >
       <PlanSheet id={id} />
     </RouteSheet>
   );
