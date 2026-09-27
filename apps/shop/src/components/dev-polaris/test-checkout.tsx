@@ -245,19 +245,6 @@ export function TestCheckout({
 
             {mode === "later" && plan ? (
               <>
-                <ol className="mt-3 divide-y divide-white/10 rounded-2xl bg-white/[0.06] px-4" aria-label="Payment schedule">
-                  {plan.installments.map((inst) => (
-                    <li key={inst.index} className="flex items-center justify-between py-2.5 text-[0.9rem]">
-                      <span className="text-white/60">
-                        {inst.index === plan.installments.length ? "Last payment" : (["First", "Second", "Third"][inst.index - 1] ?? `Payment ${inst.index}`) + (inst.index <= 3 ? " payment" : "")}
-                      </span>
-                      <span className="num">
-                        {formatUsd(inst.amount)} <span className="text-white/45">· {SHORT_DATE.format(new Date(now + inst.dueInSeconds * 1000))}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-
                 <div className="mt-3 rounded-2xl bg-white/[0.06] px-4 py-3">
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="text-[0.95rem] font-medium">Your limit</span>
@@ -291,7 +278,8 @@ export function TestCheckout({
               </p>
             ) : null}
 
-            <div className="mt-auto pt-6">
+            {/* The action stays in view at the foot of the sheet, as in the Polaris app. */}
+            <div className="sticky bottom-0 -mx-5 mt-auto bg-gradient-to-t from-[#0f1011] from-70% to-transparent px-5 pb-3 pt-6">
               <button
                 type="button"
                 onClick={complete}
