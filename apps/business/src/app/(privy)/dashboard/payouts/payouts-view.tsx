@@ -193,7 +193,10 @@ function AutoPayoutsPanel({
   const sample = useSample();
   const data = useDashboardData();
   const { enable, disable } = useAutoPayouts();
-  const [address, setAddress] = useState("");
+  // null until edited: the input shows the saved payout address, the same one
+  // the status row below names.
+  const [draft, setDraft] = useState<string | null>(null);
+  const address = draft ?? auto?.payoutAddress ?? "";
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
@@ -231,7 +234,7 @@ function AutoPayoutsPanel({
       }
       return;
     }
-    const checked = checkAddress(address || auto?.payoutAddress || "", wallet);
+    const checked = checkAddress(address, wallet);
     if ("error" in checked) {
       setError(checked.error);
       return;
@@ -278,8 +281,8 @@ function AutoPayoutsPanel({
                 label="Pay out to"
                 placeholder="0x…"
                 value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="font-mono text-[14px]"
+                onChange={(e) => setDraft(e.target.value)}
+                className="ui-figure text-[14px]"
                 spellCheck={false}
               />
             ) : null}
@@ -308,7 +311,7 @@ function AutoPayoutsPanel({
                 {
                   label: "Pays out to",
                   value: auto.payoutAddress ? (
-                    <span className="font-mono text-[13px] whitespace-nowrap" title={auto.payoutAddress}>
+                    <span className="ui-figure whitespace-nowrap" title={auto.payoutAddress}>
                       {shortAddress(auto.payoutAddress, 6, 4)}
                     </span>
                   ) : (
