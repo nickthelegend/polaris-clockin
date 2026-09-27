@@ -37,6 +37,28 @@ export function activityPill(item: ActivityItem): { tone: StatusPillTone; text: 
   }
 }
 
+/**
+ * What a row was for, never its status pill again ("Received" twice): the
+ * note when there is one, otherwise who it came from or went to.
+ */
+export function whatOf(item: ActivityItem): string {
+  const first = item.title.split(/\s+/)[0] ?? item.title;
+  switch (item.kind) {
+    case "received":
+      return item.detail && item.detail !== "Received" ? item.detail : `From ${first}`;
+    case "sent":
+      return item.detail && item.detail !== "Sent" ? item.detail : `To ${first}`;
+    case "claimed":
+      return item.detail === "Link claimed" ? `${first}'s link, claimed` : item.detail;
+    case "sent-link":
+      if (item.detail === "Sent by link") return `A link for ${first}`;
+      if (item.detail === "Cancelled") return "Taken back";
+      return item.detail;
+    default:
+      return item.detail;
+  }
+}
+
 export function ActivityPill({ item, size }: { item: ActivityItem; size?: "sm" | "md" }) {
   const pill = activityPill(item);
   return (
@@ -76,8 +98,8 @@ export function activityColumns({
       header: "What",
       hideBelow: "xl",
       render: (a) => (
-        <span className="block max-w-[240px] truncate" title={a.detail}>
-          {a.detail}
+        <span className="block max-w-[240px] truncate" title={whatOf(a)}>
+          {whatOf(a)}
         </span>
       ),
     },

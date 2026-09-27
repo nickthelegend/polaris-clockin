@@ -40,6 +40,33 @@ export function when(ts: number, now = Date.now()): string {
   return shortDate(ts);
 }
 
+/* ── Payment details ─────────────────────────────────────────────────────── */
+
+export const KIND_LABEL: Record<ActivityItem["kind"], string> = {
+  payment: "Paid in full",
+  instalment: "Pay in 4 instalment",
+  "plan-opened": "Pay in 4",
+  subscription: "Subscription",
+  "sent-link": "Sent by link",
+  sent: "Sent",
+  received: "Received",
+  claimed: "Received by link",
+  refund: "Returned",
+  added: "Added money",
+};
+
+/** A send link nobody has claimed yet: the money is held, and the sender can take it back. */
+export const isOpenLink = (item: ActivityItem) => item.kind === "sent-link" && item.detail === "Waiting to be claimed";
+
+export function statusOf(item: ActivityItem): string {
+  if (item.status !== "settled") return "Processing";
+  if (isOpenLink(item)) return "Waiting";
+  // Taken back by its sender: the money is in a "Link cancelled" row of its own.
+  if (item.kind === "sent-link" && item.detail === "Cancelled") return "Cancelled";
+  if (item.kind === "plan-opened") return "Plan open";
+  return "Complete";
+}
+
 /** The small line under a row's amount (ref A's sub-amount). */
 export function subAmount(item: ActivityItem): string {
   const part = item.detail.match(/(\d+) of (\d+)/);

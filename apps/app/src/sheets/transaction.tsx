@@ -8,40 +8,16 @@ import { ActivityAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { LocalEquivalent } from "@/components/local-equivalent";
 import { RouteSheet } from "@/components/shell/sheet-host";
+import { TransactionDrawerContent } from "@/desktop/transaction";
 import { cancelSendLink } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { receiptUrl } from "@/lib/chain";
-import { type ActivityItem, getActivity, getContacts, getPlans } from "@/lib/data";
+import { getActivity, getContacts, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { longDate, time } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
-import { movesBalance, n, signed } from "@/lib/view";
-
-const KIND_LABEL: Record<ActivityItem["kind"], string> = {
-  payment: "Paid in full",
-  instalment: "Pay in 4 instalment",
-  "plan-opened": "Pay in 4",
-  subscription: "Subscription",
-  "sent-link": "Sent by link",
-  sent: "Sent",
-  received: "Received",
-  claimed: "Received by link",
-  refund: "Returned",
-  added: "Added money",
-};
-
-/** A send link nobody has claimed yet: the money is held, and the sender can take it back. */
-const isOpenLink = (item: ActivityItem) => item.kind === "sent-link" && item.detail === "Waiting to be claimed";
-
-function statusOf(item: ActivityItem): string {
-  if (item.status !== "settled") return "Processing";
-  if (isOpenLink(item)) return "Waiting";
-  // Taken back by its sender: the money is in a "Link cancelled" row of its own.
-  if (item.kind === "sent-link" && item.detail === "Cancelled") return "Cancelled";
-  if (item.kind === "plan-opened") return "Plan open";
-  return "Complete";
-}
+import { isOpenLink, KIND_LABEL, movesBalance, n, signed, statusOf } from "@/lib/view";
 
 /** Payment details (half): the amount, what it was, and the one road to the receipt. */
 export function TransactionSheet({ id }: { id: string }) {
@@ -150,7 +126,12 @@ export function TransactionSheet({ id }: { id: string }) {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function TransactionRoute({ id, cold }: { cold?: boolean } & { id: string }) {
   return (
-    <RouteSheet label="Payment details" cold={cold} fallback="/activity" desktop={{ as: "drawer", title: "Payment details" }}>
+    <RouteSheet
+      label="Payment details"
+      cold={cold}
+      fallback="/activity"
+      desktop={{ as: "drawer", title: "Payment details", content: <TransactionDrawerContent id={id} /> }}
+    >
       <TransactionSheet id={id} />
     </RouteSheet>
   );
