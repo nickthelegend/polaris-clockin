@@ -28,6 +28,8 @@ const ARS_UPDATED_AT = 1_790_543_663;
 
 type Replay = {
   down?: Set<ChainKey>;
+  /** Every answer waits for this first (a slow RPC). */
+  hold?: Promise<void>;
   /** Replace one recorded answer: return a hex result, or undefined to keep the recording. */
   edit?: (chain: ChainKey, method: string, to?: string, data?: string) => string | undefined;
 };
@@ -41,6 +43,7 @@ function replay(opts: Replay = {}): FxServiceOptions["transport"] {
       async request({ method, params }: { method: string; params?: unknown }) {
         const call = method === "eth_call" ? (params as [{ to: string; data: string }])[0] : undefined;
         requests.push({ chain, method, data: call?.data });
+        if (opts.hold) await opts.hold;
         if (opts.down?.has(chain)) throw new Error(`${chain} RPC is down`);
         const edited = opts.edit?.(chain, method, call?.to, call?.data);
         if (edited !== undefined) return edited;
@@ -60,6 +63,7 @@ function service(opts: Replay & Partial<FxServiceOptions> & { at?: () => number 
     now: opts.at ?? (() => fixture.recordedAtMs),
     onSourceError: (source, error) => errors.push({ source, error }),
     ...(opts.cacheMs !== undefined ? { cacheMs: opts.cacheMs } : {}),
+    ...(opts.deadlineMs !== undefined ? { deadlineMs: opts.deadlineMs } : {}),
     ...(opts.env ? { env: opts.env } : {}),
   });
   return Object.assign(s, { errors });
@@ -224,6 +228,20 @@ describe("caching", () => {
     expect((await s.lookup("ARS")).status).toBe("unavailable");
     now += 11 * 1000;
     expect((await s.lookup("ARS")).status).toBe("ok");
+  });
+
+  it("answers a slow lookup as unavailable by the deadline, and caches the late answer", async () => {
+    let release!: () => void;
+    const s = service({ hold: new Promise<void>((r) => (release = r)), deadlineMs: 30 });
+    const started = Date.now();
+    expect(await s.lookup("ARS")).toEqual({ currency: "ARS", status: "unavailable", rate: null });
+    expect(Date.now() - started).toBeLessThan(1000);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    const reads = requests.length;
+    const late = await s.lookup("ARS");
+    expect(late.status === "ok" && late.rate.source.chain).toBe("ethereum");
+    expect(requests.length).toBe(reads);
   });
 
   it("answers no-feed for currencies without one, without touching the network", async () => {

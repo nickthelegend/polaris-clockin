@@ -56,6 +56,9 @@ For each lookup the service:
 5. Caches the result for **5 minutes** (`unavailable` for 30 s), shares one
    read between concurrent lookups, and re-checks the 26 h limit when it
    serves from cache.
+6. Answers within **10 s** whatever the RPCs do (5 s per request): past
+   the deadline the caller gets `unavailable` while the read finishes and
+   fills the cache for the next one.
 
 An app exposes it as `GET /api/fx?currency=ARS` with `handleFxRequest(service,
 request)`: 400 for anything but a three-letter code, otherwise the lookup as
@@ -65,7 +68,7 @@ The customer app's route is `apps/app/src/app/api/fx/route.ts`.
 Options (all optional): `rpcUrls`, `env` (for `FX_RPC_MONAD`,
 `FX_RPC_ETHEREUM`, `FX_RPC_POLYGON`, `FX_RPC_BASE`, each a comma-separated
 list of URLs), `transport` (tests replay recorded answers through it), `now`,
-`cacheMs`, `errorCacheMs`, `maxAgeSeconds`, `timeoutMs`, `feeds`,
+`cacheMs`, `errorCacheMs`, `maxAgeSeconds`, `timeoutMs`, `deadlineMs`, `feeds`,
 `onSourceError` (the customer app logs every feed it had to skip).
 
 ## The feeds

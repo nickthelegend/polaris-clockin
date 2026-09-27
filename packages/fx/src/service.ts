@@ -64,8 +64,14 @@ export interface FxServiceOptions {
   cacheMs?: number;
   errorCacheMs?: number;
   maxAgeSeconds?: number;
-  /** Per-request RPC timeout. */
+  /** Per-request RPC timeout (default 5 s). */
   timeoutMs?: number;
+  /**
+   * The longest a caller waits (default 10 s). Past it the lookup answers
+   * `unavailable`, while the read carries on and fills the cache for the next
+   * caller, so one slow RPC never holds a page's request open.
+   */
+  deadlineMs?: number;
   /** The feed table. Default `FX_FEEDS`. */
   feeds?: readonly CurrencyFeeds[];
   /** Told about every feed that could not be used, e.g. to log it. */
@@ -135,7 +141,8 @@ export function createFxService(options: FxServiceOptions = {}): FxService {
   const cacheMs = options.cacheMs ?? FX_CACHE_MS;
   const errorCacheMs = options.errorCacheMs ?? FX_ERROR_CACHE_MS;
   const maxAgeSeconds = options.maxAgeSeconds ?? FX_MAX_AGE_SECONDS;
-  const timeoutMs = options.timeoutMs ?? 8_000;
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  const deadlineMs = options.deadlineMs ?? 10_000;
   const table = new Map((options.feeds ?? FX_FEEDS).map((f) => [f.currency, f]));
 
   const clients = new Map<ChainKey, PublicClient>();
@@ -234,7 +241,12 @@ export function createFxService(options: FxServiceOptions = {}): FxService {
         inflight.set(currency, pending);
         pending.finally(() => inflight.delete(currency)).catch(() => undefined);
       }
-      return pending;
+      // Answer by the deadline; a slower read still lands in the cache.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = new Promise<FxLookup>((done) => {
+        timer = setTimeout(() => done({ currency, status: "unavailable", rate: null }), deadlineMs);
+      });
+      return Promise.race([pending, late]).finally(() => clearTimeout(timer));
     },
     clear() {
       cache.clear();
