@@ -28,9 +28,19 @@ function useCanScan(): boolean | null {
   );
 }
 
-/** Pay or claim a link (full): scan a Polaris code, paste a link, or try a sample. */
-export function PaySheet() {
+/**
+ * Where a link found here opens. Over a tab, the checkout or claim takes this
+ * sheet's place in history, so its Back or Done returns to the tab, not here.
+ * Opened cold there is no tab behind, so it stacks and Back comes here.
+ */
+function useOpenLink(cold: boolean): (path: string) => void {
   const router = useRouter();
+  return useCallback((path: string) => (cold ? router.push(path, { scroll: false }) : router.replace(path, { scroll: false })), [cold, router]);
+}
+
+/** Pay or claim a link (full): scan a Polaris code, paste a link, or try a sample. */
+export function PaySheet({ cold = false }: { cold?: boolean }) {
+  const go = useOpenLink(cold);
   const close = useCloseSheet();
   const canScan = useCanScan();
   const [scanning, setScanning] = useState(false);
@@ -46,10 +56,10 @@ export function PaySheet() {
         setMessage("That isn't a Polaris link. Check it and try again.");
         return false;
       }
-      router.push(path, { scroll: false });
+      go(path);
       return true;
     },
-    [router],
+    [go],
   );
 
   const stop = useCallback(() => {
@@ -180,15 +190,15 @@ export function PaySheet() {
           )}
         </form>
 
-        <SampleLinks />
+        <SampleLinks cold={cold} />
       </Sheet.Body>
     </div>
   );
 }
 
 /** Placeholder merchants' links, so every checkout path can be tried. */
-function SampleLinks() {
-  const router = useRouter();
+function SampleLinks({ cold }: { cold: boolean }) {
+  const go = useOpenLink(cold);
   const links = useData(
     async () => (await Promise.all(SAMPLE_LINK_IDS.map((id) => getPaymentLink(id)))).filter((l): l is PaymentLink => l !== null),
     [],
@@ -203,10 +213,11 @@ function SampleLinks() {
                 key={link.id}
                 leading={<MerchantAvatar name={link.merchant.name} />}
                 title={link.merchant.name}
-                subtitle={`${link.description}${link.modes.later ? " · Pay in 4" : ""}${link.modes.subscription ? " · Monthly" : ""}`}
+                subtitle={link.description}
                 value={usd(link.amount, { trim: true })}
+                meta={link.modes.later ? "Pay in 4" : link.modes.subscription ? "Monthly" : "Pay now"}
                 trend="flat"
-                onClick={() => router.push(`/pay/${link.id}`, { scroll: false })}
+                onClick={() => go(`/pay/${link.id}`)}
               />
             ))
           : [0, 1, 2].map((i) => <Skeleton key={i} shape="row" height={72} />)}
@@ -219,7 +230,7 @@ function SampleLinks() {
 export function PayRoute({ cold }: { cold?: boolean }) {
   return (
     <RouteSheet label="Pay or claim a link" snapPoints={["full"]} cold={cold}>
-      <PaySheet />
+      <PaySheet cold={cold} />
     </RouteSheet>
   );
 }

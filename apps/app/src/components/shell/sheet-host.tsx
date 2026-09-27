@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { markIntroSeen } from "./first-run";
 
 /**
  * Route sheets. Every screen you *do* (Send, Checkout, Credit…) is a route
@@ -124,6 +125,11 @@ export type RouteSheetProps = {
   cold?: boolean;
   /** Where a cold sheet lands when it closes. */
   fallback?: string;
+  /**
+   * Replaces the cold fallback: somewhere better to send someone who came
+   * from outside (the merchant's window or page that sent them).
+   */
+  onColdClose?: () => void;
   children: ReactNode;
 };
 
@@ -148,6 +154,7 @@ export function RouteSheet({
   defaultSnap,
   cold = false,
   fallback = "/",
+  onColdClose,
   children,
 }: RouteSheetProps) {
   const host = useContext(HostContext);
@@ -164,9 +171,16 @@ export function RouteSheet({
     if (closing.current) return;
     closing.current = true;
     host?.release(key);
-    if (cold) router.replace(fallback, { scroll: false });
-    else router.back();
-  }, [cold, fallback, router, host, key]);
+    if (!cold) {
+      router.back();
+      return;
+    }
+    // Someone who came from a link and backs out has seen enough of Polaris
+    // not to be sent through the intro: they land where the fallback says.
+    markIntroSeen();
+    if (onColdClose) onColdClose();
+    else router.replace(fallback, { scroll: false });
+  }, [cold, fallback, onColdClose, router, host, key]);
 
   const content = <CloseContext.Provider value={close}>{children}</CloseContext.Provider>;
 
