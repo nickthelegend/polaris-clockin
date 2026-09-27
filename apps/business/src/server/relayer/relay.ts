@@ -54,11 +54,12 @@ import { polarisDomain, TYPES, type Domain } from "./typed-data";
  * | `claim`              | link key: Claim            | PolarisSend.claim                           |
  * | `cancelSend`         | sender: Cancel             | PolarisSend.cancel                          |
  * | `repay`              | borrower: RepayIntent      | PolarisLoanEngine.repayWithSig              |
+ * | `reauthorize`        | borrower: Permit (engine)  | PolarisCheckout.reauthorize                 |
  * | `cancelSubscription` | subscriber: CancelSubscription | PolarisPayments.cancelWithSignature     |
  * | `transfer`           | owner: TransferWithAuth.   | AUSD.transferWithAuthorization              |
  */
 
-export const RELAY_TYPES = ["pay", "openPlan", "subscribe", "send", "claim", "cancelSend", "repay", "cancelSubscription", "transfer"] as const;
+export const RELAY_TYPES = ["pay", "openPlan", "subscribe", "send", "claim", "cancelSend", "repay", "reauthorize", "cancelSubscription", "transfer"] as const;
 export type RelayType = (typeof RELAY_TYPES)[number];
 
 export type RelayResponse = {
@@ -502,6 +503,43 @@ async function repay(body: Record<string, unknown>, chain: ChainConfig): Promise
   return respond("repay", { ...result, ids: { planId: loanId.toString(), ...result.ids } }, null);
 }
 
+/**
+ * A buyer whose instalment failed because the loan engine's allowance was
+ * gone (a collections run skipped it with InsufficientAllowance) signs one
+ * ERC-2612 permit again: spender PolarisLoanEngine, value at least everything
+ * they owe it (a permit replaces the allowance). PolarisCheckout.reauthorize
+ * applies it and emits Reauthorized, and the CRE collections workflow's EVM
+ * log trigger collects what is due in the same minute
+ * (CollectionsReceiver.dueTasksFor). Refused before any gas when nothing is
+ * owed, when the allowance already covers it, or when the permit is short.
+ */
+async function reauthorize(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
+  if (body.permit === undefined || body.permit === null) bad("permit", "permit is required.");
+  const replayed = await replay("reauthorize", relayIdOf("reauthorize", signature(body, "permit.signature")));
+  if (replayed) return replayed;
+  const buyer = address(body, "buyer");
+  const client = publicClient();
+  const [owed, allowance] = await Promise.all([
+    client.readContract({ address: chain.contracts.loanEngine, abi: polarisLoanEngineAbi, functionName: "activeDebtOf", args: [buyer] }) as Promise<bigint>,
+    client.readContract({ address: chain.contracts.stablecoin, abi: iausdAbi, functionName: "allowance", args: [buyer, chain.contracts.loanEngine] }) as Promise<bigint>,
+  ]);
+  if (owed === 0n) throw new HttpError(409, "nothing_owed", "You don't owe anything on Pay in 4 right now.");
+  if (allowance >= owed) throw new HttpError(409, "already_authorised", "Your payments are already set up. Each one is collected on its date.");
+  const { permit, sig } = await permitOf(body, buyer, chain.contracts.loanEngine, chain);
+  if (permit.value < owed) {
+    throw new HttpError(409, "stale_signature", "What you owe changed since you confirmed. Try again.", { param: "permit.value" });
+  }
+  countVerified(buyer);
+  const result = await carry({
+    kind: "reauthorize",
+    relayId: relayIdOf("reauthorize", sig as Hex),
+    to: chain.contracts.checkout,
+    data: encodeFunctionData({ abi: polarisCheckoutAbi, functionName: "reauthorize", args: [buyer, permit] }),
+    signer: buyer,
+  });
+  return respond("reauthorize", result, null);
+}
+
 async function cancelSubscription(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
   const subId = uint(body, "subId");
   const cancelDeadline = deadline(uint(body, "deadline"), "deadline", { maxAheadSeconds: 3600 });
@@ -620,6 +658,8 @@ export async function handleRelay(body: Record<string, unknown>): Promise<RelayR
       return cancelSend(body, chain);
     case "repay":
       return repay(body, chain);
+    case "reauthorize":
+      return reauthorize(body, chain);
     case "cancelSubscription":
       return cancelSubscription(body, chain);
     case "transfer":

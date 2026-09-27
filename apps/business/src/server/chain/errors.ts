@@ -13,6 +13,8 @@ import {
 } from "./abis";
 import { mockAUSDAbi } from "@polarispay/contracts/abi";
 
+import { GUARD_PAUSED_MESSAGE } from "@/lib/data/guard";
+
 /**
  * Turn a revert into something a person can act on.
  *
@@ -107,6 +109,11 @@ const MESSAGES: Record<string, { status: number; code: string; message: string }
   PlanNotActive: { status: 409, code: "plan_unavailable", message: "This subscription isn't available any more." },
   AlreadySubscribed: { status: 409, code: "already_subscribed", message: "You're already subscribed." },
   MerchantNotEligible: { status: 409, code: "merchant_not_eligible", message: "This business can't offer Pay in 4 for this amount yet. Pay now instead." },
+  // The CRE guardian paused new Pay in 4 plans (PolarisCheckout.openPlan); Pay now, Send and Subscribe carry on.
+  CreditPausedByGuardian: { status: 503, code: "credit_paused", message: GUARD_PAUSED_MESSAGE },
+  // PolarisCheckout.reauthorize: signing again for instalments already owed.
+  NothingOwed: { status: 409, code: "nothing_owed", message: "You don't owe anything on Pay in 4 right now." },
+  PermitBelowDebt: { status: 409, code: "stale_signature", message: "What you owe changed since you confirmed. Try again." },
   InsufficientLiquidity: { status: 503, code: "credit_unavailable", message: "Pay in 4 isn't available right now. Pay now instead." },
   InvalidInstallments: { status: 400, code: "invalid_plan", message: "That payment schedule isn't available." },
   InvalidInterval: { status: 400, code: "invalid_plan", message: "That payment schedule isn't available." },

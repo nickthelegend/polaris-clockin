@@ -41,6 +41,8 @@ export const ADDR = {
   send: at("PolarisSend"),
   checkout: at("PolarisCheckout"),
   collections: at("CollectionsReceiver"),
+  underwriting: at("UnderwritingReceiver"),
+  guardian: at("GuardianReceiver"),
 };
 
 export const ALL_ABIS = [polarisCheckoutAbi, polarisPaymentsAbi, polarisLoanEngineAbi, polarisSendAbi, merchantRegistryAbi, iausdAbi, collectionsReceiverAbi] as unknown as Abi[];

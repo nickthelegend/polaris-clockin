@@ -12,7 +12,7 @@ import {
 } from "@polaris/db";
 import { decodeEventLog, getAddress, type Abi, type Address, type Hex, type Log, type TransactionReceipt } from "viem";
 
-import { collectionsReceiverAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "../chain/abis";
+import { collectionsReceiverAbi, guardianReceiverAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi, underwritingReceiverAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { failureReasonOf } from "../chain/errors";
 import { centsToUnits, formatUnits, installmentAmounts, thresholdFor, unitsToCents } from "../chain/money";
@@ -21,6 +21,7 @@ import type { ChainConfig } from "../env";
 import { merchantByWallet } from "../merchants";
 import { periodSeconds } from "../sessions/params";
 import { emitEvent } from "../webhooks/events";
+import { onCollectionsReport, onGuardianReport, onReauthorized, onUnderwritingItem } from "./cre";
 
 /**
  * Chain events in, records and webhooks out.
@@ -35,7 +36,7 @@ import { emitEvent } from "../webhooks/events";
  * so the next sync retries it.
  */
 
-type Contract = "payments" | "checkout" | "loanEngine" | "collections";
+type Contract = "payments" | "checkout" | "loanEngine" | "collections" | "underwriting" | "guardian";
 
 type Decoded = {
   contract: Contract;
@@ -52,6 +53,8 @@ const ABIS: Record<Contract, Abi> = {
   checkout: polarisCheckoutAbi as unknown as Abi,
   loanEngine: polarisLoanEngineAbi as unknown as Abi,
   collections: collectionsReceiverAbi as unknown as Abi,
+  underwriting: underwritingReceiverAbi as unknown as Abi,
+  guardian: guardianReceiverAbi as unknown as Abi,
 };
 
 /** The contracts whose logs we read. */
@@ -61,6 +64,9 @@ export function watchedContracts(chain: ChainConfig): Record<Contract, Address |
     checkout: chain.contracts.checkout,
     loanEngine: chain.contracts.loanEngine,
     collections: chain.contracts.collections,
+    // The other CRE receivers' reports, for the Chainlink page (./cre.ts).
+    underwriting: chain.contracts.underwriting,
+    guardian: chain.contracts.guardian,
   };
 }
 
@@ -233,6 +239,17 @@ async function handle(log: Decoded, ctx: Ctx): Promise<number> {
       return onTaskSkipped(log, ctx);
     case "collections.CollectionsRun":
       return onCollectionsRun(log, ctx);
+    case "checkout.Reauthorized":
+      await onReauthorized(log, await blockTime(ctx, log.blockNumber));
+      return 0;
+    case "underwriting.UnderwritingApplied":
+    case "underwriting.UnderwritingRefused":
+      await onUnderwritingItem(log, await blockTime(ctx, log.blockNumber));
+      return 0;
+    case "guardian.CreditGuardUpdated":
+    case "guardian.AttestationRefused":
+      await onGuardianReport(log, await blockTime(ctx, log.blockNumber));
+      return 0;
     default:
       return 0;
   }
@@ -554,6 +571,8 @@ async function onInstallmentPaid(log: Decoded, ctx: Ctx): Promise<number> {
       installmentsPaid: after,
       attempts: progressed ? 0 : p.attempts,
       lastFailure: progressed ? null : p.lastFailure,
+      // The collection that followed the buyer signing again (shown in the app as "Collected").
+      reauthorized: p.reauthorized && progressed && !p.reauthorized.collected ? { ...p.reauthorized, collected: { at, txHash: log.txHash } } : (p.reauthorized ?? null),
       state: p.state === "dunning" && progressed ? "collecting" : p.state,
       updatedAt: at,
     };
@@ -650,6 +669,7 @@ async function onTaskSkipped(log: Decoded, ctx: Ctx): Promise<number> {
       state: "dunning",
       attempts,
       lastFailure: { reason, at, nextAttemptAt: hours === undefined ? null : new Date(nowMs + hours * 3_600_000).toISOString() },
+      reauthorized: null,
       updatedAt: at,
     };
   })) as PlanRecord;
@@ -685,6 +705,7 @@ async function onCollectionsRun(log: Decoded, ctx: Ctx): Promise<number> {
     executed: Number(log.args.executed),
     skipped: Number(log.args.skipped),
   });
+  await onCollectionsReport(log, at, ctx.tx);
   return 0;
 }
 

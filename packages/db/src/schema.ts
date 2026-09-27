@@ -217,6 +217,7 @@ export type RelayKind =
   | "claim"
   | "cancelSend"
   | "repay"
+  | "reauthorize"
   | "cancelSubscription"
   | "transfer"
   | "registerMerchant"
@@ -301,6 +302,13 @@ export type PlanRecord = {
   /** Failed collections of the current instalment. */
   attempts: number;
   lastFailure: { reason: string; at: IsoDate; nextAttemptAt: IsoDate | null } | null;
+  /**
+   * The borrower signed their approval again (PolarisCheckout.Reauthorized)
+   * after a collection failed for a lost one, and the collection that
+   * followed (the CRE collections run on its log trigger). Cleared by the
+   * next failure. The app shows "collecting now" until `collected` is set.
+   */
+  reauthorized?: { at: IsoDate; txHash: Hex; collected: { at: IsoDate; txHash: Hex } | null } | null;
   openedTxHash: Hex;
   createdAt: IsoDate;
   updatedAt: IsoDate;
@@ -505,6 +513,12 @@ export type CreditDecisionRecord = {
   callbackId: string;
   at: IsoDate;
   /**
+   * The report transaction behind it, as the chain sync saw it land
+   * (UnderwritingApplied or UnderwritingRefused through the forwarder): the
+   * provenance the app links to ("Verified by Chainlink CRE").
+   */
+  report?: { txHash: Hex; at: IsoDate; blockNumber: number } | null;
+  /**
    * The buyer's reasons for this decision, explained by the underwriting
    * gateway from the facts the DON attested (each line with its points and
    * the provider behind it, e.g. Nansen). Undefined until tried; null when
@@ -517,6 +531,67 @@ export type CreditDecisionRecord = {
     source: "gateway" | "package";
   } | null;
 };
+
+/* ── Chainlink CRE: what each workflow run did on chain ─────────────────── */
+
+/** A task a collections report carried, as CollectionsReceiver reported it. */
+export type CreTaskOutcome = {
+  /** 1 collect an instalment, 2 charge a subscription, 3 liquidate. */
+  action: number;
+  /** The loan or subscription id. */
+  id: string;
+  executed: boolean;
+  /** What TaskExecuted moved, base units; null for a skip. */
+  amountUnits: string | null;
+  /** Why it was skipped, in the chain sync's words (insufficient_funds, allowance_lost, stale, other). */
+  reason: string | null;
+};
+
+/**
+ * One CRE report that landed: a transaction through the forwarder to one of
+ * our receivers, from its own events (CollectionsRun and its tasks,
+ * UnderwritingApplied or Refused, CreditGuardUpdated or AttestationRefused).
+ * The chain is the source: nothing here comes from a callback.
+ */
+export type CreRunRecord = {
+  /** The transaction hash, lower-case: one report per transaction. */
+  id: string;
+  workflow: "collections" | "underwrite" | "guardian";
+  txHash: Hex;
+  blockNumber: number;
+  at: IsoDate;
+  /** Who delivered it: the forwarder's ReportProcessed and the transaction's sender, when the receipt could be read. */
+  delivery: { forwarder: Address; transmitter: Address | null; workflowExecutionId: Hex | null; result: boolean } | null;
+  collections?: {
+    tasks: number;
+    executed: number;
+    skipped: number;
+    items: CreTaskOutcome[];
+    /**
+     * A buyer's Reauthorized that this run collected after (the instant
+     * retry on the EVM log trigger): the buyer, that transaction, and when.
+     */
+    afterReauthorization: { buyer: Address; txHash: Hex; at: IsoDate } | null;
+  };
+  underwrite?: { items: Array<{ user: Address; linkedWallet: Address | null; applied: boolean; score: number | null; reason: string | null }> };
+  guardian?: {
+    accepted: boolean;
+    /** The feed round it wrote, when accepted. */
+    round: number | null;
+    creditPaused: boolean | null;
+    reasons: number | null;
+    /** AUSD/USD it cited, 8 decimals, and that Chainlink round. */
+    price: string | null;
+    priceRoundId: string | null;
+    freeCashUnits: string | null;
+    observedAt: IsoDate | null;
+    /** Why it was refused (VerdictMismatch, AttestationOutOfOrder, …). */
+    refusal: string | null;
+  };
+};
+
+/** A buyer signed their approval again (PolarisCheckout.Reauthorized): the collections log trigger's event. */
+export type ReauthorizationRecord = { id: string; buyer: Address; valueUnits: string; txHash: Hex; blockNumber: number; at: IsoDate };
 
 /** A CRE callback we have handled, by its id: every DON node may deliver it. */
 export type CreCallbackRecord = { id: string; type: string; receivedAt: IsoDate };
@@ -682,6 +757,16 @@ export const COLLECTIONS = {
     id: (d: CreCallbackRecord) => d.id,
     indexes: { receivedAt: (d: CreCallbackRecord) => d.receivedAt },
   } satisfies CollectionSpec<CreCallbackRecord>,
+  creRuns: {
+    name: "cre_runs",
+    id: (d: CreRunRecord) => d.id,
+    indexes: { workflow: (d: CreRunRecord) => d.workflow, at: (d: CreRunRecord) => d.at },
+  } satisfies CollectionSpec<CreRunRecord>,
+  reauthorizations: {
+    name: "reauthorizations",
+    id: (d: ReauthorizationRecord) => d.id,
+    indexes: { buyer: (d: ReauthorizationRecord) => d.buyer.toLowerCase(), at: (d: ReauthorizationRecord) => d.at },
+  } satisfies CollectionSpec<ReauthorizationRecord>,
   failedLogs: {
     name: "failed_logs",
     id: (d: FailedLogRecord) => d.id,
@@ -713,6 +798,8 @@ export function collections(store: Store) {
     underwritingRequests: store.collection(COLLECTIONS.underwritingRequests),
     creditDecisions: store.collection(COLLECTIONS.creditDecisions),
     creCallbacks: store.collection(COLLECTIONS.creCallbacks),
+    creRuns: store.collection(COLLECTIONS.creRuns),
+    reauthorizations: store.collection(COLLECTIONS.reauthorizations),
   };
 }
 
