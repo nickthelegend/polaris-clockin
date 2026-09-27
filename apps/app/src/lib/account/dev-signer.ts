@@ -13,9 +13,19 @@ import { AccountError } from "./errors";
  *   2. Every entry point re-checks the flag and throws without it.
  *   3. It refuses to run on the production domain whatever the flag says.
  * The UI shows a "Dev signer" badge whenever it is on.
+ *
+ * The key lives in the tab's sessionStorage, so each tab is a new account.
+ * `NEXT_PUBLIC_DEV_SIGNER_PERSIST=1` (set by `pnpm demo:local`) keeps it in
+ * localStorage instead, the way a passkey belongs to the device: a shop's
+ * checkout popup then opens as the same buyer as the app's own tab.
  */
 
 const KEY = "polaris.dev-signer.v1";
+
+/** Where the key is kept: the tab, or (demo:local) the device. */
+function store(): Storage {
+  return process.env.NEXT_PUBLIC_DEV_SIGNER_PERSIST === "1" ? window.localStorage : window.sessionStorage;
+}
 const PRODUCTION_DOMAIN = "polarispay.app";
 
 type DevRecord = { privateKey: Hex; createdAt: number };
@@ -32,7 +42,7 @@ function assertEnabled(): void {
 
 function read(): DevRecord | null {
   try {
-    const raw = window.sessionStorage.getItem(KEY);
+    const raw = store().getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<DevRecord>;
     if (typeof parsed.privateKey === "string" && isHex(parsed.privateKey) && parsed.privateKey.length === 66) {
@@ -50,7 +60,7 @@ export async function devCreate(): Promise<DevSession> {
   assertEnabled();
   const record: DevRecord = { privateKey: generatePrivateKey(), createdAt: Date.now() };
   try {
-    window.sessionStorage.setItem(KEY, JSON.stringify(record));
+    store().setItem(KEY, JSON.stringify(record));
   } catch {
     /* the account still works for this page */
   }
@@ -74,7 +84,7 @@ export function devStoredAddress(): Hex | null {
 export function devForget(): void {
   assertEnabled();
   try {
-    window.sessionStorage.removeItem(KEY);
+    store().removeItem(KEY);
   } catch {
     /* nothing stored */
   }

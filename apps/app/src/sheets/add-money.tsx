@@ -1,15 +1,24 @@
 "use client";
 
 import { DetailsList, ListGroup, ListRow, Sheet, TileButton, toast, useIsDesktop } from "@polaris/ui";
-import { ArrowDownLeft, ScanLine, Send } from "lucide-react";
+import { ArrowDownLeft, Droplets, ScanLine, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useAccounts } from "@/components/accounts";
 import { useAccountState } from "@/lib/account/hooks";
 import { useOrigin } from "@/lib/browser";
+import { notifyDataChanged } from "@/lib/data/changes";
+import { env } from "@/lib/env";
 import { receiveLink } from "@/lib/links";
 import { usd } from "@/lib/money";
 import { usePrefs } from "@/lib/prefs";
 import { RouteSheet } from "@/components/shell/sheet-host";
+
+/**
+ * `pnpm demo:local`'s faucet: test dollars (MockAUSD) on the local chain
+ * only. Unset everywhere else, so no other build shows it.
+ */
+const LOCAL_FAUCET = env.chainId === 31337 ? (process.env.NEXT_PUBLIC_LOCAL_FAUCET_URL?.trim() || "").replace(/\/+$/, "") : "";
 
 /**
  * Add money: the ways dollars come in today, on ref C's Send / Receive /
@@ -24,6 +33,25 @@ export function AddMoneySheet() {
   const { balance } = useAccounts();
   const desktop = useIsDesktop();
   const address = state.status === "ready" || state.status === "locked" ? state.address : null;
+  const [minting, setMinting] = useState(false);
+
+  async function testDollars() {
+    if (!address) {
+      router.push("/onboard?next=/");
+      return;
+    }
+    setMinting(true);
+    try {
+      const res = await fetch(`${LOCAL_FAUCET}/mint`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ address }) });
+      if (!res.ok) throw new Error(String(res.status));
+      notifyDataChanged();
+      toast({ title: "$500.00 test dollars added", description: "Local chain only.", tone: "success" });
+    } catch {
+      toast({ title: "The local faucet didn't answer", description: "Is pnpm demo:local still running?", tone: "error" });
+    } finally {
+      setMinting(false);
+    }
+  }
 
   async function ask() {
     if (!address || !origin) {
@@ -75,6 +103,17 @@ export function AddMoneySheet() {
           </p>
         </>
       )}
+      {LOCAL_FAUCET ? (
+        <ListGroup label="Local demo">
+          <ListRow
+            icon={<Droplets />}
+            tone="tint-lime"
+            title={minting ? "Adding test dollars…" : "Get $500 test dollars"}
+            description="From the local chain's faucet. Not real money."
+            onClick={minting ? undefined : () => void testDollars()}
+          />
+        </ListGroup>
+      ) : null}
       <DetailsList
         items={[
           { label: "Lands in", value: "Under a second" },
