@@ -85,9 +85,8 @@ describe("the underwriting client", () => {
     assert.equal(a.report, null);
     assert.equal(a.decision.limit, "0");
     assert.deepEqual(a.decision.thinFile, [
-      { fact: "walletAgeDays", have: 3, need: 30 },
-      { fact: "txCount", have: 2, need: 25 },
-      { fact: "defiTenureDays", have: 0, need: 30 },
+      { fact: "walletAgeDays", have: 3, need: 90 },
+      { fact: "txCount", have: 2, need: 10 },
     ]);
   });
 
@@ -118,7 +117,7 @@ describe("the underwriting client", () => {
     );
     const health = await createUnderwritingClient({ baseUrl: "http://gateway.test", fetch: m.fetch }).health();
     assert.equal(health.ok, true, "health needs no token");
-    assert.equal(health.version.model, 2);
+    assert.equal(health.version.model, 3);
     assert.equal(new Headers(m.calls[0]!.init.headers).get("authorization"), "Bearer wrong");
     assert.equal(new Headers(m.calls[1]!.init.headers).get("authorization"), null);
 

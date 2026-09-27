@@ -28,15 +28,19 @@ describe("thinFileReason", () => {
     expect(thin({ stableBalance: 5_000_000_000n })).toBe(true);
   });
 
-  test("just under every step is still thin", () => {
-    expect(thin({ walletAgeDays: 29, txCount: 24, defiTenureDays: 29, stableBalance: 99_000_000n })).toBe(true);
+  test("just under either of ScoreManager's minimums is still thin", () => {
+    expect(thin({ walletAgeDays: 89, txCount: 500, defiTenureDays: 400, exchangeFunded: true, stableBalance: 99_000_000n })).toBe(true);
+    expect(thin({ walletAgeDays: 900, txCount: 9, exchangeFunded: true })).toBe(true);
   });
 
-  test("one point from time or identity is enough", () => {
-    expect(thin({ walletAgeDays: 30 })).toBe(false);
-    expect(thin({ txCount: 25 })).toBe(false);
-    expect(thin({ defiTenureDays: 30 })).toBe(false);
-    expect(thin({ exchangeFunded: true })).toBe(false);
+  test("ScoreManager.isThinFile's rule exactly: 90 days and 10 transactions clear it", () => {
+    expect(thin({ walletAgeDays: 90, txCount: 10 })).toBe(false);
+    expect(thin({ walletAgeDays: 1200, txCount: 900, exchangeFunded: true })).toBe(false);
+    // One point from time or identity is not enough: the chain would refuse the report with ThinFile.
+    expect(thin({ walletAgeDays: 30 })).toBe(true);
+    expect(thin({ txCount: 25 })).toBe(true);
+    expect(thin({ defiTenureDays: 30 })).toBe(true);
+    expect(thin({ exchangeFunded: true })).toBe(true);
   });
 
   test("penalties alone do not make a file: one liquidation and nothing else is still thin", () => {

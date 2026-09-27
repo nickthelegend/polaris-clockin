@@ -11,36 +11,31 @@
  * creditLimitOf $200). The sybil and one-link checks cover only a linked
  * history wallet, so they do not help an account that brings none.
  *
- * So the DON attests only facts that show something a brand-new account
- * cannot: at least one point from a signal that takes time or a real identity
- * to earn, in ScoreManager's own step sizes (`scoreFromFacts`). Any one of
+ * So the DON attests only facts that show a life elsewhere, exactly as
+ * `ScoreManager.isThinFile` requires on chain: at least 90 days since the
+ * oldest activity AND at least 10 transactions, counted across every subject
+ * the derivation used (the account, plus a linked wallet that passed its risk
+ * checks). Age is the signal a farmer cannot parallelise; the transaction
+ * floor stops an old wallet that was funded once and never used from
+ * standing in for a history. Dollars do not count: the same balance can be
+ * walked through account after account inside the 15 minutes a report is
+ * good for.
  *
- *   walletAgeDays   >= 30   (2 points per 30 days)
- *   txCount         >= 25   (1 point per 25 payments and transfers)
- *   defiTenureDays  >= 30   (1 point per 30 days)
- *   exchangeFunded          (10 points: an exchange's identity checks stand behind it)
- *
- * counted across every subject the derivation used (the account, plus a
- * linked wallet that passed its risk checks). Dollars do not count: the same
- * balance can be walked through account after account inside the 15 minutes
- * a report is good for.
- *
- * A thin file gets no report at all, rather than a report of zeros. The
- * account stays where `requireUnderwriting` puts every account before its
- * report, exactly as `ScoreManager._securedOnly` treats it: no unsecured
- * line, collateral at face value. Because underwriting runs once per account,
- * that also keeps the door open: the buyer comes back with a history wallet
- * (Bring your history, which clears the gate at once) or once the account has
- * a history of its own.
+ * A thin file gets no report at all (the chain would refuse it with
+ * ThinFile). The account stays where `requireUnderwriting` puts every account
+ * before its report, exactly as `ScoreManager._securedOnly` treats it: no
+ * unsecured line, collateral at face value. Because underwriting runs once
+ * per account, that also keeps the door open: the buyer comes back with a
+ * history wallet (Bring your history) or once the account has a history of
+ * its own.
  *
  * A declined file is attested even when it is thin: `declined` shuts the
  * unsecured line for good and spends the history wallet (it can never back
  * another account), which is the point of the sybil and liquidation checks.
  *
- * This is the same rule, point for point, as the CRE underwriting workflow's
- * gate (workflows/src/underwriting/thin.ts on metropolis/cre), so the app's
- * preview never promises a line the DON will not attest, or hides one it will.
- * A matching floor in `ScoreManager.underwrite` belongs to the contracts.
+ * The CRE underwriting workflow's gate (workflows/src/underwriting/thin.ts)
+ * is the same rule, so the app's preview never promises a line the DON will
+ * not attest, or that the chain would refuse.
  */
 
 import { ATTEST_MINIMUM } from "./constants.ts";
@@ -51,22 +46,20 @@ export type { AttestGap };
 
 type GateFacts = Omit<Facts, "observedAt"> & { observedAt?: bigint };
 
-/** True when the DON may attest these facts: declined, or at least one point from time or identity. */
+/** True when the DON may attest these facts: declined, or at least 90 days and 10 transactions of history. */
 export function isAttestable(facts: GateFacts): boolean {
-  const b = scoreBreakdown(facts);
-  return b.declined || b.age + b.activity + b.defi + b.exchange > 0;
+  if (scoreBreakdown(facts).declined) return true;
+  return facts.walletAgeDays >= ATTEST_MINIMUM.walletAgeDays && facts.txCount >= ATTEST_MINIMUM.txCount;
 }
 
 /**
  * Empty when the facts may be attested. Otherwise the facts are a thin file,
- * and each entry is one way out: reaching any single `need` clears the gate
- * (as does a history wallet first funded from an exchange).
+ * and each entry is a requirement still to meet: ALL of them clear the gate.
  */
 export function attestGaps(facts: GateFacts): AttestGap[] {
   if (isAttestable(facts)) return [];
-  return [
-    { fact: "walletAgeDays", have: facts.walletAgeDays, need: ATTEST_MINIMUM.walletAgeDays },
-    { fact: "txCount", have: facts.txCount, need: ATTEST_MINIMUM.txCount },
-    { fact: "defiTenureDays", have: facts.defiTenureDays, need: ATTEST_MINIMUM.defiTenureDays },
-  ];
+  const gaps: AttestGap[] = [];
+  if (facts.walletAgeDays < ATTEST_MINIMUM.walletAgeDays) gaps.push({ fact: "walletAgeDays", have: facts.walletAgeDays, need: ATTEST_MINIMUM.walletAgeDays });
+  if (facts.txCount < ATTEST_MINIMUM.txCount) gaps.push({ fact: "txCount", have: facts.txCount, need: ATTEST_MINIMUM.txCount });
+  return gaps;
 }

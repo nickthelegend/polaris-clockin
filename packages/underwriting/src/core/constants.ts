@@ -16,23 +16,22 @@ export const FACTS_VERSION = 1;
 /**
  * Bumped whenever the score or decision rules change. See score.ts.
  * 2: thin files are not attested (attest.ts, ATTEST_MINIMUM).
+ * 3: the thin-file gate is ScoreManager.isThinFile's, exactly (90 days and 10 transactions).
  */
-export const MODEL_VERSION = 2;
+export const MODEL_VERSION = 3;
 
 /**
  * The thin-file gate (attest.ts): the DON attests facts only when they reach
- * at least ONE of these (each is where its ScoreManager term earns its first
- * point), or were first funded from an exchange, or decline. Below all of
- * them no report is sent and the account stays secured-only, because
- * ScoreManager would open even an empty account at the $200 floor.
+ * BOTH of these, or decline. They are ScoreManager's own MIN_HISTORY_DAYS and
+ * MIN_HISTORY_TXS (`isThinFile`): below either, `ScoreManager.underwrite`
+ * refuses the report with ThinFile, so no report is sent and the account
+ * stays secured-only.
  */
 export const ATTEST_MINIMUM = {
-  /** Days since the oldest sign of life across the subjects counted. */
-  walletAgeDays: 30,
-  /** Payments and transfers sent across the subjects counted. */
-  txCount: 25,
-  /** Days since the first savings, lending or trading action. */
-  defiTenureDays: 30,
+  /** Days since the oldest sign of life across the subjects counted (ScoreManager.MIN_HISTORY_DAYS). */
+  walletAgeDays: 90,
+  /** Payments and transfers sent across the subjects counted (ScoreManager.MIN_HISTORY_TXS). */
+  txCount: 10,
 } as const;
 
 /** ScoreManager constants. */

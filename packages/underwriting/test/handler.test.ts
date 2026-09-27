@@ -24,7 +24,7 @@ describe("the underwriting API", () => {
     const body = JSON.parse(res.body);
     assert.equal(body.ok, true);
     assert.deepEqual(body.modes, { nansen: "fixture", zerion: "fixture", etherscan: "fixture", rpc: "fixture" });
-    assert.deepEqual(body.version, { facts: 1, model: 2 });
+    assert.deepEqual(body.version, { facts: 1, model: 3 });
   });
 
   it("POST /v1/underwrite: the decision, with amounts as base-unit strings", async () => {
@@ -55,9 +55,8 @@ describe("the underwriting API", () => {
     assert.equal(body.decision.limit, "0");
     assert.equal(body.decision.payIn4.allowed, false);
     assert.deepEqual(body.decision.thinFile, [
-      { fact: "walletAgeDays", have: 3, need: 30 },
-      { fact: "txCount", have: 2, need: 25 },
-      { fact: "defiTenureDays", have: 0, need: 30 },
+      { fact: "walletAgeDays", have: 3, need: 90 },
+      { fact: "txCount", have: 2, need: 10 },
     ]);
   });
 

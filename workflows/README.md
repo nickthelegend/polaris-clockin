@@ -42,9 +42,10 @@ Monad: one decides who gets credit, the other collects what is owed.
   same run.
 - **No history, no report.** `ScoreManager` opens any underwritten account
   at the $200 floor, and an account with no history costs nothing to make.
-  So the workflow attests only facts with at least one point from time or
-  identity (30 days of age, 25 sends, 30 days of DeFi, or exchange funding;
-  dollars do not count, they can be passed from account to account). A thin
+  So the workflow attests only facts with the history `ScoreManager.isThinFile`
+  requires on chain: at least 90 days of age and 10 transactions, over the
+  account and its linked wallet (dollars do not count, they can be passed
+  from account to account). A thin
   file gets no report: no unsecured line, collateral still works, and the
   buyer can come back with a history wallet. A declined file is always
   reported.

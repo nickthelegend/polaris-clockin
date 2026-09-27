@@ -303,18 +303,17 @@ describe("the thin-file gate: a report for an empty account is a free $200 line,
     assert.equal(out.decision.payIn4.allowed, false);
     assert.equal(out.decision.payIn4.maxPurchase, 0n);
     assert.deepEqual(out.decision.thinFile, [
-      { fact: "walletAgeDays", have: 0, need: 30 },
-      { fact: "txCount", have: 0, need: 25 },
-      { fact: "defiTenureDays", have: 0, need: 30 },
+      { fact: "walletAgeDays", have: 0, need: 90 },
+      { fact: "txCount", have: 0, need: 10 },
     ]);
-    assert.equal(out.decision.payIn4.reason, "Pay in 4 opens after 30 days of history, or after 25 payments and transfers.");
+    assert.equal(out.decision.payIn4.reason, "Pay in 4 opens after 90 days of history and 10 payments and transfers.");
     assert.equal(out.decision.headline, "Pay in 4 opens once there's a little more history here.");
     assert.equal(out.decision.nextTier, null, "no line, so repaying has nothing to raise");
     assert.deepEqual(
       out.decision.nextSteps.map((s) => [s.id, s.label]),
       [
         ["link-history", "Open a line now: confirm with the wallet you already use."],
-        ["build-history", "Keep using Polaris: Pay in 4 opens in 30 days, or sooner after 25 more payments and transfers."],
+        ["build-history", "Keep using Polaris: Pay in 4 opens in 90 days, once you've made 10 more payments and transfers."],
         ["secure", "Set money aside to pay in 4 against it."],
       ],
     );
@@ -326,22 +325,23 @@ describe("the thin-file gate: a report for an empty account is a free $200 line,
     assert.equal(out.report, null);
     assert.equal(
       out.decision.nextSteps.find((s) => s.id === "build-history")?.label,
-      "Keep using Polaris: Pay in 4 opens in 27 days, or sooner after 23 more payments and transfers.",
+      "Keep using Polaris: Pay in 4 opens in 87 days, once you've made 8 more payments and transfers.",
     );
     // Secured-only, as ScoreManager treats a wallet not yet underwritten: collateral at face value.
     assert.equal(out.decision.nextSteps.find((s) => s.id === "secure")?.label, "Set aside $201.54 to pay in 4 for this purchase.");
   });
 
-  it("any one point from time or identity clears it: 30 days, 25 payments and transfers, 30 days of trading, or exchange funding", () => {
-    for (const cleared of [
-      at(30, 0),
-      at(0, 25),
-      at(3, 2, { defiSince: evidence.ok<number | null>(days(30), "zerion.probe") }),
-    ]) {
+  it("ScoreManager.isThinFile's rule, exactly: 90 days AND 10 transactions clear it, and nothing less does", () => {
+    for (const cleared of [at(90, 10), at(400, 12), at(90, 300)]) {
       assert.equal(cleared.attest, true);
       assert.match(cleared.report ?? "", /^0x[0-9a-f]{832}$/);
       assert.equal(cleared.decision.thinFile, null);
-      assert.equal(cleared.decision.limit, 200_000_000n);
+      assert.ok(cleared.decision.limit >= 200_000_000n);
+    }
+    // One point from time or identity used to be enough; the chain refuses these with ThinFile.
+    for (const refused of [at(30, 0), at(0, 25), at(89, 500), at(400, 9), at(3, 2, { defiSince: evidence.ok<number | null>(days(30), "zerion.probe") })]) {
+      assert.equal(refused.attest, false);
+      assert.equal(refused.report, null);
     }
     const exchange = underwrite({
       user: ACCOUNT,
@@ -351,24 +351,26 @@ describe("the thin-file gate: a report for an empty account is a free $200 line,
       linkVerified: true,
     });
     assert.equal(exchange.facts.exchangeFunded, true);
-    assert.equal(exchange.attest, true, "an exchange's identity checks stand behind a wallet it funded");
+    assert.equal(exchange.attest, false, "exchange funding two days ago is not a history the chain accepts");
   });
 
-  it("one short of every way is thin, and dollars do not count: a balance can be walked through account after account", () => {
-    const rich = at(29, 24, { stableBalance: evidence.ok(5_000_000_000, "rpc.balance") });
+  it("one short is thin, and dollars do not count: a balance can be walked through account after account", () => {
+    const rich = at(89, 9, { stableBalance: evidence.ok(5_000_000_000, "rpc.balance") });
     assert.equal(rich.breakdown.balance, 50);
     assert.equal(rich.final, true);
     assert.equal(rich.report, null);
     assert.equal(rich.decision.limit, 0n);
     assert.deepEqual(rich.decision.thinFile, [
-      { fact: "walletAgeDays", have: 29, need: 30 },
-      { fact: "txCount", have: 24, need: 25 },
-      { fact: "defiTenureDays", have: 0, need: 30 },
+      { fact: "walletAgeDays", have: 89, need: 90 },
+      { fact: "txCount", have: 9, need: 10 },
     ]);
     assert.equal(
       rich.decision.nextSteps.find((s) => s.id === "build-history")?.label,
-      "Keep using Polaris: Pay in 4 opens in 1 day, or sooner after 1 more payment or transfer.",
+      "Keep using Polaris: Pay in 4 opens in 1 day, once you've made 1 more payment or transfer.",
     );
+    const oldEnough = at(120, 4);
+    assert.deepEqual(oldEnough.decision.thinFile, [{ fact: "txCount", have: 4, need: 10 }]);
+    assert.equal(oldEnough.decision.nextSteps.find((s) => s.id === "build-history")?.label, "Keep using Polaris: Pay in 4 opens after 6 more payments and transfers.");
   });
 
   it("a proven history clears it at once, even for a brand-new account", () => {
@@ -444,40 +446,33 @@ describe("the thin-file gate: a report for an empty account is a free $200 line,
     assert.equal(decision.limit, 200_000_000n);
   });
 
-  it("is the CRE workflow's gate, point for point, over a seeded sweep", () => {
-    // workflows/src/underwriting/thin.ts on metropolis/cre, restated: attest when declined, or when
-    // age, activity, trading tenure or exchange funding earns at least one point.
-    const workflowAttests = (f: Parameters<typeof isAttestable>[0]) => {
-      const b = scoreBreakdown(f);
-      return b.declined || b.age + b.activity + b.defi + b.exchange > 0;
-    };
+  it("is the CRE workflow's gate and ScoreManager.isThinFile, point for point, over a seeded sweep", () => {
+    // workflows/src/underwriting/thin.ts and ScoreManager.isThinFile, restated: attest when declined,
+    // or when the facts show at least 90 days AND 10 transactions of history.
+    const chainAttests = (f: Parameters<typeof isAttestable>[0]) =>
+      scoreBreakdown(f).declined || (f.walletAgeDays >= 90 && f.txCount >= 10);
     let seed = 0x7a1c;
     const rand = () => ((seed = (seed * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32);
     const pick = (max: number) => Math.floor(rand() * (max + 1));
     let thin = 0;
+    let attested = 0;
     for (let i = 0; i < 2_000; i++) {
       const f = {
-        walletAgeDays: pick(40),
-        txCount: pick(30),
+        walletAgeDays: pick(140),
+        txCount: pick(20),
         stableBalance: BigInt(pick(900)) * 1_000_000n,
         defiTenureDays: pick(35),
         priorLiquidations: rand() < 0.05 ? 2 : 0,
         relatedWallets: rand() < 0.05 ? 30 : pick(5),
         exchangeFunded: rand() < 0.1,
       };
-      assert.equal(isAttestable(f), workflowAttests(f), JSON.stringify({ ...f, stableBalance: String(f.stableBalance) }));
-      assert.equal(attestGaps(f).length === 0, workflowAttests(f));
-      if (!workflowAttests(f)) thin += 1;
+      assert.equal(isAttestable(f), chainAttests(f), JSON.stringify({ ...f, stableBalance: String(f.stableBalance) }));
+      assert.equal(attestGaps(f).length === 0, chainAttests(f));
+      if (chainAttests(f)) attested += 1;
+      else thin += 1;
     }
-    assert.ok(thin > 100, "the sweep reaches thin files");
-    assert.deepEqual(ATTEST_MINIMUM, { walletAgeDays: 30, txCount: 25, defiTenureDays: 30 });
-    // Each minimum is exactly where its ScoreManager term earns its first point.
-    const zero = { walletAgeDays: 0, txCount: 0, stableBalance: 0n, defiTenureDays: 0, priorLiquidations: 0, relatedWallets: 0, exchangeFunded: false };
-    assert.equal(scoreBreakdown({ ...zero, walletAgeDays: ATTEST_MINIMUM.walletAgeDays - 1 }).age, 0);
-    assert.ok(scoreBreakdown({ ...zero, walletAgeDays: ATTEST_MINIMUM.walletAgeDays }).age > 0);
-    assert.equal(scoreBreakdown({ ...zero, txCount: ATTEST_MINIMUM.txCount - 1 }).activity, 0);
-    assert.ok(scoreBreakdown({ ...zero, txCount: ATTEST_MINIMUM.txCount }).activity > 0);
-    assert.equal(scoreBreakdown({ ...zero, defiTenureDays: ATTEST_MINIMUM.defiTenureDays - 1 }).defi, 0);
-    assert.ok(scoreBreakdown({ ...zero, defiTenureDays: ATTEST_MINIMUM.defiTenureDays }).defi > 0);
+    assert.ok(thin > 100 && attested > 100, "the sweep reaches both sides of the gate");
+    // ScoreManager.MIN_HISTORY_DAYS and MIN_HISTORY_TXS.
+    assert.deepEqual(ATTEST_MINIMUM, { walletAgeDays: 90, txCount: 10 });
   });
 });

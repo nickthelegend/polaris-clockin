@@ -202,13 +202,13 @@ each and draw about $196 from every one (security review, "sybil credit
 farming", proven on a Hardhat chain). The sybil and one-link checks only see a
 linked wallet, so they do not help an account that brings none.
 
-`underwrite()` therefore attests only facts that show something a brand-new
-account cannot: at least one point from time or identity, in ScoreManager's
-own steps. Any one of **30 days of history, 25 payments and transfers, 30
-days with savings or trading apps, or a history wallet first funded from an
-exchange**, counted across the account and a linked wallet that passed its
-checks (`isAttestable`, `attestGaps` and `ATTEST_MINIMUM` in
-`core/attest.ts`). Dollars do not count: one balance can be walked through
+`underwrite()` therefore attests only facts that show a life elsewhere,
+exactly as `ScoreManager.isThinFile` requires on chain (the contract refuses
+anything less with `ThinFile`): **at least 90 days of history and at least
+10 payments and transfers**, counted across the account and a linked wallet
+that passed its checks (`isAttestable`, `attestGaps` and `ATTEST_MINIMUM` in
+`core/attest.ts`; `ATTEST_MINIMUM` is the contract's `MIN_HISTORY_DAYS` and
+`MIN_HISTORY_TXS`). Dollars do not count: one balance can be walked through
 account after account inside the 15 minutes a report is good for. A declined
 file is attested even when thin, so the decline sticks and the wallet can
 never back another account.
@@ -216,21 +216,21 @@ never back another account.
 Below the gate the outcome is `final: true, attest: false, report: null`,
 and the decision is secured-only, exactly as ScoreManager treats a wallet
 never underwritten while `requireUnderwriting` is on: `limit` 0, collateral
-at face value, `thinFile` listing each way out (`{ fact, have, need }`; any
-one clears it), and the next steps "Open a line now: confirm with the wallet
-you already use" and "Keep using Polaris: Pay in 4 opens in 27 days, or
-sooner after 23 more payments and transfers". No report also keeps the one
+at face value, `thinFile` listing what is still missing (`{ fact, have,
+need }`; all of it is needed), and the next steps "Open a line now: confirm
+with the wallet you already use" and "Keep using Polaris: Pay in 4 opens in
+87 days, once you've made 8 more payments and transfers". No report also keeps the one
 underwriting an account gets for when it has the history.
 `explainOnChainFacts` does not apply the gate: facts already attested are
 explained as the chain scored them.
 
-The CRE underwriting workflow applies the same gate, point for point
-(`workflows/src/underwriting/thin.ts` on `metropolis/cre`; a seeded sweep in
-`test/facts.test.ts` holds the two together), so the app's preview never
-promises a line the DON will not attest. Still open elsewhere:
-`ScoreManager.underwrite` should refuse thin facts itself so a stray report
-cannot open the floor, and the API should gate merchant auto-activation and
-rate-limit underwriting per verified person.
+The CRE underwriting workflow applies the same gate
+(`workflows/src/underwriting/thin.ts`), and `ScoreManager.underwrite`
+refuses thin facts itself; a seeded sweep in `test/facts.test.ts` holds the
+package to the contract's rule, so the app's preview never promises a line
+the DON will not attest or the chain would refuse. The API rate-limits
+underwriting per verified account and activates merchants for Pay in 4 only
+after real sales.
 
 ## API
 

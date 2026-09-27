@@ -53,7 +53,7 @@ describe("personas", () => {
     assert.equal(o.breakdown.score, 520);
     assert.equal(o.decision.limit, 0n);
     assert.equal(o.decision.payIn4.allowed, false);
-    assert.deepEqual(o.decision.thinFile?.map((g) => g.fact), ["walletAgeDays", "txCount", "defiTenureDays"]);
+    assert.deepEqual(o.decision.thinFile?.map((g) => g.fact), ["walletAgeDays", "txCount"]);
     assert.deepEqual(o.decision.nextSteps.map((s) => s.id), ["link-history", "build-history", "secure"]);
   });
 

@@ -104,24 +104,24 @@ export interface DecideInput {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "Pay in 4 opens after 30 days of history, or after 25 payments and transfers." */
+/** "Pay in 4 opens after 90 days of history and 10 payments and transfers." */
 function thinReason(gaps: readonly AttestGap[]): string {
   const age = gaps.find((g) => g.fact === "walletAgeDays");
   const tx = gaps.find((g) => g.fact === "txCount");
   const parts = [
-    age ? `after ${plural(age.need, "day", "days")} of history` : null,
-    tx ? `after ${plural(tx.need, "payment or transfer", "payments and transfers")}` : null,
+    age ? `${plural(age.need, "day", "days")} of history` : null,
+    tx ? plural(tx.need, "payment or transfer", "payments and transfers") : null,
   ].filter((p): p is string => p !== null);
-  return parts.length > 0 ? `Pay in 4 opens ${parts.join(", or ")}.` : "Pay in 4 opens once there's a little more history here.";
+  return parts.length > 0 ? `Pay in 4 opens after ${parts.join(" and ")}.` : "Pay in 4 opens once there's a little more history here.";
 }
 
-/** "Keep using Polaris: Pay in 4 opens in 27 days, or sooner after 23 more payments and transfers." */
+/** "Keep using Polaris: Pay in 4 opens in 87 days, once you've made 9 more payments and transfers." */
 function buildHistoryStep(gaps: readonly AttestGap[]): NextStep {
   const age = gaps.find((g) => g.fact === "walletAgeDays");
   const tx = gaps.find((g) => g.fact === "txCount");
   const days = age ? `in ${plural(age.need - age.have, "day", "days")}` : null;
-  const sends = tx ? `after ${plural(tx.need - tx.have, "more payment or transfer", "more payments and transfers")}` : null;
-  const when = days && sends ? `${days}, or sooner ${sends}` : (days ?? sends ?? "with a little more history");
+  const sends = tx ? plural(tx.need - tx.have, "more payment or transfer", "more payments and transfers") : null;
+  const when = days && sends ? `${days}, once you've made ${sends}` : (days ?? (sends ? `after ${sends}` : "with a little more history"));
   return { id: "build-history", label: `Keep using Polaris: Pay in 4 opens ${when}.` };
 }
 
