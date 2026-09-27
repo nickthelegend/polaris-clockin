@@ -584,60 +584,64 @@ function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: P
 
   return (
     <>
-      {link ? (
-        <LinkReady link={link} blocker={blocker} sample={sampleLinks} />
-      ) : (
-        <SwapStack
-          top={
-            <SwapCard coin={<DollarCoin size={42} />} symbol="USD" caption="You request">
-              <input
-                aria-label="Amount to request, in dollars"
-                aria-invalid={Boolean(errors.amount) || undefined}
-                inputMode="decimal"
-                autoComplete="off"
-                placeholder="0.00"
-                value={amount}
-                onChange={(e) => {
-                  setAmount(e.target.value);
-                  setErrors((x) => ({ ...x, amount: undefined }));
-                }}
-                className={cn(
-                  "ui-figure w-full bg-transparent font-satoshi text-[34px] leading-none font-medium tracking-[-0.03em] outline-none placeholder:text-ui-dim sm:text-[40px]",
-                  "rounded-[8px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus",
-                  errors.amount ? "text-ui-down" : "text-ui-text",
-                )}
-              />
-              <input
-                aria-label="What it's for"
-                aria-invalid={Boolean(errors.description) || undefined}
-                placeholder="What it's for: Brand identity package"
-                maxLength={120}
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  setErrors((x) => ({ ...x, description: undefined }));
-                }}
-                className="mt-3 w-full rounded-[8px] bg-transparent text-[15px] text-ui-text outline-none placeholder:text-ui-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus"
-              />
-            </SwapCard>
-          }
-          toggle={<SwapToggle label="Switch to Withdraw: send your balance out" onClick={onSwitch} />}
-          bottom={
-            <SwapCard coin={<PolarisCoin size={42} />} symbol="Buyer can pay" caption="Ways">
-              <div role="group" aria-label="Ways the buyer can pay" className="flex flex-wrap gap-2">
-                {WAYS.map((w) => (
-                  <Chip key={w.mode} variant="pill" selected={modes.includes(w.mode)} onClick={() => toggle(w.mode)} title={MODE_LABEL[w.mode]}>
-                    {w.label}
-                  </Chip>
-                ))}
-              </div>
-              <p className="ui-figure mt-3 text-[14px] text-ui-muted">
-                {quote ? `In 4: 4 × ${money(quote.each)} at 10% APR, paid by the buyer` : modes.includes("later") ? "Pay in 4 from $20.00" : "Paid in full, in dollars"}
-              </p>
-            </SwapCard>
-          }
-        />
-      )}
+      {/* The Link ready card takes the two cards' cell: the cards stay laid
+          out (hidden and inert) so the cell keeps their height and nothing
+          under it moves. */}
+      <div className="grid min-w-0 [&>*]:col-start-1 [&>*]:row-start-1">
+        <div className={cn("min-w-0", link && "invisible")} inert={link ? true : undefined}>
+          <SwapStack
+            top={
+              <SwapCard coin={<DollarCoin size={42} />} symbol="USD" caption="You request">
+                <input
+                  aria-label="Amount to request, in dollars"
+                  aria-invalid={Boolean(errors.amount) || undefined}
+                  inputMode="decimal"
+                  autoComplete="off"
+                  placeholder="0.00"
+                  value={amount}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    setErrors((x) => ({ ...x, amount: undefined }));
+                  }}
+                  className={cn(
+                    "ui-figure w-full bg-transparent font-satoshi text-[34px] leading-none font-medium tracking-[-0.03em] outline-none placeholder:text-ui-dim sm:text-[40px]",
+                    "rounded-[8px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus",
+                    errors.amount ? "text-ui-down" : "text-ui-text",
+                  )}
+                />
+                <input
+                  aria-label="What it's for"
+                  aria-invalid={Boolean(errors.description) || undefined}
+                  placeholder="What it's for: Brand identity package"
+                  maxLength={120}
+                  value={description}
+                  onChange={(e) => {
+                    setDescription(e.target.value);
+                    setErrors((x) => ({ ...x, description: undefined }));
+                  }}
+                  className="mt-3 w-full rounded-[8px] bg-transparent text-[15px] text-ui-text outline-none placeholder:text-ui-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus"
+                />
+              </SwapCard>
+            }
+            toggle={<SwapToggle label="Switch to Withdraw: send your balance out" onClick={onSwitch} />}
+            bottom={
+              <SwapCard coin={<PolarisCoin size={42} />} symbol="Buyer can pay" caption="Ways">
+                <div role="group" aria-label="Ways the buyer can pay" className="flex flex-wrap gap-2">
+                  {WAYS.map((w) => (
+                    <Chip key={w.mode} variant="pill" selected={modes.includes(w.mode)} onClick={() => toggle(w.mode)} title={MODE_LABEL[w.mode]}>
+                      {w.label}
+                    </Chip>
+                  ))}
+                </div>
+                <p className="ui-figure mt-3 text-[14px] text-ui-muted">
+                  {quote ? `In 4: 4 × ${money(quote.each)} at 10% APR, paid by the buyer` : modes.includes("later") ? "Pay in 4 from $20.00" : "Paid in full, in dollars"}
+                </p>
+              </SwapCard>
+            }
+          />
+        </div>
+        {link ? <LinkReady link={link} blocker={blocker} sample={sampleLinks} /> : null}
+      </div>
       {errorText ? (
         <p role="alert" className="px-1 text-[14px] text-ui-down">
           {errorText}
@@ -684,7 +688,7 @@ function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: P
  */
 function LinkReady({ link, blocker, sample }: { link: PaymentLink; blocker: string | null; sample: boolean }) {
   return (
-    <div className="flex min-h-[336px] flex-col rounded-ui-panel bg-ui-surface-1 p-5" aria-live="polite">
+    <div className="flex h-full min-w-0 flex-col rounded-ui-panel bg-ui-surface-1 p-5" aria-live="polite">
       <p className="flex items-center gap-2 text-[14px] text-ui-muted">
         <Check aria-hidden size={16} strokeWidth={2.25} className="text-ui-lime-text" />
         Link ready
