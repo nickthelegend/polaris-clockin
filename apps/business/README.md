@@ -132,11 +132,15 @@ RELAYER_ADDRESS=0x… pnpm --filter @polarispay/contracts grant-relayer:monad
 NEW_OWNER=0x… node apps/business/scripts/transfer-registry-owner.mjs --apply  # only with --registry-admin, after grant-relayer
 pnpm --filter @polaris/business privy:setup-payouts -- --apply
 pnpm --filter @polaris/business privy:prove-policy -- --run                   # the bounty evidence: what Privy refused
+# with the server running on Monad testnet (RELAYER_MODE=privy), a merchant's sk_test_ key
+# and a throwaway test buyer holding $0.50 of testnet AUSD:
+POLARIS_SECRET_KEY=sk_test_… BUYER_PRIVATE_KEY=0x… pnpm --filter @polaris/business privy:smoke -- --run  # one real relayed Pay now
 ```
 
 The scripts write the server's side to `apps/business/.env.privy`
 (git-ignored); copy those lines into `.env.local`. The admin key quorum's
-private key is printed once and belongs offline.
+private key is written once to `apps/business/.privy-admin.key` (mode 0600,
+git-ignored, never printed): move it offline and delete the file.
 
 ## Checkout sessions (plan §5.8)
 
