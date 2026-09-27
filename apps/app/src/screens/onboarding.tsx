@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, IconButton, Logo, LogoMark, PageDots } from "@polaris/ui";
+import { Button, IconButton, Logo, PageDots } from "@polaris/ui";
 import { AlertCircle, ChevronLeft, Mail, ScanFace } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -58,23 +58,25 @@ export function Onboarding() {
         {step === "account" ? (
           <IconButton label="Back" icon={<ChevronLeft />} tone="ghost" className="-ml-2" onClick={() => setStep("intro")} />
         ) : null}
-        <span className="flex items-center gap-2">
-          <LogoMark size={32} title="" />
-          <Logo height={28} />
-        </span>
+        {/* The wordmark carries its own star. */}
+        <Logo height={30} />
       </header>
 
       {step === "intro" ? (
         <>
           <div
             ref={rail}
-            className="ui-no-scrollbar -mt-16 flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden"
+            className="ui-no-scrollbar -mt-16 flex min-h-0 flex-1 snap-x snap-mandatory overflow-x-auto overflow-y-hidden outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ui-focus"
+            role="region"
             aria-roledescription="carousel"
             aria-label="Introduction"
+            // Arrow keys scroll it once it has focus.
+            tabIndex={0}
           >
             {PAGES.map((p, i) => (
               <section
                 key={p.line1}
+                role="group"
                 aria-roledescription="slide"
                 aria-label={`${i + 1} of ${PAGES.length}`}
                 className="flex w-full shrink-0 snap-center flex-col px-5"

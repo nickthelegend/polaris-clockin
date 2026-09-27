@@ -7,7 +7,11 @@ import { type CSSProperties, useEffect, useState, useSyncExternalStore } from "r
 import type { LottieJson } from "./lottie-player";
 
 // The Lottie engine touches `document` when it loads, so it only ever loads in the browser.
-const LottiePlayer = dynamic(() => import("./lottie-player"), { ssr: false });
+const loadPlayer = () => import("./lottie-player");
+const LottiePlayer = dynamic(loadPlayer, { ssr: false });
+
+/** Where each page's animation starts: page 1's coins drift in from off screen at frame 0. */
+const START_FRAME: Record<1 | 2 | 3, number> = { 1: 90, 2: 40, 3: 0 };
 
 const reducedQuery = "(prefers-reduced-motion: reduce)";
 function useReducedMotion(): boolean {
@@ -31,6 +35,8 @@ function useLottieFile(page: number): LottieJson | null {
   const [data, setData] = useState<LottieJson | null>(null);
   useEffect(() => {
     let live = true;
+    // Fetch the engine alongside the file, so the player mounts as soon as the file lands.
+    void loadPlayer().catch(() => undefined);
     fetch(`/lottie/onboarding-${page}.json`)
       .then((res) => (res.ok && (res.headers.get("content-type") ?? "").includes("json") ? res.json() : null))
       .then((json: unknown) => {
@@ -93,21 +99,36 @@ function Arc() {
 }
 
 /**
- * The full-bleed art over each onboarding page: the page's Lottie when it has
- * shipped, the glass renders floating until then. The Lottie plays from the
- * start while its page is `active`; reduced motion holds it on its "still"
- * marker and keeps the renders still.
+ * The full-bleed art over each onboarding page: the page's Lottie, with the
+ * glass renders floating in its place until the animation has drawn its first
+ * frame, then crossfading out. The Lottie plays while its page is `active`;
+ * reduced motion holds it on its "still" marker and keeps the renders still.
  */
 export function OnboardingArt({ page, active = true, className }: { page: 1 | 2 | 3; active?: boolean; className?: string }) {
   const json = useLottieFile(page);
   const reduced = useReducedMotion();
+  const [ready, setReady] = useState(false);
+  const [stillsGone, setStillsGone] = useState(false);
 
   return (
     <div aria-hidden className={cn("relative size-full overflow-visible", className)}>
       {json ? (
-        <LottiePlayer data={json} reduced={reduced} active={active} className="absolute inset-0 size-full" />
-      ) : (
-        <>
+        <LottiePlayer
+          data={json}
+          reduced={reduced}
+          active={active}
+          startFrame={START_FRAME[page]}
+          onReady={() => setReady(true)}
+          className={cn("absolute inset-0 size-full transition-opacity duration-300 ease-out", ready ? "opacity-100" : "opacity-0")}
+        />
+      ) : null}
+      {stillsGone ? null : (
+        <div
+          className={cn("absolute inset-0 transition-opacity duration-300 ease-out", ready ? "opacity-0" : "opacity-100")}
+          onTransitionEnd={(e) => {
+            if (ready && e.target === e.currentTarget) setStillsGone(true);
+          }}
+        >
           {page === 3 ? <Arc /> : null}
           {STILLS[page].map((piece, i) => (
             <div key={i} className={cn("glass-in absolute", piece.className)} style={piece.style}>
@@ -125,7 +146,7 @@ export function OnboardingArt({ page, active = true, className }: { page: 1 | 2 
               </div>
             </div>
           ))}
-        </>
+        </div>
       )}
     </div>
   );

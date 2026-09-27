@@ -45,7 +45,6 @@ export function Home() {
   return (
     <TabScreen gutter="tight">
       <AppHeader
-        mark
         logoHref="/"
         linkAs={Link}
         name={name || "Your account"}
@@ -100,7 +99,7 @@ export function Home() {
           </div>
         )}
 
-        <SectionHeader title="Recent transactions" actionLabel="See all" onAction={() => router.push("/activity")} className="mt-6" />
+        <SectionHeader title="Recent activity" actionLabel="See all" onAction={() => router.push("/activity")} className="mt-6" />
         <div className="mt-2 flex flex-col">
           {activity.value
             ? activity.value.slice(0, 5).map((item) => (
