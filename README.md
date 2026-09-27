@@ -56,7 +56,19 @@ request widget in place of buy and sell.
   </tr>
 </table>
 
-### The Polaris app (customers)
+### The Polaris app on the web (customers)
+
+On a laptop the customer app has its own layout in the same design system as
+the merchant web app: the reference, the merchant web and the customer web,
+side by side.
+
+![Reference, merchant web and customer web](docs/screenshots/reference-merchant-customer.jpg)
+
+![Customer Home on the web](docs/screenshots/customer-web-home.jpg)
+
+![Customer web pages](docs/screenshots/customer-web-pages.jpg)
+
+### The Polaris app on a phone (customers)
 
 Onboarding with Face ID, the tabs, and the screens that slide up as sheets:
 Send, Receive, a Pay in 4 checkout, the Face ID confirm and receipt, the credit
