@@ -236,7 +236,13 @@ function RecentPayments({ payments, sample, className }: { payments: QueryState<
           {
             key: "amount",
             header: "Amount",
-            render: (p) => <span className={cn("ui-figure", p.status === "failed" && "text-ui-muted line-through")}>{money(p.amountCents)}</span>,
+            render: (p) => (
+              <span className="flex flex-col">
+                <span className={cn("ui-figure", p.status === "failed" && "text-ui-muted line-through")}>{money(p.amountCents)}</span>
+                {/* Below sm the Net column folds in here. */}
+                <span className="ui-figure text-[13px] text-ui-muted sm:hidden">{p.status === "failed" ? "Failed" : `Net ${money(p.netCents)}`}</span>
+              </span>
+            ),
           },
           {
             key: "status",
@@ -250,6 +256,7 @@ function RecentPayments({ payments, sample, className }: { payments: QueryState<
           {
             key: "net",
             header: "Net",
+            hideBelow: "sm",
             render: (p) => (
               <span className="ui-figure" title={formatAgo(p.createdAt, now)}>
                 {p.status === "failed" ? "$0.00" : money(p.netCents)}
