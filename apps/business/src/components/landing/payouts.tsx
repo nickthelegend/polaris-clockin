@@ -3,6 +3,7 @@
 import {
   BalanceSummaryCard,
   DollarCoin,
+  Money,
   PolarisCoin,
   PrimaryButton,
   StatusPill,
@@ -119,7 +120,7 @@ export function Payouts() {
             )}
             <BalanceSummaryCard
               label="Available balance"
-              value={money(balance)}
+              value={<Money value={balance / 100} />}
               delta={11.05}
               deltaSuffix="this week"
               stats={[

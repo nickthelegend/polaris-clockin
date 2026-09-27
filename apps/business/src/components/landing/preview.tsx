@@ -9,6 +9,7 @@ import {
   DollarCoin,
   GradientLineChart,
   IconSquareButton,
+  Money,
   PairHeader,
   PolarisCoin,
   PrimaryButton,
@@ -128,7 +129,7 @@ export function SalesPreview({ extra = 0, rows = true, height = 340, className }
       />
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className="ui-figure text-[34px] leading-none font-medium tracking-[-0.035em] sm:text-[42px]">{money(f.total + extra)}</span>
+          <span className="ui-figure text-[34px] leading-none font-medium tracking-[-0.035em] sm:text-[42px]"><Money value={(f.total + extra) / 100} /></span>
           <DeltaChip value={f.delta} suffix={frame === "24h" ? "today" : frame === "1h" ? "this hour" : frame === "1w" ? "this week" : "this month"} />
         </div>
         <TimeframeChips options={["1h", "24h", "1w", "1m"] as const} value={frame} onValueChange={setFrame} aria-label="Timeframe" />
@@ -287,7 +288,7 @@ export function CheckoutWidgetPreview({ onPaid, className }: { onPaid?: (cents: 
         <div className="relative">
           <BalanceSummaryCard
             label="You receive"
-            value={money(receive)}
+            value={<Money value={receive / 100} />}
             badge={
               <StatusPill tone="lime" size="sm">
                 {way === "later" ? "100% at checkout" : "In 0.8 s"}
