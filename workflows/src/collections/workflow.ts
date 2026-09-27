@@ -26,12 +26,13 @@
 
 import { type CronPayload, cre, consensusIdenticalAggregation, type HTTPSendRequester, type Runtime } from "@chainlink/cre-sdk";
 import { collectionsReceiverAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
-import { type Address, parseAbi } from "viem";
+import { type Address, parseAbi, zeroAddress } from "viem";
 import { z } from "zod";
 import { base64Utf8 } from "../shared/callback.ts";
 import { address, callbackSchema, chainSelectorName, gasSchema } from "../shared/config.ts";
 import {
   deliveredTo,
+  estimateDelivery,
   estimateOnReport,
   type EVMClient,
   evmClientFor,
@@ -109,6 +110,23 @@ const COUNTS_ABI = parseAbi([
   "function loanCount() view returns (uint256)",
   "function subscriptionCount() view returns (uint256)",
 ]);
+const TRANSMITTER_ABI = parseAbi(["function simulationTransmitter() view returns (address)"]);
+
+/**
+ * The receiver's simulation-only origin check, or zero when it has none. A
+ * receiver that, while it trusts Chainlink's public simulation forwarder,
+ * accepts deliveries only from its `simulationTransmitter` (as
+ * UnderwritingReceiver does) refuses an estimate sent from the forwarder's
+ * address, so the gas is estimated for the whole delivery from that key
+ * instead. A receiver without the function answers with a revert: no check.
+ */
+function simulationTransmitterOf(runtime: Runtime<CollectionsConfig>, evm: EVMClient, receiver: Address): Address {
+  try {
+    return readContract(runtime, evm, { address: receiver, abi: TRANSMITTER_ABI, functionName: "simulationTransmitter" }) as Address;
+  } catch {
+    return zeroAddress;
+  }
+}
 
 export interface CollectionsResult {
   status: "idle" | "written" | "dry-run";
@@ -277,8 +295,8 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   const now = nowSeconds(runtime);
   // The same on every node: the time this run was scheduled for, not a clock read.
   const tick = payload.scheduledExecutionTime?.seconds ?? BigInt(now);
-  // Two reads kept back for the write: the gas estimate and the receipt.
-  const RESERVE = 2;
+  // Three reads kept back for the write: the receiver's transmitter, the gas estimate and the receipt.
+  const RESERVE = 3;
 
   // 1. Candidates: the indexer proposes, else the chain.
   let source: CollectionsResult["source"] = "indexer";
@@ -395,11 +413,16 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
     return JSON.stringify(base);
   }
 
-  // 3. One report, gas sized from an estimate.
+  // 3. One report, gas sized from an estimate: of onReport as the forwarder
+  // calls it, or, behind a simulation transmitter, of the whole delivery from it.
   const report = signReport(runtime, encodeCollectionsReport(tasks));
   budget.take();
-  const estimate = estimateOnReport(runtime, evm, { forwarder: cfg.forwarder, receiver: cfg.receiver, report });
-  const gasLimit = gasLimitFor(estimate, cfg.gas);
+  const transmitter = simulationTransmitterOf(runtime, evm, cfg.receiver);
+  budget.take();
+  const target = { forwarder: cfg.forwarder, receiver: cfg.receiver, report };
+  const estimate =
+    transmitter === zeroAddress ? estimateOnReport(runtime, evm, target) : estimateDelivery(runtime, evm, { ...target, from: transmitter });
+  const gasLimit = gasLimitFor(estimate, cfg.gas, transmitter === zeroAddress ? "receiver" : "delivery");
   const write = submitReport(runtime, evm, { receiver: cfg.receiver, report, gasLimit });
   runtime.log(`wrote ${tasks.length} tasks, gas limit ${gasLimit} (estimate ${estimate}), tx ${write.txHash}`);
   const result: CollectionsResult = { ...base, status: "written", txHash: write.txHash, gasLimit: gasLimit.toString() };

@@ -62,10 +62,10 @@ export const EVIDENCE_DIR = join(ROOT, "evidence");
 
 /** What each workflow needs from the deployment, and how its trigger is fired. */
 export const WORKFLOWS = {
-  collections: { dir: "./collections", trigger: "cron", contracts: ["CollectionsReceiver", "PolarisLoanEngine", "PolarisPayments"] },
-  underwriting: { dir: "./underwriting", trigger: "http", contracts: ["UnderwritingReceiver", "ScoreManager", "Stablecoin"] },
+  collections: { dir: "./collections", trigger: "cron", receiver: "CollectionsReceiver", contracts: ["CollectionsReceiver", "PolarisLoanEngine", "PolarisPayments"] },
+  underwriting: { dir: "./underwriting", trigger: "http", receiver: "UnderwritingReceiver", contracts: ["UnderwritingReceiver", "ScoreManager", "Stablecoin"] },
   // Workflow 3, once its folder is here: its config must already hold its addresses.
-  guardian: { dir: "./guardian", trigger: "cron", contracts: [] },
+  guardian: { dir: "./guardian", trigger: "cron", receiver: "GuardianReceiver", contracts: [] },
 };
 
 const TARGETS = { "staging-settings": "staging", "local-settings": "local" };
@@ -171,14 +171,26 @@ async function main() {
   const transmitter = transmitterAddress(env.CRE_ETH_PRIVATE_KEY.trim());
   const rpcUrl = target === "staging-settings" ? MONAD_TESTNET.rpc : "http://127.0.0.1:8620";
   const balance = BigInt(await rpc(rpcUrl, "eth_getBalance", [transmitter, "latest"]));
-  const expected = deployment.contracts?.UnderwritingReceiver?.address
-    ? `0x${(await rpc(rpcUrl, "eth_call", [{ to: deployment.contracts.UnderwritingReceiver.address, data: SIMULATION_TRANSMITTER_CALL }, "latest"])).slice(26)}`
-    : null;
-  console.log(`Transmitter ${transmitter}: ${Number(balance) / 1e18} MON; UnderwritingReceiver.simulationTransmitter() = ${expected}`);
+  console.log(`Transmitter ${transmitter}: ${Number(balance) / 1e18} MON on ${target}`);
   const refuse = [];
   if (balance === 0n) refuse.push(`The transmitter ${transmitter} holds no MON on ${target}: fund it (1-2 testnet MON), then run this again.`);
-  if (workflows.includes("underwriting") && expected && !/^0x0{40}$/.test(expected) && expected.toLowerCase() !== transmitter.toLowerCase()) {
-    refuse.push(`UnderwritingReceiver only accepts reports sent by ${expected}, not ${transmitter}: set CRE_ETH_PRIVATE_KEY to that key (or call setSimulationTransmitter as the owner).`);
+  // A receiver that guards simulated deliveries by origin reverts every report another key sends.
+  for (const w of workflows) {
+    const name = WORKFLOWS[w].receiver;
+    const at = deployment.contracts?.[name]?.address;
+    if (!at) continue;
+    let raw;
+    try {
+      raw = await rpc(rpcUrl, "eth_call", [{ to: at, data: SIMULATION_TRANSMITTER_CALL }, "latest"]);
+    } catch {
+      continue; // no simulationTransmitter(): no origin check
+    }
+    if (typeof raw !== "string" || raw.length < 66) continue;
+    const expected = `0x${raw.slice(26, 66)}`;
+    console.log(`${name}.simulationTransmitter() = ${expected}`);
+    if (!/^0x0{40}$/.test(expected) && expected.toLowerCase() !== transmitter.toLowerCase()) {
+      refuse.push(`${name} only accepts reports sent by ${expected}, not ${transmitter}: set CRE_ETH_PRIVATE_KEY to that key (or have the owner call setSimulationTransmitter).`);
+    }
   }
   if (refuse.length > 0) {
     console.error("\nRefusing to run: nothing was sent.\n");

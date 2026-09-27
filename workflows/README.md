@@ -283,7 +283,14 @@ action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
    the receiver's revert, so an estimate of the whole delivery can settle on
    a limit where the receiver ran out of gas inside the catch; the receivers
    revert a whole report when a task runs out of gas, so this estimate cannot
-   undershoot that way.
+   undershoot that way. One exception: a receiver that, on the public
+   simulation forwarder, accepts deliveries only from its
+   `simulationTransmitter()` (UnderwritingReceiver today; CollectionsReceiver
+   once it guards the same way) refuses an estimate sent from the forwarder's
+   address, so the workflow reads that function (a receiver without it just
+   reverts, which means no check) and, when a transmitter is set, estimates
+   the whole delivery from it. The run still fails loudly if the forwarder's
+   `ReportProcessed` says the receiver reverted.
 5. **Outcome:** the receipt's `TaskExecuted` / `TaskSkipped` become events,
    posted to `callback.url` when set (and on every run whose indexer failed).
 
@@ -308,8 +315,9 @@ Executed tasks become `installment.collected`, `subscription.charged` and
 `plan.liquidated`.
 
 The run uses at most 15 EVM reads (CRE's quota): 2 counts (chain mode), the
-`checkTasks` batches, the estimate and the receipt; it checks fewer
-candidates, and says so, rather than exceed it.
+`checkTasks` batches, one due-time read per due task on the chain's ladder,
+and three kept for the write (the receiver's transmitter, the estimate, the
+receipt); it checks fewer candidates, and says so, rather than exceed it.
 
 ### `polaris-underwrite`
 

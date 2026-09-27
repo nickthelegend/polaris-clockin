@@ -65,6 +65,8 @@ interface Chain {
   loans?: Record<string, { startedAt: bigint; intervalSeconds: bigint; installmentsPaid: number }>;
   /** PolarisPayments.getSubscription(id).nextChargeAt. */
   nextChargeAt?: Record<string, bigint>;
+  /** A receiver that guards simulated deliveries by origin; without it, simulationTransmitter() reverts. */
+  transmitter?: Address;
 }
 
 /** Wire the EVM mock to a small fake chain and record what the workflow did. */
@@ -77,6 +79,7 @@ function fakeChain(chain: Chain) {
     gasLimits: [] as bigint[],
     countReads: 0,
     dueReads: [] as string[],
+    estimates: [] as Array<{ from: string; to: string }>,
   };
 
   const engine = addContractMock(evm, { address: ENGINE, abi: polarisLoanEngineAbi });
@@ -103,14 +106,21 @@ function fakeChain(chain: Chain) {
     if (next === undefined) throw new Error(`no subscription ${id} in this fake chain`);
     return { subscriber: FORWARDER, planId: 1n, startedAt: 0n, nextChargeAt: next, periodsCharged: 0, missedCharges: 0, status: 0 };
   };
-  const receiver = addContractMock(evm, { address: RECEIVER, abi: collectionsReceiverAbi });
+  const receiver = addContractMock(evm, {
+    address: RECEIVER,
+    abi: chain.transmitter ? [...collectionsReceiverAbi, ...parseAbi(["function simulationTransmitter() view returns (address)"])] : collectionsReceiverAbi,
+  });
+  if (chain.transmitter) receiver.simulationTransmitter = () => chain.transmitter;
   receiver.checkTasks = (tasks: unknown) => {
     seen.checkCalls++;
     const list = tasks as Array<{ action: number; id: bigint }>;
     seen.checked.push(...list);
     return list.map((t) => chain.ready(t));
   };
-  evm.estimateGas = () => ({ gas: String(chain.estimate ?? 300_000n) });
+  evm.estimateGas = (req) => {
+    seen.estimates.push({ from: hexOf(req.msg!.from).toLowerCase(), to: hexOf(req.msg!.to).toLowerCase() });
+    return { gas: String(chain.estimate ?? 300_000n) };
+  };
 
   let lastLogs: TestLog[] = [];
   evm.writeReport = (req) => {
@@ -360,8 +370,8 @@ test("a healthy run with nothing to say posts nothing, and a run that did someth
 test("stays inside CRE's 15-read quota however many candidates there are", () => {
   const seen = fakeChain({ loanCount: 5_000n, subscriptionCount: 5_000n, ready: () => false });
   const out = run(baseConfig({ candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 500, sweepWindow: 500, chainBackoff: null } }));
-  // 2 count reads + checkTasks reads, with 2 kept back for the write.
-  expect(2 + seen.checkCalls).toBeLessThanOrEqual(15 - 2);
+  // 2 count reads + checkTasks reads, with 3 kept back for the write.
+  expect(2 + seen.checkCalls).toBeLessThanOrEqual(15 - 3);
   expect(out.note).toContain("the rest wait for the next run");
 });
 
@@ -464,9 +474,27 @@ describe("the dunning ladder when the chain proposes (candidates.chainBackoff)",
     const loans = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [String(i + 1), dueAt(NOW - 30)]));
     const seen = fakeChain({ loanCount: 40n, subscriptionCount: 0n, ready: (t) => t.action === ACTION.COLLECT_INSTALLMENT, loans });
     const out = run(chainMode());
-    // 2 counts + 1 checkTasks + 1 liquidation check, 2 kept for the write: 9 due-time reads.
-    expect(seen.dueReads).toHaveLength(9);
-    expect(seen.reports[0]).toHaveLength(9);
-    expect(out.note).toContain("31 due task(s) wait for a later run");
+    // 2 counts + 1 checkTasks + 1 liquidation check, 3 kept for the write: 8 due-time reads.
+    expect(seen.dueReads).toHaveLength(8);
+    expect(seen.reports[0]).toHaveLength(8);
+    expect(out.note).toContain("32 due task(s) wait for a later run");
   });
+});
+
+test("behind a simulation transmitter, gas is estimated for the whole delivery from it; without one, for onReport as the forwarder calls it", () => {
+  const transmitter = "0x00000000000000000000000000000000000000a1" as Address;
+  const chain = { loanCount: 1n, subscriptionCount: 0n, ready: (t: { action: number }) => t.action === ACTION.COLLECT_INSTALLMENT };
+
+  // The receiver as deployed today: no simulationTransmitter() (the read reverts), so onReport from the forwarder.
+  const plain = fakeChain(chain);
+  run(baseConfig());
+  expect(plain.estimates).toEqual([{ from: FORWARDER.toLowerCase(), to: RECEIVER.toLowerCase() }]);
+  expect(plain.gasLimits[0]).toBe(((300_000n + 80_000n) * 11_500n) / 10_000n);
+
+  // A receiver that guards simulated deliveries by origin: the delivery from its transmitter.
+  const guarded = fakeChain({ ...chain, transmitter });
+  run(baseConfig());
+  expect(guarded.estimates).toEqual([{ from: transmitter, to: FORWARDER.toLowerCase() }]);
+  // The whole delivery was estimated, so no forwarder overhead on top: estimate + 15%.
+  expect(guarded.gasLimits[0]).toBe((300_000n * 11_500n) / 10_000n);
 });
