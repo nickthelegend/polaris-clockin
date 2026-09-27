@@ -236,7 +236,8 @@ export type TextTabsProps<T extends string> = {
   panelId?: (value: T) => string;
   /** Tab ids, so a panel can be labelled by its tab. */
   tabId?: (value: T) => string;
-  size?: "md" | "lg";
+  /** `lg` the reference's 20px; `md` 16px; `auto` 16px on phones, 20px from 640px. */
+  size?: "md" | "lg" | "auto";
   className?: string;
 };
 
@@ -256,7 +257,12 @@ export function TextTabs<T extends string>({ options, value, onValueChange, pane
     onValueChange,
   );
   return (
-    <div role="tablist" aria-label={rest["aria-label"]} onKeyDown={onKeyDown} className={cn("flex items-center gap-6", className)}>
+    <div
+      role="tablist"
+      aria-label={rest["aria-label"]}
+      onKeyDown={onKeyDown}
+      className={cn("flex min-w-0 items-center", size === "auto" ? "gap-4 sm:gap-6" : "gap-6", className)}
+    >
       {options.map((o) => {
         const on = o.value === value;
         return (
@@ -273,7 +279,7 @@ export function TextTabs<T extends string>({ options, value, onValueChange, pane
             className={cn(
               "rounded-[8px] font-satoshi font-semibold tracking-[0.01em] uppercase transition-colors duration-200",
               "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus",
-              size === "lg" ? "text-[20px] leading-none" : "text-[16px] leading-none",
+              size === "lg" ? "text-[20px] leading-none" : size === "auto" ? "text-[16px] leading-none sm:text-[20px]" : "text-[16px] leading-none",
               on ? "text-ui-lime-active" : "text-ui-muted hover:text-ui-text",
             )}
           >

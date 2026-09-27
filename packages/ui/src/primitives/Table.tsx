@@ -18,8 +18,8 @@ export type TableColumn<T> = {
   /** The cell; defaults to `row[key]`. */
   render?: (row: T, index: number) => ReactNode;
   sortable?: boolean;
-  /** Drop the column on narrow screens. */
-  hideBelow?: "sm" | "md" | "lg";
+  /** Drop the column on narrow screens (`xl`: only from 1280px, e.g. beside a side column). */
+  hideBelow?: "sm" | "md" | "lg" | "xl";
   className?: string;
   headerClassName?: string;
 };
@@ -57,6 +57,7 @@ const HIDE: Record<NonNullable<TableColumn<unknown>["hideBelow"]>, string> = {
   sm: "hidden sm:table-cell",
   md: "hidden md:table-cell",
   lg: "hidden lg:table-cell",
+  xl: "hidden xl:table-cell",
 };
 
 const ALIGN = { left: "text-left", right: "text-right", center: "text-center" } as const;

@@ -153,7 +153,9 @@ export function GradientLineChart({
   }, [measured]);
   const reveal = animate && !reduced && !drawn.current;
 
-  const every = Math.max(1, Math.round((n - 1) / Math.max(1, xTicks - 1)));
+  // As many time labels as fit (about 84px each), up to `xTicks`.
+  const fit = Math.max(2, Math.min(xTicks, Math.floor(plotW / 84) + 1));
+  const every = Math.max(1, Math.round((n - 1) / Math.max(1, fit - 1)));
   const xLabels = n ? data.map((d, i) => ({ i, d })).filter(({ i }) => i % every === 0) : [];
   const axisFmt = formatAxis ?? formatValue;
   const note = formatBubbleNote === null ? null : (formatBubbleNote ?? ((p: GradientPoint) => formatTime(p.t)));
