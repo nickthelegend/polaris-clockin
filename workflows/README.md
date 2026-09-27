@@ -9,16 +9,17 @@ Monad: one decides who gets credit, the other collects what is owed.
  app asks for Pay in 4 ──▶ polaris-underwrite (HTTP trigger)                          │
                          │  verify the account's own consent and the history         │
                          │  wallet's signature, both fresh (no network)              │
-                         │  EVM reads: already underwritten? wallet already linked?  │
-                         │            the account's AUSD balance                     │
-                         │  node mode: Nansen → Zerion → Etherscan → RPC, per node,  │──▶ UnderwritingReceiver
-                         │             facts derived by @polarispay/underwriting     │      └▶ ScoreManager.underwrite
-                         │  consensus: counts by median, verdicts by identical       │         (score computed on chain,
-                         │  report = facts, never a score; a thin file (nothing      │          line capped at $1,000)
-                         │    a new account could not show) gets none                │
+                         │  EVM reads: what the chain would refuse (underwritten,    │
+                         │    history already lent or linked), the AUSD balance      │
+                         │  Confidential HTTP (switch): Nansen, Zerion, Etherscan    │──▶ UnderwritingReceiver
+                         │    once, from an enclave that holds the keys; public RPC  │      └▶ ScoreManager.underwrite
+                         │    plain. Switch off: every node calls, counts by median  │         (score computed on chain,
+                         │  facts derived by @polarispay/underwriting; report =      │          line capped at $1,000)
+                         │    facts, never a score; a thin file gets none            │
                          │                                                           │
  every minute (demo) ────▶ polaris-collections (cron trigger)                        │
- daily (production)      │  candidates: Envio GraphQL, else the chain's own counts   │
+ daily (production)      │  candidates: Envio GraphQL, else the chain's own counts,  │
+                         │    both on the dunning ladder (6h, 24h, 72h, 168h)        │
                          │  EVM read: CollectionsReceiver.checkTasks (the chain       │──▶ CollectionsReceiver
                          │            disposes: only what is due at a final block)   │      ├▶ collectInstallment
                          │  one signed report, gas = its own estimate + 15%          │      ├▶ chargeDue
@@ -60,7 +61,9 @@ Monad: one decides who gets credit, the other collects what is owed.
 |---|---|
 | Build a CRE workflow | [`collections/main.ts`](collections/main.ts) → [`src/collections/workflow.ts`](src/collections/workflow.ts), [`underwriting/main.ts`](underwriting/main.ts) → [`src/underwriting/workflow.ts`](src/underwriting/workflow.ts); `project.yaml`, `workflow.yaml`, `secrets.yaml`, per-target configs |
 | Used as an orchestration layer | Cron + HTTP triggers; EVM reads (`checkTasks`, `profileOf`, `linkedUserOf`, `balanceOf`, gas estimates, receipts); HTTP with consensus (Envio, Nansen, Zerion, Etherscan, RPC); signed reports written through the forwarder; a signed callback the Polaris API verifies and acts on (`apps/business` `POST /api/cre/callback`) |
-| Simulate or deploy | `cre workflow simulate … --broadcast` against the local Monad stand-in or Monad testnet (needs `cre login`, see below); `cre workflow build` compiles both to WASM without a login |
+| Simulate or deploy | `cre workflow simulate … --broadcast` against the local Monad stand-in or Monad testnet (needs `cre login`, see below); `pnpm --filter @polaris/cre-workflows evidence` runs each workflow once on Monad testnet and keeps its log and transaction hashes in [`evidence/`](evidence/); `cre workflow build` compiles both to WASM without a login |
+| Monad | Writes to Monad testnet (10143) through Chainlink's forwarder; every target in `project.yaml` can also read Monad mainnet (143), where Chainlink's AUSD/USD and FX feeds are, without writing there |
+| Chainlink privacy | The paid provider calls go through CRE's Confidential HTTP (a switch, on in simulation): see [Confidential HTTP](#confidential-http) |
 
 ## One command
 
@@ -121,12 +124,51 @@ pnpm --filter @polaris/cre-workflows simulate:collections staging-settings
 pnpm --filter @polaris/cre-workflows simulate:underwriting staging-settings
 ```
 
-Cron does not schedule under simulation: each run fires once. For the demo's
-"every minute", loop it on the built WASM:
+Cron does not schedule under simulation: each `simulate` fires once, at the
+schedule's next tick (the simulator waits for it and stamps that exact time).
+For the demo's "every minute", keep it running:
 
-```powershell
-while ($true) { pnpm --filter @polaris/cre-workflows cre workflow simulate ./collections -T staging-settings --non-interactive --trigger-index 0 --broadcast --wasm ./collections/binary.wasm; Start-Sleep 60 }
+```bash
+pnpm --filter @polaris/cre-workflows collections:loop               # dry runs: nothing is sent
+pnpm --filter @polaris/cre-workflows collections:loop --broadcast   # real transactions (or CRE_LOOP_BROADCAST=1)
 ```
+
+`scripts/collections-loop.mjs` builds the WASM once, then starts `simulate
+--wasm` again as soon as a run ends, so every minute's tick gets a run. Each
+run's output (secrets redacted) is appended to
+`evidence/loop/<UTC date>.log`, and one JSON line to `<date>.jsonl`: the
+outcome, the tasks, what the dunning ladder held back, the transaction hash.
+`--target local-settings` runs it against the local stand-in, `--runs <n>`
+stops after n runs. It refuses to start when you are not logged in, when
+`collections/config.<target>.json` has no addresses, or when `--broadcast` has
+no `CRE_ETH_PRIVATE_KEY`.
+
+### The evidence, in one command
+
+```bash
+pnpm --filter @polaris/cre-workflows evidence                       # every workflow, once, on Monad testnet
+pnpm --filter @polaris/cre-workflows evidence --only collections    # or some of them
+```
+
+`scripts/evidence.mjs` refuses, before anything is sent, unless: `cre whoami`
+says you are logged in; `packages/contracts/deployments/monad-testnet.json`
+(or `--deployment <file>`) exists, is on Monad testnet, and has every address
+the workflows need; `CRE_ETH_PRIVATE_KEY` is set, holds testnet MON, and is
+UnderwritingReceiver's `simulationTransmitter()` (read on chain; only its
+address is printed). Then it fills `config.staging.json` from the record
+(`configure staging`), keeps `cre workflow supported-chains`, and runs each
+workflow with `simulate --broadcast` (underwriting with a freshly signed
+payload). Every hash in a result or a log is read back from Monad testnet:
+landed or reverted, the block, and the forwarder's `ReportProcessed` result
+for the receiver. It writes `evidence/<UTC date>/<workflow>-<time>.log`,
+`runs.json` and a `README.md` table, and prints the table. A run that wrote
+nothing (nothing due, a thin file) is recorded as such: no hash is invented.
+
+Every script that starts `cre workflow simulate` here (`cre`, the
+`simulate:*` scripts, `collections:loop`, `evidence`) also sets
+`ZERION_BASIC_AUTH = base64("<ZERION_API_KEY>:")` for the CLI when
+`ZERION_API_KEY` is set and it is not: the credential Confidential HTTP
+templates into Zerion's header ([Confidential HTTP](#confidential-http)).
 
 For live underwriting, keep the simulator listening and let the API queue
 requests (the HTTP trigger fires at most once per 30 s):
@@ -142,14 +184,15 @@ receipt and fail the run when the forwarder's `ReportProcessed` says
 `result = false`; judge a run by `TaskExecuted` / `TaskSkipped` /
 `UnderwritingApplied` / `UnderwritingRefused`, never by the CLI's status.
 
-## Deploy (after Early Access)
+## Deploy (once deploy access is granted)
 
 1. `cre account access` until `cre whoami` shows deploy access.
 2. Point both receivers at the production forwarder and lock them to the
    workflows (`packages/contracts/README.md`, "Forwarders on Monad testnet"):
    `setForwarderAddress(0xF8344CFd5c43616a4366C34E3EEE75af79a74482)`,
    `UnderwritingReceiver.setSimulationTransmitter(0)`,
-   `setExpectedAuthor(<workflow owner>)`, `setExpectedWorkflowName("polaris-collections" | "polaris-underwrite")`.
+   `setExpectedAuthor(<workflow owner>)`, `setExpectedWorkflowName("polaris-collections" | "polaris-underwrite")`,
+   and `setExpectedWorkflowId(<id>)` with the id `cre workflow hash <dir> -T production-settings` prints.
 3. `pnpm --filter @polaris/cre-workflows configure production --authorized-key <address the API signs trigger requests with>`
 4. `pnpm --filter @polaris/cre-workflows cre secrets create ./secrets.yaml -T production-settings --secrets-auth=browser`
 5. `pnpm --filter @polaris/cre-workflows cre workflow deploy ./collections -T production-settings` and the same for `./underwriting`.
@@ -157,18 +200,29 @@ receipt and fail the run when the forwarder's `ReportProcessed` says
 The private registry allows three workflows per organisation: deploy these
 two, not staging copies.
 
+## Anyone can run the collections
+
+There is no fallback keeper. Every action a collections report carries is
+permissionless on its target: `PolarisLoanEngine.collectInstallment(id)` and
+`liquidate(id)`, `PolarisPayments.chargeDue(id)`. The schedule the buyer
+signed decides what moves and when, so a stranger calling them can only do
+what the buyer already agreed to, and `CollectionsReceiver.checkTasks` (a
+view) says which are due. If CRE is down, anyone (us, a merchant, a bot) can
+call them directly; `packages/contracts/lib/cre.js` builds the same task list.
+
 ## Layout
 
 | Path | What |
 |---|---|
-| `project.yaml` | CRE targets: `local-settings` (the node on :8620), `staging-settings` (Monad testnet, simulation forwarder), `production-settings` (Monad testnet, deployed DON) |
+| `project.yaml` | CRE targets: `local-settings` (the node on :8620), `staging-settings` (Monad testnet, simulation forwarder), `production-settings` (Monad testnet, deployed DON); each also reads `monad-mainnet` (https://rpc.monad.xyz) |
 | `secrets.yaml`, `.env.example` | Secret ids → environment variables for simulation; the Vault DON once deployed |
 | `collections/`, `underwriting/` | `main.ts` (the WASM entry), `workflow.yaml`, `config.<target>.json`, a strict `tsconfig.json` with no Node/DOM/Bun types |
-| `src/collections/` | `workflow.ts` (the handler), `candidates.ts` (Envio query, chain window), `tasks.ts` (report encoding, batching), `outcomes.ts` (receipt → dunning events) |
-| `src/underwriting/` | `workflow.ts`, `consent.ts` (the account's consent), `thin.ts` (facts it will not attest), `link.ts` (the history wallet's proof; both verified synchronously with @noble/curves), `evidence.ts` (node mode: the recipe over CRE's HTTP client), `report.ts`, `payload.ts` |
+| `src/collections/` | `workflow.ts` (the handler), `candidates.ts` (Envio query, chain window), `backoff.ts` (the dunning ladder when the chain proposes), `tasks.ts` (report encoding, batching), `outcomes.ts` (receipt → dunning events) |
+| `src/underwriting/` | `workflow.ts`, `consent.ts` (the account's consent), `thin.ts` (facts it will not attest), `link.ts` (the history wallet's proof; both verified synchronously with @noble/curves), `evidence.ts` (the recipe over CRE's HTTP client in node mode, or over Confidential HTTP), `report.ts`, `payload.ts` |
 | `src/shared/` | Config schemas, EVM helpers (reads, gas, write, receipt), the signed callback |
 | `src/trigger.ts` | `triggerSimulatedUnderwriting` for the API (`underwriteConsentMessage` is `@polaris/cre-workflows/consent`) |
-| `scripts/` | `install-cre.mjs`, `cre.mjs`, `bun.mjs`, `configure.mjs`, `underwriting-payload.mjs`, `local-chain.mjs`, `e2e-local.mjs`, `hardhat.cre-local.config.cjs` |
+| `scripts/` | `install-cre.mjs`, `cre.mjs`, `bun.mjs`, `configure.mjs`, `underwriting-payload.mjs`, `local-chain.mjs`, `e2e-local.mjs`, `hardhat.cre-local.config.cjs`, `evidence.mjs`, `collections-loop.mjs`, `sim.mjs` (what those two share) |
+| `evidence/` | What real CLI runs left: `<date>/` from `evidence`, `loop/` from `collections:loop` |
 | `test/` | Unit tests (`bun test`, `@chainlink/cre-sdk/test`) |
 | `e2e/` | The local-chain round trip |
 
@@ -195,11 +249,24 @@ action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
    fails, the chain proposes: `loanCount()` and `subscriptionCount()`, the
    newest `recentWindow` ids of each, plus a `sweepWindow` slice of older ids
    that rotates with the cron's scheduled time so every id is revisited. The
-   chain keeps no failure history, so this fallback has no dunning backoff: a
-   buyer who is short is tried on every run until the indexer is back. So the
    fallback is never silent: the result's `indexerError` names the failure,
    and the run posts its callback even when nothing else happened, with
    `candidates: { source: "chain", indexerError }`, for the API to raise.
+   **The dunning ladder holds there too** (`candidates.chainBackoff`,
+   [`src/collections/backoff.ts`](src/collections/backoff.ts)). The chain
+   keeps no failure history, and CRE reads logs 100 blocks at a time, so the
+   ladder is counted from each task's due time, which the chain does know
+   (one `getLoan` / `getSubscription` read per due task): rungs at the due
+   time, then 6 h, 24 h, 72 h and 168 h after the one before (the indexer's
+   `dunningRetrySeconds`), the last repeating. A task is tried only by a run
+   within `windowSeconds` of a rung: 120 s in staging (a run every minute),
+   86,400 s in production (a run a day), 30 s locally. A loan past grace is
+   always tried (collection, then liquidation if that fails), and so is a
+   renewal past its 7-day charge window (the charge then records the miss).
+   Held-back tasks and their next attempt are in the result's `heldBack`.
+   Limits, stated: a run that misses a rung's window (a simulate loop that
+   skipped a minute) leaves that task for the next rung, and a task whose due
+   time the read quota leaves unread waits for a later run.
 2. **The chain disposes.** `CollectionsReceiver.checkTasks` at the last
    finalized block, 72 tasks per read (CRE caps a read request at 5 KB).
    Liquidation is checked only on loans that are due.
@@ -225,11 +292,14 @@ action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
 | `InsufficientAllowance(have, need)`, `ERC20InsufficientAllowance` | `installment.failed` / `subscription.charge_failed`, `reason: "allowance_lost"` | sign again |
 | `InsufficientBalance(have, need)`, `ERC20InsufficientBalance` | `…failed`, `reason: "insufficient_funds"` | add money |
 | `NotDue`, `LoanNotActive`, `InvalidLoan`, `NotLiquidatable`, `SubscriptionNotActive` | none (a stale candidate is nobody's fault) | nothing |
+| `Error("…allowance…")`, `Error("…balance…")` (a token that reverts with a message) | `allowance_lost`, `insufficient_funds` | as above |
 | anything else | `…failed`, `reason: "other"` | (a person looks) |
 
 The reasons are polarispay-sdk's `InstallmentFailureReason`, word for word
 (`test/dunning.test.ts` holds them to `packages/sdk/src/events.ts`), so the
 API forwards them to the merchant's `installment.failed` webhook unchanged.
+The Envio indexer records the same words in `reasonAction` (plus `stale`), and
+the same test holds every revert it decodes to the workflow's classification.
 `subscription.charge_failed` is for the API alone, to dun the subscriber: the
 SDK's nine webhook types have no failed renewal, and a merchant hears of a
 subscription that stays unpaid as `subscription.canceled` (`lapsed`).
@@ -281,17 +351,68 @@ that shipped takes this batch, so the workflow uses `src/underwriting/report.ts`
 The Facts words are the package's.
 
 Result (the handler's return value, JSON): `status` is `applied` (with
-`onChainScore`), `refused` (with ScoreManager's reason: `StaleEvidence`,
-`AlreadyHasRecord`, `WalletAlreadyLinked`), `incomplete` (evidence missing,
+`onChainScore`), `refused` (with the reason, decoded against every error in
+ScoreManager's and UnderwritingReceiver's ABIs: `ThinFile(days, txs)`,
+`StaleEvidence`, `AlreadyHasRecord`, `WalletAlreadyLinked`,
+`UserIsLinkedHistory`, `WalletAlreadyUnderwritten`, …; the last three are also
+checked before any provider call, with `linkedUserOf` and
+`profileOf(wallet).underwritten`, and refused with no report and a signed
+`credit.refused` callback), `incomplete` (evidence missing,
 no report, retry later: missing data is never attested as zero), `thin`
 (final, but nothing a new account could not show: no report, and a signed
 `credit.thin` callback, see `src/underwriting/thin.ts`), `skipped`
 (already underwritten; no provider call spent), or `rejected` (no consent
 from the account, a bad proof or payload; nothing read or spent).
 
-Node mode sends each request with `cacheSettings: { store: true, maxAge }`,
-so one node's paid Nansen call serves the DON, and adds keys only there:
-Nansen `apikey` header, Zerion `Authorization: Basic`, Etherscan `&apikey=`.
+With `confidentialHttp: false`, node mode sends each request with
+`cacheSettings: { store: true, maxAge }`, so one node's paid Nansen call
+serves the DON (best effort), and adds each node's key only there: Nansen
+`apikey` header, Zerion `Authorization: Basic`, Etherscan `&apikey=`. With it
+on, see the next section.
+
+#### Confidential HTTP
+
+`confidentialHttp: true` (staging and local; production keeps `false` until a
+deployed run shows Monad's DON serves the capability) sends the paid calls,
+Nansen, Zerion and Etherscan, through CRE's Confidential HTTP capability
+(`confidential-http@1.0.0-alpha`, `cre.capabilities.ConfidentialHTTPClient` in
+SDK 1.22.0). The public RPC calls (send counts on Ethereum and Base) stay on
+the plain HTTP client, agreed by identical consensus.
+
+- **Keys never leave the enclave.** The workflow never calls `getSecret` for a
+  provider: it sends `{{.NANSEN_API_KEY}}`-style placeholders and names the
+  secret in `vaultDonSecrets`; the enclave resolves them from the Vault DON
+  (from `secrets.yaml` and the environment under simulation). With the switch
+  off, every node reads every key into its own memory.
+- **Each provider is called once.** One request leaves the enclave after the
+  nodes agree on its parameters, instead of one per node, which is what
+  Nansen's 10 free credits a day can afford.
+- **The trade-off:** the DON trusts one enclave's answer. With the switch off,
+  every node calls the provider and the report carries the median of their
+  counts, so one bad response is outvoted; with it on, the facts are only as
+  good as the one response the enclave got (its attestation is what vouches
+  for it). The response is not encrypted (`encryptOutput: false`), because the
+  report needs the facts in the clear.
+- **What changes on the wire:** Zerion's header needs the ready credential,
+  `ZERION_BASIC_AUTH = base64("<key>:")`, because a placeholder cannot be
+  base64-encoded inside the enclave (the scripts derive it). Etherscan takes
+  its key in the query string, which the enclave does not template (it fills
+  headers and a POST body: chainlink `core/capabilities/fakes/confidential_http_action.go`,
+  the simulator's implementation), so the request becomes a POST with the
+  parameters still in the URL and `apikey={{.ETHERSCAN_API_KEY}}` as the form
+  body. Etherscan reads a key from a POST body (checked 28 Sep 2026 with an
+  invalid key: "Invalid API Key (#err2)", as from the query string); a real
+  key's first run is the proof that it reads the rest the same way.
+- A request that already contains `{{` is refused rather than templated, so
+  no input can name a secret. The same 15-call budget covers both clients.
+
+#### Reading Monad mainnet
+
+Every target in `project.yaml` also lists `monad-mainnet` with the public RPC
+`https://rpc.monad.xyz`. Chainlink's AUSD/USD, MON/USD and EUR/GBP/JPY/CAD/CHF
+feeds exist only on Monad mainnet, so a workflow that writes to testnet reads
+them there with an EVM client for the `monad-mainnet` selector. Nothing here
+holds a mainnet key or writes to mainnet; the reads are free.
 
 **The call budget.** CRE allows 15 HTTP calls per execution and the recipe's
 worst case is more, so the staging recipe counts sends on Ethereum and Base
@@ -313,9 +434,17 @@ and, when it is set, estimates the whole delivery from that key instead
 
 Addresses in the committed `config.staging.json` and `config.production.json`
 are `null` until the contracts are deployed; the workflow refuses to start
-with the command that fills them (`configure`). Everything else is real:
-the forwarders (verified on chain, docs/research/cre.md §4), AUSD and USDC on
-Monad testnet, the provider endpoints, gas bounds and schedules.
+with the command that fills them (`configure`, which `evidence` runs for
+you). Everything else is real: the forwarders (verified on chain,
+docs/research/cre.md §4), AUSD and USDC on Monad testnet, the provider
+endpoints, gas bounds and schedules.
+
+| Key | Workflow | What it does |
+|---|---|---|
+| `candidates.chainBackoff` | collections | `{ ladderSeconds, windowSeconds }`, or `null` to try every due task every run: the dunning ladder when the chain proposes |
+| `confidentialHttp` | underwriting | `true`: the paid calls through Confidential HTTP; `false`: every node calls them with its own key |
+| `secrets.zerionBasicAuth` | underwriting | The secret id of `base64("<Zerion key>:")`, used only under `confidentialHttp` |
+| `secrets.nansen`, `.zerion`, `.etherscan` | underwriting | Secret ids of the provider keys; `null` leaves a provider out |
 
 ### Callback (`callback.url`)
 
@@ -353,6 +482,25 @@ and `credit.thin`.
   the account did not sign for (no consent, another key's, a consent to be
   underwritten alone replayed with a wallet, a stale one) is rejected before
   anything is read.
+- `test/backoff.test.ts` and the ladder cases in
+  `test/collections.workflow.test.ts`: the rungs (due, +6 h, +24 h, +72 h,
+  +168 h, repeating) are the indexer's `dunningRetrySeconds`; a run per window
+  tries each rung once; a task between rungs is held back with its next
+  attempt; a loan past grace and a renewal past its charge window never wait;
+  the reads stay inside the quota; the indexer's candidates are not read twice.
+- `test/underwriting.workflow.test.ts`, Confidential HTTP: the same facts as
+  every node calling the providers, from one enclave call per paid request;
+  only placeholders leave the workflow (no key value, one listed secret per
+  request, Etherscan's in a POST body); no provider key is read; the thin-file
+  gate and the 15-call budget hold. Pre-checks: `UserIsLinkedHistory`,
+  `WalletAlreadyLinked` and `WalletAlreadyUnderwritten` are refused before any
+  provider or enclave call, with a signed `credit.refused`; every refusal the
+  contracts can record is named.
+- `test/evidence-script.test.ts`: the evidence and loop scripts read a run
+  from the CLI's own output format, find its transaction, read the receipt's
+  `ReportProcessed`, refuse (logged out, no deployment, a missing address,
+  another chain, no transmitter key) before sending anything, and redact every
+  secret.
 - `test/thin.test.ts` and the thin-file cases in
   `test/underwriting.workflow.test.ts`: an account with no history (or only
   dollars) gets no report and no $200 line; it opens once a history wallet
@@ -388,16 +536,19 @@ with against what it used:
 
 | | |
 |---|---|
-| Both workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed (rebuilt 27 Sep 2026 with the consent and thin-file checks: 2.75 MB and 2.85 MB) |
+| Both workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed |
 | Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`, `e2e:local`) |
-| `cre workflow simulate` | needs `cre login` (a CRE account): not run here. The commands are above; `local-settings` keeps `--broadcast` off public chains |
-| Monad testnet | waits for `deploy:monad` (the deployer is unfunded), then `configure staging` |
-| Deploy to the DON | waits for Early Access |
+| `cre workflow simulate --broadcast` on Monad testnet | ready (`evidence`, `collections:loop`); needs `cre login` and a funded `CRE_ETH_PRIVATE_KEY`. Its runs land in [`evidence/`](evidence/) |
+| Monad testnet | waits for `deploy:monad`; `evidence` then fills `config.staging.json` from the record |
+| Monad mainnet reads | every target reads `monad-mainnet` (public RPC); nothing writes there |
+| Confidential HTTP | on in staging and local; production off until a deployed run shows Monad's DON serves it |
+| Deploy to the DON | waits for deploy access (`cre account access`) |
 | The Polaris API side of the callback | done: `apps/business` `POST /api/cre/callback` verifies the HMAC (`POLARIS_CRE_CALLBACK_SECRET`), records `credit.underwritten` / `credit.refused` / `credit.thin` for the app, and runs the chain sync on `collections.run`. The committed configs keep `callback: null` until a deployment has an API URL to put there |
 | Firing `polaris-underwrite` from the product | done: the app's **Raise your limit** (Bring your history) signs the consent and the history wallet's proof; `apps/business` `POST /api/credit/underwrite` verifies both and fires the HTTP trigger at most once per 30 s (`CRE_UNDERWRITING_TRIGGER_URL`) |
-| Without a CRE login | `pnpm --filter @polaris/cre-workflows trigger:local` (`scripts/local-trigger.mjs`) serves the same trigger URL on a local chain: each request runs this `polaris-underwrite` handler on the SDK's test runtime (fixture evidence, the local forwarder) and posts its signed callback. `pnpm demo:local` starts it; `docs/demo` shows a run opening a $1,000 line |
-| The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` (the test still reads a snapshot in `test/fixtures/indexer/`) |
-| Dunning backoff without the indexer | not applied: the chain fallback has no failure history, so it retries a short buyer every run. Keep the indexer configured in production; a run that falls back says so (`indexerError`, and a callback) |
+| Without a CRE login | `pnpm --filter @polaris/cre-workflows trigger:local` (`scripts/local-trigger.mjs`) serves the same trigger URL on a local chain: each request runs this `polaris-underwrite` handler on the SDK's test runtime (fixture evidence, the local forwarder) and posts its signed callback. It is not the CLI or a DON. `pnpm demo:local` starts it |
+| The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` |
+| Dunning backoff without the indexer | done: the ladder from each task's due time (`candidates.chainBackoff`) |
+| Provider calls | Nansen, Zerion and Etherscan have only answered from synthesized fixtures here; a live run needs their keys in `workflows/.env` |
 
 ## Limits that shaped this (docs/research/cre.md §8)
 
