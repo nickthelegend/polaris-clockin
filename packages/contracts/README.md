@@ -52,6 +52,7 @@ Then, as needed:
 | `RELAYER_ADDRESS=0x… grant-relayer:monad` | The Privy relayer wallet exists: gives it PolarisPayments and MerchantRegistry operator and BatchSettlement settler. |
 | `ETHERSCAN_API_KEY=… verify:monad` | Verify every contract on Monadscan (Etherscan V2 API). |
 | `check:monad` | Read-only live check of AUSD, the forwarders, Multicall3 and gas. |
+| `guardian:monad` | The credit guard's status (paused, why, stale, override, thresholds, the latest attestation). `GUARD_ACTION=thresholds` sets the `GUARD_*` thresholds (decision 9 for any unset; `GUARD_MIN_PRICE=1.001` is the demo's raised peg, decision 28), `GUARD_ACTION=override GUARD_OVERRIDE=pause\|resume\|none`, `GUARD_ACTION=max-age GUARD_MAX_ATTESTATION_AGE_SECONDS=…`. |
 | `CRE_WORKFLOW_OWNER=0x… CRE_WORKFLOW_ID_COLLECTIONS=0x… CRE_WORKFLOW_ID_UNDERWRITE=0x… CRE_WORKFLOW_ID_GUARDIAN=0x… lock-receivers:monad` | After `cre workflow deploy`: each receiver accepts only its workflow's owner, name **and** id, moves to the production KeystoneForwarder, and drops the simulation transmitter (in that order; idempotent). `CRE_FORWARDER=simulation` adds the identity checks and keeps the simulation forwarder and transmitter. Writes `cre.locked` into the deployment record. |
 
 `deploy:monad` uses **real AUSD** (`0xa9012a05…22dC`) and checks its EIP-712

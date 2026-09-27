@@ -313,13 +313,13 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
         await expect(s.guardian.setMaxAttestationAge(age)).to.be.revertedWithCustomError(s.guardian, "InvalidMaxAttestationAge").withArgs(age);
       }
       for (const call of [
-        s.guardian.connect(s.stranger).setThresholds(DEFAULTS),
-        s.guardian.connect(s.stranger).setMaxAttestationAge(60),
-        s.guardian.connect(s.stranger).setOverride(OVERRIDE.FORCE_RESUME),
-        s.guardian.connect(s.stranger).setSimulationTransmitter(s.stranger.address),
-        s.checkout.connect(s.stranger).setCreditGuardian(ethers.ZeroAddress),
+        () => s.guardian.connect(s.stranger).setThresholds(DEFAULTS),
+        () => s.guardian.connect(s.stranger).setMaxAttestationAge(60),
+        () => s.guardian.connect(s.stranger).setOverride(OVERRIDE.FORCE_RESUME),
+        () => s.guardian.connect(s.stranger).setSimulationTransmitter(s.stranger.address),
+        () => s.checkout.connect(s.stranger).setCreditGuardian(ethers.ZeroAddress),
       ]) {
-        await expect(call).to.be.revertedWithCustomError(s.guardian, "OwnableUnauthorizedAccount");
+        await expect(call()).to.be.revertedWithCustomError(s.guardian, "OwnableUnauthorizedAccount");
       }
     });
 
@@ -336,6 +336,39 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       expect(await s.checkout.creditPaused()).to.deep.equal([false, 0n]);
       const buyer = await newBuyer();
       await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer)))).to.emit(s.checkout, "PlanOpened");
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  describe("the owner's script (lib/guardian.js, guardian:monad)", () => {
+    const { guardianStatus, runGuardianAction, reasonWords } = require("../../lib/guardian");
+    const { guardianConfig } = require("../../scripts/deploy-monad");
+
+    it("raises the peg for the demo, forces and clears an override, and reports the guard in words", async () => {
+      expect((await guardianStatus(s.guardian)).latest).to.equal(null);
+      await runGuardianAction(s.guardian, "thresholds", { config: guardianConfig({ GUARD_MIN_PRICE: "1.001" }) });
+      await attest();
+      let st = await guardianStatus(s.guardian);
+      expect([st.paused, st.reasonWords, st.thresholds.minPrice]).to.deep.equal([true, ["depeg"], "100100000"]);
+      expect(st.latest.price).to.equal(PRICE("0.9998").toString());
+
+      await runGuardianAction(s.guardian, "override", { override: "resume" });
+      st = await guardianStatus(s.guardian);
+      expect([st.paused, st.override]).to.deep.equal([false, "resume"]);
+      await runGuardianAction(s.guardian, "override", { override: "none" });
+      await runGuardianAction(s.guardian, "thresholds", { config: guardianConfig({}) });
+      await runGuardianAction(s.guardian, "max-age", { config: guardianConfig({ GUARD_MAX_ATTESTATION_AGE_SECONDS: "900" }) });
+      st = await guardianStatus(s.guardian);
+      expect([st.thresholds.minPrice, st.maxAttestationAge, st.override]).to.deep.equal(["99500000", 900, "none"]);
+
+      expect(reasonWords(DEPEG | STALE_PRICE | OWNER_PAUSE)).to.deep.equal(["depeg", "stale price", "paused by the owner"]);
+      let err;
+      try {
+        await runGuardianAction(s.guardian, "override", { override: "sideways" });
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.message).to.match(/GUARD_OVERRIDE/);
     });
   });
 
