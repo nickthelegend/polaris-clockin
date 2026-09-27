@@ -145,3 +145,65 @@ describe("deploy-monad (in process)", () => {
     expect(() => JSON.stringify(record, (_, v) => (typeof v === "bigint" ? v.toString() : v))).to.not.throw();
   });
 });
+
+describe("the CRE simulation transmitter", () => {
+  // Behind Chainlink's public simulation forwarder, tx.origin is the
+  // underwriting receiver's only guard: whatever the transmitter's key calls
+  // can deliver credit facts. So on a public network it is a dedicated key.
+  const { simulationTransmitterFor } = require("../../scripts/deploy-monad");
+  const creKey = ethers.Wallet.createRandom();
+  let deployer;
+  before(async () => {
+    [deployer] = await ethers.getSigners();
+  });
+  const none = () => undefined;
+
+  it("on the simulation forwarder, is the address of CRE_ETH_PRIVATE_KEY or CRE_SIMULATION_TRANSMITTER, and never defaults to the deployer", () => {
+    expect(simulationTransmitterFor("simulation", deployer, {}, (n) => (n === "CRE_ETH_PRIVATE_KEY" ? creKey.privateKey.slice(2) : undefined)))
+      .to.equal(creKey.address);
+    expect(simulationTransmitterFor("simulation", deployer, { CRE_SIMULATION_TRANSMITTER: creKey.address.toLowerCase() }, none))
+      .to.equal(creKey.address);
+    expect(() => simulationTransmitterFor("simulation", deployer, {}, none)).to.throw(/dedicated CRE transmitter/);
+  });
+
+  it("refuses the deployer's key on the simulation forwarder, however it is given", () => {
+    expect(() => simulationTransmitterFor("simulation", deployer, { CRE_SIMULATION_TRANSMITTER: deployer.address }, none))
+      .to.throw(/must not be the deployer/);
+    // Hardhat's first account: the deployer here, with its well-known key.
+    const hardhatKey0 = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
+    expect(new ethers.Wallet(hardhatKey0).address).to.equal(deployer.address);
+    expect(() => simulationTransmitterFor("simulation", deployer, {}, () => hardhatKey0)).to.throw(/must not be the deployer/);
+  });
+
+  it("is zero on the production forwarder, and the deployer by default on a local node", () => {
+    expect(simulationTransmitterFor("production", deployer, { CRE_SIMULATION_TRANSMITTER: creKey.address }, none)).to.equal(ethers.ZeroAddress);
+    expect(simulationTransmitterFor("local", deployer, {}, none)).to.equal(deployer.address);
+    expect(simulationTransmitterFor("local", deployer, { CRE_SIMULATION_TRANSMITTER: creKey.address }, none)).to.equal(creKey.address);
+  });
+
+  it("deployPolaris refuses a simulation forwarder with the deployer, or nobody, as transmitter before sending anything", async () => {
+    const cfg = {
+      tokenMode: "mock",
+      treasury: deployer.address,
+      graceSeconds: 120,
+      minInterval: 60,
+      minPeriod: 60,
+      forwarderKind: "simulation",
+      forwarderAddress: ethers.Wallet.createRandom().address,
+      demoMerchant: ethers.Wallet.createRandom(),
+      poolSeed: USD(1),
+    };
+    const nonce = await ethers.provider.getTransactionCount(deployer.address);
+    for (const simulationTransmitter of [deployer.address, ethers.ZeroAddress, undefined]) {
+      let err;
+      try {
+        await deployPolaris(hre, { ...cfg, simulationTransmitter });
+      } catch (e) {
+        err = e;
+      }
+      expect(err, String(simulationTransmitter)).to.be.instanceOf(Error);
+      expect(err.message).to.match(/simulation/);
+    }
+    expect(await ethers.provider.getTransactionCount(deployer.address)).to.equal(nonce, "nothing was sent");
+  });
+});

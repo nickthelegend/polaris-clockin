@@ -29,9 +29,13 @@
  *                               MockKeystoneForwarder, for `cre workflow simulate
  *                               --broadcast`) or "production" (KeystoneForwarder,
  *                               once Early Access lands)
- *   CRE_SIMULATION_TRANSMITTER  the address of CRE_ETH_PRIVATE_KEY; the only origin
- *                               UnderwritingReceiver accepts while on the mock
- *                               forwarder (default: the deployer). Ignored for
+ *   CRE_SIMULATION_TRANSMITTER  the address of CRE_ETH_PRIVATE_KEY, the key
+ *                               `cre workflow simulate --broadcast` signs with: the
+ *                               only origin UnderwritingReceiver accepts while on
+ *                               the mock forwarder. Required for "simulation"
+ *                               (read from CRE_ETH_PRIVATE_KEY in the environment
+ *                               or .env when unset) and never the deployer. A
+ *                               local node defaults to the deployer. Ignored for
  *                               "production".
  *   CRE_WORKFLOW_OWNER          production only: the receivers then accept only
  *                               this workflow owner and the Polaris workflow names
@@ -50,7 +54,7 @@ const hre = require("hardhat");
 const { Wallet, ZeroAddress, getAddress, formatEther, parseUnits } = require("ethers");
 
 const { deployPolaris, MONAD_TESTNET } = require("../lib/deploy");
-const { ensureEnvKey } = require("./lib/env");
+const { ensureEnvKey, readEnvValue } = require("./lib/env");
 
 const LOCAL_NETWORKS = new Set(["hardhat", "localhost", "monadLocal"]);
 
@@ -77,6 +81,51 @@ async function roughDeploymentGas() {
   return gas + 30n * 150_000n;
 }
 
+/**
+ * The only transaction origin UnderwritingReceiver accepts reports from while
+ * it sits behind a simulation forwarder.
+ *
+ * Chainlink's MockKeystoneForwarder is a public contract anyone can call, so
+ * under it the receiver's one guard is `tx.origin == simulationTransmitter`.
+ * Whatever contract the transmitter's key calls can therefore deliver a
+ * forged underwriting report. The deployer's key calls a great deal, so on a
+ * public network the transmitter must be a key kept for `cre workflow
+ * simulate --broadcast` alone: CRE_SIMULATION_TRANSMITTER, or the address of
+ * CRE_ETH_PRIVATE_KEY. A local node, where nothing is at stake, defaults to
+ * the deployer (the CRE package's local chain relies on that). The
+ * production forwarder checks DON signatures, so it needs no transmitter.
+ */
+function simulationTransmitterFor(forwarderKind, deployer, env = process.env, readKey = readEnvValue) {
+  if (forwarderKind === "production") return ZeroAddress;
+  if (env.CRE_SIMULATION_TRANSMITTER) {
+    const transmitter = getAddress(env.CRE_SIMULATION_TRANSMITTER);
+    if (forwarderKind !== "local") refuseDeployerAsTransmitter(transmitter, deployer);
+    return transmitter;
+  }
+  if (forwarderKind === "local") return deployer.address;
+  const key = readKey("CRE_ETH_PRIVATE_KEY");
+  if (!key) {
+    throw new Error(
+      "The simulation forwarder needs a dedicated CRE transmitter. Set CRE_SIMULATION_TRANSMITTER to the " +
+        "address of the key `cre workflow simulate --broadcast` signs with (CRE_ETH_PRIVATE_KEY in " +
+        "workflows/.env), a key used for nothing else and funded with a little testnet MON."
+    );
+  }
+  const transmitter = new Wallet(key.startsWith("0x") ? key : `0x${key}`).address;
+  refuseDeployerAsTransmitter(transmitter, deployer);
+  return transmitter;
+}
+
+function refuseDeployerAsTransmitter(transmitter, deployer) {
+  if (transmitter === getAddress(deployer.address)) {
+    throw new Error(
+      "The CRE simulation transmitter must not be the deployer: while the simulation forwarder is in use, " +
+        "any contract the transmitter's key calls could deliver underwriting facts. Use a dedicated " +
+        "CRE_ETH_PRIVATE_KEY and set CRE_SIMULATION_TRANSMITTER to its address."
+    );
+  }
+}
+
 async function buildConfig(networkName, deployer) {
   const local = LOCAL_NETWORKS.has(networkName);
   const env = process.env;
@@ -97,6 +146,8 @@ async function buildConfig(networkName, deployer) {
         ? MONAD_TESTNET.CRE_KEYSTONE_FORWARDER
         : undefined;
 
+  const simulationTransmitter = simulationTransmitterFor(forwarderKind, deployer, env);
+
   let demoMerchant;
   if (local) {
     demoMerchant = Wallet.createRandom();
@@ -114,12 +165,7 @@ async function buildConfig(networkName, deployer) {
     minPeriod: num(env.MIN_PERIOD_SECONDS, 60),
     forwarderKind,
     forwarderAddress,
-    simulationTransmitter:
-      forwarderKind === "production"
-        ? ZeroAddress
-        : env.CRE_SIMULATION_TRANSMITTER
-          ? getAddress(env.CRE_SIMULATION_TRANSMITTER)
-          : deployer.address,
+    simulationTransmitter,
     workflowOwner: env.CRE_WORKFLOW_OWNER ? getAddress(env.CRE_WORKFLOW_OWNER) : undefined,
     relayer: env.RELAYER_ADDRESS ? getAddress(env.RELAYER_ADDRESS) : undefined,
     demoMerchant,
@@ -163,7 +209,9 @@ async function main() {
 
   const cfg = await buildConfig(networkName, deployer);
   console.log(`Token     ${cfg.tokenMode === "ausd" ? `AUSD ${cfg.tokenAddress}` : "MockAUSD (new)"}`);
-  console.log(`CRE       ${cfg.forwarderKind} forwarder ${cfg.forwarderAddress ?? "(deployed locally)"}\n`);
+  console.log(`CRE       ${cfg.forwarderKind} forwarder ${cfg.forwarderAddress ?? "(deployed locally)"}`);
+  if (cfg.simulationTransmitter !== ZeroAddress) console.log(`CRE sim   transmitter ${cfg.simulationTransmitter}`);
+  console.log("");
 
   const record = await deployPolaris(hre, cfg, (line) => console.log(line));
   record.abiDir = "packages/contracts/abi";
@@ -193,4 +241,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildConfig, deploymentFile, LOCAL_NETWORKS };
+module.exports = { buildConfig, deploymentFile, simulationTransmitterFor, LOCAL_NETWORKS };

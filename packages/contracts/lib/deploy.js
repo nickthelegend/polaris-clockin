@@ -51,6 +51,20 @@ const USD = (n) => BigInt(Math.round(Number(n) * 1e6));
 async function deployPolaris(hre, cfg, log = () => {}) {
   const { ethers } = hre;
   const [deployer] = await ethers.getSigners();
+  // Behind Chainlink's public simulation forwarder the transmitter's tx.origin
+  // is UnderwritingReceiver's only guard, so it must be a key kept for the CRE
+  // simulator alone: never missing, never the deployer's (see
+  // scripts/deploy-monad.js, simulationTransmitterFor). Checked before
+  // anything is sent.
+  if (cfg.forwarderKind === "simulation") {
+    const t = cfg.simulationTransmitter;
+    if (!t || getAddress(t) === ZeroAddress) {
+      throw new Error("A simulation forwarder needs a simulationTransmitter, or anyone can write credit facts.");
+    }
+    if (getAddress(t) === deployer.address) {
+      throw new Error("The CRE simulation transmitter must be a dedicated key, not the deployer.");
+    }
+  }
   const net = await ethers.provider.getNetwork();
   const record = {
     network: hre.network.name,

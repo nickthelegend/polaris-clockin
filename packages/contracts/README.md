@@ -47,8 +47,11 @@ at the top of `scripts/deploy-monad.js`: `AUSD_MODE`, `TREASURY`,
 `GRACE_SECONDS` (3600), `MIN_INTERVAL_SECONDS` and `MIN_PERIOD_SECONDS` (60,
 so a plan plays out on camera; weekly plans still work), `CRE_FORWARDER`
 (`simulation` by default, `production` once Early Access lands),
-`CRE_SIMULATION_TRANSMITTER` (the `CRE_ETH_PRIVATE_KEY` address; defaults to
-the deployer), `CRE_WORKFLOW_OWNER`, `RELAYER_ADDRESS`, `POOL_SEED_AUSD`.
+`CRE_SIMULATION_TRANSMITTER` (the address of `CRE_ETH_PRIVATE_KEY`, a key kept
+for `cre workflow simulate --broadcast` alone; required on the simulation
+forwarder, read from `CRE_ETH_PRIVATE_KEY` when unset, and never the deployer,
+which the script refuses), `CRE_WORKFLOW_OWNER`, `RELAYER_ADDRESS`,
+`POOL_SEED_AUSD`.
 
 **Gas.** Monad bills the gas *limit*. Every script sends through `lib/tx.js`:
 `eth_estimateGas` plus 15%, never a blanket limit. Measured locally (gas used):
