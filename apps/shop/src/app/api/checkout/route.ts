@@ -1,4 +1,5 @@
 import { centsToDecimal } from "@/lib/money";
+import { accessCookie, payRefOf, tokenFromRequest } from "@/lib/orders/access";
 import { parseCheckoutRequest } from "@/lib/orders/checkout-request";
 import { appendSdkLog, attachSession, createOrder, nextSessionAttempt, reusableSession } from "@/lib/orders/service";
 import type { Order, SdkCall } from "@/lib/orders/types";
@@ -27,7 +28,13 @@ function summary(order: Order) {
  *
  * The order stays "awaiting_payment" until a verified webhook says otherwise.
  * Send an Idempotency-Key: a retried or double-clicked request gets the same
- * order and session back instead of a second one.
+ * order and session back instead of a second one. Send `continueOrder` (the
+ * order this browser was already paying) when the buyer changes how they
+ * pay: an unpaid order for the same goods is reused, never doubled.
+ *
+ * The response sets an HttpOnly cookie that lets this browser read the order
+ * back (the receipt, the developer drawer). Polaris and pay() get the order's
+ * payRef, never its id.
  */
 export async function POST(req: Request) {
   const origin = requestOrigin(req);
@@ -55,23 +62,31 @@ export async function POST(req: Request) {
     return error(400, "invalid_idempotency_key", "Idempotency-Key must be 8 to 100 letters, digits, _, - or :.");
   }
 
-  const created = await createOrder(parsed.value, key);
+  const continueId = (body as { continueOrder?: unknown }).continueOrder;
+  const continueOrder = typeof continueId === "string" && /^hc_[a-z2-7]{20}$/.test(continueId) ? { id: continueId, token: tokenFromRequest(req, continueId) } : null;
+
+  const created = await createOrder(parsed.value, key, undefined, undefined, continueOrder);
   if (!created.ok) return error(409, "idempotency_conflict", "This checkout changed after it was sent. Please try again.");
   let order: Order = created.order;
+  const cookie = accessCookie(order, origin);
+  const init: ResponseInit = cookie ? { headers: { "set-cookie": cookie } } : {};
 
   if (order.status !== "awaiting_payment" || order.payment.method === "wallet") {
-    return Response.json({
-      order: summary(order),
-      reused: created.reused,
-      ...(order.payment.method === "wallet" && order.status === "awaiting_payment"
-        ? { wallet: { merchant: config.merchant, amount: centsToDecimal(order.total), orderId: order.id } }
-        : {}),
-    });
+    return Response.json(
+      {
+        order: summary(order),
+        reused: created.reused,
+        ...(order.payment.method === "wallet" && order.status === "awaiting_payment"
+          ? { wallet: { merchant: config.merchant, amount: centsToDecimal(order.total), orderId: payRefOf(order) } }
+          : {}),
+      },
+      init,
+    );
   }
 
   const open = reusableSession(order);
   if (open) {
-    return Response.json({ order: summary(order), reused: true, checkout: { sessionId: open.id, url: open.url } });
+    return Response.json({ order: summary(order), reused: true, checkout: { sessionId: open.id, url: open.url } }, init);
   }
 
   if (order.payment.sessionId) order = (await nextSessionAttempt(order.id)) ?? order;
@@ -81,7 +96,7 @@ export async function POST(req: Request) {
     // this same app, so the browser opens it on the origin it's already on.
     const url = config.target === "dev-mock" ? new URL(new URL(session.url).pathname, origin).href : session.url;
     await attachSession(order.id, { ...session, url }, log);
-    return Response.json({ order: summary(order), reused: created.reused, checkout: { sessionId: session.id, url } });
+    return Response.json({ order: summary(order), reused: created.reused, checkout: { sessionId: session.id, url } }, init);
   } catch (e) {
     const log = (e as { sdkLog?: SdkCall }).sdkLog;
     if (log) await appendSdkLog(order.id, [log]);

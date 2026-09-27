@@ -19,6 +19,9 @@ function deliver(e: WebhookEvent | string, header?: string | null) {
 }
 
 let orderId = "";
+/** What the shop gave Polaris as the session's orderId, and what webhooks name the order by. */
+let payRef = "";
+let cookie = "";
 
 beforeEach(async () => {
   setOrderStore(createMemoryStore());
@@ -31,6 +34,8 @@ beforeEach(async () => {
   const created = await createOrder(priced(), "hc_webhook_test");
   if (!created.ok) throw new Error("no order");
   orderId = created.order.id;
+  payRef = created.order.payRef!;
+  cookie = `hc_o_${orderId}=${created.order.accessToken}`;
 });
 
 afterEach(() => vi.unstubAllEnvs());
@@ -39,7 +44,7 @@ const paidEvent = (overrides: { orderId?: string; sessionId?: string | null; amo
   event("payment.succeeded", {
     txHash: TX,
     chainId: 10143,
-    orderId: overrides.orderId ?? orderId,
+    orderId: overrides.orderId ?? payRef,
     sessionId: overrides.sessionId === undefined ? "cs_test_1" : overrides.sessionId,
     metadata: {},
     paymentId: TX,
@@ -69,7 +74,7 @@ describe("POST /api/webhooks/polaris", () => {
     const body = JSON.stringify(e);
     const header = signed(body);
     // Someone replays a real delivery for another order id, keeping the signature.
-    const res = await deliver(body.replaceAll(orderId, "hc_someone_elses_order"), header);
+    const res = await deliver(body.replaceAll(payRef, "hcp_someone_elses_order"), header);
     expect(res.status).toBe(400);
     expect(await status()).toBe("awaiting_payment");
   });
@@ -98,11 +103,16 @@ describe("POST /api/webhooks/polaris", () => {
 
   it("answers 409 to an instalment that beats its plan, so Polaris redelivers it", async () => {
     const res = await deliver(
-      event("installment.collected", { txHash: TX, chainId: 10143, planId: "42", orderId, installment: 2, installments: 4, amount: "87.25", remaining: "174.50" }),
+      event("installment.collected", { txHash: TX, chainId: 10143, planId: "42", orderId: payRef, installment: 2, installments: 4, amount: "87.25", remaining: "174.50" }),
     );
     expect(res.status).toBe(409);
     const data = await orderStore().read();
     expect(Object.keys(data.events)).toHaveLength(0);
+  });
+
+  it("finds the order by its id, for orders placed before payRef existed", async () => {
+    expect((await deliver(paidEvent({ orderId }))).status).toBe(200);
+    expect(await status()).toBe("paid");
   });
 
   it("finds the order by session id when metadata is missing", async () => {
@@ -127,7 +137,11 @@ describe("POST /api/webhooks/polaris", () => {
     expect(Object.keys(route).filter((k) => ["POST", "PUT", "PATCH", "DELETE"].includes(k))).toEqual([]);
     const log = await import("@/app/api/orders/[id]/log/route");
     const res = await log.POST(
-      new Request(`https://shop.test/api/orders/${orderId}/log`, { method: "POST", body: JSON.stringify([{ call: "polaris.pay", result: { status: "paid" } }, { call: "markPaid" }]) }),
+      new Request(`https://shop.test/api/orders/${orderId}/log`, {
+        method: "POST",
+        headers: { cookie },
+        body: JSON.stringify([{ call: "polaris.pay", result: { status: "paid" } }, { call: "markPaid" }]),
+      }),
       { params: Promise.resolve({ id: orderId }) },
     );
     expect(await res.json()).toMatchObject({ recorded: 1 });

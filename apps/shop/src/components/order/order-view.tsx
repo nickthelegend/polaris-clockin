@@ -78,7 +78,8 @@ export function OrderView({
     };
   }, [initial.id, fromPolaris]);
 
-  const firstName = order.address.name.split(/\s+/)[0] ?? order.address.name;
+  // A receipt opened without this browser's access cookie has no name or address in it.
+  const firstName = order.redacted ? null : (order.address.name.split(/\s+/)[0] ?? order.address.name);
   const paid = order.status === "paid";
   const sessionDead = session && (session.status === "expired" || session.status === "canceled");
 
@@ -100,7 +101,7 @@ export function OrderView({
                   <span className="grid h-12 w-12 place-items-center rounded-full bg-ok text-paper">
                     <CheckIcon size={24} strokeWidth={2} />
                   </span>
-                  <h1 className="display mt-6 text-[3rem] leading-[1] sm:text-[4.2rem]">Thank you, {firstName}.</h1>
+                  <h1 className="display mt-6 text-[3rem] leading-[1] sm:text-[4.2rem]">{firstName ? `Thank you, ${firstName}.` : "Thank you."}</h1>
                   <p className="mt-4 max-w-[34rem] text-[1.08rem] leading-relaxed text-ink-2">
                     {order.kind === "subscription"
                       ? `Your Coffee Club subscription has started. The first bag ships this week, and we'll email ${order.contact.email} with tracking.`
@@ -202,6 +203,11 @@ export function OrderView({
                 <dd className="num">{formatUsd(order.total)}</dd>
               </div>
             </dl>
+            {order.redacted ? (
+              <p className="mt-8 border-t border-hair pt-6 text-[0.88rem] text-muted">
+                Open this receipt in the browser you ordered from to see the delivery details.
+              </p>
+            ) : (
             <div className="mt-8 border-t border-hair pt-6 text-[0.93rem]">
               <h3 className="font-medium">Delivering to</h3>
               <address className="mt-2 not-italic leading-relaxed text-ink-2">
@@ -219,6 +225,7 @@ export function OrderView({
                 {order.address.country}
               </address>
             </div>
+            )}
             <Link href="/shop" className="btn btn-line mt-8 w-full">
               Continue shopping
             </Link>

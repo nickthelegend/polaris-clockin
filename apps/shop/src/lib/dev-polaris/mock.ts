@@ -44,6 +44,7 @@ export interface MockSession extends CheckoutSession {
   plan?: { planId: string; collected: number; total: number; schedule: { index: number; amount: string; dueAt: string }[]; totalAmount: string };
   subscriptionId?: string;
   periodsCharged?: number;
+  subscriptionCanceled?: boolean;
 }
 
 interface MockState {
@@ -244,12 +245,13 @@ export function getSession(id: string, now: Date = new Date()): MockSession | nu
 /** The session as the API returns it: the mock's bookkeeping stays inside. */
 export function publicSession(session: MockSession, now: Date = new Date()): CheckoutSession {
   const current = getSession(session.id, now) ?? session;
-  const { webhookUrl: _url, deliveries: _deliveries, plan: _plan, subscriptionId: _sub, periodsCharged: _periods, ...rest } = current;
+  const { webhookUrl: _url, deliveries: _deliveries, plan: _plan, subscriptionId: _sub, periodsCharged: _periods, subscriptionCanceled: _canceled, ...rest } = current;
   void _url;
   void _deliveries;
   void _plan;
   void _sub;
   void _periods;
+  void _canceled;
   return rest;
 }
 
@@ -457,11 +459,42 @@ export function cancelSession(id: string): MockSession | null {
   return getSession(id);
 }
 
-/** The next thing that would happen to a completed session: an instalment, or a renewal. */
-export function advanceSession(id: string, now: Date = new Date()): { ok: true; events: WebhookEvent[] } | { ok: false; message: string } {
+/**
+ * The next thing that would happen to a completed session: an instalment, or
+ * a renewal. Or, with "cancel", the buyer canceling their subscription in Polaris.
+ */
+export function advanceSession(
+  id: string,
+  action: "next" | "cancel" = "next",
+  now: Date = new Date(),
+): { ok: true; events: WebhookEvent[] } | { ok: false; message: string } {
   const session = getSession(id, now);
   if (!session || session.status !== "complete") return { ok: false, message: "Only a completed session can move forward." };
   const orderId = session.orderId ?? session.id;
+  if (action === "cancel") {
+    if (!session.subscriptionId) return { ok: false, message: "Only a subscription can be canceled." };
+    if (session.subscriptionCanceled) return { ok: false, message: "This subscription is already canceled." };
+    session.subscriptionCanceled = true;
+    save();
+    return {
+      ok: true,
+      events: [
+        eventOf(
+          "subscription.canceled",
+          {
+            txHash: fakeTxHash(),
+            chainId,
+            subscriptionId: session.subscriptionId,
+            planId: "1",
+            merchant: mockKeys().merchant,
+            subscriber: session.payment?.payer ?? fakeAddress(),
+            canceledBy: "subscriber",
+          },
+          now,
+        ),
+      ],
+    };
+  }
   if (session.plan) {
     const plan = session.plan;
     if (plan.collected >= plan.total) return { ok: false, message: "Every instalment is already collected." };
@@ -492,6 +525,7 @@ export function advanceSession(id: string, now: Date = new Date()): { ok: true; 
     return { ok: true, events };
   }
   if (session.subscriptionId) {
+    if (session.subscriptionCanceled) return { ok: false, message: "This subscription is canceled." };
     const period = (session.periodsCharged ?? 1) + 1;
     session.periodsCharged = period;
     const interval = session.subscription?.interval ?? "month";

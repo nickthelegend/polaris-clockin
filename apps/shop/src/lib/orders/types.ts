@@ -85,7 +85,23 @@ export interface SdkCall {
 }
 
 export interface Order {
+  /** The order's address on this store: /orders/{id}. Reading the buyer's details also needs the access token. */
   id: string;
+  /**
+   * The reference Polaris and the chain see: the session's orderId, and the
+   * orderId pay() signs for (it is written on chain in PaymentMade). Never
+   * the order id, so an indexer of Polaris payments learns nothing it can
+   * read an order with. Orders stored before it existed use their id.
+   */
+  payRef?: string;
+  /**
+   * Proof that a browser placed this order: set as an HttpOnly cookie when
+   * the order is created, and needed to see the buyer's name, email and
+   * address. Never sent to a browser in JSON (see orders/access.ts).
+   */
+  accessToken?: string;
+  /** Set on the copy a browser gets without the access token: the buyer's details are masked or empty. */
+  redacted?: boolean;
   number: string;
   createdAt: string;
   updatedAt: string;
@@ -108,6 +124,10 @@ export interface Order {
     sessionUrl?: string;
     sessionExpiresAt?: string;
     sessionAttempt: number;
+    /** The mode the current session was opened with; a new mode needs a new session. */
+    sessionMode?: CheckoutMode;
+    /** The last time the store asked Polaris for the session (sessions.retrieve), to keep that to one call per 10 s. */
+    lastSyncedAt?: string;
     paidAt?: string;
     payer?: string;
     txHash?: string;

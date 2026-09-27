@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { OrderView } from "@/components/order/order-view";
+import { accessCookieName, canRead, orderForBrowser } from "@/lib/orders/access";
 import { getOrder } from "@/lib/orders/service";
 import { browserConfig } from "@/lib/polaris";
 
@@ -13,10 +15,12 @@ export default async function OrderPage({ params, searchParams }: { params: Prom
   const [{ id }, { via }] = await Promise.all([params, searchParams]);
   const order = await getOrder(id);
   if (!order) notFound();
+  // The buyer's details only for the browser that placed the order.
+  const readable = canRead(order, (await cookies()).get(accessCookieName(id))?.value);
   const config = browserConfig();
   return (
     <OrderView
-      initial={order}
+      initial={orderForBrowser(order, readable)}
       fromPolaris={via === "polaris"}
       fromCheckout={via === "polaris" || via === "wallet"}
       devMock={config.ok && config.target === "dev-mock"}

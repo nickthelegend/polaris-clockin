@@ -80,11 +80,15 @@ describe("POST /api/checkout (Polaris)", () => {
       subscription: null,
       successUrl: `https://shop.test/orders/${json.order.id}?via=polaris`,
       cancelUrl: `https://shop.test/checkout?order=${json.order.id}&canceled=1`,
-      orderId: json.order.id,
+      // The payRef, never the order id: Polaris may write it on chain.
+      orderId: expect.stringMatching(/^hcp_[a-z2-7]{20}$/),
       metadata: { orderNumber: expect.stringMatching(/^HC-\d{5}$/) },
     });
 
     const stored = (await orderStore().read()).orders[json.order.id]!;
+    expect(call!.body!.orderId).toBe(stored.payRef);
+    // This browser gets the cookie that lets it read the order back.
+    expect(res.headers.get("set-cookie")).toBe(`hc_o_${stored.id}=${stored.accessToken}; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax; Secure`);
     expect(stored.payment.sessionId).toBe(json.checkout.sessionId);
     expect(stored.sdkLog[0]?.call).toBe("polaris.checkout.sessions.create");
     expect(call!.headers["polaris-client"]).toBe("polarispay-sdk/0.3.0");
@@ -177,9 +181,48 @@ describe("POST /api/checkout (wallet)", () => {
   it("returns what pay() needs, and calls nothing at Polaris", async () => {
     const res = await post(checkoutBody({ method: "wallet" }), "hc_attempt_wallet_1");
     const json = (await res.json()) as { order: { id: string }; wallet: { merchant: string; amount: string; orderId: string } };
-    expect(json.wallet).toEqual({ merchant: "0x1111111111111111111111111111111111111111", amount: "349.00", orderId: json.order.id });
+    const stored = (await orderStore().read()).orders[json.order.id]!;
+    // pay() signs for the payRef, which goes on chain in PaymentMade; the order id stays off chain.
+    expect(json.wallet).toEqual({ merchant: "0x1111111111111111111111111111111111111111", amount: "349.00", orderId: stored.payRef });
+    expect(json.wallet.orderId).toMatch(/^hcp_[a-z2-7]{20}$/);
     expect(json.order.id).toMatch(/^hc_[a-z2-7]{20}$/);
     expect(calls).toHaveLength(0);
+  });
+
+  it("switching an unpaid order to the wallet keeps the order, so the chain can't be paid twice for it", async () => {
+    const first = await post(checkoutBody({ method: "polaris", mode: "later" }), "hc_attempt_switch_1");
+    const a = (await first.json()) as { order: { id: string } };
+    const cookie = first.headers.get("set-cookie")!.split(";")[0]!;
+    const res = await post({ ...checkoutBody({ method: "wallet" }), continueOrder: a.order.id }, "hc_attempt_switch_2", { cookie });
+    const b = (await res.json()) as { order: { id: string }; wallet: { orderId: string } };
+    expect(b.order.id).toBe(a.order.id);
+    const stored = (await orderStore().read()).orders[a.order.id]!;
+    expect(b.wallet.orderId).toBe(stored.payRef);
+    expect(stored.payment.method).toBe("wallet");
+    expect(Object.keys((await orderStore().read()).orders)).toHaveLength(1);
+  });
+
+  it("only the browser that placed an order can continue it, and only for the same goods", async () => {
+    const first = await post(checkoutBody({ method: "polaris", mode: "later" }), "hc_attempt_switch_3");
+    const a = (await first.json()) as { order: { id: string } };
+    const cookie = first.headers.get("set-cookie")!.split(";")[0]!;
+    const stranger = (await (await post({ ...checkoutBody({ method: "wallet" }), continueOrder: a.order.id }, "hc_attempt_switch_4")).json()) as { order: { id: string } };
+    expect(stranger.order.id).not.toBe(a.order.id);
+    const lamp = [{ productId: "arc-lamp", optionId: "chalk-brass", quantity: 1 }];
+    const changed = (await (await post({ ...checkoutBody({ method: "wallet" }, lamp), continueOrder: a.order.id }, "hc_attempt_switch_5", { cookie })).json()) as { order: { id: string } };
+    expect(changed.order.id).not.toBe(a.order.id);
+  });
+
+  it("a new mode for the same order opens a new session instead of reusing the old one", async () => {
+    const first = await post(checkoutBody({ method: "polaris", mode: "later" }), "hc_attempt_mode_1");
+    const a = (await first.json()) as { order: { id: string }; checkout: { sessionId: string } };
+    const cookie = first.headers.get("set-cookie")!.split(";")[0]!;
+    const res = await post({ ...checkoutBody({ method: "polaris", mode: "now" }), continueOrder: a.order.id }, "hc_attempt_mode_2", { cookie });
+    const b = (await res.json()) as { order: { id: string }; checkout: { sessionId: string } };
+    expect(b.order.id).toBe(a.order.id);
+    expect(b.checkout.sessionId).not.toBe(a.checkout.sessionId);
+    expect(calls[1]!.body).toMatchObject({ modes: ["now"] });
+    expect(calls[1]!.headers["idempotency-key"]).toBe(`${a.order.id}:session:1`);
   });
 });
 

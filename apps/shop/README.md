@@ -40,7 +40,7 @@ is in two files:
 
 | File | Side | Calls |
 |---|---|---|
-| [`src/lib/polaris.ts`](src/lib/polaris.ts) | Server, `polarispay-sdk/server` | `createPolarisServer`, `checkout.sessions.create` (the order id as `orderId`, one idempotency key per order and attempt), `checkout.sessions.retrieve`, `webhooks.verify` |
+| [`src/lib/polaris.ts`](src/lib/polaris.ts) | Server, `polarispay-sdk/server` | `createPolarisServer`, `checkout.sessions.create` (the order's `payRef` as `orderId`, one idempotency key per order and attempt), `checkout.sessions.retrieve`, `webhooks.verify` |
 | [`src/lib/polaris-client.ts`](src/lib/polaris-client.ts) | Browser, `polarispay-sdk` and `polarispay-sdk/react` | `createPolaris`, `openCheckout` (through `PolarisCheckoutButton`), `pay`, `PolarisMessaging`, `PolarisMark` |
 
 The SDK ships from `dist/`, so it has to be built before the shop runs:
@@ -51,10 +51,18 @@ The routes that use them:
 
 | Route | What it does |
 |---|---|
-| `POST /api/checkout` | Validates and prices the order from the catalogue (never from the browser), stores it as `awaiting_payment` under the request's `Idempotency-Key`, then either creates a Polaris checkout session or returns what `pay()` needs |
+| `POST /api/checkout` | Validates and prices the order from the catalogue (never from the browser), stores it as `awaiting_payment` under the request's `Idempotency-Key`, sets the order's access cookie, then either creates a Polaris checkout session or returns what `pay()` needs. With `continueOrder`, an unpaid order for the same goods is reused when the buyer changes how they pay |
 | `POST /api/webhooks/polaris` | Verifies the signature against the raw body, dedupes on the event id, and moves the order forward if the event matches it (amount, currency). The only writer of `paid` |
-| `GET /api/orders/[id]` | The order, for the receipt to poll. `?sync=1` also shows the session status from `sessions.retrieve` |
-| `POST /api/orders/[id]/log` | The browser reports its SDK calls for the developer drawer. It can only append to a log |
+| `GET /api/orders/[id]` | The order, for the receipt to poll: whole for the browser that placed it, with the buyer's name, email and address masked for anyone else. `?sync=1` also shows the session status from `sessions.retrieve`, for the placing browser only, while the order is unpaid, at most once every 10 seconds |
+| `POST /api/orders/[id]/log` | The browser reports its SDK calls for the developer drawer: only the placing browser, only while the order is unpaid, up to 12 entries. It can only append to a log |
+
+**Who can read an order.** The order id is in the receipt's URL, so it isn't
+a secret. `/api/checkout` sets an HttpOnly, `SameSite=Lax` cookie holding a
+random token for the order; with it the receipt and the drawer get the whole
+order, and without it (a forwarded link, a guessed id) the buyer's details
+are masked. Polaris and the chain never see the order id at all: sessions
+and direct payments carry the order's `payRef` (`hcp_…`), which is what
+`PaymentMade` writes on chain and what webhooks name the order by.
 
 An order becomes paid on `payment.succeeded` (Pay now, and direct wallet
 payments), `plan.opened` (Pay in 4: the store is paid the principal in full
