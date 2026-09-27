@@ -1,22 +1,21 @@
 "use client";
 
 import {
-  Avatar,
-  Button,
-  Card,
-  CellStack,
+  BalanceSummaryCard,
+  DataTable,
   DetailsList,
   Drawer,
   EmptyState,
   KeyValueGrid,
   Money,
   Notice,
+  PanelCard,
+  SecondaryButton,
   Skeleton,
-  Tab,
-  TabList,
-  Table,
-  Tabs,
+  StatusPill,
+  TableName,
   Ticks,
+  TimeframeChips,
   cn,
   type TableColumn,
 } from "@polaris/ui";
@@ -26,14 +25,17 @@ import { useMemo, useState } from "react";
 
 import { Address, PlanStateBadge } from "@/components/dashboard/bits";
 import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
-import { DashboardHeader } from "@/components/shell/dashboard-shell";
-import { formatDate, formatDue, money, PLAN_INTERVAL_DAYS } from "@/lib/data/format";
+import { FigureRow, PageCoin, PageHead } from "@/components/dashboard/page-head";
+import { ModeCoin } from "@/components/dashboard/payment-bits";
+import { formatDate, formatDue, money, payInFourQuote, PLAN_INTERVAL_DAYS, shortAddress } from "@/lib/data/format";
 import type { Plan, PlanFilter } from "@/lib/data/types";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
 
 const DAY = 86_400_000;
 /** Plans shown at a time; "Show more" adds another page. */
 const PAGE = 25;
+/** The worked example: $200 at 10% APR over 28 days is 4 × $50.38. */
+const EXAMPLE = payInFourQuote(200_00);
 
 export function PlansView() {
   const plans = useQuery((d) => d.listPlans(), { refreshMs: 60_000 });
@@ -73,189 +75,198 @@ export function PlansView() {
   );
   // The drawer finds an open plan in the whole list, whatever page is showing.
   const shown = filtered.slice(0, limit);
+  const s = useSummary(list);
 
   return (
     <>
-      <DashboardHeader
+      <PageHead
         title="Pay in 4"
-        description="Every plan your buyers opened. You were paid in full when each one opened; Polaris collects the four payments and carries the risk."
+        coins={[
+          <PageCoin key="4" tone="purple">
+            <span className="text-[24px] leading-none font-bold">4</span>
+          </PageCoin>,
+          <PageCoin key="d" tone="lime">
+            <span className="text-[26px] font-bold">$</span>
+          </PageCoin>,
+        ]}
       />
       <StaleNotice queries={[plans as QueryState<unknown>]} />
       <DataModeNotice empty={list !== undefined && list.length === 0} />
 
-      <Summary plans={list} sample={sample.on} />
-
-      <Card padding="none" className="mt-4 min-w-0">
-        <div className="px-4 pt-4 sm:px-5 sm:pt-5">
-          <Tabs
-            value={filter}
-            onValueChange={(v) => {
-              setFilter(v as PlanFilter);
-              setLimit(PAGE);
-            }}
-            variant="pill"
-          >
-            <TabList aria-label="Filter plans">
-              <Tab value="all" count={counts.all}>
-                All
-              </Tab>
-              <Tab value="collecting" count={counts.collecting}>
-                Collecting
-              </Tab>
-              <Tab value="dunning" count={counts.dunning}>
-                Retrying
-              </Tab>
-              <Tab value="closed" count={counts.closed}>
-                Closed
-              </Tab>
-            </TabList>
-          </Tabs>
-        </div>
-
-        {plans.error && !list ? (
-          <LoadError query={plans as QueryState<unknown>} title="We couldn't load the ledger" />
-        ) : !list ? (
-          <div className="grid gap-2 p-4 sm:p-5">
-            {Array.from({ length: 6 }, (_, i) => (
-              <Skeleton key={i} shape="row" height={64} />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<CalendarClock />}
-            title={list.length ? "No plans here" : "No Pay in 4 plans yet"}
-            description={
-              list.length
-                ? "No plans match this filter."
-                : "When a buyer chooses Pay in 4 on one of your links, the plan appears here with its four payments."
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+        <section aria-label="The Pay in 4 ledger" className="min-w-0">
+          <FigureRow
+            caption="Still owed by buyers"
+            value={s ? money(s.outstanding) : undefined}
+            deltaLabel={s ? `${s.open} open ${s.open === 1 ? "plan" : "plans"}` : undefined}
+            sample={sample.on}
+            right={
+              <TimeframeChips<PlanFilter>
+                aria-label="Filter plans"
+                options={[
+                  { value: "all", label: `All ${counts.all}` },
+                  { value: "collecting", label: `Collecting ${counts.collecting}` },
+                  { value: "dunning", label: `Retrying ${counts.dunning}` },
+                  { value: "closed", label: `Closed ${counts.closed}` },
+                ]}
+                value={filter}
+                onValueChange={(v) => {
+                  setFilter(v);
+                  setLimit(PAGE);
+                }}
+              />
             }
           />
-        ) : (
-          <>
-            <div className="hidden xl:block">
-              <Table
-                className="mt-3 pb-2"
+          <p className="mt-3 max-w-[600px] text-[15px] leading-relaxed text-ui-muted">
+            Every plan your buyers opened. You were paid in full when each one opened; Polaris collects the four payments and carries the risk.
+          </p>
+
+          <div className="mt-6">
+            {plans.error && !list ? (
+              <LoadError query={plans as QueryState<unknown>} title="We couldn't load the ledger" />
+            ) : list && filtered.length === 0 ? (
+              <EmptyState
+                icon={<CalendarClock />}
+                title={list.length ? "No plans here" : "No Pay in 4 plans yet"}
+                description={
+                  list.length ? "No plans match this filter." : "When a buyer chooses Pay in 4 on one of your links, the plan appears here with its four payments."
+                }
+              />
+            ) : (
+              <DataTable
                 caption="Pay in 4 plans"
-                columns={columns(sample.on)}
+                loading={!list}
+                loadingRows={8}
+                columns={COLUMNS}
                 rows={shown}
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setOpen(p)}
                 selectedKey={open?.id}
               />
-            </div>
-            <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 p-3 sm:p-4 xl:hidden">
-              {shown.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(p)}
-                    className="grid w-full grid-cols-[minmax(0,1fr)] gap-3 rounded-[22px] bg-ui-surface-2 px-4 py-3.5 text-left transition-colors hover:bg-ui-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus sm:px-5"
-                  >
-                    <span className="flex items-center gap-3">
-                      <Avatar name={p.description} size="md" decorative />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-[16px] font-medium">{p.description}</span>
-                          {sample.on ? <SampleBadge /> : null}
-                        </span>
-                        <span className="mt-0.5 block text-[13px] text-ui-muted">
-                          {p.nextDueAt ? nextPaymentLabel(p.nextDueAt) : `Opened ${formatDate(p.openedAt)}`}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-right">
-                        <span className="ui-figure block text-[15px] font-medium">{money(p.outstandingCents)}</span>
-                        <span className="block text-[12px] text-ui-muted">outstanding</span>
-                      </span>
-                    </span>
-                    <span className="flex items-center gap-3">
-                      <Ticks
-                        done={p.installmentsPaid}
-                        late={p.state === "dunning" ? 1 : 0}
-                        total={p.installmentCount}
-                        size="sm"
-                        className="flex-1"
-                      />
-                      <PlanStateBadge state={p.state} />
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+            )}
             {shown.length < filtered.length ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ui-hairline px-4 py-4 sm:px-5">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 <p className="text-[13px] text-ui-muted">
                   Showing {shown.length} of {filtered.length} plans
                 </p>
-                <Button variant="outline" size="sm" onClick={() => setLimit((l) => l + PAGE)}>
+                <SecondaryButton size="md" onClick={() => setLimit((l) => l + PAGE)}>
                   Show {Math.min(PAGE, filtered.length - shown.length)} more
-                </Button>
+                </SecondaryButton>
               </div>
             ) : null}
-          </>
-        )}
-      </Card>
+          </div>
+        </section>
+
+        <aside aria-label="Pay in 4 summary" className="grid min-w-0 content-start gap-3">
+          {s ? (
+            <BalanceSummaryCard
+              label={
+                <span className="flex items-center gap-2">
+                  Paid to you up front
+                  {sample.on ? <SampleBadge /> : null}
+                </span>
+              }
+              value={money(s.principal)}
+              badge={
+                <StatusPill tone="lime" size="sm">
+                  100% at checkout
+                </StatusPill>
+              }
+              stats={[
+                { label: "Retrying", value: money(s.atRisk) },
+                { label: "Repaid plans", value: s.repaid.toLocaleString("en-US") },
+                { label: "Your risk", value: "$0.00" },
+              ]}
+            />
+          ) : (
+            <Skeleton shape="card" height={170} />
+          )}
+          <PanelCard title="How Pay in 4 works" padding="md">
+            <div className="mt-4 rounded-[20px] bg-ui-surface-1 p-4">
+              <p className="text-[14px] text-ui-muted">A $200.00 order</p>
+              <p className="ui-figure mt-1 text-[28px] leading-none font-medium tracking-[-0.025em]">4 × {money(EXAMPLE.each)}</p>
+              <Ticks done={0} total={4} className="mt-4" />
+              <p className="ui-figure mt-3 text-[13px] text-ui-muted">
+                Every {PLAN_INTERVAL_DAYS} days · 10% APR · {money(EXAMPLE.interest)} interest · {money(EXAMPLE.total)} in total
+              </p>
+            </div>
+            <ul className="mt-4 grid gap-2.5 text-[14px] leading-snug">
+              <li className="flex gap-2.5">
+                <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
+                You get the whole order at checkout, with no fee.
+              </li>
+              <li className="flex gap-2.5">
+                <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
+                The buyer pays 10% APR to Polaris, pro-rated over the four weeks.
+              </li>
+              <li className="flex gap-2.5">
+                <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
+                Chainlink CRE collects each payment and retries a missed one; the risk is ours.
+              </li>
+            </ul>
+          </PanelCard>
+        </aside>
+      </div>
 
       <PlanDrawer plan={open} sample={sample.on} onClose={() => setOpen(null)} />
     </>
   );
 }
 
-function columns(sample: boolean): TableColumn<Plan>[] {
-  return [
-    {
-      key: "plan",
-      header: "Plan",
-      render: (p) => (
-        <div className="flex min-w-0 items-center gap-3">
-          <Avatar name={p.description} size="sm" decorative />
-          <CellStack
-            title={
-              <span className="flex items-center gap-2">
-                <span className="truncate">{p.description}</span>
-                {sample ? <SampleBadge /> : null}
-              </span>
-            }
-            sub={`${p.orderId} · opened ${formatDate(p.openedAt)}`}
-          />
-        </div>
-      ),
-    },
-    {
-      key: "progress",
-      header: "Paid",
-      width: 170,
-      render: (p) => (
-        <div className="flex items-center gap-3">
-          <Ticks done={p.installmentsPaid} late={p.state === "dunning" ? 1 : 0} total={p.installmentCount} size="sm" className="w-24" />
-          <span className="ui-figure text-[13px] text-ui-muted">
-            {p.installmentsPaid}/{p.installmentCount}
-          </span>
-        </div>
-      ),
-    },
-    {
-      key: "next",
-      header: "Next payment",
-      render: (p) => (
-        <span className={cn("whitespace-nowrap", p.state === "dunning" ? "text-ui-warn" : "text-ui-muted")}>
-          {p.nextDueAt ? formatDue(p.nextDueAt) : "—"}
-          {p.state === "dunning" ? ` · retry ${p.attempts}` : ""}
+const COLUMNS: TableColumn<Plan>[] = [
+  {
+    key: "plan",
+    header: "Buyer",
+    render: (p) => (
+      <TableName icon={<ModeCoin mode="later" text={p.description} />} title={<span className="ui-figure">{shortAddress(p.buyer, 6, 4)}</span>} sub={p.description} />
+    ),
+  },
+  {
+    key: "progress",
+    header: "Paid",
+    hideBelow: "sm",
+    render: (p) => (
+      <div className="flex items-center gap-3">
+        <Ticks done={p.installmentsPaid} late={p.state === "dunning" ? 1 : 0} total={p.installmentCount} className="w-24" />
+        <span className="ui-figure text-[13px] text-ui-muted">
+          {p.installmentsPaid}/{p.installmentCount}
         </span>
-      ),
-    },
-    { key: "state", header: "State", render: (p) => <PlanStateBadge state={p.state} /> },
-    { key: "outstanding", header: "Outstanding", align: "right", render: (p) => <span className="font-medium">{money(p.outstandingCents)}</span> },
-    { key: "total", header: "Order", align: "right", render: (p) => <span className="text-ui-muted">{money(p.principalCents)}</span> },
-  ];
-}
+      </div>
+    ),
+  },
+  {
+    key: "next",
+    header: "Next payment",
+    hideBelow: "lg",
+    render: (p) => (
+      <span className={cn("whitespace-nowrap", p.state === "dunning" ? "text-ui-pill-amber-text" : "text-ui-muted")}>
+        {p.nextDueAt ? formatDue(p.nextDueAt) : "—"}
+        {p.state === "dunning" ? ` · retry ${p.attempts}` : ""}
+      </span>
+    ),
+  },
+  { key: "state", header: "State", hideBelow: "md", render: (p) => <PlanStateBadge state={p.state} size="md" /> },
+  {
+    key: "outstanding",
+    header: "Outstanding",
+    align: "right",
+    render: (p) => (
+      <span className="flex flex-col items-end">
+        <span className="ui-figure font-medium">{money(p.outstandingCents)}</span>
+        <span className="ui-figure text-[13px] whitespace-nowrap text-ui-muted">of {money(p.totalCents)}</span>
+      </span>
+    ),
+  },
+];
 
-function Summary({ plans, sample }: { plans?: Plan[]; sample: boolean }) {
-  const s = useMemo(() => {
+function useSummary(plans?: Plan[]) {
+  return useMemo(() => {
     if (!plans) return null;
     let outstanding = 0;
     let atRisk = 0;
     let open = 0;
     let principal = 0;
+    let repaid = 0;
     for (const p of plans) {
       principal += p.principalCents;
       if (p.state === "collecting" || p.state === "dunning") {
@@ -263,35 +274,10 @@ function Summary({ plans, sample }: { plans?: Plan[]; sample: boolean }) {
         open += 1;
       }
       if (p.state === "dunning") atRisk += p.outstandingCents;
+      if (p.state === "repaid") repaid += 1;
     }
-    return { outstanding, atRisk, open, principal };
+    return { outstanding, atRisk, open, principal, repaid };
   }, [plans]);
-  if (!s) return <Skeleton shape="tile" height={84} />;
-  return (
-    <div className="relative">
-      <KeyValueGrid
-        columns={4}
-        variant="surface"
-        items={[
-          { label: "Paid to you up front", value: <Money value={s.principal / 100} /> },
-          { label: "Still owed by buyers", value: <Money value={s.outstanding / 100} /> },
-          { label: "Retrying", value: <Money value={s.atRisk / 100} /> },
-          {
-            label: "Open plans",
-            // One Sample chip for the whole strip, beside its shortest figure.
-            value: sample ? (
-              <span className="flex items-center gap-2">
-                {s.open.toLocaleString("en-US")}
-                <SampleBadge />
-              </span>
-            ) : (
-              s.open.toLocaleString("en-US")
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
 }
 
 type Instalment = { index: number; dueAt: number; cents: number; status: "paid" | "due" | "retrying" | "upcoming" | "written_off" };
@@ -314,11 +300,11 @@ function schedule(p: Plan): Instalment[] {
 }
 
 const STEP = {
-  paid: { icon: <Check size={15} strokeWidth={2.5} />, well: "bg-ui-lime text-ui-on-lime", label: "Paid" },
-  due: { icon: <Clock size={15} strokeWidth={2} />, well: "bg-ui-surface-3 text-ui-text", label: "Next" },
-  retrying: { icon: <RotateCcw size={15} strokeWidth={2} />, well: "bg-[#f5a524] text-[#2f2410]", label: "Retrying" },
+  paid: { icon: <Check size={15} strokeWidth={2.5} />, well: "bg-ui-lime-button text-[#121418]", label: "Paid" },
+  due: { icon: <Clock size={15} strokeWidth={2} />, well: "bg-ui-pill-teal text-ui-pill-teal-text", label: "Next" },
+  retrying: { icon: <RotateCcw size={15} strokeWidth={2} />, well: "bg-ui-pill-amber text-ui-pill-amber-text", label: "Retrying" },
   upcoming: { icon: <Clock size={15} strokeWidth={2} />, well: "bg-ui-surface-2 text-ui-muted", label: "Upcoming" },
-  written_off: { icon: <X size={15} strokeWidth={2} />, well: "bg-ui-down/20 text-ui-down", label: "Written off" },
+  written_off: { icon: <X size={15} strokeWidth={2} />, well: "bg-ui-pill-red text-ui-pill-red-text", label: "Written off" },
 } as const;
 
 function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: boolean; onClose: () => void }) {
@@ -330,18 +316,18 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
       {p ? (
         <Drawer.Body>
           <div className="flex items-center gap-3 pb-5">
-            <Avatar name={p.description} size="lg" decorative />
-            <CellStack title={p.description} sub={`Opened ${formatDate(p.openedAt, true)}`} />
+            <TableName icon={<ModeCoin mode="later" text={p.description} size={40} />} title={p.description} sub={`Opened ${formatDate(p.openedAt, true)}`} />
             {sample ? <SampleBadge className="ml-auto" /> : null}
           </div>
           <p className="text-[14px] text-ui-muted">Still owed</p>
-          <Money value={p.outstandingCents / 100} className="text-[44px] leading-none font-semibold tracking-[-0.035em]" />
+          <Money value={p.outstandingCents / 100} className="mt-1 text-[44px] leading-none font-medium tracking-[-0.035em]" />
           <div className="mt-3 flex flex-wrap items-center gap-3">
-            <PlanStateBadge state={p.state} />
+            <PlanStateBadge state={p.state} size="md" />
             <Ticks done={p.installmentsPaid} late={p.state === "dunning" ? 1 : 0} total={p.installmentCount} className="w-32" />
           </div>
           <KeyValueGrid
             className="mt-6"
+            variant="surface"
             items={[
               { label: "Paid to you up front", value: money(p.principalCents) },
               { label: "The buyer repays", value: money(p.totalCents) },
@@ -354,7 +340,7 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
             {schedule(p).map((s) => {
               const step = STEP[s.status];
               return (
-                <li key={s.index} className="flex items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3">
+                <li key={s.index} className="flex items-center gap-3 rounded-[18px] bg-ui-surface-1 px-4 py-3">
                   <span aria-hidden className={cn("grid size-8 shrink-0 place-items-center rounded-full", step.well)}>
                     {step.icon}
                   </span>
@@ -378,6 +364,7 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
           <DetailsList
             className="mt-4"
             size="sm"
+            variant="surface"
             items={[
               { label: "Buyer", value: <Address value={p.buyer} label="buyer's address" explorer={!sample} /> },
               { label: "Order", value: p.orderId },
@@ -388,12 +375,4 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
       ) : null}
     </Drawer>
   );
-}
-
-/** "Next payment in 5 days", "Next payment tomorrow", "Payment 2 days overdue", "Next payment on Oct 12". */
-function nextPaymentLabel(iso: string): string {
-  const due = formatDue(iso);
-  if (due.endsWith("overdue")) return `Payment ${due}`;
-  if (/^(In|Today|Tomorrow)\b/.test(due)) return `Next payment ${due[0]!.toLowerCase()}${due.slice(1)}`;
-  return `Next payment on ${due}`;
 }

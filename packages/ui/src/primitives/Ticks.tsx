@@ -37,7 +37,7 @@ export function Ticks({ done, total, late = 0, size = "md", label, className, ..
           className={cn(
             "flex-1 rounded-full",
             size === "sm" ? "h-1 min-w-3" : "h-1.5 min-w-4",
-            i < done ? "bg-ui-lime" : i < done + late ? "bg-[#f5a524]" : "bg-ui-surface-3",
+            i < done ? "bg-ui-lime" : i < done + late ? "bg-ui-warn" : "bg-ui-surface-3",
           )}
         />
       ))}
