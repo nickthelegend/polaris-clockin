@@ -16,7 +16,7 @@ import { BrowserProvider, Contract, JsonRpcProvider, formatUnits, parseUnits } f
 
 import { assertDeployed, explorerTxUrl, type PolarisChain } from "./chains.js";
 import type { Result } from "./pay/direct.js";
-import { buyerMessage, findProvider } from "./pay/wallet.js";
+import { buyerMessage, ensureChain, findProvider } from "./pay/wallet.js";
 import type { ContractName } from "./types.js";
 
 const ERC20 = [
@@ -78,17 +78,10 @@ export function createLegacyMethods(options: LegacyOptions) {
 
     const net = await provider.getNetwork();
     if (net.chainId !== BigInt(c.chainId)) {
-      const hex = `0x${c.chainId.toString(16)}`;
-      try {
-        await provider.send("wallet_switchEthereumChain", [{ chainId: hex }]);
-      } catch (err) {
-        // 4902: the wallet has never heard of this chain. Offer to add it
-        // rather than dead-ending the buyer on "unrecognized chain".
-        if ((err as { code?: number })?.code !== 4902) throw err;
-        await provider.send("wallet_addEthereumChain", [
-          { chainId: hex, chainName: c.name, rpcUrls: [c.rpcUrl], blockExplorerUrls: [c.explorer], nativeCurrency: c.nativeCurrency },
-        ]);
-      }
+      // The same switch as pay(): add the chain if the wallet has never seen
+      // it (4902), and a declined switch asks the buyer to change network
+      // (`wrong_chain`) rather than reading "You cancelled the request."
+      await ensureChain(eth, c);
       /*
        * A BrowserProvider caches the network it detected on construction, so
        * the instance that just switched still reports the old chain and will

@@ -40,31 +40,43 @@ export async function chainIdOf(provider: Eip1193Provider): Promise<number> {
   return typeof raw === "string" ? Number.parseInt(raw, 16) : Number(raw);
 }
 
-/** Switch the wallet to `chain`, adding it first if the wallet has never seen it (error 4902). */
+function wrongChain(chain: PolarisChain, cause?: unknown): PolarisError {
+  return new PolarisError(`Switch your wallet to ${chain.name} to pay.`, { type: "wallet_error", code: "wrong_chain", cause });
+}
+
+/**
+ * Switch the wallet to `chain`, adding it first if the wallet has never seen
+ * it (error 4902). When the buyer declines the switch or the add, or the
+ * wallet can't switch on its own, this throws `wrong_chain` ("Switch your
+ * wallet to Monad Testnet to pay."), never "You cancelled the request.": the
+ * buyer didn't cancel the payment, and the next step is to change network.
+ * The wallet's own error is kept as `cause`.
+ */
 export async function ensureChain(provider: Eip1193Provider, chain: PolarisChain): Promise<void> {
   if ((await chainIdOf(provider)) === chain.chainId) return;
   const chainId = `0x${chain.chainId.toString(16)}`;
   try {
     await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
   } catch (err) {
-    if (errorCode(err) !== 4902) throw err;
-    await provider.request({
-      method: "wallet_addEthereumChain",
-      params: [
-        {
-          chainId,
-          chainName: chain.name,
-          rpcUrls: [chain.rpcUrl],
-          blockExplorerUrls: [chain.explorer],
-          nativeCurrency: chain.nativeCurrency,
-        },
-      ],
-    });
+    if (errorCode(err) !== 4902) throw wrongChain(chain, err);
+    try {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId,
+            chainName: chain.name,
+            rpcUrls: [chain.rpcUrl],
+            blockExplorerUrls: [chain.explorer],
+            nativeCurrency: chain.nativeCurrency,
+          },
+        ],
+      });
+    } catch (addErr) {
+      throw wrongChain(chain, addErr);
+    }
   }
-  const now = await chainIdOf(provider);
-  if (now !== chain.chainId) {
-    throw new PolarisError(`Switch your wallet to ${chain.name} to pay.`, { type: "wallet_error", code: "wrong_chain" });
-  }
+  if ((await chainIdOf(provider)) !== chain.chainId) throw wrongChain(chain);
 }
 
 export async function ethCall(provider: Eip1193Provider, to: string, data: string): Promise<Hex> {

@@ -71,6 +71,10 @@ Polaris on Monad, with Stripe's ergonomics.
 - `quotePayIn4`'s displayed instalments could miss the displayed total by a
   cent or more ($189 at 10%: 4 × 47.61 against 190.45). They are now the steps
   of the running total rounded to the cent, so they always add up to it.
+- A buyer on the wrong network who declined the switch (or declined adding
+  Monad) was told "You cancelled the request." `pay()` and the 0.2 flows now
+  answer "Switch your wallet to Monad Testnet to pay." with a `wrong_chain`
+  `PolarisError` as `cause`, and never ask for a signature.
 
 ## 0.2.1
 

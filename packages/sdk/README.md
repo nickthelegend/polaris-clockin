@@ -264,7 +264,10 @@ It never throws for anything the buyer can cause; it returns
 `{ ok, error, transactionHash, explorerUrl, paymentId, payer, amount, relayed }`
 with `error` written for the buyer ("You cancelled the request.", "This order has
 already been paid."). Configuration mistakes (an undeployed contract, a bad
-address) do throw. `onStage` reports `connecting → signing → submitting →
+address) do throw. The original error is kept as `cause`: a wallet on another
+network that the buyer won't switch reads *"Switch your wallet to Monad Testnet
+to pay."*, with `cause.code === "wrong_chain"` so you can show a switch step.
+`onStage` reports `connecting → signing → submitting →
 confirming` for your UI, and `getPayment({ merchant, orderId })` reads the
 on-chain record so you can match `payer` and `amount` before fulfilling.
 
