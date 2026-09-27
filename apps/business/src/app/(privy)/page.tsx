@@ -4,6 +4,7 @@ import { Closing, Footer } from "@/components/landing/closing";
 import { Credit } from "@/components/landing/credit";
 import { Developers } from "@/components/landing/developers";
 import { Faq } from "@/components/landing/faq";
+import { LandingFrame } from "@/components/landing/frame";
 import { Hero } from "@/components/landing/hero";
 import { LandingNav } from "@/components/landing/nav";
 import { Payouts } from "@/components/landing/payouts";
@@ -22,19 +23,21 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   return (
     <SmoothScroll>
-      <LandingNav />
-      <main>
-        <Hero />
-        <Sponsors />
-        <Ways />
-        <Credit />
-        <Developers />
-        <Payouts />
-        <Pricing />
-        <Faq />
-        <Closing />
-      </main>
-      <Footer />
+      <LandingFrame className="overflow-hidden">
+        <LandingNav />
+        <main>
+          <Hero />
+          <Sponsors />
+          <Ways />
+          <Credit />
+          <Developers />
+          <Payouts />
+          <Pricing />
+          <Faq />
+          <Closing />
+        </main>
+        <Footer />
+      </LandingFrame>
     </SmoothScroll>
   );
 }
