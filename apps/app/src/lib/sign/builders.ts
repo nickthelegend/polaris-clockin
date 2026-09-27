@@ -29,16 +29,28 @@ export type Typed<T extends TypedData, P extends keyof T & string, M> = TypedDat
 };
 
 export type PlanIntent = {
-  borrower: Address;
+  buyer: Address;
   merchant: Address;
   principal: bigint;
   installments: number;
   interval: bigint;
-  orderId: Hex;
+  /** The merchant's order reference, as the text it is (a Solidity `string`). */
+  orderId: string;
+  /** `PolarisCheckout.nonces(buyer)`: one sequence shared with SubscribeIntent. */
+  nonce: bigint;
   deadline: bigint;
 };
 
-export type SubscribeIntent = { subscriber: Address; planId: bigint; deadline: bigint };
+export type SubscribeIntent = {
+  buyer: Address;
+  merchant: Address;
+  planId: bigint;
+  pricePerPeriod: bigint;
+  periodSeconds: bigint;
+  orderId: string;
+  nonce: bigint;
+  deadline: bigint;
+};
 
 export type Authorization = {
   from: Address;
@@ -51,7 +63,7 @@ export type Authorization = {
 
 export type Permit = { owner: Address; spender: Address; value: bigint; nonce: bigint; deadline: bigint };
 
-export type Claim = { to: Address };
+export type Claim = { to: Address; deadline: bigint };
 
 export type Cancel = { linkKey: Address; deadline: bigint };
 
@@ -76,6 +88,9 @@ export function buildSubscribeIntent(
   domain: Eip712Domain,
   message: SubscribeIntent,
 ): Typed<typeof subscribeIntentTypes, "SubscribeIntent", SubscribeIntent> {
+  if (message.periodSeconds < 0n || message.periodSeconds > 0xffffffffffffffffn) {
+    throw new RangeError("periodSeconds must fit a uint64");
+  }
   return { domain, types: subscribeIntentTypes, primaryType: "SubscribeIntent", message };
 }
 

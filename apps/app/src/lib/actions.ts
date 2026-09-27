@@ -15,7 +15,6 @@ import {
   buildSubscribeIntent,
   buildTransferWithAuthorization,
   type Eip712Domain,
-  orderIdToBytes32,
   paymentNonce,
   sendNonce,
 } from "./sign";
@@ -38,12 +37,15 @@ function randomNonce(): Hex {
   return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
-async function permitNonce(owner: Address): Promise<bigint> {
-  if (!isConfigured("ausd")) return 0n;
+const NONCES_ABI = parseAbi(["function nonces(address owner) view returns (uint256)"]);
+
+/** OpenZeppelin `Nonces.nonces(owner)` on a contract; 0 while it isn't deployed yet. */
+async function nonceOn(contract: "ausd" | "checkout", owner: Address): Promise<bigint> {
+  if (!isConfigured(contract)) return 0n;
   try {
     return await publicClient().readContract({
-      address: contractAddress("ausd"),
-      abi: parseAbi(["function nonces(address owner) view returns (uint256)"]),
+      address: contractAddress(contract),
+      abi: NONCES_ABI,
       functionName: "nonces",
       args: [owner],
     });
@@ -51,6 +53,12 @@ async function permitNonce(owner: Address): Promise<bigint> {
     return 0n;
   }
 }
+
+/** The token's ERC-2612 nonce, for a Permit. */
+const permitNonce = (owner: Address) => nonceOn("ausd", owner);
+
+/** PolarisCheckout's nonce for the buyer: PlanIntent and SubscribeIntent share one sequence. */
+const checkoutNonce = (owner: Address) => nonceOn("checkout", owner);
 
 /** Signs a payload from one of the builders (which type-check it against viem). */
 async function sign<M>(account: LocalAccount, typed: { domain: Eip712Domain; message: M }): Promise<Signed<M>> {
@@ -88,21 +96,24 @@ export async function payLink(
   if (mode === "later") {
     const offer = link.modes.later;
     if (!offer) throw new Error("This link doesn't offer Pay in 4");
-    const [checkoutDomain, tokenDomain, nonce] = await Promise.all([
+    const [checkoutDomain, tokenDomain, nonce, intentNonce] = await Promise.all([
       getDomain("checkout"),
       getDomain("ausd"),
       permitNonce(account.address),
+      checkoutNonce(account.address),
     ]);
+    // Within PolarisCheckout.MAX_SIGNATURE_WINDOW (an hour).
     const deadline = t + 15n * MINUTE;
     const intent = await sign(
       account,
       buildPlanIntent(checkoutDomain, {
-        borrower: account.address,
+        buyer: account.address,
         merchant: link.merchant.address,
         principal: link.amount,
         installments: offer.installments,
         interval: BigInt(offer.interval),
-        orderId: orderIdToBytes32(link.orderId),
+        orderId: link.orderId,
+        nonce: intentNonce,
         deadline,
       }),
     );
@@ -122,15 +133,25 @@ export async function payLink(
 
   const offer = link.modes.subscription;
   if (!offer) throw new Error("This link doesn't offer a subscription");
-  const [checkoutDomain, tokenDomain, nonce] = await Promise.all([
+  const [checkoutDomain, tokenDomain, nonce, intentNonce] = await Promise.all([
     getDomain("checkout"),
     getDomain("ausd"),
     permitNonce(account.address),
+    checkoutNonce(account.address),
   ]);
   const deadline = t + 15n * MINUTE;
   const intent = await sign(
     account,
-    buildSubscribeIntent(checkoutDomain, { subscriber: account.address, planId: offer.planId, deadline }),
+    buildSubscribeIntent(checkoutDomain, {
+      buyer: account.address,
+      merchant: link.merchant.address,
+      planId: offer.planId,
+      pricePerPeriod: offer.price,
+      periodSeconds: BigInt(offer.periodSeconds),
+      orderId: link.orderId,
+      nonce: intentNonce,
+      deadline,
+    }),
   );
   const permit = await sign(
     account,
@@ -192,7 +213,11 @@ export async function createSendLink(
   };
 }
 
-/** Claim: the link's key signs the recipient's address. No account signature needed. */
+/**
+ * Claim: the link's key signs the recipient's address and a deadline. No
+ * account signature needed. Until the deadline passes the claim can't be
+ * redirected (PolarisSend), so it is kept short.
+ */
 export async function claimLink(
   recipient: Address,
   linkPrivateKey: Hex,
@@ -201,8 +226,9 @@ export async function claimLink(
 ): Promise<RelayReceipt> {
   const linkAccount = privateKeyToAccount(linkPrivateKey);
   const domain = await getDomain("send");
-  const claim = await sign(linkAccount, buildClaim(domain, { to: recipient }));
-  return relayer.claim({ linkKey: linkAccount.address, claim, amount, senderName });
+  const deadline = now() + 15n * MINUTE;
+  const claim = await sign(linkAccount, buildClaim(domain, { to: recipient, deadline }));
+  return relayer.claim({ linkKey: linkAccount.address, claim, deadline, amount, senderName });
 }
 
 export async function cancelSendLink(account: LocalAccount, linkKey: Address): Promise<RelayReceipt> {
