@@ -220,6 +220,11 @@
   --ui-candle-axis: #7c7f87;
   --ui-candle-up: #b0c956;
   --ui-candle-down: #ee9443;
+
+  /* Bars: olive tracks filled in a darker olive, the selected day in lime. */
+  --ui-bar-fill: #4f5a2c;
+  --ui-bar-low: #3a4027;
+  --ui-bar-selected: #b0c956;
 }
 
 @theme inline {

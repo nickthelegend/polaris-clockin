@@ -31,11 +31,11 @@ export type BarChartProps = Omit<HTMLAttributes<HTMLDivElement>, "children" | "o
   label: string;
 };
 
-/** Ref D's fills on the dark panel. */
+/** Ref D's fills on the dark panel; a theme can recolour them (ref E: olive bars, the lime selection). */
 export const BAR_COLORS = {
-  fill: "#4a6f5e",
-  low: "#6f6e48",
-  selected: "var(--ui-pink)",
+  fill: "var(--ui-bar-fill, #4a6f5e)",
+  low: "var(--ui-bar-low, #6f6e48)",
+  selected: "var(--ui-bar-selected, var(--ui-pink))",
   track: "var(--ui-track)",
 };
 
@@ -156,8 +156,8 @@ export function BarChart({
                   <>
                     <span
                       aria-hidden
-                      className="absolute left-1/2 z-[1] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-ui-pink"
-                      style={{ top: `${(1 - share) * 100}%` }}
+                      className="absolute left-1/2 z-[1] size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white"
+                      style={{ top: `${(1 - share) * 100}%`, background: BAR_COLORS.selected }}
                     />
                     <span
                       aria-hidden
