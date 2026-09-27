@@ -229,6 +229,8 @@ describe("PolarisLoanEngine pool totals (the guardian's inputs)", () => {
       // The sequence exercised the paths it claims to.
       expect(counts.open ?? 0).to.be.greaterThan(5);
       expect((counts.collect ?? 0) + (counts.repay ?? 0) + (counts.repaySig ?? 0)).to.be.greaterThan(3);
+      expect(counts.liquidate ?? 0).to.be.greaterThan(0);
+      expect(bad.total).to.be.greaterThan(0n, "a liquidation left a shortfall");
     });
   }
 });
