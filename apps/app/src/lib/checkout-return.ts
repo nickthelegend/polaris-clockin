@@ -14,8 +14,11 @@ import type { RelayReceipt } from "./relayer";
  * checkout posts its result and closes; otherwise it goes to `successUrl`.
  * It must not be served with `Cross-Origin-Opener-Policy: same-origin`.
  *
- * The /pay/[id] screen calls `announceReady` on load and `finishCheckout`
- * after the receipt (or `cancelCheckout` on Cancel).
+ * The /pay/[id] route (sheets/checkout.tsx `CheckoutRoute`) calls
+ * `announceReady` on load (`expireCheckout` for an expired session),
+ * `postCompleted` the moment the payment is final and `returnToMerchant`
+ * from the receipt (a popup closes itself a few seconds after paying), and
+ * `cancelCheckout` when the buyer backs out.
  */
 
 export type CheckoutEvent = "ready" | "completed" | "canceled" | "expired";
@@ -48,13 +51,9 @@ export function announceReady(link: PaymentLink): void {
   post(link, checkoutMessage("ready", link.id));
 }
 
-/**
- * After a confirmed payment: tell the opener, then close the popup, or go to
- * the merchant's success page. Returns false when the buyer should stay on
- * our receipt (a sample link, or a checkout opened directly).
- */
-export function finishCheckout(link: PaymentLink, mode: Mode, receipt: RelayReceipt): boolean {
-  const posted = post(
+/** Tell the opener the checkout completed. Returns whether a message went out. */
+export function postCompleted(link: PaymentLink, mode: Mode, receipt: RelayReceipt): boolean {
+  return post(
     link,
     checkoutMessage("completed", link.id, {
       mode: mode === "subscription" ? "subscribe" : mode,
@@ -65,21 +64,54 @@ export function finishCheckout(link: PaymentLink, mode: Mode, receipt: RelayRece
       subscriptionId: receipt.subscriptionId,
     }),
   );
-  if (posted && isPopupCheckout()) {
+}
+
+/**
+ * Back to the merchant after the receipt: close the popup (its opener
+ * already has the result), or go to the session's success page. Returns
+ * false when there is nowhere to go back to (a sample link, or a checkout
+ * opened directly), so the buyer stays in Polaris.
+ */
+export function returnToMerchant(link: PaymentLink): boolean {
+  if (typeof window === "undefined") return false;
+  const successUrl = link.successUrl;
+  if (isPopupCheckout() && window.opener) {
     window.close();
+    // A browser that refuses to close the window goes to the success page instead.
+    if (successUrl) window.setTimeout(() => window.location.assign(successUrl), 300);
     return true;
   }
-  if (link.session && link.successUrl && !isPopupCheckout()) {
-    window.location.assign(link.successUrl);
+  if (successUrl) {
+    window.location.assign(successUrl);
     return true;
   }
   return false;
 }
 
-export function cancelCheckout(link: PaymentLink): void {
+/**
+ * After a confirmed payment, in one step: tell the opener, then close the
+ * popup, or go to the merchant's success page.
+ */
+export function finishCheckout(link: PaymentLink, mode: Mode, receipt: RelayReceipt): boolean {
+  postCompleted(link, mode, receipt);
+  return returnToMerchant(link);
+}
+
+/**
+ * The buyer backed out: tell the opener and close the popup, or go to the
+ * session's cancel page. Returns false when neither applies.
+ */
+export function cancelCheckout(link: PaymentLink): boolean {
   const posted = post(link, checkoutMessage("canceled", link.id));
-  if (posted && isPopupCheckout()) window.close();
-  else if (link.session?.cancelUrl) window.location.assign(link.session.cancelUrl);
+  if (posted && isPopupCheckout()) {
+    window.close();
+    return true;
+  }
+  if (link.session?.cancelUrl) {
+    window.location.assign(link.session.cancelUrl);
+    return true;
+  }
+  return posted;
 }
 
 export function expireCheckout(link: PaymentLink): void {

@@ -15,10 +15,10 @@ import {
   Sheet,
   toast,
 } from "@polaris/ui";
-import { AlertCircle, BadgeCheck, Link2Off, Share2, TrendingUp } from "lucide-react";
+import { AlertCircle, BadgeCheck, CircleCheck, Clock, Link2Off, Share2, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
@@ -27,6 +27,7 @@ import { SuccessSheet } from "@/components/success-sheet";
 import { CheckoutDesktop, CheckoutMissing } from "@/desktop/checkout";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
+import { announceReady, cancelCheckout, expireCheckout, isPopupCheckout, postCompleted, returnToMerchant } from "@/lib/checkout-return";
 import { describeDuration, describeInterval, dueAt, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { shortDate } from "@/lib/dates";
@@ -269,19 +270,20 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
   const later = link.modes.later;
   const sub = link.modes.subscription;
 
-  // Tell the merchant's page that opened us, and only that page.
+  // Tell the merchant's page that opened us, and only that page (polarispay-sdk's
+  // v1 protocol, lib/checkout-return.ts), the moment the payment is final.
+  const told = useRef(false);
   useEffect(() => {
-    if (!link.successUrl || !window.opener) return;
-    try {
-      const target = new URL(link.successUrl).origin;
-      (window.opener as Window).postMessage(
-        { type: "polaris:payment", status: "paid", linkId: link.id, orderId: link.orderId, mode: paid.mode, txHash: paid.receipt.txHash },
-        target,
-      );
-    } catch {
-      /* no opener to tell */
-    }
+    if (told.current) return;
+    told.current = true;
+    postCompleted(link, paid.mode, paid.receipt);
   }, [link, paid]);
+  // A popup has done its job once its opener knows: it closes itself after a moment on the receipt.
+  useEffect(() => {
+    if (!link.session || !isPopupCheckout() || !window.opener) return;
+    const timer = window.setTimeout(() => returnToMerchant(link), 2500);
+    return () => window.clearTimeout(timer);
+  }, [link]);
 
   // The plan opened when the relayer's block was final; payment 1 is one interval later.
   const firstDate = later ? shortDate(dueAt(paid.at, later.interval, 0)) : "";
@@ -304,8 +306,7 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
   rows.push({ label: "Order", value: link.orderId });
 
   const done = () => {
-    if (link.successUrl) window.location.assign(link.successUrl);
-    else onDone();
+    if (!returnToMerchant(link)) onDone();
   };
 
   return (
@@ -325,9 +326,22 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
 export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: PaymentLink | null }) {
   const router = useRouter();
   const successUrl = link?.successUrl ?? null;
+
+  // The merchant's page that opened us learns the checkout is up (or that
+  // the session had already expired), over polarispay-sdk's v1 protocol.
+  const announced = useRef<string | null>(null);
+  useEffect(() => {
+    if (!link?.session || announced.current === link.id) return;
+    announced.current = link.id;
+    if (link.status === "expired" || link.session.expiresAt <= Date.now()) expireCheckout(link);
+    else announceReady(link);
+  }, [link]);
+
   // A buyer who backs out of a checkout they were sent to goes back where they
   // came from: the merchant's window that opened this one, or its page.
   const leave = useCallback(() => {
+    // A real session tells its opener "canceled" and closes, or goes to its cancel page.
+    if (link?.session && link.status === "open" && cancelCheckout(link)) return;
     if (window.opener) {
       window.close();
       // A browser that refuses to close the window leaves us here: go home.
@@ -337,16 +351,24 @@ export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: Payme
     } else {
       router.replace("/", { scroll: false });
     }
-  }, [router, successUrl]);
+  }, [router, successUrl, link]);
   return (
     <RouteSheet
       label={link ? `Pay ${link.merchant.name}` : "Payment link"}
       snapPoints={["full"]}
       cold={cold}
       onColdClose={leave}
-      desktop={{ as: "page", focus: true, content: link ? <CheckoutDesktop link={link} /> : <CheckoutMissing /> }}
+      desktop={{
+        as: "page",
+        focus: true,
+        content: !link ? <CheckoutMissing /> : link.status !== "open" ? <CheckoutClosed link={link} framed /> : <CheckoutDesktop link={link} />,
+      }}
     >
-      {link ? (
+      {link && link.status !== "open" ? (
+        <Sheet.Body className="pt-10">
+          <CheckoutClosed link={link} />
+        </Sheet.Body>
+      ) : link ? (
         <CheckoutSheet link={link} />
       ) : (
         <Sheet.Body className="pt-10">
@@ -364,4 +386,39 @@ export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: Payme
       )}
     </RouteSheet>
   );
+}
+
+/** A session that was already paid, or has expired: nothing to pay, and the way back. */
+function CheckoutClosed({ link, framed }: { link: PaymentLink; framed?: boolean }) {
+  const paid = link.status === "paid";
+  const state = (
+    <EmptyState
+      icon={paid ? <CircleCheck /> : <Clock />}
+      title={paid ? `${link.merchant.name} is already paid` : "This checkout has expired"}
+      description={
+        paid
+          ? `${link.description}. Nothing more to pay here.`
+          : `Nothing was charged. Go back to ${link.merchant.name} to start again.`
+      }
+      action={
+        link.successUrl || link.session?.cancelUrl ? (
+          <Button
+            variant="white"
+            size="lg"
+            onClick={() => {
+              if (paid) returnToMerchant(link);
+              else window.location.assign(link.session?.cancelUrl ?? link.successUrl!);
+            }}
+          >
+            Back to {link.merchant.name}
+          </Button>
+        ) : (
+          <Button asChild variant="white" size="lg">
+            <Link href="/">Go to Polaris</Link>
+          </Button>
+        )
+      }
+    />
+  );
+  return framed ? <div className="mx-auto grid w-full max-w-[560px] justify-items-center rounded-[32px] border border-ui-hairline-strong p-10">{state}</div> : state;
 }
