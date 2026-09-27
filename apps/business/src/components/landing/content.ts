@@ -28,13 +28,13 @@ export const hero = {
 export const sponsors = {
   pill: "Built on Monad with Privy, Chainlink CRE, Nansen, Envio, Agora AUSD and Mera",
   items: [
-    { name: "Monad", glyph: "monad" },
-    { name: "Privy", glyph: "privy" },
-    { name: "Chainlink CRE", glyph: "chainlink" },
-    { name: "Nansen", glyph: "nansen" },
-    { name: "Envio", glyph: "envio" },
-    { name: "Agora AUSD", glyph: "agora" },
-    { name: "Mera", glyph: "mera" },
+    { name: "Monad" },
+    { name: "Privy" },
+    { name: "Chainlink CRE" },
+    { name: "Nansen" },
+    { name: "Envio" },
+    { name: "Agora AUSD" },
+    { name: "Mera" },
   ],
 } as const;
 
@@ -94,7 +94,7 @@ export const credit = {
 
 export const developers = {
   eyebrow: "Developers",
-  heading: ["Ten lines of code."],
+  heading: ["A few lines of code."],
   sub: "Create a checkout session on your server, open it from your page, and fulfil from a signed webhook. Or skip the code and share a link.",
   bullets: [
     "Checkout sessions with idempotency keys",
@@ -111,15 +111,19 @@ export const developers = {
       code: `"use client";
 import { PolarisCheckoutButton } from "polarispay-sdk/react";
 
-// Your /api/checkout route creates the session (Node tab) and returns it.
-export function Checkout({ cart }: { cart: { id: string; title: string; total: string } }) {
+type Cart = { id: string; title: string; total: string };
+
+// Your route creates the session (the Node tab) and returns it.
+const createSession = (cart: Cart) =>
+  fetch("/api/checkout", { method: "POST", body: JSON.stringify(cart) })
+    .then((r) => r.json());
+
+export function Checkout({ cart }: { cart: Cart }) {
   return (
     <PolarisCheckoutButton
       publishableKey={process.env.NEXT_PUBLIC_POLARIS_KEY!}
       amount={cart.total}
-      createSession={() =>
-        fetch("/api/checkout", { method: "POST", body: JSON.stringify(cart) }).then((r) => r.json())
-      }
+      createSession={() => createSession(cart)}
       onSuccess={() => location.assign("/thanks")}
     />
   );
@@ -130,37 +134,31 @@ export function Checkout({ cart }: { cart: { id: string; title: string; total: s
       label: "Node",
       filename: "server.ts",
       language: "ts",
-      code: `import express from "express";
-import { createPolarisServer } from "polarispay-sdk/server";
+      code: `import { createPolarisServer } from "polarispay-sdk/server";
 
 const polaris = createPolarisServer({
-  secretKey: process.env.POLARIS_SECRET_KEY!, // sk_test_… from Developers
-  baseUrl: process.env.POLARIS_BASE_URL!, // this dashboard's URL
-});
-const app = express();
-
-app.post("/checkout", express.urlencoded({ extended: false }), async (req, res) => {
-  const { id, title, total } = req.body;
-  const session = await polaris.checkout.sessions.create(
-    { amount: total, description: title, orderId: id, successUrl: "https://your.shop/thanks" },
-    { idempotencyKey: id },
-  );
-  res.redirect(303, session.url);
+  secretKey: process.env.POLARIS_SECRET_KEY!, // sk_test_…
+  baseUrl: process.env.POLARIS_BASE_URL!, // this dashboard
 });
 
-app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
-  const signature = req.headers["polaris-signature"];
-  const event = polaris.webhooks.verify(req.body, signature, process.env.POLARIS_WEBHOOK_SECRET!);
-  if (event.type === "payment.succeeded" || event.type === "plan.opened") fulfil(event.data.orderId);
-  res.sendStatus(204);
-});`,
+// Checkout: create a session, send the buyer to it.
+const session = await polaris.checkout.sessions.create(
+  { amount: "200.00", description: "Brand kit", orderId: "INV-2041",
+    successUrl: "https://your.shop/thanks" },
+  { idempotencyKey: "INV-2041" },
+);
+redirect(session.url);
+
+// Webhook: check the signature, then fulfil.
+const event = polaris.webhooks.verify(rawBody, signature, whSecret);
+if (event.type === "payment.succeeded") fulfil(event.data.orderId);`,
     },
     {
       key: "html",
       label: "HTML",
       filename: "checkout.html",
       language: "html",
-      code: `<!-- Posts to /checkout in the Node tab, which redirects to Polaris -->
+      code: `<!-- Posts to your route (Node tab), which redirects to Polaris -->
 <form action="/checkout" method="post">
   <input type="hidden" name="id" value="INV-2041" />
   <input type="hidden" name="title" value="Brand identity package" />
@@ -169,7 +167,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
 </form>
 
 <!-- No server at all: paste a payment link from your dashboard -->
-<a href="https://pay.polarispay.app/pay/pl_…">Pay $200, or 4 × $50.38</a>`,
+<a href="YOUR_PAYMENT_LINK">Pay $200, or 4 × $50.38</a>`,
     },
   ],
 } as const;

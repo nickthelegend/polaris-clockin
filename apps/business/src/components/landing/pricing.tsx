@@ -4,6 +4,7 @@ import { PrimaryButton } from "@polaris/ui";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 
+import { Glass } from "@/components/app/glass";
 import { BlurWords, Rise } from "@/components/motion";
 import { pricing } from "./content";
 import { Shell } from "./section";
@@ -14,7 +15,8 @@ export function Pricing() {
     <section id="pricing" aria-labelledby="pricing-title" className="scroll-mt-24 py-20 lg:py-28">
       <Shell>
         <div className="relative isolate overflow-hidden rounded-[32px] bg-ui-surface-1 px-6 py-14 ring-1 ring-ui-hairline-strong sm:px-12 lg:px-16 lg:py-20">
-          <div aria-hidden className="glow-lime absolute -top-40 -right-40 -z-10 h-[520px] w-[520px]" />
+          {/* A crisp lime glass coin in the corner, not a glow. */}
+          <Glass art="coin-lime" size={220} className="absolute -top-10 -right-10 -z-10 hidden w-[180px] rotate-[14deg] opacity-90 md:block lg:w-[220px]" />
           <Rise y={10} blur={4} duration={0.6}>
             <p className="inline-flex items-center gap-2 text-[14px] font-medium tracking-[0.02em] text-ui-lime uppercase">
               <span aria-hidden className="size-1.5 rounded-full bg-ui-lime" />

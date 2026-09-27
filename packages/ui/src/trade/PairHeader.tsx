@@ -115,6 +115,8 @@ export type PairHeaderProps<T extends string> = {
   trailing?: ReactNode;
   /** The heading level of the title. */
   as?: "h1" | "h2" | "h3" | "p";
+  /** Extra classes for the title (e.g. a smaller size on phones: `max-sm:text-[20px]`). */
+  titleClassName?: string;
   className?: string;
 };
 
@@ -143,9 +145,10 @@ export function PairHeader<T extends string>({
   menuLabel = "Choose what to chart",
   trailing,
   as: Heading = "h2",
+  titleClassName,
   className,
 }: PairHeaderProps<T>) {
-  const titleClass = "truncate font-satoshi text-[24px] leading-none font-medium tracking-[-0.02em] text-ui-text sm:text-[28px]";
+  const titleClass = cn("truncate font-satoshi text-[24px] leading-none font-medium tracking-[-0.02em] text-ui-text sm:text-[28px]", titleClassName);
   const heading = <Heading className={titleClass}>{title}</Heading>;
   return (
     <div className={cn("flex min-w-0 items-center gap-4", className)}>

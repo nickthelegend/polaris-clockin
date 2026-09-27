@@ -1,9 +1,25 @@
 import type { Metadata, Viewport } from "next";
+import localFont from "next/font/local";
 
 import "@fontsource-variable/jetbrains-mono";
 import "./globals.css";
 
 import { Icons } from "@/components/app/icons";
+
+/**
+ * Satoshi through next/font: the page preloads it and falls back to a
+ * metric-matched Arial, so the hero and the figures don't reflow when it
+ * arrives. globals.css points the library's --font-satoshi at it; the
+ * library's own @font-face stays for the other apps.
+ */
+const satoshi = localFont({
+  src: "../../../../packages/ui/fonts/Satoshi-Variable.woff2",
+  weight: "300 900",
+  style: "normal",
+  display: "swap",
+  variable: "--font-satoshi-next",
+  adjustFontFallback: "Arial",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -28,7 +44,7 @@ export const viewport: Viewport = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="ref-e">
+    <html lang="en" data-theme="ref-e" className={satoshi.variable}>
       <body className="ui-root">
         <Icons>{children}</Icons>
       </body>

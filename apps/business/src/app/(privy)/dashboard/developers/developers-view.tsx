@@ -32,7 +32,7 @@ import { DemoShopButton } from "@/components/landing/demo-shop";
 import { PageCoin, PageHead } from "@/components/dashboard/page-head";
 import { DataError, errorMessage, WEBHOOK_EVENTS, type ApiKey, type WebhookDelivery, type WebhookEndpoint, type WebhookEventType } from "@/lib/data";
 import { formatAgo, formatDate, formatDateTime, formatIn } from "@/lib/data/format";
-import { DEMO_SHOP_URL } from "@/lib/features";
+import { DEMO_SHOP_SOON, DEMO_SHOP_URL } from "@/lib/features";
 import { useMerchant } from "@/lib/merchant-context";
 import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
@@ -63,9 +63,10 @@ export function DevelopersView() {
         description="Take payments from your own site or app: create a checkout session on your server, send the buyer to it, and fulfil from a signed webhook. Everything is test mode on Monad testnet."
         actions={
           <IconSquareButton
-            label="Open the demo shop (a new tab)"
+            label={DEMO_SHOP_URL ? "Open the demo shop (a new tab)" : DEMO_SHOP_SOON}
             icon={<Store />}
-            onClick={() => window.open(DEMO_SHOP_URL, "_blank", "noopener,noreferrer")}
+            disabled={!DEMO_SHOP_URL}
+            onClick={() => DEMO_SHOP_URL && window.open(DEMO_SHOP_URL, "_blank", "noopener,noreferrer")}
           />
         }
       />
@@ -78,7 +79,7 @@ export function DevelopersView() {
           <IntegrationPanel sample={sample} />
           <DemoShopPanel />
         </div>
-        <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="xl:col-span-2">
+        <Panel title="A few lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="xl:col-span-2">
           <CodeBlock className="mt-5" aria-label="SDK example" note={sdk.note} copyable defaultKey="node" samples={sdk.samples.map((s) => ({ ...s }))} />
         </Panel>
       </div>
@@ -169,7 +170,13 @@ function DemoShopPanel() {
       <div className="min-w-0">
         <h2 className="text-[18px] leading-tight font-medium tracking-[-0.015em]">See it in a shop</h2>
         <p className="mt-1 text-[14px] text-ui-muted">
-          Halcyon, a demo store on polarispay-sdk, at <code className="font-mono text-[13px] text-ui-text">{DEMO_SHOP_URL}</code>
+          {DEMO_SHOP_URL ? (
+            <>
+              Halcyon, a demo store on polarispay-sdk, at <code className="font-mono text-[13px] text-ui-text">{DEMO_SHOP_URL}</code>
+            </>
+          ) : (
+            "Halcyon, a demo store on polarispay-sdk. It opens here once it's deployed."
+          )}
         </p>
         <ul className="mt-4 grid gap-y-2">
           {SHOP_POINTS.map((point) => (
@@ -658,7 +665,7 @@ function AddEndpointDialog({ open, onClose, onSaved }: { open: boolean; onClose:
               hint="Public HTTPS. Private and internal addresses are refused, when you add it and again at every delivery."
             />
             <fieldset className="grid gap-2">
-              <legend className="mb-2 text-[14px] font-medium">Events</legend>
+              <legend className="mb-2 text-[14px] font-medium text-ui-muted">Events</legend>
               <div className="flex flex-wrap gap-2">
                 {WEBHOOK_EVENTS.map((ev) => (
                   <Chip key={ev} size="sm" variant="pill" selected={events.includes(ev)} onClick={() => toggle(ev)} className="font-mono text-[12px]">

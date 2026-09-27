@@ -2,13 +2,14 @@ import { Button, type ButtonSize, type ButtonVariant } from "@polaris/ui";
 import { ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { DEMO_SHOP_URL } from "@/lib/features";
+import { DEMO_SHOP_SOON, DEMO_SHOP_URL } from "@/lib/features";
 
 /**
  * "See the demo shop": Halcyon (apps/shop), a storefront that pays through
  * polarispay-sdk with Pay now, Pay in 4 and direct wallet pay. It runs on
- * http://localhost:3600 by default; NEXT_PUBLIC_DEMO_SHOP_URL points it at a
- * deployed one.
+ * http://localhost:3600 in development; NEXT_PUBLIC_DEMO_SHOP_URL points it
+ * at a deployed one, and without it a production build shows the button
+ * disabled.
  */
 export function DemoShopButton({
   label,
@@ -23,6 +24,13 @@ export function DemoShopButton({
   size?: ButtonSize;
   className?: string;
 }) {
+  if (!DEMO_SHOP_URL) {
+    return (
+      <Button variant={variant} size={size} icon={icon} disabled className={className}>
+        {DEMO_SHOP_SOON}
+      </Button>
+    );
+  }
   return (
     <Button asChild variant={variant} size={size} icon={icon} iconRight={<ArrowUpRight />} className={className}>
       <a href={DEMO_SHOP_URL} target="_blank" rel="noreferrer">

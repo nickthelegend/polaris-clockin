@@ -6,7 +6,7 @@
   POLARIS FOR BUSINESS
   ────────────────────
   Ref E (docs/design/refs-v2/ref-e-lumatrade.png, docs/design/system.md): from
-  1280px the app is a dark rounded panel floating on a lime canvas; below it
+  1024px the app is a dark rounded panel floating on a lime canvas; below it
   the dark panel is full bleed. <html data-theme="ref-e"> sets the tokens.
   Every colour, radius and font comes from @polaris/ui; this file adds only
   the monospace face, the page ground and the landing page's reveal motion.
@@ -14,6 +14,12 @@
 
 @theme {
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+/* Satoshi, preloaded by next/font (src/app/layout.tsx), ahead of the
+   library's @font-face; stronger than the library's :root token. */
+:root[data-theme] {
+  --font-satoshi: var(--font-satoshi-next), "Satoshi", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 html {
@@ -27,8 +33,8 @@ body {
   min-height: 100dvh;
 }
 
-/* The lime canvas shows past the panel (and on overscroll) from 1280px. */
-@media (min-width: 1280px) {
+/* The lime canvas shows past the panel (and on overscroll) from 1024px. */
+@media (min-width: 1024px) {
   html {
     background-color: var(--ui-frame);
   }

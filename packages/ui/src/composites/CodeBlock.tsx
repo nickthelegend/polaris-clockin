@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, type HTMLAttributes, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "../lib/cn";
 import { CopyButton } from "../primitives/CopyButton";
@@ -112,6 +112,37 @@ function Highlighted({ code, lineNumbers }: { code: string; lineNumbers: boolean
 }
 
 /**
+ * The code's scroller: when a line runs past the edge, the right edge fades
+ * out so it reads as "more this way", and the fade lifts at the end.
+ */
+function ScrollFade({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLPreElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    el.addEventListener("scroll", check, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener("scroll", check);
+    };
+  }, []);
+  return (
+    <pre
+      ref={ref}
+      className="overflow-x-auto px-4 py-5 font-mono text-[13px] leading-[1.75] sm:px-5"
+      style={more ? { maskImage: "linear-gradient(to right, #000 calc(100% - 56px), transparent)" } : undefined}
+    >
+      {children}
+    </pre>
+  );
+}
+
+/**
  * A dark code panel with tabs (React, Node, HTML), a filename, line numbers
  * and quiet syntax colour in the brand's accents. The panel is ref C's candle
  * ground, so code sits in the same family as the charts.
@@ -160,16 +191,22 @@ export function CodeBlock({
           ) : (
             <span aria-hidden className="hidden flex-1 @xl:block" />
           )}
-          {note ? <span className="ml-auto shrink-0 text-[12px] font-medium text-ui-muted @xl:ml-0">{note}</span> : null}
+          {/* The note only where it fits beside the tabs; the copy button always stays on the tab row. */}
+          {note ? <span className="ml-auto hidden shrink-0 text-[12px] font-medium text-ui-muted @lg:inline @xl:ml-0">{note}</span> : null}
           {copyable && current ? (
-            <CopyButton value={current.code} label={`${current.label} snippet`} tone="ghost" className={note ? undefined : "ml-auto @xl:ml-0"} />
+            <CopyButton
+              value={current.code}
+              label={`${current.label} snippet`}
+              tone="ghost"
+              className={note ? "ml-auto @lg:ml-0" : "ml-auto @xl:ml-0"}
+            />
           ) : null}
         </div>
         {samples.map((s) => (
           <TabPanel key={s.key} value={s.key} className="focus-visible:outline-offset-[-2px]">
-            <pre className="overflow-x-auto px-4 py-5 font-mono text-[13px] leading-[1.75] sm:px-5">
+            <ScrollFade>
               <Highlighted code={s.code} lineNumbers={showLineNumbers} />
-            </pre>
+            </ScrollFade>
           </TabPanel>
         ))}
       </Tabs>

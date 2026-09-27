@@ -59,7 +59,7 @@ function activeKey(pathname: string): string {
 }
 
 /**
- * The dashboard frame (ref E): from 1280px a dark rounded panel floating on
+ * The dashboard frame (ref E): from 1024px a dark rounded panel floating on
  * the lime canvas, full bleed below. A top nav instead of a sidebar: the
  * wordmark, the links with a "More" dropdown, the payout wallet pill, the
  * lime "New link" and the account menu. Below 1024px a compact bar whose
@@ -107,8 +107,9 @@ export function DashboardShell({ merchant, children }: { merchant: Merchant; chi
         sheetTitle={merchant.businessName ?? "Menu"}
         sheetFooter={
           <>
-            <WalletPill address={merchant.walletAddress} label="payout wallet address" maxWidth={640} className="w-full" />
-            <SecondaryButton size="md" block icon={<LogOut />} onClick={() => void signOut()}>
+            {/* Raised off the sheet's #1D2129, like every control on it. */}
+            <WalletPill address={merchant.walletAddress} label="payout wallet address" maxWidth={640} className="w-full bg-ui-surface-2 hover:bg-ui-surface-3" />
+            <SecondaryButton size="md" block icon={<LogOut />} onClick={() => void signOut()} className="bg-ui-surface-2 hover:bg-ui-surface-3">
               Sign out
             </SecondaryButton>
           </>

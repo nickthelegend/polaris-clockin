@@ -28,7 +28,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useId, useMemo, useState } from "react";
 
 import { ModeCoin } from "@/components/dashboard/payment-bits";
-import { DEMO_SHOP_URL } from "@/lib/features";
+import { DEMO_SHOP_SOON, DEMO_SHOP_URL } from "@/lib/features";
 import { money, parseAmount, payInFourQuote } from "@/lib/data/format";
 
 /*
@@ -111,9 +111,20 @@ export function SalesPreview({ extra = 0, rows = true, height = 340, className }
     <div className={cn("min-w-0", className)}>
       <PairHeader
         as="p"
-        coins={[<PolarisCoin key="p" size={48} />, <DollarCoin key="d" size={48} />]}
+        // Smaller coins and title on phones, and no chart type toggle, so the title never truncates.
+        coins={[
+          <span key="p" className="inline-flex">
+            <PolarisCoin size={48} className="hidden sm:inline-grid" />
+            <PolarisCoin size={36} className="sm:hidden" />
+          </span>,
+          <span key="d" className="inline-flex">
+            <DollarCoin size={48} className="hidden sm:inline-grid" />
+            <DollarCoin size={36} className="sm:hidden" />
+          </span>,
+        ]}
         title="Sales / USD"
-        trailing={<ChartTypeToggle value={type} onValueChange={setType} />}
+        titleClassName="max-sm:text-[20px]"
+        trailing={<ChartTypeToggle value={type} onValueChange={setType} className="hidden sm:flex" />}
       />
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -133,6 +144,8 @@ export function SalesPreview({ extra = 0, rows = true, height = 340, className }
             formatAxis={axis}
             formatTime={time}
             formatBubbleNote={null}
+            tickZone="utc"
+            lastLabel="Now"
             defaultIndex={extra ? data.length - 1 : undefined}
           />
         ) : (
@@ -220,7 +233,12 @@ export function CheckoutWidgetPreview({ onPaid, className }: { onPaid?: (cents: 
               onPaid?.(0);
             }}
           />
-          <IconSquareButton label="Open the demo shop (a new tab)" icon={<Store />} onClick={() => window.open(DEMO_SHOP_URL, "_blank", "noopener,noreferrer")} />
+          <IconSquareButton
+            label={DEMO_SHOP_URL ? "Open the demo shop (a new tab)" : DEMO_SHOP_SOON}
+            icon={<Store />}
+            disabled={!DEMO_SHOP_URL}
+            onClick={() => DEMO_SHOP_URL && window.open(DEMO_SHOP_URL, "_blank", "noopener,noreferrer")}
+          />
         </div>
       </div>
 
@@ -254,12 +272,18 @@ export function CheckoutWidgetPreview({ onPaid, className }: { onPaid?: (cents: 
         <PrimaryButton size="lg" block className="mt-1" icon={<Zap />} disabled={!valid} onClick={take}>
           {way === "later" ? "Pay in 4 as the buyer" : "Pay now as the buyer"}
         </PrimaryButton>
-        <SecondaryButton asChild size="lg" block iconRight={<Store />}>
-          <a href={DEMO_SHOP_URL} target="_blank" rel="noreferrer">
-            See the demo shop
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-        </SecondaryButton>
+        {DEMO_SHOP_URL ? (
+          <SecondaryButton asChild size="lg" block iconRight={<Store />}>
+            <a href={DEMO_SHOP_URL} target="_blank" rel="noreferrer">
+              See the demo shop
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          </SecondaryButton>
+        ) : (
+          <SecondaryButton size="lg" block iconRight={<Store />} disabled>
+            {DEMO_SHOP_SOON}
+          </SecondaryButton>
+        )}
         <div className="relative">
           <BalanceSummaryCard
             label="You receive"

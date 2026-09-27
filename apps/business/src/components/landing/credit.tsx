@@ -40,7 +40,8 @@ function Stats() {
               play={seen}
               duration={1.3}
               format={(n) => `${"prefix" in s ? s.prefix : ""}${n.toFixed(s.decimals)}${"suffix" in s ? s.suffix : ""}`}
-              className="ui-figure block text-[30px] leading-none font-medium tracking-[-0.04em] text-ui-lime-button sm:text-[40px]"
+              // Three tiles about 125px wide at 1024: a step smaller there, and never wrapped.
+              className="ui-figure block text-[30px] leading-none font-medium tracking-[-0.04em] whitespace-nowrap text-ui-lime-active sm:text-[40px] lg:text-[30px] xl:text-[40px]"
             />
             <span aria-hidden className="mt-2 block text-[13px] leading-snug text-ui-muted sm:text-[14px]">
               {s.label}

@@ -183,6 +183,12 @@ export type TopNavProps = {
   sheetFooter?: ReactNode;
   /** The phone sheet's title. */
   sheetTitle?: string;
+  /**
+   * Hold the bar to the page's content column (1280px wide, 32px gutters),
+   * for pages whose sections sit in that column (the landing, /login), so
+   * the wordmark lines up with them. Off: the dashboard's full-width gutters.
+   */
+  contained?: boolean;
   className?: string;
 };
 
@@ -215,6 +221,7 @@ export function TopNav({
   compactActions,
   sheetFooter,
   sheetTitle = "Menu",
+  contained = false,
   className,
 }: TopNavProps) {
   const [open, setOpen] = useState(false);
@@ -226,7 +233,12 @@ export function TopNav({
   return (
     <header className={cn("relative z-30 font-satoshi", className)}>
       {/* From 1024px: the reference's bar. */}
-      <div className="hidden h-[104px] items-center gap-8 px-10 lg:flex xl:h-[112px] xl:px-14">
+      <div
+        className={cn(
+          "hidden h-[104px] items-center gap-8 lg:flex xl:h-[112px]",
+          contained ? "mx-auto w-full max-w-[1280px] px-8" : "px-10 xl:px-14",
+        )}
+      >
         <Link href={brandHref} aria-label={brandLabel} className="shrink-0 rounded-[12px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus">
           {brand}
         </Link>

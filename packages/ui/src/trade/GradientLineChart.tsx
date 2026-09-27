@@ -39,6 +39,8 @@ export type GradientLineChartProps = Omit<HTMLAttributes<HTMLDivElement>, "child
   formatAxisCompact?: (v: number) => string;
   /** A label at the right end, for the latest point ("Now"). */
   lastLabel?: string;
+  /** Which clock the round time labels fall on: the viewer's (default) or UTC, to match `formatTime`. */
+  tickZone?: "local" | "utc";
   /** Shown over the plot when every value is zero; it can hold buttons. */
   empty?: ReactNode;
   /** What the chart shows, for screen readers. */
@@ -53,7 +55,7 @@ const MIN = 60_000;
 const HR = 60 * MIN;
 const DY = 24 * HR;
 /** Round steps for time labels, smallest first. */
-const TIME_STEPS = [5 * MIN, 10 * MIN, 15 * MIN, 30 * MIN, HR, 2 * HR, 3 * HR, 4 * HR, 6 * HR, 12 * HR, DY, 2 * DY, 7 * DY, 14 * DY];
+const TIME_STEPS = [5 * MIN, 10 * MIN, 15 * MIN, 30 * MIN, HR, 2 * HR, 3 * HR, 4 * HR, 6 * HR, 8 * HR, 12 * HR, DY, 2 * DY, 7 * DY, 14 * DY];
 
 /**
  * Exactly `count` evenly spaced round labels whose top sits at or above the
@@ -128,6 +130,7 @@ export function GradientLineChart({
   compactAxisWidth = 48,
   formatAxisCompact = compactNumber,
   lastLabel,
+  tickZone = "local",
   empty,
   label,
   animate = true,
@@ -220,7 +223,7 @@ export function GradientLineChart({
       const room = lastLabel ? fit - 1 : fit;
       const step = TIME_STEPS.find((s) => Math.floor(spanMs / s) <= room) ?? TIME_STEPS[TIME_STEPS.length - 1]!;
       // Align to local time: whole hours, and local midnight for days.
-      const offset = new Date(t0).getTimezoneOffset() * MIN;
+      const offset = tickZone === "utc" ? 0 : new Date(t0).getTimezoneOffset() * MIN;
       const first = Math.ceil((t0 - offset) / step) * step + offset;
       const out: { key: string; px: number; text: string }[] = [];
       for (let t = first; t <= t1; t += step) {

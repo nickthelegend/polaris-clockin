@@ -8,7 +8,7 @@ import { developers } from "./content";
 import { SectionIntro, Shell } from "./section";
 
 /**
- * "Ten lines of code": polarispay-sdk 0.3.0 as it ships (createPolarisServer,
+ * "A few lines of code": polarispay-sdk 0.3.0 as it ships (createPolarisServer,
  * checkout.sessions.create, webhooks.verify, the React button) in React,
  * Node and HTML, against this server's checkout-session API.
  */
