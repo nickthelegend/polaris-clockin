@@ -68,6 +68,14 @@ export type AllowedCall = {
    * its PolarisPayments operator role, with no signature (see above).
    */
   signedBy: "owner" | "operator";
+  /**
+   * The argument holding the amount of AUSD the call moves, when it may not
+   * be below the relayer's minimum (`RELAYER_MIN_TRANSFER_UNITS`). The two
+   * calls a stranger can make with nothing but their own fresh key (a
+   * transfer, a send by link) would otherwise let anyone spend the
+   * relayer's MON moving 0 AUSD between throwaway keys.
+   */
+  minAmountArg?: string;
 };
 
 export const RELAYER_CALLS: readonly AllowedCall[] = [
@@ -78,13 +86,13 @@ export const RELAYER_CALLS: readonly AllowedCall[] = [
   { contract: "payments", functionName: "cancelWithSignature", rule: "Cancel subscription: cancelWithSignature", why: "Subscriber's CancelSubscription signature", signedBy: "owner" },
   { contract: "payments", functionName: "createPlanFor", rule: "Publish plan: PolarisPayments.createPlanFor", why: "Operator: a merchant's subscription terms from a checkout session (moves nothing)", signedBy: "operator" },
   { contract: "payments", functionName: "quoteOrder", rule: "Pin a price: PolarisPayments.quoteOrder", why: "Operator: a checkout session's price, pinned on its order (moves nothing)", signedBy: "operator" },
-  { contract: "send", functionName: "send", rule: "Send by link: PolarisSend.send", why: "Sender's ERC-3009 authorisation + the link key's Open", signedBy: "owner" },
+  { contract: "send", functionName: "send", rule: "Send by link: PolarisSend.send", why: "Sender's ERC-3009 authorisation + the link key's Open", signedBy: "owner", minAmountArg: "amount" },
   { contract: "send", functionName: "claim", rule: "Claim a link: PolarisSend.claim", why: "The link key's Claim naming the recipient", signedBy: "owner" },
   { contract: "send", functionName: "cancel", rule: "Cancel a link: PolarisSend.cancel", why: "Sender's Cancel signature", signedBy: "owner" },
   { contract: "loanEngine", functionName: "repayWithSig", rule: "Pay early: PolarisLoanEngine.repayWithSig", why: "Borrower's RepayIntent", signedBy: "owner" },
   { contract: "registry", functionName: "registerFor", rule: "Onboard: MerchantRegistry.registerFor", why: "Merchant's Registration signature (Privy embedded wallet)", signedBy: "owner" },
   { contract: "registry", functionName: "updatePayoutAddressWithSig", rule: "Payout address: updatePayoutAddressWithSig", why: "Merchant's PayoutUpdate signature", signedBy: "owner" },
-  { contract: "stablecoin", functionName: "transferWithAuthorization", rule: "Payouts: AUSD transferWithAuthorization", why: "Owner's ERC-3009 TransferWithAuthorization (withdrawals, payouts, sends to a user)", signedBy: "owner" },
+  { contract: "stablecoin", functionName: "transferWithAuthorization", rule: "Payouts: AUSD transferWithAuthorization", why: "Owner's ERC-3009 TransferWithAuthorization (withdrawals, payouts, sends to a user)", signedBy: "owner", minAmountArg: "value" },
 ];
 
 export const CONTRACT_ABIS: Record<RelayerContract, Abi> = {
@@ -109,13 +117,25 @@ export class PolicyViolation extends Error {
 
 export type CheckedCall = { contract: RelayerContract; functionName: string; args: readonly unknown[] };
 
+/** The value of the named argument in a decoded call, from the function's ABI fragment. */
+function argNamed(abi: Abi, functionName: string, args: readonly unknown[], name: string): unknown {
+  for (const item of abi) {
+    if (item.type !== "function" || item.name !== functionName || item.inputs.length !== args.length) continue;
+    const i = item.inputs.findIndex((input) => input.name === name);
+    if (i >= 0) return args[i];
+  }
+  return undefined;
+}
+
 /**
  * Refuse any transaction the relayer policy wouldn't allow: another chain,
- * any MON, a contract off the list, or a function off the list.
+ * any MON, a contract off the list, a function off the list, or (when
+ * `minAmountUnits` is given) an amount below the relayer's minimum on the
+ * calls that carry one.
  */
 export function checkRelayerCall(
   tx: { to: Address | null | undefined; data: Hex | undefined; value?: bigint; chainId: number },
-  expected: { chainId: number; addresses: RelayerAddresses },
+  expected: { chainId: number; addresses: RelayerAddresses; minAmountUnits?: bigint },
 ): CheckedCall {
   if (tx.chainId !== expected.chainId) {
     throw new PolicyViolation("chain_id", `The relayer signs only on chain ${expected.chainId}, not ${tx.chainId}.`);
@@ -138,6 +158,15 @@ export function checkRelayerCall(
   const allowed = RELAYER_CALLS.find((c) => c.contract === contract && c.functionName === decoded.functionName);
   if (!allowed) {
     throw new PolicyViolation("function_name", `${contract}.${decoded.functionName} isn't on the relayer's allow-list.`);
+  }
+  if (allowed.minAmountArg && expected.minAmountUnits !== undefined) {
+    const amount = argNamed(CONTRACT_ABIS[contract], decoded.functionName, decoded.args ?? [], allowed.minAmountArg);
+    if (typeof amount !== "bigint" || amount < expected.minAmountUnits) {
+      throw new PolicyViolation(
+        `${decoded.functionName}.${allowed.minAmountArg}`,
+        `The relayer carries ${decoded.functionName} only for ${expected.minAmountUnits} base units or more.`,
+      );
+    }
   }
   return { contract, functionName: decoded.functionName, args: decoded.args ?? [] };
 }
@@ -163,11 +192,18 @@ export function functionFragments(abi: Abi, name: string): Abi {
  *   with the gas limit set from estimateGas + 15% (Monad bills the limit).
  * - One DENY rule refuses any transaction carrying MON. The Node SDK's viem
  *   adapter omits a zero `value`, so "value = 0" can't be an ALLOW condition.
- * - One ALLOW rule per call: this chain, this contract, this function.
+ * - One ALLOW rule per call: this chain, this contract, this function, and
+ *   for the calls that move an amount a stranger chooses (an AUSD transfer,
+ *   a send by link) that amount at least `minAmountUnits`, so a compromised
+ *   server can't be used to burn the relayer's MON on zero-value calls.
  * - Everything else (other contracts, `approve`, raw MON transfers,
  *   `personal_sign`, typed data, key export) matches no rule and is denied.
+ *
+ * Privy's transaction conditions can't see the gas limit or the fee, so
+ * those are capped by `submitCall` before anything is sent to Privy
+ * (`RELAYER_MAX_GAS`, `RELAYER_MAX_FEE_GWEI`).
  */
-export function buildRelayerPolicy(input: { chainId: number; addresses: RelayerAddresses; name?: string }): PrivyPolicy {
+export function buildRelayerPolicy(input: { chainId: number; addresses: RelayerAddresses; minAmountUnits?: bigint; name?: string }): PrivyPolicy {
   const onChain: Condition = { field_source: "ethereum_transaction", field: "chain_id", operator: "eq", value: String(input.chainId) };
   const rules: PrivyRule[] = [
     {
@@ -178,22 +214,22 @@ export function buildRelayerPolicy(input: { chainId: number; addresses: RelayerA
     },
   ];
   for (const call of RELAYER_CALLS) {
-    rules.push({
-      name: call.rule,
-      method: "eth_signTransaction",
-      action: "ALLOW",
-      conditions: [
-        { field_source: "ethereum_transaction", field: "to", operator: "in", value: bothCases(input.addresses[call.contract]) },
-        onChain,
-        {
-          field_source: "ethereum_calldata",
-          field: "function_name",
-          abi: functionFragments(CONTRACT_ABIS[call.contract], call.functionName),
-          operator: "eq",
-          value: call.functionName,
-        },
-      ],
-    });
+    const abi = functionFragments(CONTRACT_ABIS[call.contract], call.functionName);
+    const conditions: Condition[] = [
+      { field_source: "ethereum_transaction", field: "to", operator: "in", value: bothCases(input.addresses[call.contract]) },
+      onChain,
+      { field_source: "ethereum_calldata", field: "function_name", abi, operator: "eq", value: call.functionName },
+    ];
+    if (call.minAmountArg && input.minAmountUnits !== undefined) {
+      conditions.push({
+        field_source: "ethereum_calldata",
+        field: `${call.functionName}.${call.minAmountArg}`,
+        abi,
+        operator: "gte",
+        value: input.minAmountUnits.toString(),
+      });
+    }
+    rules.push({ name: call.rule, method: "eth_signTransaction", action: "ALLOW", conditions });
   }
   return { version: "1.0", name: (input.name ?? `polaris-relayer-${input.chainId}`).slice(0, 50), chain_type: "ethereum", rules };
 }

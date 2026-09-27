@@ -59,7 +59,12 @@ export type TestEnv = {
  * recording webhook transport. Privy is off; dashboard routes authenticate
  * through `signIn`.
  */
+// What the last test's `env` overrides set, so the next test starts without them.
+let overridden: string[] = [];
+
 export function setupServer(env: Record<string, string> = {}): TestEnv {
+  for (const k of overridden) delete process.env[k];
+  overridden = Object.keys(env);
   const relayerKey = generatePrivateKey();
   const base: Record<string, string> = {
     POLARIS_DEPLOYMENT_FILE: DEPLOYMENT,

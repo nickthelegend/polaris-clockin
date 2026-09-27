@@ -6,3 +6,5 @@ next-env.d.ts
 .data/
 # Written by scripts/privy/*.mjs: relayer and payout signer keys
 .env.privy
+# Written once by scripts/privy/setup-relayer.mjs: the admin key quorum's private key
+.privy-admin.key

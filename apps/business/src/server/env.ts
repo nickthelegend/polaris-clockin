@@ -65,6 +65,15 @@ export type ServerConfig = {
   /** Why the chain isn't configured, for the health route and the setup screen. */
   chainProblem: string | null;
   relayer: RelayerConfig;
+  /**
+   * What the relayer refuses to spend its MON on, whoever asks:
+   * - `minTransferUnits`: the smallest AUSD transfer or send by link it
+   *   carries (also a condition in the Privy policy), so moving 0 AUSD
+   *   between throwaway keys is not free gas;
+   * - `maxGas` and `maxFeePerGasWei`: caps on any one transaction, which the
+   *   Privy policy can't express.
+   */
+  relayerLimits: { minTransferUnits: bigint; maxGas: bigint; maxFeePerGasWei: bigint };
   activator: ActivatorConfig;
   /** Per-merchant Pay in 4 cap set on activation, in AUSD base units. */
   activationCapUnits: bigint;
@@ -309,6 +318,11 @@ function build(): ServerConfig {
     chain,
     chainProblem,
     relayer: relayerFrom(chain),
+    relayerLimits: {
+      minTransferUnits: BigInt(Math.max(1, int("RELAYER_MIN_TRANSFER_UNITS", 100_000))), // $0.10
+      maxGas: BigInt(Math.max(21_000, int("RELAYER_MAX_GAS", 3_000_000))),
+      maxFeePerGasWei: BigInt(Math.max(1, int("RELAYER_MAX_FEE_GWEI", 1_000))) * 1_000_000_000n,
+    },
     activator: activatorFrom(chain),
     activationCapUnits: BigInt(int("MERCHANT_ACTIVATION_CAP_USD", 1_000)) * 1_000_000n,
     payoutSigner: signerId && signerKey ? { signerId, authorizationKey: signerKey } : null,

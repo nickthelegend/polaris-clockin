@@ -55,6 +55,8 @@ export class FakeChain {
   /** Revert data for the next simulated call, by function name. */
   reverts = new Map<string, Hex>();
   reads: Record<string, (args: readonly unknown[]) => unknown> = {};
+  /** What eth_feeHistory would suggest. */
+  fees = { maxFeePerGas: 100_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n };
   /** What a sent transaction emits. */
   onSend: (tx: SentTx, fn: { functionName: string; args: readonly unknown[] }) => LogSpec[] = () => [];
   abis: Abi[] = [];
@@ -101,7 +103,7 @@ export class FakeChain {
         return 200_000n;
       },
       estimateFeesPerGas: async () => {
-        return { maxFeePerGas: 100_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n };
+        return this.fees;
       },
       getTransactionCount: async () => {
         return this.sent.length;

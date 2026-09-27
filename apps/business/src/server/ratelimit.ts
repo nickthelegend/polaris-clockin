@@ -24,6 +24,10 @@ export type Limit = { name: string; perMinute: number; burst: number };
 export const LIMITS = {
   relayPerIp: { name: "relay-ip", perMinute: 30, burst: 15 },
   relayPerSigner: { name: "relay-signer", perMinute: 12, burst: 6 },
+  /** A day's relays for one account: 100, refilling over 24 hours. */
+  relayPerSignerDaily: { name: "relay-signer-day", perMinute: 100 / 1440, burst: 100 },
+  /** Every transfer and send by link, from anyone (no merchant checkout behind them): the relayer's circuit breaker. */
+  relayOpenGlobal: { name: "relay-open-global", perMinute: 60, burst: 120 },
   publicPerIp: { name: "public-ip", perMinute: 240, burst: 60 },
   apiPerKey: { name: "api-key", perMinute: 300, burst: 100 },
   onboardPerMerchant: { name: "onboard", perMinute: 6, burst: 3 },

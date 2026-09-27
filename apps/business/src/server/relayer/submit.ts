@@ -4,7 +4,7 @@ import { decodeFunctionData, getAddress, type Address, type Hex, type Transactio
 
 import { buyerErrorFromThrown, type BuyerError } from "../chain/errors";
 import { publicClient, requireChain } from "../chain/client";
-import type { ChainConfig } from "../env";
+import { getConfig, type ChainConfig } from "../env";
 import { CONTRACT_ABIS, checkRelayerCall, PolicyViolation, type RelayerAddresses } from "../policy/relayer";
 import type { RelayerAccount } from "./signer";
 
@@ -121,8 +121,10 @@ export async function submitCall(input: {
   const client = publicClient();
   const { signer, to, data } = input;
 
-  if (input.role === "relayer") checkRelayerCall({ to, data, value: 0n, chainId: chain.id }, { chainId: chain.id, addresses: relayerAddresses(chain) });
-  else checkActivatorCall(to, data, chain);
+  const limits = getConfig().relayerLimits;
+  if (input.role === "relayer") {
+    checkRelayerCall({ to, data, value: 0n, chainId: chain.id }, { chainId: chain.id, addresses: relayerAddresses(chain), minAmountUnits: limits.minTransferUnits });
+  } else checkActivatorCall(to, data, chain);
 
   try {
     await client.call({ account: signer.address, to, data });
@@ -145,6 +147,13 @@ export async function submitCall(input: {
     const buyer = buyerErrorFromThrown(error);
     if (buyer.revert) throw new RelayRejected(buyer);
     throw new RelayUnavailable("rpc_unavailable", "We couldn't reach the network. Nothing was charged; try again.", { cause: error });
+  }
+  // Monad bills the whole limit at the fee: a call that needs more, or a network that asks more, waits.
+  if (gasLimit > limits.maxGas) {
+    throw new PolicyViolation("RELAYER_MAX_GAS", `This call needs ${gasLimit} gas; the relayer pays for at most ${limits.maxGas}.`);
+  }
+  if (fees.maxFeePerGas > limits.maxFeePerGasWei) {
+    throw new RelayUnavailable("network_busy", "The network is unusually expensive right now. Nothing was charged; try again in a few minutes.");
   }
 
   const { txHash, nonce } = await serialize(signer.address, async (l) => {

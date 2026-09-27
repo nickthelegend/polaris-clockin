@@ -11,7 +11,9 @@
 // What --apply creates, in this order:
 //   1. an `admin` key quorum (a P-256 key generated here). It owns the wallet
 //      and every policy, so no server key can widen them. Its private key is
-//      printed ONCE: keep it offline (a password manager), never on a server.
+//      written ONCE to apps/business/.privy-admin.key (mode 0600, git-ignored),
+//      never to the terminal, where scrollback and CI logs would keep it: move
+//      it offline (a password manager) and delete the file.
 //   2. a `relayer` key quorum: the key the server signs Privy requests with.
 //   3. the relayer policy (src/server/policy/relayer.ts): DENY any MON, and
 //      one ALLOW per call the relayer carries, on this chain, to our
@@ -25,7 +27,7 @@
 // keys) to apps/business/.env.privy (git-ignored), and prints the next steps:
 // fund the relayer with testnet MON and grant it its contract roles.
 
-import { banner, flag, loadDeployment, loadEnv, mask, privyClient, writeEnvPrivy } from "./lib.mjs";
+import { banner, flag, loadDeployment, loadEnv, mask, privyClient, writeAdminKey, writeEnvPrivy } from "./lib.mjs";
 import { buildRegistryAdminPolicy, buildRelayerPolicy, lintPolicy, RELAYER_CALLS } from "../../src/server/policy/relayer.ts";
 
 const apply = flag("apply");
@@ -34,7 +36,9 @@ const env = loadEnv();
 const deployment = loadDeployment(env);
 const capUnits = BigInt(env.MERCHANT_ACTIVATION_CAP_USD ?? "1000") * 1_000_000n;
 
-const relayerPolicy = buildRelayerPolicy({ chainId: deployment.chainId, addresses: deployment.addresses });
+// The smallest AUSD transfer or send by link the relayer signs (the server applies the same floor).
+const minAmountUnits = BigInt(env.RELAYER_MIN_TRANSFER_UNITS ?? "100000");
+const relayerPolicy = buildRelayerPolicy({ chainId: deployment.chainId, addresses: deployment.addresses, minAmountUnits });
 const registryPolicy = buildRegistryAdminPolicy({ chainId: deployment.chainId, registry: deployment.addresses.registry, capUnits });
 for (const p of [relayerPolicy, registryPolicy]) {
   const problems = lintPolicy(p);
@@ -46,6 +50,7 @@ console.log(`Contracts from ${deployment.file}
 `);
 console.log("The relayer may sign exactly these calls (eth_signTransaction, value 0):");
 for (const c of RELAYER_CALLS) console.log(`  ALLOW  ${c.contract.padEnd(10)} ${c.functionName.padEnd(28)} ${c.why}`);
+console.log(`  (transferWithAuthorization and PolarisSend.send only for ${minAmountUnits} base units or more)`);
 console.log("  DENY   any transaction that carries MON");
 console.log("  DENY   everything else (no rule matches → Privy denies)");
 
@@ -86,6 +91,8 @@ async function lockedWallet(label, policyBody, admin, signer) {
 
 banner("Creating in Privy");
 const admin = env.PRIVY_ADMIN_QUORUM_ID ? { id: env.PRIVY_ADMIN_QUORUM_ID, privateKey: null } : await quorum("polaris-admin");
+// Saved before anything else is created, so a failure below can't lose the only key that owns it all.
+const adminKeyFile = admin.privateKey ? writeAdminKey(admin.id, admin.privateKey) : null;
 console.log(`  admin key quorum     ${admin.id}${admin.privateKey ? " (new)" : " (from PRIVY_ADMIN_QUORUM_ID)"}`);
 const relayerSigner = await quorum("polaris-relayer");
 console.log(`  relayer key quorum   ${relayerSigner.id}`);
@@ -117,10 +124,10 @@ if (withRegistry) {
 const path = writeEnvPrivy(values);
 banner("Done");
 console.log(`Server settings written to ${path} (relayer key ${mask(relayerSigner.privateKey)}).`);
-if (admin.privateKey) {
-  console.log("\nADMIN KEY: shown once. Store it offline (password manager). It is the only key that can change these");
-  console.log("policies or wallets; the server never needs it.\n");
-  console.log(`  PRIVY_ADMIN_PRIVATE_KEY=${admin.privateKey}\n`);
+if (adminKeyFile) {
+  console.log(`\nADMIN KEY: written once to ${adminKeyFile} (readable by you only; not printed here).`);
+  console.log("It is the only key that can change these policies or wallets, and the server never needs it:");
+  console.log("move it offline (a password manager), then delete the file.\n");
 }
 console.log("Next:");
 console.log(`  1. Send the relayer testnet MON for gas: ${relayer.wallet.address} (about 1 MON covers ~300 relayed payments).`);

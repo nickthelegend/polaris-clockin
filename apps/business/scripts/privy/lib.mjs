@@ -84,6 +84,25 @@ export function writeEnvPrivy(values) {
   return path;
 }
 
+/**
+ * Save the admin key quorum's private key to apps/business/.privy-admin.key
+ * (mode 0600, git-ignored), never to stdout: terminal scrollback and CI logs
+ * keep what is printed. Refuses to overwrite an earlier key.
+ */
+export function writeAdminKey(quorumId, privateKey) {
+  const path = join(APP_DIR, ".privy-admin.key");
+  if (existsSync(path)) throw new Error(`${path} already exists: move that key offline and delete the file first.`);
+  const body = [
+    "# The Privy admin key quorum's private key. It owns the relayer, registry admin and payout policies.",
+    "# Move it offline (a password manager) and delete this file. The server never needs it.",
+    `PRIVY_ADMIN_QUORUM_ID=${quorumId}`,
+    `PRIVY_ADMIN_PRIVATE_KEY=${privateKey}`,
+    "",
+  ].join("\n");
+  writeFileSync(path, body, { mode: 0o600, flag: "wx" });
+  return path;
+}
+
 export async function privyClient(env) {
   const appId = env.PRIVY_APP_ID || env.NEXT_PUBLIC_PRIVY_APP_ID;
   const appSecret = env.PRIVY_APP_SECRET;

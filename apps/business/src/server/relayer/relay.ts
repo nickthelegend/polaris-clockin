@@ -21,7 +21,7 @@ import {
   polarisSendAbi,
 } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
-import { centsToUnits } from "../chain/money";
+import { centsToUnits, formatUnits } from "../chain/money";
 import { getDb } from "../db";
 import { getConfig, type ChainConfig } from "../env";
 import { HttpError } from "../http";
@@ -103,9 +103,23 @@ async function assertSigner(expected: Address, recover: Promise<Address>, what: 
  * account with a junk signature would otherwise spend that account's
  * allowance and lock them out of checkout. Unverified requests are bounded
  * by the per-IP limit in front of the route (auth.ts `withSignedRequest`).
+ *
+ * Each account also has a daily budget. And `open` requests (transfers and
+ * sends by link, which need no merchant's checkout and so can be made by
+ * anyone with a fresh key and a little AUSD) share one global budget, a
+ * circuit breaker on what the relayer can be made to spend on strangers.
  */
-function countVerified(signer: Address): void {
-  consume(LIMITS.relayPerSigner, getAddress(signer));
+function countVerified(signer: Address, options: { open?: boolean } = {}): void {
+  const key = getAddress(signer);
+  consume(LIMITS.relayPerSigner, key);
+  consume(LIMITS.relayPerSignerDaily, key);
+  if (options.open) consume(LIMITS.relayOpenGlobal, "all");
+}
+
+/** The smallest transfer or send the relayer carries (and the Privy policy signs). */
+function assertMinimum(amount: bigint, param: string): void {
+  const min = getConfig().relayerLimits.minTransferUnits;
+  if (amount < min) bad(param, `${param} must be at least ${formatUnits(min)} AUSD.`);
 }
 
 /**
@@ -340,6 +354,7 @@ async function send(body: Record<string, unknown>, chain: ChainConfig): Promise<
   const linkKey = address(body, "linkKey");
   const amount = uint(body, "amount");
   if (amount === 0n) bad("amount", "amount must be more than zero.");
+  assertMinimum(amount, "amount");
   const expiresAt = uint(body, "expiresAt", { max: 0xffffffffffffffffn });
   if (expiresAt <= BigInt(now())) bad("expiresAt", "expiresAt must be in the future.");
   const validAfter = uint(body, "validAfter");
@@ -369,7 +384,7 @@ async function send(body: Record<string, unknown>, chain: ChainConfig): Promise<
     }),
     "link",
   );
-  countVerified(sender);
+  countVerified(sender, { open: true });
   const a = vrs(sig);
   const k = vrs(linkSig);
   const result = await carry({
@@ -402,7 +417,7 @@ async function claim(body: Record<string, unknown>, chain: ChainConfig): Promise
     }),
     "claim",
   );
-  countVerified(linkKey);
+  countVerified(linkKey, { open: true });
   const { v, r, s } = vrs(sig);
   const result = await carry({
     kind: "claim",
@@ -433,7 +448,7 @@ async function cancelSend(body: Record<string, unknown>, chain: ChainConfig): Pr
     }),
     "cancel",
   );
-  countVerified(link.sender);
+  countVerified(link.sender, { open: true });
   const { v, r, s } = vrs(sig);
   const result = await carry({
     kind: "cancelSend",
@@ -526,6 +541,8 @@ export async function relayTransfer(input: {
   merchantId?: string | null;
 }): Promise<RelayResult> {
   const { chain } = input;
+  if (input.value === 0n) bad("value", "value must be more than zero.");
+  if (getAddress(input.from) === getAddress(input.to)) bad("to", "to must be another account than from.");
   await assertSigner(
     input.from,
     recoverTypedDataAddress({
@@ -537,7 +554,7 @@ export async function relayTransfer(input: {
     }),
     "transfer",
   );
-  countVerified(input.from);
+  countVerified(input.from, { open: (input.kind ?? "transfer") === "transfer" });
   const { v, r, s } = vrs(input.signature);
   return carry({
     kind: input.kind ?? "transfer",
@@ -555,11 +572,13 @@ export async function relayTransfer(input: {
 
 async function transfer(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
   const from = address(body, "from");
+  const value = uint(body, "value");
+  assertMinimum(value, "value");
   const result = await relayTransfer({
     chain,
     from,
     to: address(body, "to"),
-    value: uint(body, "value"),
+    value,
     validAfter: uint(body, "validAfter"),
     validBefore: deadline(uint(body, "validBefore"), "validBefore"),
     nonce: bytes32(body, "nonce"),

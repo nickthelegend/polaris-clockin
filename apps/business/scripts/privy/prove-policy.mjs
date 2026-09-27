@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 // Prove the relayer's Privy policy does what it says: ask Privy to SIGN (never
-// send) one allowed call and four forbidden ones, and print what Privy did.
+// send) the allowed calls and the forbidden ones, and print what Privy did.
 // This is the Privy bounty's evidence: a compromised server holding the
 // relayer's key still can't get Privy to sign anything off the list.
 //
-//   pnpm --filter @polaris/business privy:prove-policy            # shows the five requests, calls nothing
+//   pnpm --filter @polaris/business privy:prove-policy            # shows the requests, calls nothing
 //   pnpm --filter @polaris/business privy:prove-policy -- --run   # asks Privy to sign each (no transaction is broadcast)
 //
 // Needs the relayer from setup-relayer.mjs (PRIVY_RELAYER_WALLET_ID, _ADDRESS, _AUTH_KEY).
 
 import { encodeFunctionData, erc20Abi, zeroHash } from "viem";
 
-import { polarisCheckoutAbi } from "@polarispay/contracts/abi";
+import { iausdAbi, polarisCheckoutAbi } from "@polarispay/contracts/abi";
 import { banner, flag, loadDeployment, loadEnv, privyClient } from "./lib.mjs";
 
 const env = loadEnv();
@@ -26,8 +26,18 @@ const payData = encodeFunctionData({
   args: [buyer, merchant, 25_000_000n, "policy-proof", 0n, 4_000_000_000n, 27, zeroHash, zeroHash],
 });
 
+const minAmountUnits = BigInt(env.RELAYER_MIN_TRANSFER_UNITS ?? "100000");
+const transferData = (value) =>
+  encodeFunctionData({
+    abi: iausdAbi,
+    functionName: "transferWithAuthorization",
+    args: [buyer, merchant, value, 0n, 4_000_000_000n, zeroHash, 27, zeroHash, zeroHash],
+  });
+
 const cases = [
   { expect: "allowed", what: "PolarisCheckout.pay (on the list)", tx: { to: addresses.checkout, data: payData } },
+  { expect: "allowed", what: `AUSD transferWithAuthorization of ${minAmountUnits} base units (the minimum)`, tx: { to: addresses.stablecoin, data: transferData(minAmountUnits) } },
+  { expect: "denied", what: "AUSD transferWithAuthorization of 0 (free gas for strangers)", tx: { to: addresses.stablecoin, data: transferData(0n) } },
   { expect: "denied", what: "the same call carrying 1 wei of MON", tx: { to: addresses.checkout, data: payData, value: "0x1" } },
   { expect: "denied", what: "the same call to another contract", tx: { to: buyer, data: payData } },
   {
