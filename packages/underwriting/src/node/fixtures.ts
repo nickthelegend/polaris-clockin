@@ -19,6 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseTimestamp } from "../core/providers/common.ts";
+import { nansenBodyProblem } from "../core/providers/nansen.ts";
 import { ProviderError, type HttpRequest, type HttpResponse, type HttpTransport } from "./http.ts";
 
 /** `packages/underwriting/fixtures`, wherever the package is installed. */
@@ -134,6 +135,24 @@ export function fixtureResponse(req: HttpRequest, dir: string = DEFAULT_FIXTURES
 function nansen(dir: string, url: URL, req: HttpRequest): HttpResponse {
   const { endpoint, rel } = locateFixture(req);
   const body = JSON.parse(req.body ?? "{}") as Record<string, unknown>;
+  // Every Nansen request schema is closed: refuse what the live API would, the
+  // way it does, so a wrong field name fails in fixture mode too.
+  const problem = nansenBodyProblem(endpoint, body);
+  if (problem && problem.code !== "deprecated_field") {
+    return {
+      status: 422,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        error: "Unprocessable Entity",
+        message: `fixture transport: the ${endpoint} request schema refuses this body`,
+        code: problem.code === "unknown_endpoint" ? "invalid_field_value" : problem.code,
+        status: 422,
+        request_id: "fixture",
+        doc_url: "https://docs.nansen.ai",
+        param: problem.param ?? undefined,
+      }),
+    };
+  }
   const f = load(dir, rel, "nansen", endpoint);
   if (endpoint !== "transactions" || (f.status ?? 200) !== 200) return respond(f);
 

@@ -6,6 +6,11 @@
  * header. Nansen covers Monad mainnet only, so it scores a linked history
  * wallet, never the buyer's new testnet account (data.md §0).
  *
+ * The request bodies are held to Nansen's published request schemas
+ * (`NANSEN_REQUEST_SCHEMA`), which disagree with each other on purpose: see
+ * there. Every response shape here is still UNVERIFIED against a live call
+ * (data.md §9); `pnpm --filter @polarispay/underwriting record` checks both.
+ *
  * Credits (Free and Pro): first-funder, related-wallets, transactions (per
  * page), pnl-summary and current-balance 1 each; counterparties 5; labels 100.
  * The recipe spends 2 per linked wallet: first-funder, then related-wallets on
@@ -172,7 +177,96 @@ export interface NansenErrorBody {
 
 // ---------------------------------------------------------------- requests
 
-function post(endpoint: string, body: unknown): RequestSpec {
+export type NansenEndpoint =
+  | "first-funder"
+  | "related-wallets"
+  | "counterparties"
+  | "transactions"
+  | "pnl-summary"
+  | "current-balance"
+  | "labels";
+
+export interface NansenRequestSchema {
+  /** The field the wallet goes in. */
+  subject: "address" | "wallet_address";
+  /** Every property the schema allows. All seven set `additionalProperties: false`. */
+  properties: readonly string[];
+  required: readonly string[];
+  /** Allowed but deprecated, so never sent: Nansen may drop them. */
+  deprecated: readonly string[];
+}
+
+/**
+ * Nansen's request schemas, as docs.nansen.ai publishes them (each endpoint's
+ * OpenAPI `…Request` object, re-read on 2026-09-27; data.md §2.5).
+ *
+ * The wallet field really does differ by endpoint. first-funder,
+ * current-balance, transactions, counterparties and labels know only
+ * `address`; related-wallets and pnl-summary take `wallet_address` and keep
+ * `address` as a deprecated alias. Every schema is closed
+ * (`additionalProperties: false`), so "one shape for all" would be refused by
+ * one side or lean on the alias. The builders below are checked against this
+ * table when they build (a body it refuses throws before any credit is
+ * spent), the fixture transport answers a refused body the way Nansen does
+ * (422 `unknown_field`), and the recorder prints what the live API said.
+ */
+export const NANSEN_REQUEST_SCHEMA: Readonly<Record<NansenEndpoint, NansenRequestSchema>> = {
+  "first-funder": { subject: "address", properties: ["address", "chain"], required: ["address"], deprecated: [] },
+  "related-wallets": {
+    subject: "wallet_address",
+    properties: ["wallet_address", "address", "chain", "pagination", "order_by"],
+    required: ["chain"],
+    deprecated: ["address"],
+  },
+  counterparties: {
+    subject: "address",
+    properties: ["address", "entity_name", "chain", "date", "source_input", "group_by", "filters", "pagination", "order_by"],
+    required: ["chain", "date"],
+    deprecated: [],
+  },
+  transactions: {
+    subject: "address",
+    properties: ["address", "chain", "date", "hide_spam_token", "filters", "pagination", "order_by"],
+    required: ["address", "chain", "date"],
+    deprecated: [],
+  },
+  "pnl-summary": {
+    subject: "wallet_address",
+    properties: ["wallet_address", "address", "entity_name", "chain", "date"],
+    required: ["chain", "date"],
+    deprecated: ["address"],
+  },
+  "current-balance": {
+    subject: "address",
+    properties: ["address", "entity_name", "chain", "hide_spam_token", "filters", "pagination", "order_by"],
+    required: ["chain"],
+    deprecated: [],
+  },
+  labels: { subject: "address", properties: ["address", "chain", "pagination"], required: ["address", "chain"], deprecated: [] },
+};
+
+/**
+ * Why Nansen would refuse this body, in its own error vocabulary, or null
+ * when the schema accepts it. `deprecated_field` is ours: Nansen accepts the
+ * alias today, but we do not send it.
+ */
+export function nansenBodyProblem(
+  endpoint: string,
+  body: unknown,
+): { code: "unknown_endpoint" | "unknown_field" | "missing_field" | "deprecated_field"; param: string | null } | null {
+  const schema = (NANSEN_REQUEST_SCHEMA as Record<string, NansenRequestSchema | undefined>)[endpoint];
+  if (!schema) return { code: "unknown_endpoint", param: null };
+  if (!isObject(body)) return { code: "missing_field", param: schema.required[0] ?? schema.subject };
+  for (const key of Object.keys(body)) if (!schema.properties.includes(key)) return { code: "unknown_field", param: key };
+  for (const key of schema.required) if (body[key] === undefined) return { code: "missing_field", param: key };
+  for (const key of schema.deprecated) if (body[key] !== undefined) return { code: "deprecated_field", param: key };
+  if (body[schema.subject] === undefined && body.entity_name === undefined) return { code: "missing_field", param: schema.subject };
+  return null;
+}
+
+function post(endpoint: NansenEndpoint, body: Record<string, unknown>): RequestSpec {
+  const problem = nansenBodyProblem(endpoint, body);
+  if (problem) throw new TypeError(`nansen ${endpoint}: the request schema refuses this body (${problem.code}: ${problem.param})`);
   return {
     provider: "nansen",
     endpoint,
@@ -184,14 +278,15 @@ function post(endpoint: string, body: unknown): RequestSpec {
 }
 
 const range = (fromUnix: number, toUnix: number) => ({ from: isoMinute(fromUnix), to: isoMinute(toUnix) });
+const subjectOf = (endpoint: NansenEndpoint) => NANSEN_REQUEST_SCHEMA[endpoint].subject;
 
 export const nansenRequests = {
   /** 1 credit. `chain` is fixed to "all"; the schema forbids other fields. */
-  firstFunder: (address: string) => post("first-funder", { address: lower(address), chain: "all" }),
+  firstFunder: (address: string) => post("first-funder", { [subjectOf("first-funder")]: lower(address), chain: "all" }),
 
   /** 1 credit. One chain per call, no "all". */
   relatedWallets: (address: string, chain: string, perPage = 100) =>
-    post("related-wallets", { wallet_address: lower(address), chain, pagination: { page: 1, per_page: perPage } }),
+    post("related-wallets", { [subjectOf("related-wallets")]: lower(address), chain, pagination: { page: 1, per_page: perPage } }),
 
   /** 5 credits. A date range is required. */
   counterparties: (
@@ -202,7 +297,7 @@ export const nansenRequests = {
     opts: { sourceInput?: "Combined" | "Tokens" | "ETH"; includeLabels?: string[]; perPage?: number } = {},
   ) =>
     post("counterparties", {
-      address: lower(address),
+      [subjectOf("counterparties")]: lower(address),
       chain,
       date: range(fromUnix, toUnix),
       source_input: opts.sourceInput ?? "Combined",
@@ -221,7 +316,7 @@ export const nansenRequests = {
     opts: { sourceType?: string; perPage?: number; direction?: "ASC" | "DESC" } = {},
   ) =>
     post("transactions", {
-      address: lower(address),
+      [subjectOf("transactions")]: lower(address),
       chain,
       date: range(fromUnix, toUnix),
       hide_spam_token: true,
@@ -232,15 +327,15 @@ export const nansenRequests = {
 
   /** 1 credit. Not a Facts field; for context only. */
   pnlSummary: (address: string, chain: string, fromUnix: number, toUnix: number) =>
-    post("pnl-summary", { wallet_address: lower(address), chain, date: range(fromUnix, toUnix) }),
+    post("pnl-summary", { [subjectOf("pnl-summary")]: lower(address), chain, date: range(fromUnix, toUnix) }),
 
   /** 1 credit. Amounts are floats; Zerion's are exact, so this is the balance fallback. */
   currentBalance: (address: string, chain = "all") =>
-    post("current-balance", { address: lower(address), chain, hide_spam_token: true, pagination: { page: 1, per_page: 100 } }),
+    post("current-balance", { [subjectOf("current-balance")]: lower(address), chain, hide_spam_token: true, pagination: { page: 1, per_page: 100 } }),
 
   /** 100 credits, API key only. Off unless configured. */
   labels: (address: string, chain = "all") =>
-    post("labels", { address: lower(address), chain, pagination: { page: 1, per_page: 100 } }),
+    post("labels", { [subjectOf("labels")]: lower(address), chain, pagination: { page: 1, per_page: 100 } }),
 } as const;
 
 // ---------------------------------------------------------------- parsers
@@ -362,11 +457,43 @@ export function parsePnlSummary(body: unknown): {
 }
 
 /** Nansen's error envelope, or null when the body is not one. */
-export function parseNansenError(body: unknown): { code: string; message: string; retryAfterSeconds: number | null } | null {
+export function parseNansenError(
+  body: unknown,
+): { code: string; message: string; param: string | null; retryAfterSeconds: number | null } | null {
   if (!isObject(body) || (typeof body.code !== "string" && typeof body.message !== "string")) return null;
   return {
     code: typeof body.code === "string" ? body.code : "unknown",
     message: typeof body.message === "string" ? body.message : "",
+    param: typeof body.param === "string" && body.param !== "" ? body.param : null,
     retryAfterSeconds: typeof body.retry_after === "number" && body.retry_after >= 0 ? body.retry_after : null,
   };
+}
+
+/** Nansen codes that mean the request we built is not one it takes. */
+const REQUEST_CODES: ReadonlySet<string> = new Set(["unknown_field", "invalid_field_value", "missing_field", "invalid_date_range"]);
+
+/**
+ * One classification of a non-200 Nansen answer, for the Node client and the
+ * CRE recipe alike. `request_rejected` means our body is wrong (a field name,
+ * a value, a range), not that Nansen is down: the detail names Nansen's code
+ * and `param`, which is what to fix, and it is never worth retrying.
+ */
+export function classifyNansenFailure(
+  status: number,
+  body: unknown,
+): { code: "insufficient_credits" | "unauthorized" | "not_found" | "request_rejected" | "http_error"; detail: string } {
+  const e = parseNansenError(body);
+  let code: "insufficient_credits" | "unauthorized" | "not_found" | "request_rejected" | "http_error";
+  if (e?.code === "insufficient_credits" || status === 403) code = "insufficient_credits";
+  // 402 is the x402 payment challenge a keyless request gets.
+  else if (status === 401 || status === 402 || e?.code === "unauthenticated") code = "unauthorized";
+  else if (status === 404) code = "not_found";
+  else if (status === 400 || status === 422 || (e !== null && REQUEST_CODES.has(e.code))) code = "request_rejected";
+  else code = "http_error";
+  const detail = e
+    ? `HTTP ${status} ${e.code}${e.param ? ` (param ${e.param})` : ""}${e.message ? `: ${e.message}` : ""}`
+    : status === 402
+      ? `HTTP ${status} payment required (no API key)`
+      : `HTTP ${status}`;
+  return { code, detail };
 }

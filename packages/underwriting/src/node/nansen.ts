@@ -17,7 +17,7 @@ import {
   parseCurrentBalanceStables,
   parseFirstFunder,
   parseLabels,
-  parseNansenError,
+  classifyNansenFailure,
   parseOldestTransaction,
   parsePnlSummary,
   parseRelatedWallets,
@@ -96,19 +96,6 @@ export class NansenClient extends ProviderClient {
 }
 
 function nansenError(spec: RequestSpec, res: HttpResponse, body: unknown): ProviderError {
-  const e = parseNansenError(body);
-  let code: "insufficient_credits" | "unauthorized" | "not_found" | "bad_request";
-  if (e?.code === "insufficient_credits" || res.status === 403) code = "insufficient_credits";
-  // 402 is the x402 payment challenge a keyless request gets.
-  else if (res.status === 401 || res.status === 402 || e?.code === "unauthenticated") code = "unauthorized";
-  else if (res.status === 404) code = "not_found";
-  else code = "bad_request";
-  return new ProviderError({
-    provider: "nansen",
-    endpoint: spec.endpoint,
-    status: res.status,
-    code,
-    message: `HTTP ${res.status}${e ? ` ${e.code}: ${e.message}` : res.status === 402 ? " payment required (no API key)" : ""}`,
-    retryable: false,
-  });
+  const { code, detail } = classifyNansenFailure(res.status, body);
+  return new ProviderError({ provider: "nansen", endpoint: spec.endpoint, status: res.status, code, message: detail, retryable: false });
 }

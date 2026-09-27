@@ -86,6 +86,8 @@ export type ProviderErrorCode =
   | "unauthorized"
   | "insufficient_credits"
   | "bad_request"
+  /** Nansen refused the body we built (a field name, value or range): fix the request, do not retry. */
+  | "request_rejected"
   | "not_found"
   | "fixture_missing"
   | "parse_error"

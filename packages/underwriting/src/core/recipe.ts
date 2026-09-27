@@ -55,7 +55,7 @@ import {
   parseCurrentBalanceStables,
   parseFirstFunder,
   parseLabels,
-  parseNansenError,
+  classifyNansenFailure,
   parseOldestTransaction,
   parseRelatedWallets,
 } from "./providers/nansen.ts";
@@ -178,9 +178,11 @@ function read<T>(spec: RequestSpec, reply: Reply | undefined, parse: (b: unknown
   if (!reply) return fail(spec, "no_reply", "the driver sent no reply", true);
   if (!reply.ok) return { ok: false, issue: { source: sourceOf(spec), code: reply.code, retryable: reply.retryable, retryAfterMs: reply.retryAfterMs, message: reply.message } };
   if (reply.status !== 200) {
-    const e = spec.provider === "nansen" ? parseNansenError(reply.body) : null;
-    const code = e?.code === "insufficient_credits" ? "insufficient_credits" : e?.code === "unauthenticated" ? "unauthorized" : statusCode(reply.status);
-    return fail(spec, code, `HTTP ${reply.status}${e ? ` ${e.code}` : ""}`);
+    if (spec.provider === "nansen") {
+      const n = classifyNansenFailure(reply.status, reply.body);
+      return fail(spec, n.code, n.detail);
+    }
+    return fail(spec, statusCode(reply.status), `HTTP ${reply.status}`);
   }
   return parsed(spec, reply.body, parse);
 }

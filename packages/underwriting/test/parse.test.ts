@@ -4,6 +4,9 @@ import { exchangeIn, riskIn } from "../src/core/labels.ts";
 import { base64Ascii, largestHit, ParseError, parseTimestamp, queryString } from "../src/core/providers/common.ts";
 import { etherscanRequests, parseLiquidationCount, parseTokenTransfers } from "../src/core/providers/etherscan.ts";
 import {
+  classifyNansenFailure,
+  NANSEN_REQUEST_SCHEMA,
+  nansenBodyProblem,
   nansenRequests,
   parseCurrentBalanceStables,
   parseFirstFunder,
@@ -76,9 +79,61 @@ describe("Nansen parsers", () => {
     assert.deepEqual(parseNansenError({ error: "x", message: "slow down", code: "rate_limit_exceeded", status: 429, request_id: "r", doc_url: "d", retry_after: 3 }), {
       code: "rate_limit_exceeded",
       message: "slow down",
+      param: null,
       retryAfterSeconds: 3,
     });
     assert.equal(parseNansenError({ data: [] }), null);
+    assert.equal(parseNansenError({ code: "unknown_field", message: "m", param: "wallet_address" })?.param, "wallet_address");
+    assert.equal(parseNansenError({ code: "unknown_field", message: "m", param: "" })?.param, null);
+  });
+
+  it("classifies a refusal: our body is wrong (request_rejected, with Nansen's param), not Nansen being down", () => {
+    const refused = classifyNansenFailure(422, { code: "unknown_field", message: "Extra inputs are not permitted", param: "wallet_address" });
+    assert.equal(refused.code, "request_rejected");
+    assert.equal(refused.detail, "HTTP 422 unknown_field (param wallet_address): Extra inputs are not permitted");
+    assert.equal(classifyNansenFailure(400, {}).code, "request_rejected");
+    assert.equal(classifyNansenFailure(418, { code: "invalid_date_range", message: "" }).code, "request_rejected");
+    assert.equal(classifyNansenFailure(403, {}).code, "insufficient_credits");
+    assert.equal(classifyNansenFailure(429, { code: "insufficient_credits" }).code, "insufficient_credits");
+    assert.deepEqual(classifyNansenFailure(402, "not json"), { code: "unauthorized", detail: "HTTP 402 payment required (no API key)" });
+    assert.equal(classifyNansenFailure(401, {}).code, "unauthorized");
+    assert.equal(classifyNansenFailure(404, {}).code, "not_found");
+    assert.deepEqual(classifyNansenFailure(503, null), { code: "http_error", detail: "HTTP 503" });
+  });
+
+  it("every body the builders make is one Nansen's closed request schemas accept, with the wallet in the field each endpoint names", () => {
+    const w = "0xB0B0000000000000000000000000000000000001";
+    const built = {
+      "first-funder": nansenRequests.firstFunder(w),
+      "related-wallets": nansenRequests.relatedWallets(w, "ethereum"),
+      counterparties: nansenRequests.counterparties(w, "ethereum", 1704164645, 1704164699),
+      transactions: nansenRequests.transactions(w, "all", 1704164645, 1704164699),
+      "pnl-summary": nansenRequests.pnlSummary(w, "ethereum", 1704164645, 1704164699),
+      "current-balance": nansenRequests.currentBalance(w),
+      labels: nansenRequests.labels(w),
+    } as const;
+    assert.deepEqual(Object.keys(built).sort(), Object.keys(NANSEN_REQUEST_SCHEMA).sort(), "a builder per schema");
+    for (const [endpoint, spec] of Object.entries(built)) {
+      const body = JSON.parse(spec.body ?? "{}") as Record<string, unknown>;
+      assert.equal(nansenBodyProblem(endpoint, body), null, endpoint);
+      const subject = NANSEN_REQUEST_SCHEMA[endpoint as keyof typeof NANSEN_REQUEST_SCHEMA].subject;
+      assert.equal(body[subject], w.toLowerCase(), `${endpoint} puts the wallet in ${subject}`);
+      assert.ok(spec.url.endsWith(`/${endpoint}`), spec.url);
+    }
+    assert.equal(NANSEN_REQUEST_SCHEMA["related-wallets"].subject, "wallet_address");
+    assert.equal(NANSEN_REQUEST_SCHEMA["pnl-summary"].subject, "wallet_address");
+    assert.equal(NANSEN_REQUEST_SCHEMA["first-funder"].subject, "address");
+  });
+
+  it("says why Nansen would refuse a body, in its own vocabulary", () => {
+    const w = "0xb0b0000000000000000000000000000000000001";
+    assert.deepEqual(nansenBodyProblem("first-funder", { wallet_address: w, chain: "all" }), { code: "unknown_field", param: "wallet_address" });
+    assert.deepEqual(nansenBodyProblem("related-wallets", { wallet_address: w }), { code: "missing_field", param: "chain" });
+    assert.deepEqual(nansenBodyProblem("related-wallets", { address: w, chain: "ethereum" }), { code: "deprecated_field", param: "address" });
+    assert.deepEqual(nansenBodyProblem("current-balance", { chain: "all" }), { code: "missing_field", param: "address" });
+    assert.equal(nansenBodyProblem("current-balance", { entity_name: "Coinbase", chain: "all" }), null, "an entity instead of a wallet is allowed");
+    assert.deepEqual(nansenBodyProblem("transactions", "nope"), { code: "missing_field", param: "address" });
+    assert.deepEqual(nansenBodyProblem("smart-money", {}), { code: "unknown_endpoint", param: null });
   });
 
   it("requests are byte-stable: lowercase addresses, fixed key order, dates to the minute", () => {

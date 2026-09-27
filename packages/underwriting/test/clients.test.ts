@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { LIQUIDATION_POOLS } from "../src/core/constants.ts";
+import { nansenRequests } from "../src/core/providers/nansen.ts";
 import { fixtureTransport } from "../src/node/fixtures.ts";
 import { ProviderError } from "../src/node/http.ts";
 import { NansenClient } from "../src/node/nansen.ts";
@@ -58,6 +59,24 @@ describe("NansenClient against fixtures", () => {
 
     const keyless = new NansenClient({ mode: "live", transport: scripted(fixtureTransport(), [{ match: host("nansen"), respond: () => status(402, {}) }]) });
     await assert.rejects(keyless.firstFunder(LINKED.strong), (e: ProviderError) => e.code === "unauthorized");
+  });
+
+  it("a body Nansen's schema refuses fails in fixture mode as it would live: 422 unknown_field, request_rejected, no retry", async () => {
+    const good = nansenRequests.firstFunder(LINKED.strong);
+    // The alias the old recipe sent to first-funder: its schema knows only `address`.
+    const wrong = { ...good, body: JSON.stringify({ wallet_address: LINKED.strong, chain: "all" }) };
+    const t = scripted(fixtureTransport(), []);
+    const res = await new NansenClient({ transport: t, retry: { attempts: 3 } }).execute(wrong);
+    assert.equal(res.status, 422);
+    const body = JSON.parse(res.body) as { code: string; param: string };
+    assert.deepEqual([body.code, body.param], ["unknown_field", "wallet_address"]);
+    assert.equal(t.calls.length, 1, "a refused body is not retried");
+
+    const live = new NansenClient({ mode: "live", apiKey: "k", transport: scripted(fixtureTransport(), [{ match: host("nansen"), respond: () => status(422, body) }]) });
+    await assert.rejects(live.firstFunder(LINKED.strong), (e: ProviderError) => e.code === "request_rejected" && !e.retryable && /param wallet_address/.test(e.message));
+
+    // The builders refuse to build such a body at all, before any credit is spent.
+    assert.throws(() => nansenRequests.relatedWallets(LINKED.strong, undefined as unknown as string), /missing_field: chain/);
   });
 
   it("sends the key in the apikey header only when live", async () => {
