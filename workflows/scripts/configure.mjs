@@ -15,9 +15,13 @@
  * the other way round.
  *
  * Options: --deployment <file> to read another record; --indexer <url> to set
- * the Envio GraphQL endpoint; --callback <url> to set where run callbacks go;
- * --authorized-key <address> for the key the Polaris API signs underwriting
- * trigger requests with (required once deployed; simulation needs none).
+ * the Envio GraphQL endpoint (the Polaris indexer, packages/indexer: the
+ * workflow's default query is its client's DUE_CANDIDATES, so this also clears
+ * any candidates.indexerQuery left in the config); --indexer-query <file> for
+ * an indexer with another schema; --callback <url> to set where run callbacks
+ * go; --authorized-key <address> for the key the Polaris API signs
+ * underwriting trigger requests with (required once deployed; simulation
+ * needs none).
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -88,7 +92,11 @@ export function configsFor(target, record, templates, opts = {}) {
     collections.schedule = "*/30 * * * * *";
   }
   if (opts.indexer !== undefined) {
-    collections.candidates = { ...collections.candidates, indexerUrl: opts.indexer || null };
+    // A query left over from another indexer would fail against this one, and a
+    // failing indexer only shows as a quiet fall back to the chain every run.
+    collections.candidates = { ...collections.candidates, indexerUrl: opts.indexer || null, indexerQuery: opts.indexerQuery || null };
+  } else if (opts.indexerQuery !== undefined) {
+    collections.candidates = { ...collections.candidates, indexerQuery: opts.indexerQuery || null };
   }
   if (opts.authorizedKey !== undefined) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(opts.authorizedKey)) throw new Error("--authorized-key must be an address");
@@ -133,9 +141,11 @@ export function configure(target, opts = {}) {
 if (process.argv[1] && /configure\.mjs$/.test(process.argv[1])) {
   const target = process.argv[2];
   try {
+    const queryFile = arg("indexer-query");
     const { written, record } = configure(target, {
       deployment: arg("deployment"),
       indexer: arg("indexer"),
+      indexerQuery: queryFile === undefined ? undefined : readFileSync(queryFile, "utf8").trim(),
       callback: arg("callback"),
       authorizedKey: arg("authorized-key"),
     });

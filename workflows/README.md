@@ -177,13 +177,24 @@ two, not staging copies.
 Report: `abi.encode(uint8 kind = 1, (uint8 action, uint256 id)[] tasks)`;
 action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
 
-1. **Candidates.** With `candidates.indexerUrl`, one GraphQL POST
-   (`DUE_CANDIDATES_QUERY`, overridable with `candidates.indexerQuery`; it must
-   return `Loan { loanId }` and `Subscription { subId }` lists) agreed by
-   identical consensus on the ids. Without an indexer, or if it fails, the
-   chain proposes: `loanCount()` and `subscriptionCount()`, the newest
-   `recentWindow` ids of each, plus a `sweepWindow` slice of older ids that
-   rotates with the cron's scheduled time so every id is revisited.
+1. **Candidates.** With `candidates.indexerUrl`, one GraphQL POST agreed by
+   identical consensus on the ids. The default query, `DUE_CANDIDATES_QUERY`,
+   is `DUE_CANDIDATES` from `@polarispay/indexer-client`, character for
+   character: `Loan: Plan(...)` and `Subscription(...)` whose `nextAttemptAt`
+   has come. The indexer moves `nextAttemptAt` up the dunning ladder after a
+   shortfall, so a buyer who is short is retried on the ladder's schedule, not
+   every tick. `test/indexer-schema.test.ts` validates the query against a
+   Hasura-shaped schema built from `packages/indexer/schema.graphql` (a
+   snapshot in `test/fixtures/indexer/` until that package is on this branch)
+   and runs it over rows; the e2e's indexer does the same. An indexer with
+   another schema sets `candidates.indexerQuery` (any query returning `Loan {
+   loanId }` and `Subscription { subId }` lists); `configure --indexer <url>`
+   clears it, `--indexer-query <file>` sets it. Without an indexer, or if it
+   fails, the chain proposes: `loanCount()` and `subscriptionCount()`, the
+   newest `recentWindow` ids of each, plus a `sweepWindow` slice of older ids
+   that rotates with the cron's scheduled time so every id is revisited. The
+   chain keeps no failure history, so this fallback has no dunning backoff: a
+   buyer who is short is tried on every run until the indexer is back.
 2. **The chain disposes.** `CollectionsReceiver.checkTasks` at the last
    finalized block, 72 tasks per read (CRE caps a read request at 5 KB).
    Liquidation is checked only on loans that are due.
@@ -308,6 +319,12 @@ from `@polaris/cre-workflows/callback`; event types are in
   `packages/contracts/lib/cre.js` (what the Hardhat suite drives the receivers
   with); workflow names hash to the receivers' bytes10; a full `checkTasks`
   batch fits 5 KB; gas sizing; the chain window revisits every id.
+- `test/indexer-schema.test.ts`: the default candidate query is valid
+  against the indexer's Hasura schema (and equal to the indexer client's
+  `DUE_CANDIDATES` once that package is here); run over rows, it returns the
+  plans and subscriptions whose attempt has come and skips those the dunning
+  ladder holds back; `configure --indexer` yields a request the indexer
+  accepts.
 - `test/collections.workflow.test.ts`, `test/underwriting.workflow.test.ts`:
   the handlers on `@chainlink/cre-sdk/test`'s runtime and mocks: reports,
   gas limits, the indexer and its fallback, the read quota, the simulator's
@@ -326,7 +343,8 @@ from `@polaris/cre-workflows/callback`; event types are in
   way viem's own verifier checks it.
 - `e2e/local-chain.e2e.test.ts` (`e2e:local`): on real contracts, a proof
   becomes facts and ScoreManager opens a line at the mirror's score; a Pay in
-  4 plan opens on it; instalment 1 is collected from indexer candidates; a
+  4 plan opens on it; instalment 1 is collected from indexer candidates (the
+  workflow's own query run against the indexer's schema); a
   revoked allowance and an empty balance become `reauthorize` and `top_up`;
   past grace the plan is liquidated in the same report; an unknown action is
   skipped, not fatal.
@@ -351,7 +369,8 @@ with against what it used:
 | Monad testnet | waits for `deploy:monad` (the deployer is unfunded), then `configure staging` |
 | Deploy to the DON | waits for Early Access |
 | The Polaris API side of the callback | `verifyCallback` and the event types are exported; the route that receives them belongs to the API |
-| The indexer schema | `DUE_CANDIDATES_QUERY` follows docs/research/envio.md; set `candidates.indexerQuery` if the indexer that ships differs |
+| The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` (snapshot at metropolis/indexer 3987062 until that branch merges; then delete `test/fixtures/indexer/`) |
+| Dunning backoff without the indexer | not applied: the chain fallback has no failure history, so it retries a short buyer every run. Keep the indexer configured in production |
 
 ## Limits that shaped this (docs/research/cre.md §8)
 

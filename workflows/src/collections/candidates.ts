@@ -6,24 +6,45 @@
  * never a wrong collection.
  *
  * - **Envio HyperIndex** (when `candidates.indexerUrl` is set): one GraphQL
- *   POST for the plans and subscriptions whose next due time has passed
- *   (docs/research/envio.md §12, "CRE candidate list").
+ *   POST for the plans and subscriptions whose next attempt has come: the
+ *   due time, or the next rung of the dunning ladder after a shortfall.
  * - **The chain** (no indexer, or the indexer failed): `loanCount()` and
  *   `subscriptionCount()`, then a bounded window of ids (see `chainWindow`).
  */
 
 /**
- * The default candidate query, against the indexer schema docs/research/envio.md
- * §12 sets out: `Loan { loanId, status, nextDueAt }` and
- * `Subscription { subId, status, nextChargeAt }`, timestamps as Int. A
- * deployment whose schema differs sets `candidates.indexerQuery`; any query
- * works that returns `Loan` and `Subscription` lists with `loanId` / `subId`
- * (or an `id` ending in the number).
+ * The default candidate query: `DUE_CANDIDATES` from @polarispay/indexer-client
+ * (packages/indexer/client/src/documents.ts), character for character.
+ *
+ * The indexer (packages/indexer/schema.graphql, served by Envio's Hasura) has
+ * no `Loan` entity: a Pay in 4 plan is a `Plan`, aliased here to `Loan` so the
+ * parser below reads both shapes. It filters on `nextAttemptAt`, not the due
+ * date: the indexer moves that along the dunning ladder after each shortfall
+ * (never past the moment the plan turns liquidatable), so a buyer who is short
+ * is retried on the ladder's schedule rather than on every tick. Timestamps
+ * are Int; `loanId` and `subId` are BigInt, which Hasura returns as strings.
+ *
+ * test/indexer-schema.test.ts validates this text against a Hasura-shaped
+ * schema built from the indexer's schema.graphql, and against the client's
+ * own document once packages/indexer is on this branch. A deployment whose
+ * schema differs sets `candidates.indexerQuery`; any query works that returns
+ * `Loan` and `Subscription` lists with `loanId` / `subId` (or an `id` ending
+ * in the number).
  */
-export const DUE_CANDIDATES_QUERY = `query DueCandidates($now: Int!, $limit: Int!) {
-  Loan(where: { status: { _eq: "ACTIVE" }, nextDueAt: { _lte: $now } }, order_by: { nextDueAt: asc }, limit: $limit) { loanId }
-  Subscription(where: { status: { _eq: "ACTIVE" }, nextChargeAt: { _lte: $now } }, order_by: { nextChargeAt: asc }, limit: $limit) { subId }
-}`;
+export const DUE_CANDIDATES_QUERY = /* GraphQL */ `
+  query DueCandidates($now: Int!, $limit: Int!) {
+    Loan: Plan(
+      where: { status: { _eq: "ACTIVE" }, nextAttemptAt: { _lte: $now } }
+      order_by: [{ nextAttemptAt: asc }, { loanId: asc }]
+      limit: $limit
+    ) { loanId liquidatableAt }
+    Subscription(
+      where: { status: { _eq: "ACTIVE" }, nextAttemptAt: { _lte: $now } }
+      order_by: [{ nextAttemptAt: asc }, { subId: asc }]
+      limit: $limit
+    ) { subId }
+  }
+`;
 
 export interface IndexerCandidates {
   loans: bigint[];

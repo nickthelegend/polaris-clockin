@@ -56,6 +56,7 @@ import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
 import { configSchema as underwritingSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
 import { answerFromFixtures, cloneFixtures, type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
+import { answerHasura, type Tables } from "../test/helpers/hasura.ts";
 import { fs, requireModule } from "../test/helpers/host.ts";
 import { bridgeEvm, call, chainNowMs, rpcSync, sendTx, travel } from "./helpers/local-evm.ts";
 
@@ -117,8 +118,13 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
   const underwritingConfig = (): UnderwritingConfig =>
     underwritingSchema.parse(JSON.parse(fs.readFileSync(join(ROOT, "underwriting", "config.local.json"), "utf8")));
 
-  /** Wire the SDK's mocks: EVM to the node, HTTP to the fixtures, the callback and an indexer. */
-  function harness(indexer?: () => unknown) {
+  /**
+   * Wire the SDK's mocks: EVM to the node, HTTP to the fixtures, the callback
+   * and an indexer. The indexer runs the workflow's own query over `indexer()`'s
+   * rows against the Polaris indexer's Hasura schema, so a query that indexer
+   * would refuse makes the run fall back to the chain, and the test fails.
+   */
+  function harness(indexer?: () => Tables) {
     const record = bridgeEvm(EvmMock.testInstance(SELECTOR), { url: RPC, forwarder: SIM_FORWARDER, transmitter: DEPLOYER });
     const callbacks: SentRequest[] = [];
     const http = HttpActionsMock.testInstance();
@@ -129,7 +135,8 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
         return { statusCode: 204 };
       }
       if (s.url === INDEXER_URL) {
-        return { statusCode: 200, body: Buffer.from(JSON.stringify(indexer?.() ?? {})).toString("base64") };
+        const answer = answerHasura(s.body ?? "", indexer?.() ?? {});
+        return { statusCode: 200, body: Buffer.from(JSON.stringify(answer)).toString("base64") };
       }
       return answerFromFixtures(s, FIXTURES);
     };
@@ -273,16 +280,27 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     expect(loanId).toBeGreaterThan(0n);
   });
 
+  /** The plan as the indexer holds it: next attempt at the next instalment's due time (no shortfall yet). */
+  const indexedPlan = () => {
+    const engine = at("PolarisLoanEngine");
+    const loan = read(engine, polarisLoanEngineAbi, "getLoan", [loanId]) as { installmentsPaid: number; status: number };
+    const dueAt = read(engine, polarisLoanEngineAbi, "installmentDueAt", [loanId, loan.installmentsPaid]) as bigint;
+    const status = ["ACTIVE", "REPAID", "LIQUIDATED"][loan.status]!;
+    return { id: loanId.toString(), loanId: loanId.toString(), status, nextAttemptAt: Number(dueAt), liquidatableAt: null };
+  };
+
   test("collections, candidates from the indexer: nothing before the due time, instalment 1 when due, the webhook signed", () => {
-    const { record, callbacks } = harness(() => ({ data: { Loan: [{ loanId: loanId.toString() }], Subscription: [] } }));
+    const { record, callbacks } = harness(() => ({ Plan: [indexedPlan()], Subscription: [] }));
     const withIndexer = collectionsConfig({
       candidates: { indexerUrl: INDEXER_URL, indexerQuery: null, indexerLimit: 100, recentWindow: 50, sweepWindow: 0 },
     });
-    expect(collect(withIndexer).status).toBe("idle");
+    const early = collect(withIndexer);
+    expect(early).toMatchObject({ status: "idle", source: "indexer", checked: 0 }); // the indexer proposed nothing yet
 
     travel(RPC, 61);
     const out = collect(withIndexer);
     expect(out.source).toBe("indexer");
+    expect(out.note).toBeNull();
     expect(out.status).toBe("written");
     expect(out.executed).toBe(1);
     const loan = read(at("PolarisLoanEngine"), polarisLoanEngineAbi, "getLoan", [loanId]) as { installmentsPaid: number };

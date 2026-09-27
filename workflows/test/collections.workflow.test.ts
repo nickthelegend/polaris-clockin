@@ -15,6 +15,7 @@ import { ACTION, decodeCollectionsReport, type Task } from "../src/collections/t
 import { type CollectionsConfig, configSchema, onCron } from "../src/collections/workflow.ts";
 import { b64, eventLog, fakeTxHash, hexOf, receiptJson, type TestLog } from "./helpers/evm.ts";
 import { type CreRequestLike, toSent } from "./helpers/fixtures-http.ts";
+import { answerHasura } from "./helpers/hasura.ts";
 
 const RECEIVER = "0x00000000000000000000000000000000000c0113" as Address;
 const ENGINE = "0x0000000000000000000000000000000000e61e00" as Address;
@@ -236,6 +237,36 @@ test("the indexer proposes: its ids are checked on chain, and the chain counts a
   expect(seen.reports[0]).toEqual([
     { action: ACTION.COLLECT_INSTALLMENT, id: 7n },
     { action: ACTION.LIQUIDATE, id: 7n },
+  ]);
+});
+
+test("configured with the Polaris indexer, the default query is answered: no fall back, and a buyer in dunning is not retried early", () => {
+  const now = NOW_MS / 1000;
+  const seen = fakeChain({ loanCount: 999n, subscriptionCount: 999n, ready: (t) => t.action !== ACTION.LIQUIDATE });
+  // The indexer's own schema and rows: loan 4 was short last run, so its next attempt is a rung up the ladder.
+  const sent = httpRecorder((_url, body) => ({
+    status: 200,
+    json: answerHasura(body!, {
+      Plan: [
+        { id: "3", loanId: "3", status: "ACTIVE", nextAttemptAt: now - 60, liquidatableAt: null },
+        { id: "4", loanId: "4", status: "ACTIVE", nextAttemptAt: now + 6 * 3600, liquidatableAt: now + 3 * 86_400 },
+      ],
+      Subscription: [{ id: "2", subId: "2", status: "ACTIVE", nextAttemptAt: now - 60 }],
+    }),
+  }));
+  const out = run(
+    baseConfig({
+      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+    }),
+  );
+  expect(sent).toHaveLength(1);
+  expect(out.source).toBe("indexer");
+  expect(out.note).toBeNull();
+  expect(seen.countReads).toBe(0);
+  expect(seen.checked.map((t) => `${t.action}:${t.id}`)).toEqual(["1:3", "2:2", "3:3"]);
+  expect(seen.reports[0]).toEqual([
+    { action: ACTION.COLLECT_INSTALLMENT, id: 3n },
+    { action: ACTION.CHARGE_SUBSCRIPTION, id: 2n },
   ]);
 });
 
