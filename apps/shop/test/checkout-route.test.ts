@@ -174,6 +174,8 @@ describe("POST /api/checkout (Polaris)", () => {
     expect(ok.status).toBe(200);
     expect(calls[0]!.body).toMatchObject({ amount: "18.00", modes: ["subscribe"], subscription: { interval: "month", intervalCount: 1 } });
     expect(calls[0]!.body!.lineItems).toEqual([{ name: "Halcyon Coffee Club, Filter", quantity: 1, unitAmount: "18.00" }]);
+    // Canceling in Polaris comes back to the subscription's own checkout, not an empty bag.
+    expect(calls[0]!.body!.cancelUrl).toBe("https://shop.test/checkout?subscribe=coffee-club&option=filter&canceled=1");
   });
 });
 

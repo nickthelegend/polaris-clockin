@@ -2,21 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import { AlertIcon, CheckIcon, Spinner, WalletIcon } from "@/components/icons";
 import { FLAT_SHIPPING, FREE_SHIPPING_THRESHOLD, getOption, getProduct } from "@/lib/catalog";
-import { formatUsd } from "@/lib/money";
 import { CheckoutError, fetchOrder, logBrowserCalls, newAttemptId, placeOrder, type CheckoutPayload } from "@/lib/checkout-client";
-import { PolarisCheckoutButton, isPolarisError, type CheckoutResult, type PayResult, type PolarisError } from "@/lib/polaris-client";
+import { formatUsd } from "@/lib/money";
+import { payIn4 } from "@/lib/pay-in-4";
+import { MONAD_TESTNET, PolarisCheckoutButton, isPolarisError, type CheckoutResult, type PayResult, type PolarisError } from "@/lib/polaris-client";
 import { useShop } from "@/lib/shop-context";
 
-import { ContactFields, DEMO_BUYER, validateBuyer, type BuyerForm } from "./contact-fields";
+import { ContactFields, ContactSummary, DEMO_BUYER, FIELD_NAMES, validateBuyer, type BuyerForm } from "./contact-fields";
 import { OrderSummary, type SummaryLine } from "./order-summary";
 import { PaymentOptions, type Method, type Mode } from "./payment-options";
 import { ACTIVE_STEP, WalletSteps, type WalletPhase } from "./wallet-steps";
 
-type Notice = { tone: "info" | "error"; text: string } | null;
+/** "top": under the Checkout heading, where a buyer lands. "inline": under the pay button, where they are. */
+type Notice = { tone: "info" | "error"; text: string; at: "top" | "inline"; working?: boolean } | null;
+
+type Eip1193 = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
+
+const MONAD_CHAIN_HEX = `0x${MONAD_TESTNET.chainId.toString(16)}`;
 
 const WALLET_LABEL: Partial<Record<WalletPhase, string>> = {
   connecting: "Connecting your wallet…",
@@ -27,6 +33,19 @@ const WALLET_LABEL: Partial<Record<WalletPhase, string>> = {
   paid: "Paid",
   error: "Try again",
 };
+
+function browserWallet(): Eip1193 | null {
+  const eth = (window as { ethereum?: Eip1193 }).ethereum;
+  return eth && typeof eth.request === "function" ? eth : null;
+}
+
+/** "email", "email and full name", "email, city and postcode". */
+function listFields(keys: string[]): string {
+  const names = keys.map((k) => FIELD_NAMES[k] ?? "details");
+  return names.length <= 1 ? (names[0] ?? "details") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function CheckoutView({
   subscription,
@@ -52,24 +71,60 @@ export function CheckoutView({
   const subtotal = lines.reduce((n, l) => n + l.lineTotal, 0);
   const shipping = kind === "subscription" || subtotal === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING;
   const total = subtotal + shipping;
+  const aprBps = polarisConfig.payInFourAprBps;
 
   const [buyer, setBuyer] = useState<BuyerForm>(DEMO_BUYER);
+  // Complete details show as one card, so the payment choice is in the first screen.
+  const [editing, setEditing] = useState(() => Object.keys(validateBuyer(DEMO_BUYER)).length > 0);
   const [touched, setTouched] = useState(false);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [method, setMethod] = useState<Method>("polaris");
   const [mode, setMode] = useState<Mode>(subscription ? "subscribe" : "later");
   const [notice, setNotice] = useState<Notice>(
-    returnedFromCancel ? { tone: "info", text: "You left Polaris without paying. Nothing was charged, and your bag is as you left it." } : null,
+    returnedFromCancel ? { tone: "info", at: "top", text: "You left Polaris without paying. Nothing was charged, and your order is as you left it." } : null,
   );
   const [walletState, setWalletState] = useState<WalletPhase>("idle");
   const [walletError, setWalletError] = useState<string | null>(null);
   const [walletStep, setWalletStep] = useState(0);
+  const [needsSwitch, setNeedsSwitch] = useState(false);
+  const [switching, setSwitching] = useState(false);
   const [attemptId, setAttemptId] = useState(newAttemptId);
+  const [hasWallet, setHasWallet] = useState<boolean | null>(null);
+  const [coarsePointer, setCoarsePointer] = useState(false);
   const sessionRef = useRef<{ orderId: string; url: string; openedAt: string } | null>(null);
+  /** The unpaid order this browser is paying, so changing how to pay continues it instead of opening another. */
+  const currentOrder = useRef<string | null>(null);
+  const alive = useRef(true);
+
+  useEffect(() => {
+    alive.current = true;
+    /* eslint-disable react-hooks/set-state-in-effect -- window.ethereum and the pointer only exist in the browser */
+    setHasWallet(browserWallet() !== null);
+    setCoarsePointer(window.matchMedia("(pointer: coarse)").matches);
+    /* eslint-enable react-hooks/set-state-in-effect */
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
   const clientErrors = validateBuyer(buyer);
   const errors = { ...(touched ? clientErrors : {}), ...serverErrors };
   const valid = Object.keys(clientErrors).length === 0 && lines.length > 0;
+
+  /** Open the fields, then take the buyer to the first one that needs another look. */
+  const revealInvalid = useCallback(() => {
+    setTouched(true);
+    setEditing(true);
+    window.requestAnimationFrame(() =>
+      window.requestAnimationFrame(() => {
+        const field = document.querySelector<HTMLElement>('[aria-invalid="true"]');
+        if (!field) return;
+        const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        field.scrollIntoView({ block: "center", behavior: smooth ? "smooth" : "auto" });
+        field.focus({ preventScroll: true });
+      }),
+    );
+  }, []);
 
   const payload = useCallback(
     (payment: CheckoutPayload["payment"]): CheckoutPayload => ({
@@ -84,6 +139,7 @@ export function CheckoutView({
         country: buyer.country,
       },
       payment,
+      ...(currentOrder.current ? { continueOrder: currentOrder.current } : {}),
     }),
     [lines, buyer],
   );
@@ -93,7 +149,9 @@ export function CheckoutView({
       setServerErrors({});
       setNotice(null);
       try {
-        return await placeOrder(payload(payment), attemptId);
+        const res = await placeOrder(payload(payment), attemptId);
+        if (res.order.status === "awaiting_payment") currentOrder.current = res.order.id;
+        return res;
       } catch (e) {
         if (e instanceof CheckoutError) {
           if (e.code === "idempotency_conflict") {
@@ -101,13 +159,24 @@ export function CheckoutView({
             setAttemptId(fresh);
             return placeOrder(payload(payment), fresh);
           }
-          setServerErrors(e.fields);
-          setTouched(true);
+          if (Object.keys(e.fields).length > 0) {
+            setServerErrors(e.fields);
+            revealInvalid();
+          }
         }
         throw e;
       }
     },
-    [payload, attemptId],
+    [payload, attemptId, revealInvalid],
+  );
+
+  const toReceipt = useCallback(
+    (orderId: string, via: "polaris" | "wallet") => {
+      // The receipt opens at its top, with the confirmation in view.
+      window.scrollTo({ top: 0 });
+      router.push(`/orders/${orderId}?via=${via}`);
+    },
+    [router],
   );
 
   const createSession = useCallback(async () => {
@@ -123,32 +192,84 @@ export function CheckoutView({
     return { id: res.checkout.sessionId, url: res.checkout.url };
   }, [place, mode, router, setCurrentOrderId]);
 
+  /**
+   * The Polaris window closed (or timed out) without telling us how it ended.
+   * The buyer may have paid a moment before closing it, so ask the store,
+   * which asks Polaris, before saying anything about money.
+   */
+  const settleAfterClose = useCallback(
+    async (orderId: string) => {
+      setNotice({ tone: "info", at: "inline", working: true, text: "Checking with Polaris…" });
+      const check = async (sync: boolean): Promise<"paid" | "open" | "expired" | "unknown"> => {
+        const latest = await fetchOrder(orderId, sync);
+        if (!latest) return "unknown";
+        if (latest.order.status === "paid" || latest.session?.status === "complete") return "paid";
+        if (latest.session?.status === "open" || latest.session?.status === "expired") return latest.session.status;
+        return "unknown";
+      };
+      const say = (verdict: "open" | "expired") =>
+        setNotice({
+          tone: "info",
+          at: "inline",
+          text:
+            verdict === "open"
+              ? "The Polaris window closed before you finished. Nothing was charged; you can pick up where you left off."
+              : "That Polaris checkout expired. Nothing was charged; start again when you're ready.",
+        });
+
+      let verdict = await check(true);
+      if (!alive.current) return;
+      if (verdict === "paid") return toReceipt(orderId, "polaris");
+      if (verdict !== "unknown") return say(verdict);
+
+      setNotice({ tone: "info", at: "inline", working: true, text: "The Polaris window closed. If you finished paying, we'll confirm it here in a moment." });
+      const started = Date.now();
+      let lastSync = started;
+      while (Date.now() - started < 30_000) {
+        await sleep(1500);
+        if (!alive.current) return;
+        const sync = Date.now() - lastSync >= 10_000;
+        if (sync) lastSync = Date.now();
+        verdict = await check(sync);
+        if (!alive.current) return;
+        if (verdict === "paid") return toReceipt(orderId, "polaris");
+        if (verdict !== "unknown") return say(verdict);
+      }
+      setNotice({
+        tone: "info",
+        at: "inline",
+        text: "We haven't heard from Polaris yet. If you paid, your receipt will show it; otherwise you can try again.",
+      });
+    },
+    [toReceipt],
+  );
+
   const onCheckoutResult = useCallback(
     (result: CheckoutResult) => {
       const session = sessionRef.current;
       if (session) {
-        logBrowserCalls(session.orderId, [
-          { at: session.openedAt, call: "polaris.openCheckout", args: [session.url], result },
-        ]);
+        logBrowserCalls(session.orderId, [{ at: session.openedAt, call: "polaris.openCheckout", args: [session.url], result }]);
       }
       if (result.status === "completed" && session) {
         // The receipt empties the bag once the order is paid.
-        router.push(`/orders/${session.orderId}?via=polaris`);
+        toReceipt(session.orderId, "polaris");
       } else if (result.status === "canceled") {
-        setNotice({ tone: "info", text: "You canceled in Polaris. Nothing was charged. Choose another way to pay, or try again." });
-      } else if (result.status === "closed") {
-        setNotice({ tone: "info", text: "The Polaris window closed before you finished. Nothing was charged; you can pick up where you left off." });
-      } else if (result.status === "expired" || result.status === "timeout") {
-        setNotice({ tone: "info", text: "That Polaris checkout expired. Nothing was charged; start again when you're ready." });
+        setNotice({ tone: "info", at: "inline", text: "You canceled in Polaris. Nothing was charged. Choose another way to pay, or try again." });
+      } else if ((result.status === "closed" || result.status === "expired" || result.status === "timeout") && session) {
+        void settleAfterClose(session.orderId);
       }
     },
-    [router],
+    [toReceipt, settleAfterClose],
   );
 
   const onCheckoutError = useCallback((e: PolarisError | Error) => {
     const cause = (e as { cause?: unknown }).cause ?? e;
     if ((cause instanceof CheckoutError && cause.code === "already_paid") || (e instanceof CheckoutError && e.code === "already_paid")) return;
-    setNotice({ tone: "error", text: isPolarisError(e) && e.type === "configuration_error" ? "Polaris isn't set up correctly on this store." : e.message });
+    setNotice({
+      tone: "error",
+      at: "inline",
+      text: isPolarisError(e) && e.type === "configuration_error" ? "Polaris isn't set up correctly on this store." : e.message,
+    });
   }, []);
 
   const moveWallet = useCallback((phase: WalletPhase) => {
@@ -157,18 +278,55 @@ export function CheckoutView({
     if (step !== undefined) setWalletStep(step);
   }, []);
 
+  const walletMessage = useCallback(
+    (result: { error?: string; cause?: unknown }): string => {
+      const code = (result.cause as { code?: unknown } | undefined)?.code;
+      if (code === "no_wallet") {
+        return coarsePointer
+          ? "We couldn't find a wallet in this browser. Open this page in your wallet app's browser, or pay with Polaris above."
+          : "We couldn't find a wallet in this browser. Install one such as MetaMask or Rabby, or pay with Polaris above.";
+      }
+      if (code === 4001 || /cancell?ed the request|user rejected|user denied/i.test(result.error ?? "")) {
+        return "You canceled in your wallet. Nothing was charged.";
+      }
+      return result.error ?? "The payment didn't go through. Nothing was charged.";
+    },
+    [coarsePointer],
+  );
+
   /**
-   * Direct wallet payment: the store creates the order (its id is what the
-   * buyer signs for), then polaris.pay() asks the wallet for one ERC-3009
+   * Direct wallet payment: the store creates the order (its payRef is what
+   * the buyer signs for), then polaris.pay() asks the wallet for one ERC-3009
    * signature and the Polaris relayer submits it. Paid still only comes from
    * the webhook.
    */
   const payFromWallet = useCallback(async () => {
     if (!polaris) return;
+    if (!valid) {
+      revealInvalid();
+      return;
+    }
+    const eth = browserWallet();
     setWalletError(null);
-    setTouched(true);
-    if (!valid) return;
+    setNeedsSwitch(false);
+    if (!eth) {
+      moveWallet("error");
+      setWalletError(walletMessage({ cause: { code: "no_wallet" } }));
+      return;
+    }
     moveWallet("connecting");
+    // On another network: say so, and offer the switch, before the wallet or the store is asked for anything.
+    try {
+      const chainId = await eth.request({ method: "eth_chainId" });
+      if (typeof chainId === "string" && chainId.toLowerCase() !== MONAD_CHAIN_HEX) {
+        moveWallet("idle");
+        setNeedsSwitch(true);
+        return;
+      }
+    } catch {
+      // The SDK asks again, and handles what the wallet says.
+    }
+
     let res;
     try {
       res = await place({ method: "wallet" });
@@ -183,13 +341,14 @@ export function CheckoutView({
       setWalletError("This order can't be paid from a wallet.");
       return;
     }
-    const { merchant, amount, orderId } = res.wallet;
+    const { merchant, amount, orderId: payRef } = res.wallet;
+    const orderId = res.order.id;
     setCurrentOrderId(orderId);
     const startedAt = new Date().toISOString();
 
     let result: PayResult;
     try {
-      result = await polaris.pay({ merchant, amount, orderId, onStage: (stage) => moveWallet(stage) });
+      result = await polaris.pay({ merchant, amount, orderId: payRef, onStage: (stage) => moveWallet(stage) });
     } catch (e) {
       // Setup mistakes throw (an undeployed contract); the buyer's own problems come back as a result.
       result = { ok: false, error: (e as Error).message, cause: e };
@@ -198,15 +357,21 @@ export function CheckoutView({
       {
         at: startedAt,
         call: "polaris.pay",
-        args: [{ merchant, amount, orderId }],
+        args: [{ merchant, amount, orderId: payRef }],
         result: result.ok
           ? { ok: true, transactionHash: result.transactionHash, paymentId: result.paymentId, relayed: result.relayed }
           : { ok: false, error: result.error },
       },
     ]);
+    if (!alive.current) return;
     if (!result.ok) {
+      if ((result.cause as { code?: unknown } | undefined)?.code === "wrong_chain") {
+        moveWallet("idle");
+        setNeedsSwitch(true);
+        return;
+      }
       moveWallet("error");
-      setWalletError(result.error ?? "The payment didn't go through. Nothing was charged.");
+      setWalletError(walletMessage(result));
       return;
     }
 
@@ -214,15 +379,72 @@ export function CheckoutView({
     // Paid comes from the webhook, never from here: wait for the store to hear it.
     for (let i = 0; i < 90; i++) {
       const latest = await fetchOrder(orderId);
+      if (!alive.current) return;
       if (latest?.order.status === "paid") {
         moveWallet("paid");
-        window.setTimeout(() => router.push(`/orders/${orderId}?via=wallet`), 1600);
+        window.setTimeout(() => toReceipt(orderId, "wallet"), 1600);
         return;
       }
-      await new Promise((r) => setTimeout(r, 1000));
+      await sleep(1000);
     }
-    router.push(`/orders/${orderId}?via=wallet`);
-  }, [polaris, valid, place, router, setCurrentOrderId, moveWallet]);
+    toReceipt(orderId, "wallet");
+  }, [polaris, valid, revealInvalid, place, router, setCurrentOrderId, moveWallet, walletMessage, toReceipt]);
+
+  /** Switch the wallet to Monad Testnet (adding it if the wallet has never seen it), then carry on paying. */
+  const switchNetwork = useCallback(async () => {
+    const eth = browserWallet();
+    if (!eth) return;
+    setSwitching(true);
+    setWalletError(null);
+    try {
+      try {
+        await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: MONAD_CHAIN_HEX }] });
+      } catch (e) {
+        if ((e as { code?: unknown }).code !== 4902) throw e;
+        await eth.request({
+          method: "wallet_addEthereumChain",
+          params: [
+            {
+              chainId: MONAD_CHAIN_HEX,
+              chainName: MONAD_TESTNET.name,
+              rpcUrls: [MONAD_TESTNET.rpcUrl],
+              blockExplorerUrls: [MONAD_TESTNET.explorer],
+              nativeCurrency: MONAD_TESTNET.nativeCurrency,
+            },
+          ],
+        });
+      }
+    } catch {
+      if (alive.current) {
+        setSwitching(false);
+        setWalletError("Your wallet stayed on the other network. Switch to Monad Testnet in your wallet, then try again.");
+      }
+      return;
+    }
+    if (!alive.current) return;
+    setSwitching(false);
+    setNeedsSwitch(false);
+    void payFromWallet();
+  }, [payFromWallet]);
+
+  const onPolarisClickCapture = useCallback(
+    (e: MouseEvent) => {
+      if (valid) return;
+      // Keep the Polaris window from opening, and show what needs fixing.
+      e.stopPropagation();
+      e.preventDefault();
+      revealInvalid();
+    },
+    [valid, revealInvalid],
+  );
+
+  const topNotice =
+    notice?.at === "top" ? (
+      <p id="checkout-notice" role="status" className="mt-5 flex gap-3 rounded-xl bg-sand p-4 text-[0.95rem] text-ink-2">
+        <AlertIcon size={20} className="mt-0.5 shrink-0" />
+        {notice.text}
+      </p>
+    ) : null;
 
   if (!shop.ready && !subscription) {
     return (
@@ -236,6 +458,7 @@ export function CheckoutView({
     return (
       <div className="mx-auto max-w-[1440px] px-4 pt-16 sm:px-6 lg:px-10">
         <h1 className="display text-[3rem] sm:text-[4rem]">Checkout</h1>
+        {topNotice}
         <p className="mt-4 text-muted">Your bag is empty.</p>
         <Link href="/shop" className="btn btn-ink mt-8">
           Shop the collection
@@ -245,34 +468,46 @@ export function CheckoutView({
   }
 
   const testMode = polarisConfig.ok && polarisConfig.publishableKey.startsWith("pk_test_");
-  const busyWallet = walletState !== "idle" && walletState !== "error" && walletState !== "paid";
+  const walletBusy = walletState !== "idle" && walletState !== "error" && walletState !== "paid";
+  const plan = payIn4(total, aprBps);
   const polarisLabel =
-    mode === "later" ? "Continue to Pay in 4" : mode === "subscribe" ? "Subscribe with Polaris" : "Pay with Polaris";
+    mode === "later" && plan
+      ? `Pay in 4 · ${formatUsd(plan.each)} a week`
+      : mode === "subscribe"
+        ? `Subscribe · ${formatUsd(total)} a month`
+        : `Pay ${formatUsd(total)} with Polaris`;
+  const noWallet = hasWallet === false;
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 pt-8 sm:px-6 lg:px-10 lg:pt-14">
+    <div className="mx-auto max-w-[1440px] px-4 pt-8 sm:px-6 lg:px-10 lg:pt-12">
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-16">
         <div className="lg:col-span-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h1 className="display text-[2.8rem] sm:text-[3.6rem]">Checkout</h1>
-            {testMode ? (
-              <span className="rounded-full bg-sand px-3 py-1 text-[0.8rem] text-ink-2">Test mode · no real money moves</span>
-            ) : null}
+            {testMode ? <span className="rounded-full bg-sand px-3 py-1 text-[0.8rem] text-ink-2">Test mode · no real money moves</span> : null}
           </div>
+          {topNotice}
 
           <div className="mt-6 lg:hidden">
-            <OrderSummary lines={lines} subtotal={subtotal} shipping={shipping} total={total} mode={method === "polaris" ? mode : null} aprBps={polarisConfig.payInFourAprBps} collapsible />
+            <OrderSummary lines={lines} subtotal={subtotal} shipping={shipping} total={total} mode={method === "polaris" ? mode : null} aprBps={aprBps} collapsible />
           </div>
 
-          <form
-            noValidate
-            onSubmit={(e) => e.preventDefault()}
-            className="mt-8"
-            aria-describedby={notice ? "checkout-notice" : undefined}
-          >
-            <ContactFields value={buyer} errors={errors} onChange={(next) => { setBuyer(next); setServerErrors({}); }} onBlur={() => setTouched(true)} />
+          <form noValidate onSubmit={(e) => e.preventDefault()} className="mt-6 lg:mt-8" aria-describedby={notice ? "checkout-notice" : undefined}>
+            {editing ? (
+              <ContactFields
+                value={buyer}
+                errors={errors}
+                onChange={(next) => {
+                  setBuyer(next);
+                  setServerErrors({});
+                }}
+                onBlur={() => setTouched(true)}
+              />
+            ) : (
+              <ContactSummary value={buyer} onEdit={() => setEditing(true)} />
+            )}
 
-            <section aria-labelledby="payment-title" className="mt-12">
+            <section aria-labelledby="payment-title" className={editing ? "mt-12" : "mt-8"}>
               <h2 id="payment-title" className="display text-[1.9rem]">
                 Payment
               </h2>
@@ -288,9 +523,26 @@ export function CheckoutView({
                 onMode={setMode}
                 kind={kind}
                 total={total}
-                aprBps={polarisConfig.payInFourAprBps}
+                aprBps={aprBps}
+                hasWallet={hasWallet}
+                coarsePointer={coarsePointer}
                 walletPanel={
-                  walletState !== "idle" || walletError ? <WalletSteps phase={walletState} error={walletError} lastStep={walletStep} /> : null
+                  needsSwitch ? (
+                    <div className="mt-5 rounded-xl bg-sand px-4 py-4" role="group" aria-label="Switch network">
+                      <p className="text-[0.94rem] text-ink">Your wallet is on another network. Polaris takes payments on Monad Testnet.</p>
+                      <button type="button" onClick={switchNetwork} disabled={switching} aria-busy={switching || undefined} className="btn btn-line mt-3 bg-paper">
+                        {switching ? <Spinner size={16} /> : null}
+                        Switch to Monad Testnet
+                      </button>
+                      {walletError ? (
+                        <p role="alert" className="mt-3 text-[0.9rem] text-alert">
+                          {walletError}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : walletState !== "idle" || walletError ? (
+                    <WalletSteps phase={walletState} error={walletError} lastStep={walletStep} />
+                  ) : null
                 }
               />
 
@@ -306,11 +558,11 @@ export function CheckoutView({
                     Payments are switched off on this store right now.
                   </p>
                 ) : method === "polaris" ? (
-                  <div onClickCapture={() => setTouched(true)}>
+                  <div onClickCapture={onPolarisClickCapture}>
                     <PolarisCheckoutButton
                       polaris={polaris ?? undefined}
                       createSession={createSession}
-                      disabled={!valid || !polaris}
+                      disabled={!polaris}
                       installments={false}
                       label={polarisLabel}
                       size="lg"
@@ -321,24 +573,29 @@ export function CheckoutView({
                 ) : (
                   <button
                     type="button"
-                    onClick={payFromWallet}
-                    disabled={!polaris || busyWallet}
-                    aria-busy={busyWallet || undefined}
+                    onClick={walletBusy || needsSwitch ? undefined : payFromWallet}
+                    disabled={!polaris || noWallet}
+                    aria-disabled={walletBusy || needsSwitch || undefined}
+                    aria-busy={walletBusy || undefined}
                     className="btn btn-ink h-[3.75rem] w-full text-[1rem]"
                   >
-                    {busyWallet ? <Spinner size={18} /> : walletState === "paid" ? <CheckIcon size={18} /> : <WalletIcon size={20} />}
-                    {WALLET_LABEL[walletState] ?? `Pay ${formatUsd(total)} from your wallet`}
+                    {walletBusy ? <Spinner size={18} /> : walletState === "paid" ? <CheckIcon size={18} /> : <WalletIcon size={20} />}
+                    {noWallet ? "No wallet in this browser" : (WALLET_LABEL[walletState] ?? `Pay ${formatUsd(total)} from your wallet`)}
                   </button>
                 )}
-                {!valid && touched ? <p className="mt-3 text-[0.9rem] text-alert">Fill in the details above to continue.</p> : null}
+                {!valid && touched ? (
+                  <p className="mt-3 text-[0.9rem] text-alert" role="alert">
+                    Check your {listFields(Object.keys(clientErrors))}.
+                  </p>
+                ) : null}
               </div>
 
-              <div id="checkout-notice" aria-live="polite">
-                {notice ? (
+              <div id={notice?.at === "top" ? undefined : "checkout-notice"} aria-live="polite">
+                {notice && notice.at === "inline" ? (
                   <p
                     className={`mt-5 flex gap-3 rounded-xl p-4 text-[0.95rem] ${notice.tone === "error" ? "bg-alert-soft text-alert" : "bg-sand text-ink-2"}`}
                   >
-                    <AlertIcon size={20} className="mt-0.5 shrink-0" />
+                    {notice.working ? <Spinner size={18} className="mt-0.5 shrink-0" /> : <AlertIcon size={20} className="mt-0.5 shrink-0" />}
                     {notice.text}
                   </p>
                 ) : null}
@@ -349,7 +606,7 @@ export function CheckoutView({
 
         <aside aria-label="Order summary" className="hidden lg:col-span-5 lg:block">
           <div className="lg:sticky lg:top-24">
-            <OrderSummary lines={lines} subtotal={subtotal} shipping={shipping} total={total} mode={method === "polaris" ? mode : null} aprBps={polarisConfig.payInFourAprBps} />
+            <OrderSummary lines={lines} subtotal={subtotal} shipping={shipping} total={total} mode={method === "polaris" ? mode : null} aprBps={aprBps} />
           </div>
         </aside>
       </div>

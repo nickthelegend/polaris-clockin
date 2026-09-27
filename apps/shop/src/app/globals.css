@@ -42,6 +42,9 @@
     --polaris-font: var(--font-sans);
     --polaris-text: var(--color-ink);
     --polaris-focus: var(--color-sage);
+    /* The Polaris button in the store's ink, so it matches the wallet button beside it. */
+    --polaris-button-bg: var(--color-ink);
+    --polaris-button-hover: #34322e;
   }
 
 
@@ -148,12 +151,20 @@
       box-shadow 0.25s;
     user-select: none;
   }
-  .btn:active:not(:disabled) {
+  .btn:active:not(:disabled):not([aria-busy="true"]) {
     transform: scale(0.985);
   }
   .btn:disabled {
     cursor: default;
     opacity: 0.55;
+  }
+  /* Working, not broken: a button that is busy stays solid (it ignores clicks through aria-disabled). */
+  .btn[aria-busy="true"] {
+    opacity: 1;
+    cursor: progress;
+  }
+  .btn[aria-disabled="true"]:not([aria-busy="true"]) {
+    cursor: default;
   }
   .btn-ink {
     background: var(--color-ink);
@@ -269,4 +280,9 @@
 :root .plrs-hero,
 :root .plrs-amt {
   font-variant-numeric: lining-nums;
+}
+
+/* The Polaris button sits flat beside the store's own wallet button. */
+:root .plrs-checkout .plrs-btn {
+  box-shadow: none;
 }

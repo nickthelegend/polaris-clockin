@@ -93,6 +93,46 @@ function Field({
   );
 }
 
+/** Human names for the fields, for an error that says which ones need another look. */
+export const FIELD_NAMES: Record<string, string> = {
+  "contact.email": "email",
+  "contact.phone": "phone number",
+  "address.name": "full name",
+  "address.line1": "street address",
+  "address.line2": "flat or floor",
+  "address.city": "city",
+  "address.postalCode": "postcode",
+  "address.country": "country",
+};
+
+/**
+ * The buyer's details as one card, when they're already complete (the demo
+ * fills them in): the payment choice then sits in the first screen instead
+ * of under eight filled inputs. Edit opens the fields.
+ */
+export function ContactSummary({ value, onEdit }: { value: BuyerForm; onEdit: () => void }) {
+  return (
+    <section aria-labelledby="contact-title" className="rounded-2xl bg-paper px-5 py-4 shadow-[inset_0_0_0_1px_var(--color-hair)] sm:px-6">
+      <div className="flex items-center justify-between gap-4">
+        <h2 id="contact-title" className="text-[0.8rem] font-semibold uppercase tracking-[0.1em] text-muted">
+          Contact and delivery
+        </h2>
+        <button type="button" onClick={onEdit} className="link -my-2 inline-flex min-h-11 items-center px-2 -mr-2 text-[0.92rem]">
+          Edit
+        </button>
+      </div>
+      <p className="mt-1 text-[0.98rem] leading-relaxed text-ink">
+        <span className="font-medium">{value.name}</span> · {value.email}
+        {value.phone ? ` · ${value.phone}` : ""}
+      </p>
+      <p className="text-[0.95rem] leading-relaxed text-ink-2">
+        {value.line1}
+        {value.line2 ? `, ${value.line2}` : ""}, {value.postalCode} {value.city}, {value.country}
+      </p>
+    </section>
+  );
+}
+
 export function ContactFields({
   value,
   errors,

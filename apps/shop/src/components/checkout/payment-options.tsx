@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 
 import { WalletIcon } from "@/components/icons";
 import { formatUsd } from "@/lib/money";
@@ -51,6 +51,8 @@ export function PaymentOptions({
   kind,
   total,
   aprBps,
+  hasWallet,
+  coarsePointer,
   walletPanel,
 }: {
   method: Method;
@@ -60,15 +62,14 @@ export function PaymentOptions({
   kind: "one_time" | "subscription";
   total: number;
   aprBps: number;
+  /** null until the browser has been checked for window.ethereum. */
+  hasWallet: boolean | null;
+  /** A touch screen: phones get a full-page redirect to Polaris, and rarely have a browser wallet. */
+  coarsePointer: boolean;
   walletPanel: ReactNode;
 }) {
   const name = useId();
   const modeName = useId();
-  const [hasWallet, setHasWallet] = useState<boolean | null>(null);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- window.ethereum only exists in the browser
-    setHasWallet(typeof (window as { ethereum?: unknown }).ethereum !== "undefined");
-  }, []);
 
   const plan = payIn4(total, aprBps);
   const [today] = useState(() => Date.now());
@@ -88,7 +89,7 @@ export function PaymentOptions({
     <div role="radiogroup" aria-label="Payment method" className="mt-5 overflow-hidden rounded-2xl bg-paper shadow-[inset_0_0_0_1px_var(--color-hair-strong)]">
       {/* Polaris */}
       <div className={`transition-colors ${method === "polaris" ? "bg-paper" : ""}`}>
-        <label className="flex cursor-pointer items-center gap-4 px-5 py-5 sm:px-6">
+        <label className="flex cursor-pointer items-center gap-4 px-5 py-5 sm:px-6 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-sage">
           <input type="radio" name={name} className="sr-only" checked={method === "polaris"} onChange={() => onMethod("polaris")} />
           <Radio checked={method === "polaris"} />
           <span className="flex flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1">
@@ -143,7 +144,11 @@ export function PaymentOptions({
             ) : (
               <p className="mt-4 text-[0.9rem] leading-relaxed text-muted">Pay the full {formatUsd(total)} now, confirmed with Face ID.</p>
             )}
-            <p className="mt-2 text-[0.9rem] text-muted">Polaris opens in its own window to confirm. You don&rsquo;t need a card.</p>
+            <p className="mt-2 text-[0.9rem] text-muted">
+              {coarsePointer
+                ? "Polaris opens to confirm, then brings you back here. You don\u2019t need a card."
+                : "Polaris opens in its own window to confirm. You don\u2019t need a card."}
+            </p>
           </div>
         </Expand>
       </div>
@@ -152,7 +157,7 @@ export function PaymentOptions({
 
       {/* Direct wallet payment */}
       <div className={walletDisabled ? "opacity-60" : ""}>
-        <label className={`flex items-center gap-4 px-5 py-5 sm:px-6 ${walletDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}>
+        <label className={`flex items-center gap-4 px-5 py-5 sm:px-6 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-sage ${walletDisabled ? "cursor-not-allowed" : "cursor-pointer"}`}>
           <input
             type="radio"
             name={name}
@@ -177,7 +182,9 @@ export function PaymentOptions({
             </p>
             {hasWallet === false ? (
               <p className="mt-3 rounded-lg bg-sand px-3.5 py-2.5 text-[0.88rem] text-ink-2">
-                No wallet found in this browser. Install one such as MetaMask or Rabby, or pay with Polaris above.
+                {coarsePointer
+                  ? "There\u2019s no wallet in this browser. Open this page in your wallet app\u2019s browser, or pay with Polaris above."
+                  : "There\u2019s no wallet in this browser. Install one such as MetaMask or Rabby, or pay with Polaris above."}
               </p>
             ) : null}
             {walletPanel}

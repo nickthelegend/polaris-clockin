@@ -7,12 +7,15 @@ export type CheckoutPayload = {
   contact: { email: string; phone?: string };
   address: { name: string; line1: string; line2?: string; city: string; postalCode: string; country: string };
   payment: { method: "polaris"; mode: "now" | "later" | "subscribe" } | { method: "wallet" };
+  /** The unpaid order this browser is already paying: the store continues it when only the way to pay changed. */
+  continueOrder?: string;
 };
 
 export type CheckoutResponse = {
   order: { id: string; number: string; status: Order["status"]; total: number };
   reused: boolean;
   checkout?: { sessionId: string; url: string };
+  /** What pay() needs. orderId is the order's payRef, the reference that goes on chain, not the order id. */
   wallet?: { merchant: `0x${string}`; amount: string; orderId: string };
 };
 

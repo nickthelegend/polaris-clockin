@@ -191,7 +191,11 @@ export function sessionParamsFor(order: Order, origin: string): CheckoutSessionC
     modes: mode === "later" ? ["later", "now"] : [mode],
     ...(order.kind === "subscription" ? { subscription: { interval: "month" as const, intervalCount: 1 } } : {}),
     successUrl: `${origin}/orders/${order.id}?via=polaris`,
-    cancelUrl: `${origin}/checkout?order=${order.id}&canceled=1`,
+    // A subscription checks out on its own page, which the cancel URL has to name to come back to it.
+    cancelUrl:
+      order.kind === "subscription" && order.lines[0]
+        ? `${origin}/checkout?subscribe=${order.lines[0].productId}&option=${order.lines[0].optionId}&canceled=1`
+        : `${origin}/checkout?order=${order.id}&canceled=1`,
     // Echoed back as data.orderId on every webhook for this session. The
     // payRef, not the order id: Polaris may write it on chain.
     orderId: payRefOf(order),
