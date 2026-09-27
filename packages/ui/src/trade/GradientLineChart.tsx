@@ -73,7 +73,7 @@ export function spanTicks(min: number, max: number, count = 4): { lo: number; hi
   const steps = Math.max(1, count - 1);
   const rough = (max - min) / steps;
   const pow = 10 ** Math.floor(Math.log10(rough));
-  for (const m of [1, 2, 2.5, 5, 10, 20, 25, 50]) {
+  for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10, 15, 20, 25, 50]) {
     const step = m * pow;
     let lo = Math.floor(min / step) * step;
     if (min >= 0 && lo < 0) lo = 0;
