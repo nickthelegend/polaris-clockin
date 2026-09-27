@@ -19,5 +19,5 @@
     "allowJs": false,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "collections/main.ts", "underwriting/main.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "e2e/**/*.ts", "local/**/*.ts", "collections/main.ts", "underwriting/main.ts"]
 }

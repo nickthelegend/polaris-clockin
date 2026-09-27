@@ -127,9 +127,13 @@ describe("@polarispay/underwriting against ScoreManager and PolarisLoanEngine", 
     expect(out.report).to.equal(null);
     expect(out.decision.limit).to.equal(0n);
     expect(await scores.creditLimitOf(buyer.address)).to.equal(out.decision.limit);
-    // Had the DON attested the same facts, ScoreManager would have opened the $200 floor on them.
-    await scores.connect(underwriter).underwrite(buyer.address, out.facts);
-    expect(await scores.creditLimitOf(buyer.address)).to.equal(AUSD(200));
+    // Had the DON attested the same facts anyway, ScoreManager refuses them itself (isThinFile), and
+    // the package's gate is the contract's: the same facts are thin on both sides.
+    expect(await scores.isThinFile(out.facts)).to.equal(true);
+    await expect(scores.connect(underwriter).underwrite(buyer.address, out.facts)).to.be.revertedWithCustomError(scores, "ThinFile");
+    expect(await scores.creditLimitOf(buyer.address)).to.equal(0n);
+    expect(BigInt(core.ATTEST_MINIMUM.walletAgeDays)).to.equal(await scores.MIN_HISTORY_DAYS());
+    expect(BigInt(core.ATTEST_MINIMUM.txCount)).to.equal(await scores.MIN_HISTORY_TXS());
   });
 
   for (const persona of [

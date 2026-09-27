@@ -26,7 +26,8 @@
     "configure": "node scripts/configure.mjs",
     "payload:underwriting": "node --experimental-strip-types --disable-warning=ExperimentalWarning --conditions=source scripts/underwriting-payload.mjs",
     "simulate:collections": "node scripts/cre.mjs workflow simulate ./collections --non-interactive --trigger-index 0 --broadcast -T",
-    "simulate:underwriting": "node --experimental-strip-types --disable-warning=ExperimentalWarning --conditions=source scripts/underwriting-payload.mjs && node scripts/cre.mjs workflow simulate ./underwriting --non-interactive --trigger-index 0 --http-payload ./underwriting/payload.json --broadcast -T"
+    "simulate:underwriting": "node --experimental-strip-types --disable-warning=ExperimentalWarning --conditions=source scripts/underwriting-payload.mjs && node scripts/cre.mjs workflow simulate ./underwriting --non-interactive --trigger-index 0 --http-payload ./underwriting/payload.json --broadcast -T",
+    "trigger:local": "node scripts/local-trigger.mjs"
   },
   "dependencies": {
     "@chainlink/cre-sdk": "1.22.0",
