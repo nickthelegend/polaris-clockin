@@ -177,6 +177,27 @@ from the credit pool, and payment 1 is due one interval after the plan opens
 (`PolarisLoanEngine.installmentDueAt(i) = startedAt + (i + 1) × interval`).
 $200 at 10% a year over four weeks is 4 × $50.38, $1.53 of interest.
 
+### From 1024px: the customer web
+
+The same routes render ref E's desktop layout from 1024px (`<html
+data-theme-lg="ref-e">`, `Adaptive` in the tabs layout, screens in
+`src/desktop/`): the lime canvas, the dark panel and the top nav, like the
+merchant web. Below 1024px nothing changes.
+
+| Route | From 1024px |
+|---|---|
+| `/` | Home: Balance / USD chart (line or candles, 1h to 1m), recent activity, the SEND / RECEIVE widget and your credit |
+| `/activity`, `/cards`, `/insights`, `/profile` | Pages in the frame |
+| `/plans` | Pay in 4: every plan with its ticks, subscriptions (a phone goes to `/insights?view=plans`) |
+| `/activity/[id]`, `/plans/[id]`, `/notifications` | Right Drawer |
+| `/send`, `/receive`, `/add`, `/pay`, `/claim`, `/accounts` | Centred Dialog |
+| `/credit`, `/credit/score`, `/settings` | Pages in the frame |
+| `/pay/[id]` | The checkout card on its own, under the wordmark |
+| `/onboard` | Sign-up beside the animated art |
+
+The desktop shell is `src/components/shell/desktop-shell.tsx`; the route
+sheets say how they present with `desktop` on `<RouteSheet>`.
+
 ## Code map
 
 | Path | What it is |
@@ -189,6 +210,7 @@ $200 at 10% a year over four weeks is 4 × $50.38, $1.53 of interest.
 | `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
 | `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
 | `src/lib/data/` | The data interface every screen reads; `mock.ts` is placeholder data behind it |
+| `src/desktop/` | The desktop layouts (from 1024px): Home and its money widget, the pages, the checkout card, onboarding; `lib/series.ts` draws their charts |
 | `src/screens/`, `src/sheets/` | The five tabs, and every sheet with its route wrapper (`SendRoute`, `CheckoutRoute`…), which the pages in `app/(tabs)` (cold) and `app/@sheet` (intercepted) render |
 | `src/components/` | App pieces composed from `@polaris/ui`: the shell (stage, sheet host, nav), Confirm with Face ID, the success receipt, the email sheet, QR |
 | `src/lib/view.ts` | Figures the screens derive from the data layer (spending by category, the score week by week) |

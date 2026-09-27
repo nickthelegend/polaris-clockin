@@ -341,6 +341,62 @@ ref E's layout and components.
   weekly payments, so $200 is 4 × $50.38 ($1.53 interest, $201.53 in total).
   Never "interest-free".
 
+## Customer web (apps/app from 1024px)
+
+**The customer app is two layouts on one set of routes.** Below 1024px it
+is the phone app (refs A to D, the sections above), unchanged. From 1024px
+it is ref E, built from the same `src/trade` components as the merchant web,
+so the reference, the merchant web and the customer web read as one system.
+
+- **How:** `<html data-theme="dark" data-theme-lg="ref-e">` switches the
+  tokens at 1024px. The tabs layout renders `<Adaptive phone={…} desktop={…}>`
+  (both on the server, CSS shows one, only the matching one stays mounted
+  after hydration), and each screen renders its desktop layout in the desktop
+  branch (`apps/app/src/desktop`). Route sheets present the desktop way:
+  a right `Drawer` for details (Payment details, a plan, Notifications), a
+  centred `Dialog` for short flows (Send, Receive, Add money, Pay or claim,
+  Claim, Select account), or a page in the frame (Credit line, Credit score,
+  Settings, a checkout). The URLs and deep links are the phone's. Sheets
+  inside flows (Face ID confirm, the receipt, filters) are `AdaptiveSheet`s:
+  the same BottomSheet on a phone, a Dialog on a desktop.
+- **Frame and nav:** `AppFrame` and `TopNav` like the merchant: the Polaris
+  wordmark; Home, Activity, Cards, Pay in 4, Insights and **More** (Credit,
+  Settings); the dollar account's pill ("Dollar account ···· 7C80", it copies
+  your receive link); the lime **Send** pill; the avatar menu (Profile,
+  Notifications, Settings, Log out).
+- **Home** is the reference's main screen mapped to a buyer: **Balance / USD**
+  (a dropdown for the Pay later line and Boost), the balance with its change
+  over the timeframe (a percentage, or dollars when the frame starts near
+  zero), line or candles, 1h 24h 1w 1m, the balance as **one smooth
+  continuous curve** (each payment eases in over the hours before it lands,
+  and the line ends exactly on today's figure), and recent activity in the
+  borderless table with status pills (Paid, Pay in 4 · 2 of 4, Received,
+  Subscription, Sent by link). On the right the widget: **SEND** (the "USD ·
+  You send" card over the "Link · They get" card, the swap button changes who
+  gets it, Send, Pay a Polaris link, and the credit card: Available to spend,
+  what paying back freed this week, next payment, active plans, score) and
+  **RECEIVE** (your code, your link with Copy and Share, Add money, money in
+  this week).
+- **Pages** open like the merchant's: coins and the page's name, the big
+  figure with its chip and chips on the right, the table, the right column.
+  Activity (filters, search, Drawer), Cards (the accounts table beside ref
+  D's card stack), Pay in 4 (/plans: every plan with lime instalment ticks, a
+  plan's Drawer with Pay early, subscriptions), Insights (spending as the
+  line, by category, by kind), Credit line, Credit score (Line and Candles),
+  Profile and Settings. Tables that need the width (Activity, Pay in 4) put
+  the right column under them until 1280px.
+- **Checkout** (/pay/[id]) stands alone under the wordmark and a Secure
+  checkout pill: one centred card, the order on the left, Pay now, Pay in 4
+  (4 × $50.38, the four dates, nothing today) or Subscribe on the right, then
+  Face ID. A shop's popup window is narrow, so it keeps the phone checkout.
+- **Onboarding** is the framed canvas like /login: Face ID first with
+  Continue with email beneath it on the left, the animated art on the right.
+- **Buyer copy** is the phone's: no wallet, gas or blockchain words; Pay in 4
+  is 10% a year, $200 is 4 × $50.38.
+
+Captures: `docs/design/customer-web/` (1440×900 and 1024×768, the overlays,
+and `home-vs-ref-e.png`, the reference beside the 1440 Home).
+
 ## Rules
 
 - **Nothing one-off.** A screen is composed from `packages/ui`; if a screen
