@@ -219,22 +219,20 @@ export type SeriesFrame = "1h" | "24h" | "1w" | "1m";
 const MINUTE = 60_000;
 
 /**
- * Each timeframe's span, how often it is sampled, and the trailing window
- * each point sums: every point is "the sales in the `window` up to then".
+ * Each timeframe's span and how often it is sampled. `window` is the trailing
+ * window the candles sum (each candle reads "the sales in the `window` up to then").
  */
 export const SERIES_FRAMES: Record<SeriesFrame, { span: number; step: number; window: number; windowLabel: string; versus: string }> = {
   "1h": { span: HOUR, step: MINUTE, window: 10 * MINUTE, windowLabel: "10 min", versus: "vs the hour before" },
-  // Short windows sampled often, so the line has a price chart's texture
-  // (a rise for each burst of sales) rather than a few smooth humps.
   "24h": { span: DAY, step: 10 * MINUTE, window: HOUR, windowLabel: "1 h", versus: "vs yesterday" },
   "1w": { span: 7 * DAY, step: HOUR, window: 6 * HOUR, windowLabel: "6 h", versus: "vs last week" },
   "1m": { span: 30 * DAY, step: 4 * HOUR, window: DAY, windowLabel: "24 h", versus: "vs last month" },
 };
 
 export type SalesSeries = {
-  /** Dollars sold in the trailing window at each point, oldest first. */
+  /** Dollars sold since the chart's left edge at each point (smoothed), oldest first; the last equals grossCents / 100. */
   points: { t: number; value: number }[];
-  /** The same points grouped into candles (open, high, low, close of the rolling sum). */
+  /** Candles of the trailing-window total (open, high, low, close of the rolling sum). */
   candles: VolumeCandle[];
   /** Gross over the whole span. */
   grossCents: Cents;
@@ -243,7 +241,7 @@ export type SalesSeries = {
   count: number;
 };
 
-/** Paid sales over a timeframe as a smoothed rolling-window line, with its total and change. */
+/** Paid sales over a timeframe as a smoothed running total, with its total and change. */
 export function salesSeries(payments: Payment[], frame: SeriesFrame, { mode, now = Date.now() }: { mode?: PayMode; now?: number } = {}): SalesSeries {
   const { span, step, window } = SERIES_FRAMES[frame];
   const end = Math.floor(now / step) * step + step;
@@ -263,12 +261,50 @@ export function salesSeries(payments: Payment[], frame: SeriesFrame, { mode, now
     } else if (e.t > start - span && e.t <= start) prev += e.cents;
   }
 
-  // Each sale rises and falls as a smooth, causal hump (a gamma kernel that
-  // peaks `tau` after the sale and integrates to `window`), so every point is
-  // the trailing-window total, smoothed: no steps, and nothing from the future.
-  const tau = window / 3;
+  // Running total since the chart's left edge: each point is what has sold so far
+  // in this window, so the line ends at the headline figure. Gaussian-smoothed
+  // (sigma = n/24 samples: 60 min at 24h, 2.5 min at 1h, 7 h at 1w, 30 h at 1m) so
+  // each sale is a soft rise rather than a step. Monotone, so no dips are invented.
   const n = Math.round(span / step);
-  const points: { t: number; value: number }[] = [];
+  const inWindow = events.filter((e) => e.t > start && e.t <= end);
+  const raw: number[] = [];
+  let k = 0;
+  let run = 0;
+  for (let i = 0; i <= n; i++) {
+    const t = start + i * step;
+    while (k < inWindow.length && inWindow[k]!.t <= t) run += inWindow[k++]!.v;
+    raw.push(run);
+  }
+  const sigma = Math.max(1, n / 24);
+  const r = Math.ceil(sigma * 3);
+  const kern = Array.from({ length: 2 * r + 1 }, (_, j) => Math.exp(-((j - r) ** 2) / (2 * sigma * sigma)));
+  const ks = kern.reduce((a, b) => a + b, 0);
+  const smooth = raw.map((_, i) => kern.reduce((acc, w, j) => acc + w * raw[Math.max(0, Math.min(n, i + j - r))]!, 0) / ks);
+  smooth[0] = 0;
+  smooth[n] = gross / 100; // ends exactly at the headline figure
+  const points = smooth.map((v, i) => ({ t: start + i * step, value: Math.round(v * 100) / 100 }));
+
+  // Candles keep the trailing-window view (ups and downs); a running total
+  // would make every candle green.
+  const trailing = windowSeries(events, start, step, n, window);
+  const per = Math.max(1, Math.round(trailing.length / 28));
+  const candles: VolumeCandle[] = [];
+  for (let i = 0; i + 1 < trailing.length; i += per) {
+    const slice = trailing.slice(i, i + per + 1);
+    candles.push({ t: start + i * step, o: slice[0]!, c: slice[slice.length - 1]!, h: Math.max(...slice), l: Math.min(...slice) });
+  }
+
+  return { points, candles, grossCents: gross, deltaPct: pctChange(gross, prev), count };
+}
+
+/**
+ * The trailing-window total at each sample, smoothed: each sale rises and
+ * falls as a causal hump (a gamma kernel that peaks `tau` after the sale and
+ * integrates to `window`), so nothing comes from the future. Used for candles.
+ */
+function windowSeries(events: { t: number; v: number }[], start: number, step: number, n: number, window: number): number[] {
+  const tau = window / 3;
+  const out: number[] = [];
   let first = 0;
   for (let i = 0; i <= n; i++) {
     const t = start + i * step;
@@ -278,15 +314,7 @@ export function salesSeries(payments: Payment[], frame: SeriesFrame, { mode, now
       const x = (t - events[j]!.t) / tau;
       sum += events[j]!.v * 3 * x * Math.exp(-x);
     }
-    points.push({ t, value: Math.max(0, Math.round(sum * 100) / 100) });
+    out.push(Math.max(0, Math.round(sum * 100) / 100));
   }
-
-  const per = Math.max(1, Math.round(points.length / 28));
-  const candles: VolumeCandle[] = [];
-  for (let i = 0; i + 1 < points.length; i += per) {
-    const slice = points.slice(i, i + per + 1).map((p) => p.value);
-    candles.push({ t: points[i]!.t, o: slice[0]!, c: slice[slice.length - 1]!, h: Math.max(...slice), l: Math.min(...slice) });
-  }
-
-  return { points, candles, grossCents: gross, deltaPct: pctChange(gross, prev), count };
+  return out;
 }

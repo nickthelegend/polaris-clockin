@@ -123,8 +123,8 @@ function SalesChart({ payments, sample, empty, className }: { payments: QuerySta
   const list = payments.data;
   const series = useMemo(() => (list ? salesSeries(list, frame, { mode: m.mode, now }) : null), [list, frame, m.mode, now]);
   const time = timeLabel(frame);
-  const window = SERIES_FRAMES[frame].windowLabel;
-  const described = `${m.label.replace(" / USD", "")} in dollars over ${FRAME_TITLE[frame]}, each point the rolling ${window} total`;
+  const what = `${m.label.replace(" / USD", "")} in dollars over ${FRAME_TITLE[frame]}`;
+  const described = `${what}, each point the running total since the start`;
 
   return (
     <section aria-label={`${m.label.replace(" / USD", "")} chart`} className={cn("min-w-0", className)}>
@@ -201,7 +201,7 @@ function SalesChart({ payments, sample, empty, className }: { payments: QuerySta
         ) : (
           <CandlestickChart
             key={`${metric}-${frame}-c`}
-            label={`${described}, as candles`}
+            label={`${what}, as candles of the rolling ${SERIES_FRAMES[frame].windowLabel} total`}
             data={series.candles}
             height={380}
             formatPrice={(v) => (v >= 1000 ? `$${(v / 1000).toFixed(1)}K` : `$${Math.round(v)}`)}
