@@ -26,6 +26,66 @@ Track 02: Consumer Products & Payments. The plan is in
 
 ---
 
+## Screenshots
+
+Work in progress from the build window. Figures marked *Sample* in the
+dashboards are placeholder data until the contracts are live on Monad testnet.
+
+### Polaris for Business (merchant web app)
+
+The dashboard follows the team's reference (left) with Polaris content (right):
+the chart panel, the payments table with status pills, and a withdraw and
+request widget in place of buy and sell.
+
+![Reference beside the merchant Overview](docs/screenshots/merchant-web-vs-reference.jpg)
+
+![Merchant Overview](docs/screenshots/merchant-web-overview.jpg)
+
+![Merchant sign-in with Privy](docs/screenshots/merchant-web-login.jpg)
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/merchant-web-payments.jpg" alt="Payments"></td>
+    <td width="20%"><img src="docs/screenshots/merchant-web-phone.jpg" alt="Overview on a phone"></td>
+    <td width="30%"><img src="docs/screenshots/merchant-web-landing.jpg" alt="Merchant landing page"></td>
+  </tr>
+  <tr>
+    <td>Payments</td>
+    <td>Overview on a phone</td>
+    <td>Merchant landing page</td>
+  </tr>
+</table>
+
+### The Polaris app (customers)
+
+Onboarding with Face ID, the tabs, and the screens that slide up as sheets:
+Send, Receive, a Pay in 4 checkout, the Face ID confirm and receipt, the credit
+line and score, activity, cards, plans, and claiming a send link.
+
+![The customer app](docs/screenshots/customer-app-screens.jpg)
+
+### Halcyon, the demo shop
+
+A store that takes payment through the Polaris SDK: pay directly from a wallet,
+or pay now, in four instalments, or by subscription in the Polaris checkout.
+Product photography was generated for the demo.
+
+![Halcyon product photography](docs/screenshots/demo-shop-photos.jpg)
+
+### Shared components (`packages/ui`)
+
+Both apps are built from one component library: charts (candlesticks, donut,
+bars, gradient lines), cards, bottom sheets, drawers and dialogs.
+
+<table>
+  <tr>
+    <td width="70%"><img src="docs/screenshots/components-trading.jpg" alt="Candlesticks, checkout and plan details"></td>
+    <td width="30%"><img src="docs/screenshots/components-sales.jpg" alt="Sales, customers, donut and payouts"></td>
+  </tr>
+</table>
+
+---
+
 ## Layout
 
 | Path | What it is |
