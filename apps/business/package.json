@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Polaris for Business: the merchant dashboard. Privy login and payout wallet, payment links, payments, the Pay in 4 ledger, payouts, API keys and webhooks.",
+  "description": "Polaris for Business: the merchant landing, sign-in and dashboard. Privy login and payout wallet, payment links, payments, the Pay in 4 ledger, payouts, API keys and webhooks.",
   "scripts": {
     "dev": "next dev --port 3100",
     "build": "next build",
@@ -12,13 +12,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "5.3.0",
-    "@fontsource-variable/inter-tight": "5.3.0",
     "@fontsource-variable/jetbrains-mono": "5.3.0",
+    "@polaris/brand": "workspace:*",
     "@polaris/ui": "workspace:*",
     "@privy-io/node": "0.35.0",
     "@privy-io/react-auth": "3.45.0",
+    "lenis": "^1.3.26",
     "lucide-react": "1.48.0",
+    "motion": "13.4.4",
     "next": "16.3.6",
     "qrcode": "1.5.4",
     "react": "19.3.0",

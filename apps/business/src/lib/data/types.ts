@@ -25,7 +25,8 @@ export type Merchant = {
 /** How a buyer may pay: in full, in four instalments, or on a subscription. */
 export type PayMode = "now" | "later" | "subscribe";
 export type LinkUsage = "single" | "reusable";
-export type LinkStatus = "active" | "used" | "expired";
+/** inactive: the merchant turned it off; it takes no more payments. */
+export type LinkStatus = "active" | "used" | "expired" | "inactive";
 
 export type PaymentLink = {
   id: string;
@@ -49,6 +50,9 @@ export type CreateLinkInput = {
   /** Hours from now, or null for a link that never expires. */
   expiresInHours: number | null;
 };
+
+/** Links are never deleted (payments point at them); they can be turned off. */
+export type UpdateLinkInput = { active: false };
 
 /* ── Payments ───────────────────────────────────────────────────────────── */
 
@@ -220,6 +224,8 @@ export type WebhookEndpoint = {
   events: WebhookEventType[];
   /** `whsec_…` plus the last four characters. */
   secretHint: string;
+  /** Off: registered, but nothing is signed or sent for it. */
+  enabled: boolean;
   createdAt: IsoDate;
 };
 
@@ -232,6 +238,12 @@ export type CreatedWebhookEndpoint = {
 export type CreateWebhookInput = {
   url: string;
   events: WebhookEventType[];
+};
+
+export type UpdateWebhookInput = {
+  url?: string;
+  events?: WebhookEventType[];
+  enabled?: boolean;
 };
 
 export type WebhookDelivery = {

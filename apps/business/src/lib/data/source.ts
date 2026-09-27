@@ -14,6 +14,8 @@ import type {
   PayoutsState,
   Plan,
   WebhookDelivery,
+  UpdateWebhookInput,
+  WebhookEndpoint,
   WebhooksState,
   WithdrawInput,
   Payout,
@@ -22,10 +24,11 @@ import type {
 /**
  * Everything the dashboard reads or writes, as one interface.
  *
- * Pages depend on this and nothing else. Today it is implemented over our own
- * authenticated API routes (`http.ts`), which serve placeholder data from the
- * in-memory server store. When the indexer and a database land, only the server
- * side changes; the pages don't.
+ * Pages depend on this and nothing else. It is implemented over our own
+ * authenticated API routes (`http.ts`); the sample implementation
+ * (`sample.ts`) serves the labelled "Preview with sample data" view and the
+ * development-only mock session. When the indexer and a database land, only
+ * the server side changes; the pages don't.
  */
 export interface DashboardData {
   getMerchant(): Promise<Merchant>;
@@ -35,6 +38,8 @@ export interface DashboardData {
 
   listLinks(): Promise<PaymentLink[]>;
   createLink(input: CreateLinkInput): Promise<PaymentLink>;
+  /** Turn a link off. Links are never deleted. */
+  deactivateLink(linkId: string): Promise<PaymentLink>;
 
   listPayments(): Promise<Payment[]>;
   listPlans(): Promise<Plan[]>;
@@ -45,9 +50,12 @@ export interface DashboardData {
 
   listApiKeys(): Promise<ApiKey[]>;
   createApiKey(input: CreateApiKeyInput): Promise<CreatedApiKey>;
+  revokeApiKey(keyId: string): Promise<{ id: string; revoked: true }>;
 
   listWebhooks(): Promise<WebhooksState>;
   createWebhook(input: CreateWebhookInput): Promise<CreatedWebhookEndpoint>;
+  updateWebhook(endpointId: string, input: UpdateWebhookInput): Promise<WebhookEndpoint>;
+  deleteWebhook(endpointId: string): Promise<{ id: string; deleted: true }>;
   sendTestEvent(endpointId: string): Promise<WebhookDelivery>;
 }
 
@@ -57,8 +65,24 @@ export class DataError extends Error {
     message: string,
     readonly status: number,
     readonly code: string,
+    /** The request field a validation error is about, to mark in a form. */
+    readonly field?: string,
   ) {
     super(message);
     this.name = "DataError";
   }
+}
+
+/** A session that is over: sign the person out and send them to sign in. */
+export function isSessionEnded(error: unknown): boolean {
+  return error instanceof DataError && error.status === 401 && (error.code === "unauthenticated" || error.code === "invalid_token");
+}
+
+/** The message to show for anything a data call threw. */
+export function errorMessage(error: unknown, fallback = "Something went wrong. Try again."): string {
+  if (error instanceof DataError) {
+    if (error.code === "auth_not_configured") return "Sign-in isn't configured on this server yet, so your data can't load.";
+    return error.message;
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
 }

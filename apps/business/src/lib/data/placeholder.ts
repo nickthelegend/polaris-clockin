@@ -1,4 +1,6 @@
+import { SERVER_DEMO_DATA } from "./demo";
 import { payInFourQuote, PLAN_INSTALLMENTS, PLAN_INTERVAL_DAYS } from "./format";
+import { linkUrl } from "./links";
 import type {
   Address,
   Cents,
@@ -12,16 +14,19 @@ import type {
 } from "./types";
 
 /**
- * Sample data for a merchant, until the indexer is connected.
+ * The server store's sample book for a merchant.
  *
- * It is deterministic per merchant (seeded from their ID), so a reload shows
- * the same book, and it is internally consistent: every Pay in 4 payment has a
- * plan, the balance is what was paid in since the last payout, and each payout
- * is what came in between it and the one before. The UI labels it as sample
- * data everywhere it appears.
+ * Off unless NEXT_PUBLIC_POLARIS_DEMO_DATA=1: a real merchant starts with an
+ * empty book (zero balance, no payments, no links, the collector not
+ * reporting) until the indexer fills it. With the flag on, the book is
+ * deterministic per merchant (seeded from their ID), so a reload shows the
+ * same book, and internally consistent: every Pay in 4 payment has a plan, the
+ * balance is what was paid in since the last payout, and each payout is what
+ * came in between it and the one before. The UI puts a "Sample" chip on every
+ * card and row that shows it.
  */
 
-export const PAY_LINK_BASE = "https://pay.polarispay.app";
+export { linkUrl };
 /** Merchant fee on direct payments and subscription charges. Pay in 4 pays the merchant 100%. */
 export const MERCHANT_FEE_BPS = 50;
 
@@ -94,11 +99,21 @@ export function newLinkId(r: { id: (n: number) => string }): string {
   return r.id(10);
 }
 
-export function linkUrl(id: string): string {
-  return `${PAY_LINK_BASE}/${id}`;
+/** What a new merchant starts with when there is no sample data: nothing. */
+export function emptyBook(): SampleBook {
+  return {
+    links: [],
+    payments: [],
+    plans: [],
+    payouts: [],
+    balanceCents: 0,
+    // No heartbeat has ever arrived: the dashboard shows "not reporting".
+    collector: { state: "stopped", lastPassAt: null, runner: "cre" },
+  };
 }
 
-export function seedMerchantBook(merchantId: string, now = Date.now()): SampleBook {
+export function seedMerchantBook(merchantId: string, now = Date.now(), { force = false } = {}): SampleBook {
+  if (!SERVER_DEMO_DATA && !force) return emptyBook();
   const r = rng(hashSeed(merchantId));
 
   /* Links: one per catalogue line, most reusable, a couple single-use. */

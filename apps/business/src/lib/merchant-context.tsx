@@ -6,6 +6,7 @@ import type { Merchant } from "./data/types";
 
 type MerchantContextValue = {
   merchant: Merchant;
+  /** Load /api/me again (after naming the business, or once the wallet exists). */
   refresh: () => void;
 };
 

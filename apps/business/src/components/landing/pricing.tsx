@@ -1,0 +1,43 @@
+"use client";
+
+import { Button } from "@polaris/ui";
+import { ArrowRight } from "lucide-react";
+import Link from "next/link";
+
+import { BlurWords, Rise } from "@/components/motion";
+import { pricing } from "./content";
+import { Shell } from "./section";
+
+/** Pricing in one line. */
+export function Pricing() {
+  return (
+    <section id="pricing" aria-labelledby="pricing-title" className="scroll-mt-24 py-20 lg:py-28">
+      <Shell>
+        <div className="relative isolate overflow-hidden rounded-[40px] bg-ui-surface-1 px-6 py-14 ring-1 ring-white/6 sm:px-12 lg:px-16 lg:py-20">
+          <div aria-hidden className="glow-lime absolute -top-40 -right-40 -z-10 h-[520px] w-[520px]" />
+          <Rise y={10} blur={4} duration={0.6}>
+            <p className="inline-flex items-center gap-2 text-[14px] font-medium tracking-[0.02em] text-ui-lime uppercase">
+              <span aria-hidden className="size-1.5 rounded-full bg-ui-lime" />
+              {pricing.eyebrow}
+            </p>
+          </Rise>
+          <BlurWords
+            id="pricing-title"
+            as="h2"
+            text={pricing.line}
+            className="mt-4 text-[clamp(36px,5.2vw,76px)] leading-[1.02] font-medium tracking-[-0.045em] text-balance"
+          />
+          <Rise y={14} delay={0.3} className="mt-6 flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+            <p className="max-w-[560px] text-[17px] leading-[1.5] text-ui-muted lg:text-[19px]">{pricing.sub}</p>
+            <div className="flex flex-col items-start gap-3 lg:items-end">
+              <Button asChild variant="lime" size="lg" iconRight={<ArrowRight />}>
+                <Link href="/login">Start accepting payments</Link>
+              </Button>
+              <p className="text-[14px] text-ui-muted">{pricing.compare}</p>
+            </div>
+          </Rise>
+        </div>
+      </Shell>
+    </section>
+  );
+}
