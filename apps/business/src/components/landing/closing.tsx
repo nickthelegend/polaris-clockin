@@ -16,7 +16,7 @@ export function Closing() {
   return (
     <section aria-labelledby="closing-title" className="py-20 lg:py-28">
       <Shell>
-        <div className="relative isolate overflow-hidden rounded-[40px] bg-ui-lime px-6 py-14 text-ui-on-lime sm:px-12 lg:px-16 lg:py-20">
+        <div className="relative isolate overflow-hidden rounded-[32px] bg-ui-frame px-6 py-14 text-[#121418] sm:px-12 lg:px-16 lg:py-20">
           <Glass
             art="card-lime"
             size={420}

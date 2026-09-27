@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Money, Ticks, cn } from "@polaris/ui";
+import { Money, StatusPill, Ticks, cn } from "@polaris/ui";
 import { CalendarClock, Check, Layers, Zap } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -22,8 +22,8 @@ export function Ways() {
         <div className="mt-12 grid gap-4 md:grid-cols-3 lg:mt-16">
           {ways.cards.map((card, i) => (
             <Rise key={card.key} delay={0.12 * i} className="h-full">
-              <article className="flex h-full flex-col rounded-ui-card bg-ui-surface-1 p-3 ring-1 ring-white/5">
-                <div className="h-[236px] overflow-hidden rounded-[22px]">
+              <article className="flex h-full flex-col rounded-[30px] border border-ui-hairline-strong p-3">
+                <div className="h-[236px] overflow-hidden rounded-[24px] bg-ui-surface-1">
                   {card.key === "now" ? <PayNowVisual /> : card.key === "later" ? <PayIn4Visual /> : <SubscribeVisual />}
                 </div>
                 <div className="flex flex-1 flex-col px-3 pt-5 pb-3">
@@ -45,7 +45,7 @@ export function Ways() {
 
 function ModeIcon({ mode }: { mode: "now" | "later" | "subscribe" }) {
   const icon = mode === "now" ? <Zap size={16} /> : mode === "later" ? <Layers size={16} /> : <CalendarClock size={16} />;
-  const tone = mode === "now" ? "bg-ui-lime text-ui-on-lime" : mode === "later" ? "bg-ui-purple text-white" : "bg-ui-honey text-[#2f2410]";
+  const tone = mode === "now" ? "bg-[#a9c350] text-white" : mode === "later" ? "bg-[#9a6ad6] text-white" : "bg-[#4fb3ac] text-white";
   return <span className={cn("grid size-8 place-items-center rounded-full", tone)}>{icon}</span>;
 }
 
@@ -61,13 +61,12 @@ function PayNowVisual() {
   }, [seen, reduced]);
 
   return (
-    <div ref={ref} className="relative flex h-full flex-col justify-center gap-4 bg-ui-canvas px-5">
-      <div aria-hidden className="glow-lime absolute -top-24 -right-16 h-64 w-64" />
+    <div ref={ref} className="relative flex h-full flex-col justify-center gap-4 px-5">
       <Row label="Brand identity package" right={<Money value={200} dim="cents" className="text-[17px] font-medium" />} />
       <div className="relative">
-        <div className="h-2 overflow-hidden rounded-full bg-ui-surface-3">
+        <div className="h-2 overflow-hidden rounded-full bg-ui-canvas">
           <motion.div
-            className="h-full rounded-full bg-ui-lime"
+            className="h-full rounded-full bg-ui-lime-button"
             initial={{ width: "0%" }}
             animate={{ width: seen ? "100%" : "0%" }}
             transition={{ duration: reduced ? 0 : 0.8, delay: reduced ? 0 : 0.25, ease: "linear" }}
@@ -81,15 +80,15 @@ function PayNowVisual() {
       <motion.div
         animate={{ opacity: paid ? 1 : 0.35, scale: paid ? 1 : 0.98 }}
         transition={{ duration: 0.35, ease: EASE_REVEAL }}
-        className="flex items-center justify-between rounded-ui-row bg-ui-surface-2 px-4 py-3"
+        className="flex items-center justify-between rounded-[18px] bg-ui-canvas px-4 py-3"
       >
         <span className="flex items-center gap-2.5 text-[15px] font-medium">
-          <span className={cn("grid size-7 place-items-center rounded-full", paid ? "bg-ui-lime text-ui-on-lime" : "bg-ui-surface-3 text-ui-muted")}>
+          <span className={cn("grid size-7 place-items-center rounded-full", paid ? "bg-ui-lime-button text-[#121418]" : "bg-ui-surface-2 text-ui-muted")}>
             <Check size={15} strokeWidth={2.5} aria-hidden />
           </span>
           {paid ? "Paid to you" : "Settling"}
         </span>
-        <Badge tone={paid ? "lime" : "neutral"}>{paid ? "Final" : "…"}</Badge>
+        <StatusPill tone={paid ? "lime" : "neutral"} size="sm">{paid ? "Final" : "…"}</StatusPill>
       </motion.div>
     </div>
   );
@@ -109,25 +108,26 @@ function PayIn4Visual() {
   const done = reduced && seen ? 4 : ticked;
 
   return (
-    <div
-      ref={ref}
-      className="flex h-full flex-col justify-between p-5 text-white"
-      style={{ background: "linear-gradient(145deg, var(--ui-purple-chart-from), var(--ui-purple-chart-to))" }}
-    >
-      <div>
-        <p className="text-[14px] text-white/75">The buyer pays</p>
-        <p className="ui-figure mt-1 text-[34px] leading-none font-semibold tracking-[-0.035em]">4 × {money(quote.each)}</p>
+    <div ref={ref} className="flex h-full flex-col justify-between p-5 text-ui-text">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[14px] text-ui-muted">The buyer pays</p>
+          <p className="ui-figure mt-1 text-[34px] leading-none font-medium tracking-[-0.035em]">4 × {money(quote.each)}</p>
+        </div>
+        <StatusPill tone="purple" size="sm">
+          10% APR
+        </StatusPill>
       </div>
       <div className="grid gap-2">
         <Ticks done={done} total={4} label={`${done} of 4 payments collected`} />
-        <div className="grid grid-cols-4 text-[11px] text-white/70">
+        <div className="grid grid-cols-4 text-[11px] text-ui-muted">
           {["Week 1", "Week 2", "Week 3", "Week 4"].map((w) => (
             <span key={w}>{w}</span>
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-between rounded-ui-row bg-black/20 px-4 py-3 text-[15px] font-medium">
-        <span>You got, today</span>
+      <div className="flex items-center justify-between rounded-[18px] bg-ui-canvas px-4 py-3 text-[15px] font-medium">
+        <span>You got, at checkout</span>
         <Money value={200} dim="none" />
       </div>
     </div>
@@ -141,15 +141,17 @@ function SubscribeVisual() {
   const months = ["May", "Jun", "Jul", "Aug", "Sep", "Oct"];
   const skipped = 3;
   return (
-    <div ref={ref} className="flex h-full flex-col justify-between bg-ui-honey p-5 text-[#2f2410]">
+    <div ref={ref} className="flex h-full flex-col justify-between p-5 text-ui-text">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[14px] opacity-75">Social kit, monthly</p>
-          <p className="ui-figure mt-1 text-[34px] leading-none font-semibold tracking-[-0.035em]">
-            $120<span className="opacity-50">.00</span>
+          <p className="text-[14px] text-ui-muted">Social kit, monthly</p>
+          <p className="ui-figure mt-1 text-[34px] leading-none font-medium tracking-[-0.035em]">
+            $120<span className="text-ui-muted">.00</span>
           </p>
         </div>
-        <span className="rounded-full bg-black/10 px-3 py-1.5 text-[12px] font-medium">Every month</span>
+        <StatusPill tone="teal" size="sm">
+          Every month
+        </StatusPill>
       </div>
       <ol className="grid grid-cols-6 gap-2">
         {months.map((m, i) => (
@@ -160,16 +162,16 @@ function SubscribeVisual() {
               transition={{ delay: reduced ? 0 : 0.2 + i * 0.12, type: "spring", stiffness: 420, damping: 22 }}
               className={cn(
                 "grid size-9 place-items-center rounded-full text-[12px] font-semibold",
-                i === skipped ? "border-2 border-dashed border-[#2f2410]/40 text-[#2f2410]/60" : "bg-[#2f2410] text-ui-honey",
+                i === skipped ? "border-2 border-dashed border-ui-hairline-strong text-ui-muted" : "bg-ui-pill-teal text-ui-pill-teal-text",
               )}
             >
               {i === skipped ? "–" : <Check size={14} strokeWidth={2.5} aria-hidden />}
             </motion.span>
-            <span className="text-[11px] opacity-75">{m}</span>
+            <span className="text-[11px] text-ui-muted">{m}</span>
           </li>
         ))}
       </ol>
-      <p className="text-[13px] leading-snug font-medium">Missed August? It&rsquo;s skipped. September charges one month, not two.</p>
+      <p className="text-[13px] leading-snug text-ui-muted">Missed August? It&rsquo;s skipped. September charges one month, not two.</p>
     </div>
   );
 }

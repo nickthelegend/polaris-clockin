@@ -1,26 +1,16 @@
 "use client";
 
-import {
-  Avatar,
-  BarChart,
-  Button,
-  Card,
-  ErrorState,
-  Input,
-  Money,
-  Skeleton,
-  StatCard,
-  TxRow,
-  toast,
-} from "@polaris/ui";
-import { ArrowLeft, ArrowRight, Check, LoaderCircle, LockKeyhole, Percent, Store } from "lucide-react";
+import { Button, ErrorState, Input, PrimaryButton, Skeleton, StatusPill, TopNav, toast } from "@polaris/ui";
+import { ArrowRight, Check, CircleHelp, CodeXml, House, Link2, LoaderCircle, LockKeyhole, Store, Tag } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { BusinessLogo } from "@/components/app/brand";
-import { Glass } from "@/components/app/glass";
 import { SetupScreen } from "@/components/app/setup-screen";
+import { LandingFrame } from "@/components/landing/frame";
+import { NetworkPill } from "@/components/landing/nav";
+import { SalesPreview } from "@/components/landing/preview";
 import { BlurWords, Rise } from "@/components/motion";
 import { useAuth } from "@/lib/auth-context";
 import { DataError, errorMessage } from "@/lib/data";
@@ -54,33 +44,41 @@ export function LoginView() {
   );
 }
 
-/** The page: the form on the left, a live visual on wide screens. */
+const LOGIN_NAV = [
+  { key: "home", label: "Home", href: "/", icon: <House /> },
+  { key: "ways", label: "Ways to pay", href: "/#ways", icon: <Link2 /> },
+  { key: "developers", label: "Developers", href: "/#developers", icon: <CodeXml /> },
+  { key: "pricing", label: "Pricing", href: "/#pricing", icon: <Tag /> },
+  { key: "faq", label: "FAQ", href: "/#faq", icon: <CircleHelp /> },
+];
+
+/**
+ * The page, in ref E's frame: the top nav, the form on the left and, from
+ * 1024px, the Overview's chart panel on the right, built from the same
+ * components with an invented studio's numbers.
+ */
 export function LoginFrame({ children }: { children: ReactNode }) {
   return (
-    <main className="relative isolate grid min-h-dvh overflow-hidden lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-      <div aria-hidden className="glow-lime absolute -top-56 -left-40 -z-10 h-[620px] w-[620px]" />
-      <div className="flex flex-col px-5 py-6 sm:px-10 lg:px-16 lg:py-10">
-        <div className="flex items-center justify-between gap-4">
-          <Link href="/" aria-label="Polaris for Business, home" className="rounded-[12px]">
-            <BusinessLogo height={32} />
-          </Link>
-          <Button asChild variant="ghost" size="sm" icon={<ArrowLeft />}>
-            <Link href="/">Home</Link>
-          </Button>
-        </div>
-        <div className="flex flex-1 flex-col justify-center py-10 lg:py-12">
-          {/* Phones and tablets: the glass renders above the form (the wide visual is lg+). */}
-          <div aria-hidden className="relative mb-8 h-[132px] w-full max-w-[440px] lg:hidden">
-            <Glass art="card-lime" size={200} priority className="float-slow absolute top-0 left-[18%] w-[168px] rotate-[-12deg]" />
-            <Glass art="coin-purple" size={96} className="float-slower absolute top-[46px] left-0 w-[72px]" />
-            <Glass art="coin-crimson" size={72} className="float-slow absolute top-[8px] right-[6%] w-[54px] opacity-90" />
+    <LandingFrame className="flex flex-col">
+      <TopNav
+        brand={<BusinessLogo height={30} />}
+        brandHref="/"
+        brandLabel="Polaris for Business, home"
+        items={LOGIN_NAV}
+        linkAs={Link}
+        sheetTitle="Polaris for Business"
+        actions={<NetworkPill />}
+      />
+      <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 px-4 pt-4 pb-10 sm:px-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:px-10 lg:pt-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:px-14 xl:pb-14">
+        <div className="flex flex-col">
+          <div className="flex flex-1 flex-col justify-center py-6 lg:py-10">
+            <div className="w-full max-w-[460px]">{children}</div>
           </div>
-          <div className="w-full max-w-[440px]">{children}</div>
+          <p className="text-[13px] text-ui-muted">Test mode on Monad testnet. No real money moves.</p>
         </div>
-        <p className="text-[13px] text-ui-muted">Test mode on Monad testnet. No real money moves.</p>
-      </div>
-      <Showcase />
-    </main>
+        <Showcase />
+      </main>
+    </LandingFrame>
   );
 }
 
@@ -89,7 +87,12 @@ export function LoginFrame({ children }: { children: ReactNode }) {
 function SignIn({ loading, onContinue }: { loading: boolean; onContinue: () => void }) {
   return (
     <div className="grid gap-8">
-      <div className="grid gap-4">
+      <div className="grid gap-5">
+        <Rise y={8} duration={0.6}>
+          <StatusPill tone="lime" icon={<span className="block size-2 rounded-full bg-current" />}>
+            Polaris for Business
+          </StatusPill>
+        </Rise>
         <BlurWords
           as="h1"
           css
@@ -106,16 +109,16 @@ function SignIn({ loading, onContinue }: { loading: boolean; onContinue: () => v
       </div>
 
       <Rise y={10} delay={0.35} duration={0.7} className="grid gap-4">
-        <Button variant="lime" size="xl" block onClick={onContinue} loading={loading} iconRight={<ArrowRight />}>
+        <PrimaryButton size="lg" block onClick={onContinue} loading={loading} iconRight={<ArrowRight />} className="h-14 text-[17px]">
           Continue
-        </Button>
+        </PrimaryButton>
         {loading ? (
           <p role="status" className="text-center text-[14px] text-ui-muted">
             Starting secure sign-in…
           </p>
         ) : null}
         <p className="flex items-start gap-2.5 text-[14px] leading-relaxed text-ui-muted">
-          <LockKeyhole aria-hidden size={16} strokeWidth={1.75} className="mt-[3px] shrink-0 text-ui-lime" />
+          <LockKeyhole aria-hidden size={16} strokeWidth={1.75} className="mt-[3px] shrink-0 text-ui-lime-text" />
           <span>
             Sign-in is by Privy, with the methods shown in the next step. Your payout account is yours alone: we can&rsquo;t move
             money out of it.
@@ -257,9 +260,9 @@ function Onboarding({ next }: { next: string }) {
         autoFocus
       />
       <div className="grid gap-3">
-        <Button type="submit" variant="lime" size="xl" block loading={busy} iconRight={<ArrowRight />}>
+        <PrimaryButton type="submit" size="lg" block loading={busy} iconRight={<ArrowRight />} className="h-14 text-[17px]">
           Open the dashboard
-        </Button>
+        </PrimaryButton>
         <Button variant="ghost" size="md" onClick={() => void signOut()}>
           Use another account
         </Button>
@@ -290,12 +293,12 @@ function Registering({ business, step }: { business: string; step: "wallet" | "s
       </div>
       <ol className="grid gap-2">
         {steps.map((s) => (
-          <li key={s.key} className="flex items-center gap-3 rounded-ui-row bg-ui-surface-1 px-4 py-3.5 text-[15px]">
+          <li key={s.key} className="flex items-center gap-3 rounded-[20px] bg-ui-surface-1 px-4 py-3.5 text-[15px]">
             <span
               className={
                 s.state === "done"
-                  ? "grid size-7 place-items-center rounded-full bg-ui-lime text-ui-on-lime"
-                  : "grid size-7 place-items-center rounded-full bg-ui-surface-3 text-ui-muted"
+                  ? "grid size-7 place-items-center rounded-full bg-ui-lime-button text-[#121418]"
+                  : "grid size-7 place-items-center rounded-full bg-ui-surface-2 text-ui-muted"
               }
             >
               {s.state === "done" ? (
@@ -313,48 +316,13 @@ function Registering({ business, step }: { business: string; step: "wallet" | "s
   );
 }
 
-/* ── The visual: a glass card and a mini dashboard, from real components ── */
-
-const WEEK = [
-  { label: "Mon", value: 12 },
-  { label: "Tue", value: 26 },
-  { label: "Wed", value: 38 },
-  { label: "Thu", value: 24 },
-  { label: "Fri", value: 9 },
-  { label: "Sat", value: 27 },
-  { label: "Sun", value: 22 },
-];
+/* ── The visual: the Overview's chart panel, from the same components ──── */
 
 function Showcase() {
   return (
-    <aside aria-hidden className="relative hidden overflow-hidden p-3 lg:block">
-      <div className="relative h-full overflow-hidden rounded-[40px] bg-ui-surface-1">
-        <div className="grid-ground absolute inset-0" />
-        <div className="glow-violet absolute -right-40 -bottom-40 h-[560px] w-[560px]" />
-        <Glass art="card-lime" size={360} priority className="float-slow absolute top-[6%] right-[8%] w-[300px] rotate-[-10deg] xl:w-[360px]" />
-        <Glass art="coin-purple" size={130} className="float-slower absolute bottom-[10%] left-[6%] w-[110px]" />
-        <Glass art="coin-crimson" size={80} className="float-slow absolute top-[12%] left-[12%] w-[70px] opacity-90" />
-
-        <div className="absolute inset-x-[10%] bottom-[12%] grid gap-3 xl:inset-x-[14%]">
-          <div className="grid gap-3 xl:grid-cols-[1.1fr_1fr]">
-            <StatCard
-              tone="sage"
-              icon={<Percent />}
-              label="Sales"
-              delta={23}
-              value={<Money value={24575} decimals={0} spaced dim="none" />}
-              spark={[18, 21, 19.5, 20, 22.6, 17.8, 18.4, 21.2, 23.1, 17.6, 20.8, 22.2, 19.4, 18.3, 23.6]}
-            />
-            <Card padding="md" className="hidden bg-ui-canvas/80 backdrop-blur xl:block">
-              <p className="text-[15px] font-medium">Customers this week</p>
-              <BarChart label="Customers this week" data={WEEK} height={96} showAxis={false} className="mt-3" />
-            </Card>
-          </div>
-          <Card padding="sm" className="grid gap-2 bg-ui-canvas/80 backdrop-blur">
-            <TxRow static variant="card" leading={<Avatar name="Ana Ruiz" size="md" />} title="Ana Ruiz" subtitle="Pay in 4 · 1 minute ago" amount={200} />
-            <TxRow static variant="card" leading={<Avatar name="Kofi Mensah" size="md" />} title="Kofi Mensah" subtitle="Pay now · 3 minutes ago" amount={52} />
-          </Card>
-        </div>
+    <aside aria-hidden className="hidden min-w-0 lg:block">
+      <div className="h-full rounded-[32px] border border-ui-hairline-strong p-6 xl:p-8">
+        <SalesPreview height={300} />
       </div>
     </aside>
   );

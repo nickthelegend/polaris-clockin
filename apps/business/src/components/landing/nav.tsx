@@ -25,7 +25,7 @@ export function NetworkPill({ className }: { className?: string }) {
         <span className="absolute size-2.5 animate-ping rounded-full bg-ui-lime-button/60 motion-reduce:animate-none" />
         <span className="size-2 rounded-full bg-ui-lime-button" />
       </span>
-      Live on Monad testnet
+      Monad testnet · AUSD
     </span>
   );
 }
