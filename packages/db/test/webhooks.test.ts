@@ -152,6 +152,63 @@ describe("deliverWebhook", () => {
     expect(net).toMatchObject({ ok: false, status: null, retryable: true });
     expect(net.error).toMatch(/ECONNRESET/);
   });
+
+  // The reported stall: 1 KB every 500 ms held a 2 s delivery for 8 s, and the body was read to the end.
+  it("bounds the whole attempt by timeoutMs, however slowly the endpoint trickles its answer", async () => {
+    const timers: NodeJS.Timeout[] = [];
+    const server = createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.write("x");
+      const t = setInterval(() => res.write("x"), 100);
+      timers.push(t);
+      setTimeout(() => {
+        clearInterval(t);
+        res.end();
+      }, 8_000).unref();
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const started = Date.now();
+      const out = await deliverWebhook({ url: `http://127.0.0.1:${port}/hook`, secret: "whsec_x", eventType: "payment.succeeded", body: "{}", attempt: 1, allowPrivate: true, timeoutMs: 700 });
+      const took = Date.now() - started;
+      expect(out).toMatchObject({ ok: false, status: null, retryable: true });
+      expect(out.error).toMatch(/ETIMEDOUT/);
+      expect(took).toBeLessThan(2_000);
+    } finally {
+      for (const t of timers) clearInterval(t);
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 10_000);
+
+  it("stops reading a response once it has the 2 KB it keeps", async () => {
+    let wrote = 0;
+    const server = createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { "content-type": "text/plain" });
+      const chunk = "y".repeat(1024);
+      const t = setInterval(() => {
+        if (!res.write(chunk)) return;
+        wrote += chunk.length;
+      }, 20);
+      res.on("close", () => clearInterval(t));
+    });
+    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const started = Date.now();
+      const out = await deliverWebhook({ url: `http://127.0.0.1:${port}/hook`, secret: "whsec_x", eventType: "payment.succeeded", body: "{}", attempt: 1, allowPrivate: true, timeoutMs: 5_000 });
+      expect(out).toMatchObject({ ok: true, status: 200 });
+      expect(out.responseBody).toHaveLength(2048);
+      expect(Date.now() - started).toBeLessThan(2_000);
+      expect(wrote).toBeLessThan(64 * 1024);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
+  }, 10_000);
 });
 
 describe("keys", () => {

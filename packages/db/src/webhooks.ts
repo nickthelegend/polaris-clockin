@@ -281,9 +281,23 @@ const MAX_RESPONSE_BYTES = 2048;
  * POST with node:http(s), resolving the host ourselves and refusing any
  * private address at connect time (not just when the URL was saved), which
  * also defeats DNS rebinding. Redirects are not followed.
+ *
+ * `timeoutMs` bounds the whole attempt, from DNS to the last byte: Node's own
+ * `timeout` is only a socket idle timer, which an endpoint trickling a byte
+ * at a time never trips. And the body is read only up to MAX_RESPONSE_BYTES;
+ * past that the response is dropped, so one slow or chatty merchant endpoint
+ * can't hold a delivery (and the dispatcher's pass) for longer than that.
  */
 export const nodeTransport: Transport = (url, init) =>
   new Promise((resolve, reject) => {
+    let settled = false;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      fn();
+    };
     const lookup = (
       hostname: string,
       options: unknown,
@@ -315,18 +329,28 @@ export const nodeTransport: Transport = (url, init) =>
       (res: IncomingMessage) => {
         const chunks: Buffer[] = [];
         let size = 0;
+        const done = () =>
+          finish(() => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8").slice(0, MAX_RESPONSE_BYTES) }));
         res.on("data", (chunk: Buffer) => {
-          if (size < MAX_RESPONSE_BYTES) chunks.push(chunk);
+          chunks.push(chunk);
           size += chunk.length;
+          if (size >= MAX_RESPONSE_BYTES) {
+            // All we keep is in: answer now and stop reading.
+            done();
+            req.destroy();
+          }
         });
-        res.on("end", () =>
-          resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks).toString("utf8").slice(0, MAX_RESPONSE_BYTES) }),
-        );
-        res.on("error", reject);
+        res.on("end", done);
+        res.on("error", (error) => finish(() => reject(error)));
       },
     );
+    deadline = setTimeout(() => {
+      const error = Object.assign(new Error(`no complete response within ${init.timeoutMs} ms`), { code: "ETIMEDOUT" });
+      finish(() => reject(error));
+      req.destroy(error);
+    }, init.timeoutMs);
     req.on("timeout", () => req.destroy(Object.assign(new Error(`no response within ${init.timeoutMs} ms`), { code: "ETIMEDOUT" })));
-    req.on("error", reject);
+    req.on("error", (error) => finish(() => reject(error)));
     req.end(init.body);
   });
 

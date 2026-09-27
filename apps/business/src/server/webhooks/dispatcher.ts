@@ -25,6 +25,8 @@ import { getConfig } from "../env";
 const LOCK_MS = 60_000;
 const BATCH = 25;
 const CONCURRENCY = 5;
+/** How many of one endpoint's deliveries a pass sends, one after another. */
+const PER_ENDPOINT_PER_PASS = 10;
 
 let transportOverride: Transport | undefined;
 let autoKick = true;
@@ -116,14 +118,29 @@ export async function dispatchDue(options: { nowMs?: number; limit?: number; ids
         ),
       ];
 
-  const queue = [...due];
-  const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-    for (let next = queue.shift(); next; next = queue.shift()) {
-      const claimed = await claim(next.id, nowMs);
-      if (!claimed) continue;
-      summary.attempted++;
-      const result = await attempt(claimed, nowMs);
-      summary[result]++;
+  // One worker serves one endpoint at a time, so a slow or hostile endpoint ties up at most one worker (for at
+  // most its attempts' timeouts) while the others deliver everyone else's. An endpoint that fails an attempt gets
+  // no more this pass: the rest of its deliveries wait for the next one.
+  const byEndpoint = new Map<string, WebhookDeliveryRecord[]>();
+  for (const d of due) {
+    const list = byEndpoint.get(d.endpointId) ?? [];
+    list.push(d);
+    byEndpoint.set(d.endpointId, list);
+  }
+  const endpoints = [...byEndpoint.values()];
+  const workers = Array.from({ length: Math.min(CONCURRENCY, endpoints.length) }, async () => {
+    for (let list = endpoints.shift(); list; list = endpoints.shift()) {
+      let sent = 0;
+      for (const next of list) {
+        if (sent >= PER_ENDPOINT_PER_PASS) break;
+        const claimed = await claim(next.id, nowMs);
+        if (!claimed) continue;
+        sent++;
+        summary.attempted++;
+        const result = await attempt(claimed, nowMs);
+        summary[result]++;
+        if (result !== "succeeded") break;
+      }
     }
   });
   await Promise.all(workers);
