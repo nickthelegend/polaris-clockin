@@ -178,15 +178,21 @@ export function appendSdkLog(orderId: string, entries: SdkCall[], store: OrderSt
 /** How many browser calls one order's log may hold: a checkout makes a handful. */
 export const MAX_BROWSER_LOG = 12;
 
+/** How long after payment the checkout may still report its calls: the popup's result lands after the webhook. */
+export const BROWSER_LOG_GRACE_MS = 15 * 60_000;
+
 /**
  * The browser's own SDK calls, for the developer drawer: only while the order
- * is unpaid (that's when a checkout makes them), and only up to a handful.
+ * is unpaid or just paid (that's when a checkout makes them, and the popup's
+ * result often lands after the webhook), and only up to a handful.
  */
-export function appendBrowserLog(orderId: string, entries: SdkCall[], store: OrderStore = orderStore()) {
+export function appendBrowserLog(orderId: string, entries: SdkCall[], store: OrderStore = orderStore(), now: Date = new Date()) {
   return store.update((data) => {
     const order = data.orders[orderId];
     if (!order) return { ok: false as const, reason: "not_found" as const };
-    if (order.status !== "awaiting_payment") return { ok: false as const, reason: "closed" as const };
+    const paidAt = order.payment.paidAt ? new Date(order.payment.paidAt).getTime() : null;
+    const open = order.status === "awaiting_payment" || (paidAt !== null && now.getTime() - paidAt < BROWSER_LOG_GRACE_MS);
+    if (!open) return { ok: false as const, reason: "closed" as const };
     const room = MAX_BROWSER_LOG - order.sdkLog.filter((c) => c.side === "browser").length;
     const accepted = entries.slice(0, Math.max(0, room));
     order.sdkLog.push(...accepted);

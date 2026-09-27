@@ -10,8 +10,8 @@ const BROWSER_CALLS = new Set(["createPolaris", "polaris.openCheckout", "polaris
  * The browser reports the SDK calls it made (openCheckout, pay) so the
  * "Built with Polaris" drawer shows both halves of the integration. This only
  * appends to a log, and only for the browser that placed the order, while
- * it's unpaid, up to a handful of entries; nothing here can touch an order's
- * status.
+ * it's unpaid or for a few minutes after it's paid, up to a handful of
+ * entries; nothing here can touch an order's status.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
