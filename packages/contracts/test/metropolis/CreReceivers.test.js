@@ -381,6 +381,32 @@ describe("Chainlink CRE receivers", () => {
       expect(await s.scores.creditLimitOf(user)).to.equal(0n);
     });
 
+    it("a report about accounts with no history opens no line, however many of them one person makes", async () => {
+      // The reproduced sybil farm: fresh accounts, each reported with facts
+      // that are all zero, each opened a $200 unsecured line.
+      const empty = { walletAgeDays: 0, txCount: 0, stableBalance: 0n, defiTenureDays: 0, priorLiquidations: 0, relatedWallets: 0, exchangeFunded: false };
+      const t = await now();
+      const accounts = [0, 1, 2, 3].map(() => ethers.Wallet.createRandom().address);
+      const freshWallet = ethers.Wallet.createRandom().address;
+      const items = accounts.map((user, i) => ({ user, linkedWallet: i === 0 ? freshWallet : ethers.ZeroAddress, facts: { ...empty, observedAt: t } }));
+      const { tx, ok } = await deliver(s.underwriting, cre.encodeUnderwritingReport(items));
+      expect(ok).to.equal(true);
+      const thin = s.scores.interface.encodeErrorResult("ThinFile", [0, 0]);
+      for (const { user, linkedWallet } of items) {
+        await expect(tx).to.emit(s.underwriting, "UnderwritingRefused").withArgs(user, linkedWallet, thin);
+        expect(await s.scores.creditLimitOf(user)).to.equal(0n);
+        expect((await s.scores.profileOf(user)).underwritten).to.equal(false);
+      }
+      await expect(tx).to.not.emit(s.underwriting, "UnderwritingApplied");
+      // Linking a wallet as young as the account lends it nothing, and links nothing.
+      expect(await s.underwriting.linkedUserOf(freshWallet)).to.equal(ethers.ZeroAddress);
+
+      // The same account, later, with a real history wallet: the line opens.
+      const history = ethers.Wallet.createRandom().address;
+      await deliver(s.underwriting, cre.encodeUnderwritingReport([{ user: accounts[0], linkedWallet: history, facts: facts({ observedAt: await now() }) }]));
+      expect(await s.scores.creditLimitOf(accounts[0])).to.equal(AUSD(500));
+    });
+
     it("a second underwrite cannot reset a record", async () => {
       const user = ethers.Wallet.createRandom().address;
       await deliver(s.underwriting, cre.encodeUnderwritingReport([{ user, facts: facts({ observedAt: await now(), relatedWallets: 20 }) }]));

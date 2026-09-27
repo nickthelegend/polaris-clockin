@@ -64,7 +64,7 @@ Pay now 268k, open a plan 396k, CRE collection 153k, subscribe 310k, send
 |---|---|
 | `PolarisCheckout` | Pay now, Pay in 4 and Subscribe from signatures. The **only** loan originator. |
 | `PolarisLoanEngine` | Pay in 4 plans: merchant paid from the pool; permissionless `collectInstallment`; `repayWithSig`; liquidation past grace. |
-| `ScoreManager` | 300–850 scores and credit lines; `underwrite(user, facts)` computes the opening score on chain, capped at $1,000. |
+| `ScoreManager` | 300–850 scores and credit lines; `underwrite(user, facts)` computes the opening score on chain, capped at $1,000, and opens nothing for a thin file (`isThinFile`: under 90 days or 10 transactions). |
 | `PolarisPayments` | Direct payments (`payWithAuthorization`) and subscriptions (`subscribeFor`, `chargeDue`). 0.5% fee. |
 | `PolarisSend` | Send dollars as a link; claim to any address with the link key's signature. |
 | `MerchantRegistry` | Merchants, registered by their own signature (`registerFor`), activated with a cap. |
@@ -163,9 +163,15 @@ Facts = (uint32 walletAgeDays, uint32 txCount, uint64 stableBalance, uint32 defi
 ```
 
 `stableBalance` is 6-decimal base units; `observedAt` must be within 15 minutes of the block.
+A report must show a history (`ScoreManager.isThinFile`): at least `MIN_HISTORY_DAYS` (90) days
+since the oldest activity and `MIN_HISTORY_TXS` (10) transactions, over the account and its linked
+wallet. A thin file is refused with `ThinFile(walletAgeDays, txCount)` and records nothing, so a fresh
+account gets no unsecured line until it links a history wallet (collateral works meanwhile, at face
+value); a report that declines the wallet is recorded whatever the history. The balance does not count
+towards a history. The off-chain decision and the workflow should skip thin files rather than send them.
 Events: `UnderwritingApplied(address indexed user, address indexed linkedWallet, uint16 score)`,
 `UnderwritingRefused(address indexed user, address indexed linkedWallet, bytes reason)` (e.g.
-`StaleEvidence`, `AlreadyHasRecord`, `WalletAlreadyLinked(wallet, user)`, `UserIsLinkedHistory(user, account)`,
+`StaleEvidence`, `ThinFile(walletAgeDays, txCount)`, `AlreadyHasRecord`, `WalletAlreadyLinked(wallet, user)`, `UserIsLinkedHistory(user, account)`,
 `WalletAlreadyUnderwritten(wallet)`). One history opens one line: `linkedUserOf(wallet)` backs one
 account, a wallet backing an account can't be underwritten itself, and an underwritten account can't be
 linked as another's history. While `simulationTransmitter` is set (simulation), only that `tx.origin` may

@@ -168,7 +168,8 @@ async function deployPolaris(hre, cfg, log = () => {}) {
   await send(scores, "setUnderwriter", [addresses.UnderwritingReceiver, true]);
   await send(scores, "setCollateralVault", [addresses.CollateralVault]);
   // A fresh Face ID account costs nothing, so no unsecured line opens without
-  // a DON report (ScoreManager.requireUnderwriting).
+  // a DON report (ScoreManager.requireUnderwriting), and no report opens one
+  // without a history behind it (ScoreManager.isThinFile).
   await send(scores, "setRequireUnderwriting", [true]);
   await send(vault, "setLoanEngine", [addresses.PolarisLoanEngine]);
   await send(vault, "setSeizer", [addresses.PolarisLoanEngine, true]);

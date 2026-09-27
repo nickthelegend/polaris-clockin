@@ -50,8 +50,9 @@ contract ScoreManager is Ownable {
     uint16 public constant LATE_PENALTY = 40;
     uint16 public constant DEFAULT_PENALTY = 150;
 
-    /// Where an underwritten wallet with no evidence at all opens: the floor
-    /// tier. Facts lift it by earning points and sink it with penalties.
+    /// Where the score starts before facts lift it by earning points or sink
+    /// it with penalties: the floor tier. A report that earns nothing opens
+    /// nothing, though: it must first show a history (`isThinFile`).
     uint16 public constant UNDERWRITE_FLOOR = 520;
     /// The highest score underwriting can assign. 739 is the top of the $1,000
     /// tier, so an underwritten line never opens above $1,000; 740 and up is
@@ -75,6 +76,13 @@ contract ScoreManager is Ownable {
     /// same count declines a report in `scoreFromFacts`, so a default on
     /// Polaris weighs at least as much as one the DON attests elsewhere.
     uint32 public constant DECLINE_AT_LIQUIDATIONS = 2;
+
+    /// The least history a report must show before it opens any unsecured
+    /// line: this many days since the buyer's oldest activity (the account
+    /// or the wallet it linked) ... See `isThinFile`.
+    uint32 public constant MIN_HISTORY_DAYS = 90;
+    /// ... and this many transactions across them.
+    uint32 public constant MIN_HISTORY_TXS = 10;
 
     /**
      * @notice The least time between two on-time bonuses for one wallet,
@@ -181,6 +189,10 @@ contract ScoreManager is Ownable {
     error NotUnderwriter();
     error AlreadyHasRecord();
     error StaleEvidence();
+    /// The report shows too little history to open an unsecured line. See
+    /// `isThinFile`. Nothing is recorded, so a later report with a linked
+    /// history wallet can still open one.
+    error ThinFile(uint32 walletAgeDays, uint32 txCount);
 
     modifier onlyWriter() {
         if (!isWriter[msg.sender]) revert NotWriter();
@@ -370,6 +382,39 @@ contract ScoreManager is Ownable {
     }
 
     /**
+     * @notice Whether a report shows too little history to open an unsecured
+     *         line: younger than MIN_HISTORY_DAYS, or fewer than
+     *         MIN_HISTORY_TXS transactions.
+     * @dev The floor score is not a reward for showing up. `scoreFromFacts`
+     *      gives facts that are all zero UNDERWRITE_FLOOR, and 520 reads as the
+     *      $200 tier, so a report about a Face ID account created a minute ago
+     *      opened $200 of unsecured credit. Accounts cost nothing to create,
+     *      so one person could open as many lines as they cared to make
+     *      accounts, spend each at a merchant of their own, and never repay:
+     *      with nothing locked, liquidation seizes nothing. The sybil checks
+     *      (`relatedWallets`, one history per line) only bite on a history
+     *      that exists.
+     *
+     *      So a report must show a life elsewhere before it opens anything:
+     *      at least MIN_HISTORY_DAYS since the oldest activity and at least
+     *      MIN_HISTORY_TXS transactions, over the account and the wallet it
+     *      linked. Age is the signal a farmer cannot parallelise; the
+     *      transaction floor stops an old wallet that was funded once and
+     *      never used from standing in for a history. The balance does not
+     *      count here, since the same dollars can be moved from account to
+     *      account ahead of each report.
+     *
+     *      A thin file is refused, not declined: `underwrite` records nothing,
+     *      so the buyer can still bring a history wallet later, and until then
+     *      borrows against collateral at face value (see `creditLimitOf`).
+     *      Kept out of `scoreFromFacts` so the score, and every mirror of it,
+     *      is unchanged; the off-chain decision must apply this too.
+     */
+    function isThinFile(Facts calldata f) public pure returns (bool) {
+        return f.walletAgeDays < MIN_HISTORY_DAYS || f.txCount < MIN_HISTORY_TXS;
+    }
+
+    /**
      * @notice Open a wallet's first line from attested facts.
      * @dev Underwriter-only: the receiver that verifies the DON's report calls
      *      this.
@@ -406,6 +451,11 @@ contract ScoreManager is Ownable {
      *      the future. An old report is a snapshot of a wallet that may since
      *      have been drained or liquidated elsewhere, and a future stamp would
      *      let a report be pre-dated to outlive the window.
+     *
+     *      Refuses a thin file (`isThinFile`) with `ThinFile`, recording
+     *      nothing, unless the facts decline the wallet outright: a decline is
+     *      recorded whatever the history, so a thin file can't be used to dodge
+     *      one.
      */
     function underwrite(address user, Facts calldata f)
         external
@@ -422,6 +472,7 @@ contract ScoreManager is Ownable {
 
         bool declined;
         (score, declined) = scoreFromFacts(f);
+        if (!declined && isThinFile(f)) revert ThinFile(f.walletAgeDays, f.txCount);
 
         uint16 old = STARTING_SCORE;
         if (p.initialized) {

@@ -4230,6 +4230,22 @@ export declare const scoreManagerAbi: readonly [
   {
     readonly "inputs": readonly [
       {
+        readonly "internalType": "uint32";
+        readonly "name": "walletAgeDays";
+        readonly "type": "uint32";
+      },
+      {
+        readonly "internalType": "uint32";
+        readonly "name": "txCount";
+        readonly "type": "uint32";
+      }
+    ];
+    readonly "name": "ThinFile";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
         readonly "internalType": "address";
         readonly "name": "vault";
         readonly "type": "address";
@@ -4560,6 +4576,32 @@ export declare const scoreManagerAbi: readonly [
   },
   {
     readonly "inputs": readonly [];
+    readonly "name": "MIN_HISTORY_DAYS";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint32";
+        readonly "name": "";
+        readonly "type": "uint32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "MIN_HISTORY_TXS";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint32";
+        readonly "name": "";
+        readonly "type": "uint32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
     readonly "name": "MIN_SCORE";
     readonly "outputs": readonly [
       {
@@ -4659,6 +4701,67 @@ export declare const scoreManagerAbi: readonly [
       }
     ];
     readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "components": readonly [
+          {
+            readonly "internalType": "uint32";
+            readonly "name": "walletAgeDays";
+            readonly "type": "uint32";
+          },
+          {
+            readonly "internalType": "uint32";
+            readonly "name": "txCount";
+            readonly "type": "uint32";
+          },
+          {
+            readonly "internalType": "uint64";
+            readonly "name": "stableBalance";
+            readonly "type": "uint64";
+          },
+          {
+            readonly "internalType": "uint32";
+            readonly "name": "defiTenureDays";
+            readonly "type": "uint32";
+          },
+          {
+            readonly "internalType": "uint16";
+            readonly "name": "priorLiquidations";
+            readonly "type": "uint16";
+          },
+          {
+            readonly "internalType": "uint16";
+            readonly "name": "relatedWallets";
+            readonly "type": "uint16";
+          },
+          {
+            readonly "internalType": "bool";
+            readonly "name": "exchangeFunded";
+            readonly "type": "bool";
+          },
+          {
+            readonly "internalType": "uint64";
+            readonly "name": "observedAt";
+            readonly "type": "uint64";
+          }
+        ];
+        readonly "internalType": "struct ScoreManager.Facts";
+        readonly "name": "f";
+        readonly "type": "tuple";
+      }
+    ];
+    readonly "name": "isThinFile";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bool";
+        readonly "name": "";
+        readonly "type": "bool";
+      }
+    ];
+    readonly "stateMutability": "pure";
     readonly "type": "function";
   },
   {

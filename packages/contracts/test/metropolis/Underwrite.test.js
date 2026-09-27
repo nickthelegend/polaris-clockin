@@ -7,7 +7,9 @@
  * and prove the guards around the one write that sets a score without
  * repayment history: it runs once, on fresh evidence, never over bad history,
  * and it never opens a line above $1,000, not even for the one transaction
- * after it lands. With underwriting required, they prove that nothing but a
+ * after it lands. A report must show a history before it opens anything: a
+ * fresh account's empty report is refused, not scored at the floor. With
+ * underwriting required, they prove that nothing but a
  * report opens an unsecured line: not a dust plan, not a default, not a late
  * payment, and not the collateral multiplier either. And they prove that a
  * line, once open, cannot be defaulted on for ever.
@@ -17,7 +19,7 @@ const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
 const mirror = require("../helpers/underwrite-mirror");
-const { scoreFromFacts } = mirror;
+const { scoreFromFacts, isThinFile } = mirror;
 const { anyValue } = require("@nomicfoundation/hardhat-chai-matchers/withArgs");
 
 const AUSD = (n) => BigInt(Math.round(n * 1e6));
@@ -40,6 +42,11 @@ const EMPTY = {
   relatedWallets: 0,
   exchangeFunded: false,
 };
+
+/// The least history a report may show and still open a line
+/// (ScoreManager.isThinFile): 90 days and 10 transactions. It earns six
+/// points of age, so it opens at 526, the $200 floor tier.
+const HISTORY = { walletAgeDays: 90, txCount: 10 };
 
 /// Every positive signal exactly at its cap.
 const BEST = {
@@ -242,9 +249,9 @@ describe("underwriting", () => {
       expect(p.firstSeenAt).to.equal(BigInt(await time.latest()));
     });
 
-    it("an empty report opens the $200 floor line, below where a stranger reads today", async () => {
-      await scores.connect(underwriter).underwrite(user.address, await fresh());
-      expect(await scores.scoreOf(user.address)).to.equal(520);
+    it("the least history a report may show opens the $200 floor line, below where a stranger reads today", async () => {
+      await scores.connect(underwriter).underwrite(user.address, await fresh(HISTORY));
+      expect(await scores.scoreOf(user.address)).to.equal(526);
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
     });
 
@@ -291,6 +298,87 @@ describe("underwriting", () => {
       expect(await scores.scoreOf(user.address)).to.equal(720);
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(1_000));
       expect((await scores.profileOf(stranger.address)).initialized).to.equal(false);
+    });
+  });
+
+  describe("a thin file", () => {
+    it("an empty report opens no line: a fresh account is refused, not scored at the floor", async () => {
+      await scores.setRequireUnderwriting(true);
+      // The reproduced attack: every fresh account's report is all zeros,
+      // and each one opened $200 of unsecured credit.
+      const sybils = (await ethers.getSigners()).slice(10, 15);
+      for (const w of sybils) {
+        await expect(scores.connect(underwriter).underwrite(w.address, await fresh()))
+          .to.be.revertedWithCustomError(scores, "ThinFile")
+          .withArgs(0, 0);
+        const p = await scores.profileOf(w.address);
+        expect(p.initialized).to.equal(false);
+        expect(p.underwritten).to.equal(false);
+        expect(await scores.creditLimitOf(w.address)).to.equal(0n);
+        await expect(borrow(w, AUSD(10))).to.be.revertedWithCustomError(engine, "ExceedsCreditLimit");
+      }
+    });
+
+    it("a report one day or one transaction short of the minimum is refused, and one at it is not", async () => {
+      expect(await scores.MIN_HISTORY_DAYS()).to.equal(90n);
+      expect(await scores.MIN_HISTORY_TXS()).to.equal(10n);
+      const [, , , , , a, b, c] = await ethers.getSigners();
+      const short = [
+        [a, { ...HISTORY, walletAgeDays: 89 }],
+        [b, { ...HISTORY, txCount: 9 }],
+        // A balance is no history: the same dollars can visit every account.
+        [c, { walletAgeDays: 3, txCount: 2, stableBalance: AUSD(5_000), exchangeFunded: true }],
+      ];
+      for (const [who, f] of short) {
+        const report = await fresh(f);
+        await expect(scores.connect(underwriter).underwrite(who.address, report))
+          .to.be.revertedWithCustomError(scores, "ThinFile")
+          .withArgs(report.walletAgeDays, report.txCount);
+        expect((await scores.profileOf(who.address)).initialized).to.equal(false);
+      }
+      await expect(scores.connect(underwriter).underwrite(a.address, await fresh(HISTORY)))
+        .to.emit(scores, "Underwritten")
+        .withArgs(a.address, 526, false, anyValue);
+    });
+
+    it("is refused, not declined: the same account can bring a history wallet later", async () => {
+      await scores.setRequireUnderwriting(true);
+      await expect(
+        scores.connect(underwriter).underwrite(user.address, await fresh({ walletAgeDays: 3, txCount: 2 }))
+      ).to.be.revertedWithCustomError(scores, "ThinFile");
+      // Collateral works meanwhile, at face value.
+      await vault.connect(user).lock(AUSD(100));
+      expect(await scores.creditLimitOf(user.address)).to.equal(AUSD(100));
+
+      // Linking an old wallet makes the facts span its history too.
+      await scores.connect(underwriter).underwrite(user.address, await fresh(BEST));
+      expect(await scores.scoreOf(user.address)).to.equal(720);
+      expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(1_000));
+    });
+
+    it("cannot dodge a decline: a thin report that disqualifies the wallet is still recorded", async () => {
+      await expect(scores.connect(underwriter).underwrite(user.address, await fresh({ relatedWallets: 30 })))
+        .to.emit(scores, "Underwritten")
+        .withArgs(user.address, 466, true, anyValue);
+      const p = await scores.profileOf(user.address);
+      expect(p.declined).to.equal(true);
+      expect(await scores.baseLimitOf(user.address)).to.equal(0n);
+      await expect(
+        scores.connect(underwriter).underwrite(user.address, await fresh(BEST))
+      ).to.be.revertedWithCustomError(scores, "AlreadyHasRecord");
+    });
+
+    it("the JS mirror agrees with the contract on which reports are thin", async () => {
+      const rand = mulberry32(0x7417);
+      const cases = [{}, HISTORY, { ...HISTORY, walletAgeDays: 89 }, { ...HISTORY, txCount: 9 }, BEST];
+      for (let i = 0; i < 60; i++) cases.push({ walletAgeDays: Math.floor(rand() * 200), txCount: Math.floor(rand() * 25) });
+      for (const f of cases) {
+        const struct = facts(f);
+        const label = JSON.stringify(f, (_, x) => (typeof x === "bigint" ? x.toString() : x));
+        expect(await scores.isThinFile(struct)).to.equal(isThinFile(struct), label);
+      }
+      expect(await scores.MIN_HISTORY_DAYS()).to.equal(mirror.MIN_HISTORY_DAYS);
+      expect(await scores.MIN_HISTORY_TXS()).to.equal(mirror.MIN_HISTORY_TXS);
     });
   });
 
@@ -539,8 +627,8 @@ describe("underwriting", () => {
       await vault.connect(stranger).lock(AUSD(100));
       expect(await scores.creditLimitOf(stranger.address)).to.equal(AUSD(100));
 
-      // And a report opens the unsecured line.
-      await scores.connect(underwriter).underwrite(user.address, await fresh());
+      // And a report with a history opens the unsecured line.
+      await scores.connect(underwriter).underwrite(user.address, await fresh(HISTORY));
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
       await expect(borrow(user, AUSD(150))).to.not.be.reverted;
     });
@@ -685,10 +773,10 @@ describe("underwriting", () => {
       await borrow(weak, AUSD(200));
       await time.increaseTo((await engine.installmentDueAt(3n, 0)) + BigInt(GRACE) + 1n);
       await engine.connect(merchant).collectInstallment(3n);
-      const report = await fresh({ priorLiquidations: 1 });
-      expect((await scores.scoreFromFacts(report))[0]).to.equal(445n);
+      const report = await fresh({ ...HISTORY, priorLiquidations: 1 });
+      expect((await scores.scoreFromFacts(report))[0]).to.equal(451n);
       await scores.connect(underwriter).underwrite(weak.address, report);
-      expect(await scores.scoreOf(weak.address)).to.equal(405);
+      expect(await scores.scoreOf(weak.address)).to.equal(411);
       expect(await scores.baseLimitOf(weak.address)).to.equal(AUSD(200));
     });
 
@@ -713,14 +801,14 @@ describe("underwriting", () => {
         "ExceedsCreditLimit"
       );
 
-      // The DON can still assess it. An empty report opens at 520, and the
-      // +12 the wallet earned is kept: the same 532 it would have had if the
+      // The DON can still assess it. The least history opens at 526, and the
+      // +12 the wallet earned is kept: the same 538 it would have had if the
       // report had come first.
-      await expect(scores.connect(underwriter).underwrite(stranger.address, await fresh()))
+      await expect(scores.connect(underwriter).underwrite(stranger.address, await fresh(HISTORY)))
         .to.emit(scores, "Underwritten")
-        .withArgs(stranger.address, 532, false, anyValue)
+        .withArgs(stranger.address, 538, false, anyValue)
         .and.to.emit(scores, "ScoreChanged")
-        .withArgs(stranger.address, 612, 532, "underwritten");
+        .withArgs(stranger.address, 612, 538, "underwritten");
 
       const after = await scores.profileOf(stranger.address);
       expect(after.underwritten).to.equal(true);
@@ -903,7 +991,7 @@ describe("underwriting", () => {
 
     it("an underwritten wallet keeps the full multiplier on top of the line its report opened", async () => {
       await scores.setRequireUnderwriting(true);
-      await scores.connect(underwriter).underwrite(user.address, await fresh());
+      await scores.connect(underwriter).underwrite(user.address, await fresh(HISTORY));
       await vault.connect(user).lock(AUSD(100));
       expect(await scores.creditLimitOf(user.address)).to.equal(AUSD(200) + AUSD(150));
     });
@@ -922,13 +1010,13 @@ describe("underwriting", () => {
 
     it("a wallet cannot default its $200 floor line again and again: its second liquidation here closes the line", async () => {
       await scores.setRequireUnderwriting(true);
-      // An empty report opens the $200 floor line, by design.
-      await scores.connect(underwriter).underwrite(user.address, await fresh());
+      // The least history opens the $200 floor line, by design.
+      await scores.connect(underwriter).underwrite(user.address, await fresh(HISTORY));
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
       const walletStart = await ausd.balanceOf(user.address);
 
       await defaultOnce(user, AUSD(190));
-      expect(await scores.scoreOf(user.address)).to.equal(370);
+      expect(await scores.scoreOf(user.address)).to.equal(376);
       // One default costs 150 points and leaves the floor line: people recover.
       expect(await scores.baseLimitOf(user.address)).to.equal(AUSD(200));
 
