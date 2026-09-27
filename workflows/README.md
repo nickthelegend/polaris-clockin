@@ -359,8 +359,10 @@ and `credit.thin`.
 - `test/consent.test.ts`: the consent text byte for byte, bound to the
   account, the wallet (or none), the chain and 15 minutes, and checked the
   way viem's own verifier checks it.
-- `e2e/local-chain.e2e.test.ts` (`e2e:local`): on real contracts, a proof
-  becomes facts and ScoreManager opens a line at the mirror's score; a Pay in
+- `e2e/local-chain.e2e.test.ts` (`e2e:local`): on real contracts, the
+  account's consent and a proof become facts and ScoreManager opens a line at
+  the mirror's score, while a brand-new account alone is a thin file: no
+  report, and `creditLimitOf` stays 0; a Pay in
   4 plan opens on it; instalment 1 is collected from indexer candidates (the
   workflow's own query run against the indexer's schema); a
   revoked allowance and an empty balance become `allowance_lost` and

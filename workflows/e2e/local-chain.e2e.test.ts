@@ -12,7 +12,8 @@
  * underwriting fixtures. So the receivers decode the exact bytes the
  * workflows encode, and ScoreManager and PolarisLoanEngine act on them.
  *
- *   1. underwriting: the account's consent + a Bring-your-history proof → facts → ScoreManager opens a line
+ *   1. underwriting: the account's consent + a Bring-your-history proof → facts → ScoreManager opens a line;
+ *      a brand-new account alone is a thin file: no report, no line
  *   2. a Pay in 4 plan opens on that line (PlanIntent + Permit, relayed)
  *   3. collections, candidates from the indexer: instalment 1 collected, webhook posted
  *   4. the buyer revokes the allowance → installment.failed "allowance_lost"
@@ -76,10 +77,13 @@ const DEPLOYER = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266" as Address;
 const RELAYER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8" as Address;
 const buyer = privateKeyToAccount("0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a");
 const historyWallet = privateKeyToAccount("0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6");
+// A brand-new account with no history: the thin file that must not get the $200 floor line.
+const newcomer = privateKeyToAccount("0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97");
 const SINK = "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65" as Address;
 
 const REGULAR_ACCOUNT = "0xacc0000000000000000000000000000000000002";
 const STRONG = "0xb0b0000000000000000000000000000000000001";
+const FRESH_ACCOUNT = "0xacc0000000000000000000000000000000000001";
 
 interface Deployment {
   deployer: Address;
@@ -97,7 +101,13 @@ const send = (from: Address, to: Address, abi: Abi, functionName: string, args: 
 describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation forwarder", () => {
   const d = (enabled ? JSON.parse(fs.readFileSync(DEPLOYMENT, "utf8")) : {}) as Deployment;
   const at = (name: string) => d.contracts[name]!.address;
-  const FIXTURES = enabled ? cloneFixtures([{ from: REGULAR_ACCOUNT, to: buyer.address }, { from: STRONG, to: historyWallet.address }]) : "";
+  const FIXTURES = enabled
+    ? cloneFixtures([
+        { from: REGULAR_ACCOUNT, to: buyer.address },
+        { from: STRONG, to: historyWallet.address },
+        { from: FRESH_ACCOUNT, to: newcomer.address },
+      ])
+    : "";
   const secrets = new Map([
     [
       "main",
@@ -231,6 +241,29 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     );
     expect(again.status).toBe("skipped");
     expect(record.writes).toHaveLength(0); // nothing written the second time
+  });
+
+  test("underwriting: a brand-new account alone is a thin file: no report, and no unsecured line on chain", async () => {
+    const { record } = harness();
+    const now = Math.floor(chainNowMs(RPC) / 1000);
+    const chainId = underwritingConfig().recipe.accountChainId;
+    const nonce = "e2eNewcomer1";
+    const signature = await newcomer.signMessage({
+      message: underwriteConsentMessage({ account: newcomer.address, wallet: null, chainId, issuedAt: now, nonce }),
+    });
+    const out = JSON.parse(
+      onHttpTrigger(
+        newTestRuntime(secrets, { timeProvider: () => chainNowMs(RPC) }, underwritingConfig()),
+        { input: new TextEncoder().encode(JSON.stringify({ user: newcomer.address, consent: { issuedAt: now, nonce, signature } })) } as unknown as HTTPPayload,
+      ),
+    );
+    expect(out).toMatchObject({ status: "thin", txHash: null });
+    // Had it been reported, ScoreManager would have opened it at the floor: the $200 tier.
+    expect(out.expectedScore).toBeLessThan(580);
+    expect(record.writes).toHaveLength(0);
+    const profile = read(at("ScoreManager"), scoreManagerAbi, "profileOf", [newcomer.address]) as { underwritten: boolean };
+    expect(profile.underwritten).toBe(false);
+    expect(read(at("ScoreManager"), scoreManagerAbi, "creditLimitOf", [newcomer.address])).toBe(0n);
   });
 
   test("pay in 4 opens on that line, from the buyer's two signatures", async () => {

@@ -6,7 +6,7 @@
  * path derives for the same persona, and the report to the receiver's ABI.
  */
 
-import { describe, expect } from "bun:test";
+import { test as bunTest, describe, expect } from "bun:test";
 import { cre, type HTTPPayload } from "@chainlink/cre-sdk";
 import { addContractMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import { scoreManagerAbi, underwritingReceiverAbi } from "@polarispay/contracts/abi";
@@ -447,7 +447,9 @@ test("malformed input fails loudly", async () => {
   expect(() => runWith(config(), { user: buyer, consent: c, extra: 1 })).toThrow(/underwriting payload/);
 });
 
-test("the staging recipe fits CRE's 15 HTTP calls for every fixture persona pair but the worst case, which it names", () => {
+// Pure (no CRE runtime), but it reads the fixtures 24 times over: give a busy
+// disk more than bun's default 5 s.
+bunTest("the staging recipe fits CRE's 15 HTTP calls for every fixture persona pair but the worst case, which it names", () => {
   const personas = [2, 3, 4, 5, 6, 7, 8].map((i) => `0xb0b000000000000000000000000000000000000${i}` as Address);
   const over: string[] = [];
   for (const account of [REGULAR_ACCOUNT, FRESH_ACCOUNT, "0xacc0000000000000000000000000000000000003" as Address]) {
@@ -466,7 +468,7 @@ test("the staging recipe fits CRE's 15 HTTP calls for every fixture persona pair
   // Only a busy account (dated with probes) plus a wallet Nansen has no funder
   // for (dated with probes too), with all three liquidation chains counted.
   expect(over.sort()).toEqual(["2+6", "3+6"]);
-});
+}, 60_000);
 
 test("over the call budget, the run stops without a report rather than attest what it could not read", async () => {
   const noFunder = cloneFixtures([
