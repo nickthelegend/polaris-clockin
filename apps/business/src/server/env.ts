@@ -77,6 +77,15 @@ export type ServerConfig = {
   activator: ActivatorConfig;
   /** Per-merchant Pay in 4 cap set on activation, in AUSD base units. */
   activationCapUnits: bigint;
+  /**
+   * Settlement history a merchant needs before it is activated for Pay in 4
+   * automatically: this many Pay-now payments, each from a different payer
+   * (MERCHANT_ACTIVATION_MIN_PAYMENTS; 3 in production, 0 in development).
+   * A brand-new merchant can take Pay now at once, but can't have a crowd of
+   * fresh accounts draw their opening credit lines on it before it has sold
+   * anything to anyone.
+   */
+  activationMinPayers: number;
   payoutSigner: { signerId: string; authorizationKey: string } | null;
   /**
    * The offline admin key quorum that owns our Privy policies
@@ -332,6 +341,7 @@ function build(): ServerConfig {
     },
     activator: activatorFrom(chain),
     activationCapUnits: BigInt(int("MERCHANT_ACTIVATION_CAP_USD", 1_000)) * 1_000_000n,
+    activationMinPayers: Math.max(0, int("MERCHANT_ACTIVATION_MIN_PAYMENTS", production ? 3 : 0)),
     payoutSigner: signerId && signerKey ? { signerId, authorizationKey: signerKey } : null,
     adminQuorumId: env("PRIVY_ADMIN_QUORUM_ID") ?? null,
     privyDisabled: flag("POLARIS_DISABLE_PRIVY"),

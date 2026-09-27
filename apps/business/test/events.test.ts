@@ -20,7 +20,7 @@ import { MAX_DELIVERY_ATTEMPTS, verifyWebhookSignature } from "@polaris/db";
 import { verifyWebhook } from "../../../packages/sdk/src/server/webhooks";
 import { makeLog, type LogSpec } from "./helpers/fake-chain";
 import { ADDR, json, params, request, setupServer, signIn, type TestEnv } from "./helpers/env";
-import { checkoutDomain, emitLikeTheContracts, inSeconds, merchantWithKeys, newSession, stablecoinDomain, type Merchant } from "./helpers/flows";
+import { checkoutDomain, emitLikeTheContracts, inSeconds, merchantWithKeys, newSession, orderKey, stablecoinDomain, type Merchant } from "./helpers/flows";
 
 let env: TestEnv;
 let merchant: Merchant;
@@ -362,6 +362,45 @@ describe("merchant onboarding on chain", () => {
     expect(capTx?.to).toBe(ADDR.registry);
     expect(activateTx?.to).toBe(ADDR.registry);
     expect(env.chain.relayed).toHaveLength(3);
+  });
+
+  it("with MERCHANT_ACTIVATION_MIN_PAYMENTS, a new merchant waits for paid orders from different customers before Pay in 4", async () => {
+    const activatorKey = generatePrivateKey();
+    env = setupServer({ REGISTRY_ACTIVATOR: "local", REGISTRY_OWNER_PRIVATE_KEY: activatorKey, MERCHANT_ACTIVATION_MIN_PAYMENTS: "2" });
+    emitLikeTheContracts(env);
+    merchant = await merchantWithKeys({ webhook: true });
+    let registered = false;
+    env.chain.reads.merchantOf = () => ({ payoutAddress: merchant.account.address, name: "", registeredAt: registered ? 1n : 0n, active: false, maxOrderValue: 0n });
+    signIn({ userId: merchant.userId, walletAddress: merchant.account.address, walletId: "wal_1" });
+    await meUpdate(request("POST", "/api/me", { body: { businessName: "Estudio Sur" } }), params({}));
+    const typed = (await json(await registrationGet(request("GET", "/api/merchant/registration"), params({})))).body.data.typedData;
+    const signature = await merchant.account.signTypedData({
+      domain: typed.domain,
+      types: TYPES.Registration,
+      primaryType: "Registration",
+      message: { ...typed.message, nonce: BigInt(typed.message.nonce), deadline: BigInt(typed.message.deadline) },
+    });
+    env.chain.onSend = () => {
+      registered = true;
+      return [];
+    };
+    const done = await json(await registrationPost(request("POST", "/api/merchant/registration", { body: { signature, deadline: typed.message.deadline } }), params({})));
+    expect(done.body.data.merchant.registration).toMatchObject({ state: "registered" });
+    expect(done.body.data.merchant.registration.error).toMatch(/2 different customers \(0 so far\)/);
+    expect(env.chain.relayed).toHaveLength(1); // registerFor only: no cap, no activation
+
+    await syncChain();
+    const pay = (payer: Address, orderId: string) =>
+      chainEmits([{ address: ADDR.payments, abi: polarisPaymentsAbi as never, eventName: "PaymentMade", args: { paymentId: orderKey(merchant.account.address, orderId), payer, merchant: merchant.account.address, amount: 5_000_000n, fee: 25_000n, orderId } }]);
+    const first = privateKeyToAccount(generatePrivateKey()).address;
+    pay(first, "o-1");
+    pay(first, "o-2"); // the same customer twice is still one
+    await syncChain();
+    expect((await getDb().merchants.get(merchant.userId))?.registration.state).toBe("registered");
+    pay(privateKeyToAccount(generatePrivateKey()).address, "o-3");
+    await syncChain();
+    expect((await getDb().merchants.get(merchant.userId))?.registration).toMatchObject({ state: "active", error: null });
+    expect(env.chain.relayed.map((t) => t.functionName)).toEqual(["registerFor", "setMaxOrderValue", "setActive"]);
   });
 
   it("refuses a registration signed by anyone but the merchant's wallet", async () => {

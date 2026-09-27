@@ -340,6 +340,15 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
     // The order is not paid: no payment.succeeded, which a merchant would fulfil on.
     return 0;
   }
+  if (merchant.registration.state === "registered") {
+    // Settlement history is what automatic Pay in 4 activation waits for (onboarding.ts).
+    try {
+      const { activateIfEligible } = await import("../onboarding");
+      await activateIfEligible(merchant.id);
+    } catch (error) {
+      console.error("[ingest] activation check failed; it runs again on the next payment", error);
+    }
+  }
   if (session) {
     await completeSession(
       session,

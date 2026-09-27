@@ -154,11 +154,44 @@ export async function submitRegistration(auth: AuthedMerchant, body: Record<stri
   return { merchant: toMerchant(await activate(merchant, wallet)) };
 }
 
-/** Activate a registered merchant with the Pay in 4 cap, when a registry admin is configured. */
+/**
+ * How many different payers have paid this merchant in full (Pay now) for
+ * what their checkout asked: the settlement history automatic activation
+ * waits for.
+ */
+async function distinctPayers(merchantId: string): Promise<number> {
+  const payments = await getDb().payments.find({ merchantId });
+  return new Set(payments.filter((p) => p.kind === "now" && !p.mismatch && !p.sample).map((p) => p.payer.toLowerCase())).size;
+}
+
+/**
+ * Activate a registered merchant for Pay in 4 once it has some settlement
+ * history, if it hasn't been activated yet and a registry admin is set up.
+ * Called after each Pay-now payment to a registered merchant (ingest).
+ */
+export async function activateIfEligible(merchantId: string): Promise<MerchantRecord | null> {
+  const config = getConfig();
+  if (config.activator.mode === "off") return null;
+  const merchant = await getDb().merchants.get(merchantId);
+  if (!merchant?.walletAddress || merchant.registration.state !== "registered") return merchant;
+  return activate(merchant, merchant.walletAddress);
+}
+
+/** Activate a registered merchant with the Pay in 4 cap, when a registry admin is configured and it has the history. */
 async function activate(merchant: MerchantRecord, wallet: Address): Promise<MerchantRecord> {
   const config = getConfig();
   if (config.activator.mode === "off" || merchant.registration.state === "active") return merchant;
   if (merchant.registration.state !== "registered") return merchant;
+  if (config.activationMinPayers > 0) {
+    const payers = await distinctPayers(merchant.id);
+    if (payers < config.activationMinPayers) {
+      const waiting = `Registered. Pay in 4 opens automatically after paid orders from ${config.activationMinPayers} different customers (${payers} so far).`;
+      return (await getDb().merchants.update(merchant.id, (m) => ({
+        ...m,
+        registration: { ...m.registration, error: waiting, updatedAt: new Date().toISOString() },
+      }))) as MerchantRecord;
+    }
+  }
   const chain = requireChain();
   const cap = config.activationCapUnits;
   try {
@@ -185,6 +218,7 @@ async function activate(merchant: MerchantRecord, wallet: Address): Promise<Merc
       registration: {
         ...m.registration,
         state: activated.status === "confirmed" && capped.status === "confirmed" ? "active" : m.registration.state,
+        error: null,
         activationTxHash: activated.txHash,
         maxOrderUnits: cap.toString(),
         updatedAt: new Date().toISOString(),
