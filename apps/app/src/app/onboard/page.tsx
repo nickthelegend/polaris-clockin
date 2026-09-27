@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { Onboard } from "./onboard";
+import { Onboarding } from "@/screens/onboarding";
 
-export const metadata: Metadata = { title: "Create your account" };
+export const metadata: Metadata = { title: "Welcome" };
 
 export default function OnboardPage() {
   return (
     <Suspense>
-      <Onboard />
+      <Onboarding />
     </Suspense>
   );
 }
