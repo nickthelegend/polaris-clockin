@@ -392,10 +392,10 @@ with against what it used:
 | `cre workflow simulate` | needs `cre login` (a CRE account): not run here. The commands are above; `local-settings` keeps `--broadcast` off public chains |
 | Monad testnet | waits for `deploy:monad` (the deployer is unfunded), then `configure staging` |
 | Deploy to the DON | waits for Early Access |
-| The Polaris API side of the callback | **not written**: no route in `apps/business` receives it yet. `verifyCallback` and the event types are exported for one (`POST /api/cre/callback` on the API's branch, verifying with the secret the workflows hold as `POLARIS_CALLBACK_SECRET`). Until it exists, the committed configs set `callback: null`; dunning runs on the business app's own chain sync of `TaskSkipped`, and a new credit line reaches the app as `UnderwritingApplied` on chain |
+| The Polaris API side of the callback | **not written**: no route in `apps/business` receives it yet. `verifyCallback` and the event types are exported for one (`POST /api/cre/callback` on the API's branch, verifying with the secret the workflows hold as `POLARIS_CALLBACK_SECRET`). Until it exists, the committed configs set `callback: null`; dunning runs on the business app's own chain sync of `TaskSkipped`, and a new credit line reaches the app as `UnderwritingApplied` on chain. A `thin`, `incomplete` or `rejected` run leaves nothing on chain, so until the route exists the app cannot tell the buyer why no line opened |
 | Firing `polaris-underwrite` from the product | not wired: `triggerSimulatedUnderwriting` and `underwriteConsentMessage` are exported, but no API route calls them yet (an authenticated `POST /api/credit/underwrite` on the API's branch: the app has the buyer's account sign the consent, the route queues one run per 30 s) |
 | The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` (snapshot at metropolis/indexer 3987062 until that branch merges; then delete `test/fixtures/indexer/`) |
-| Dunning backoff without the indexer | not applied: the chain fallback has no failure history, so it retries a short buyer every run. Keep the indexer configured in production |
+| Dunning backoff without the indexer | not applied: the chain fallback has no failure history, so it retries a short buyer every run. Keep the indexer configured in production; a run that falls back says so (`indexerError`, and a callback) |
 
 ## Limits that shaped this (docs/research/cre.md §8)
 
