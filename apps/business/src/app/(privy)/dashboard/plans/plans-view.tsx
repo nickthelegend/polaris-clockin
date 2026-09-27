@@ -2,6 +2,7 @@
 
 import {
   Avatar,
+  Button,
   Card,
   CellStack,
   DetailsList,
@@ -31,6 +32,8 @@ import type { Plan, PlanFilter } from "@/lib/data/types";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
 
 const DAY = 86_400_000;
+/** Plans shown at a time; "Show more" adds another page. */
+const PAGE = 25;
 
 export function PlansView() {
   const plans = useQuery((d) => d.listPlans(), { refreshMs: 60_000 });
@@ -39,6 +42,7 @@ export function PlansView() {
   const pathname = usePathname();
   const params = useSearchParams();
   const [filter, setFilter] = useState<PlanFilter>("all");
+  const [limit, setLimit] = useState(PAGE);
 
   const list = plans.data;
   const openId = params.get("open");
@@ -67,6 +71,8 @@ export function PlansView() {
   const filtered = (list ?? []).filter((p) =>
     filter === "all" ? true : filter === "closed" ? p.state === "repaid" || p.state === "written_off" : p.state === filter,
   );
+  // The drawer finds an open plan in the whole list, whatever page is showing.
+  const shown = filtered.slice(0, limit);
 
   return (
     <>
@@ -81,7 +87,14 @@ export function PlansView() {
 
       <Card padding="none" className="mt-4 min-w-0">
         <div className="px-4 pt-4 sm:px-5 sm:pt-5">
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as PlanFilter)} variant="pill">
+          <Tabs
+            value={filter}
+            onValueChange={(v) => {
+              setFilter(v as PlanFilter);
+              setLimit(PAGE);
+            }}
+            variant="pill"
+          >
             <TabList aria-label="Filter plans">
               <Tab value="all" count={counts.all}>
                 All
@@ -124,14 +137,14 @@ export function PlansView() {
                 className="mt-3 pb-2"
                 caption="Pay in 4 plans"
                 columns={columns(sample.on)}
-                rows={filtered}
+                rows={shown}
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setOpen(p)}
                 selectedKey={open?.id}
               />
             </div>
             <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 p-3 sm:p-4 xl:hidden">
-              {filtered.map((p) => (
+              {shown.map((p) => (
                 <li key={p.id}>
                   <button
                     type="button"
@@ -168,6 +181,16 @@ export function PlansView() {
                 </li>
               ))}
             </ul>
+            {shown.length < filtered.length ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ui-hairline px-4 py-4 sm:px-5">
+                <p className="text-[13px] text-ui-muted">
+                  Showing {shown.length} of {filtered.length} plans
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setLimit((l) => l + PAGE)}>
+                  Show {Math.min(PAGE, filtered.length - shown.length)} more
+                </Button>
+              </div>
+            ) : null}
           </>
         )}
       </Card>
