@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Address, Log } from "viem";
 
-import { publicClient, requireChain } from "../chain/client";
+import { logsClient, publicClient, requireChain } from "../chain/client";
 import { getDb } from "../db";
 import { resetNonceLane } from "../relayer/submit";
 import { ingestLogs, ingestReceipt, watchedContracts } from "./ingest";
@@ -14,6 +14,11 @@ import { ingestLogs, ingestReceipt, watchedContracts } from "./ingest";
  * records and webhooks. The cursor only advances past a range once every
  * log in it was handled.
  *
+ * With POLARIS_LOGS_RPC_URL set to Envio's HyperRPC for Monad, the logs come
+ * from Envio's index (the dashboard, payouts, the buyer's book and every
+ * webhook then run on Envio data), 10,000 blocks per request instead of the
+ * public RPC's 100; receipts and reads still use POLARIS_RPC_URL.
+ *
  * This is the fallback half of plan §5.1's "Envio HyperIndex → webhooks":
  * `ingestLogs` takes logs from anywhere, so the Envio indexer can feed the
  * same function when it is deployed.
@@ -21,10 +26,11 @@ import { ingestLogs, ingestReceipt, watchedContracts } from "./ingest";
 
 const CURSOR_ID = "logs";
 
-function chunkSize(chainId: number): number {
+export function chunkSize(chainId: number, hyperRpc = false): number {
   const configured = Number(process.env.POLARIS_SYNC_CHUNK_BLOCKS ?? "");
   if (Number.isInteger(configured) && configured > 0) return configured;
-  // Monad's public RPC caps eth_getLogs at 100 blocks (40 s of chain).
+  // Monad's public RPC caps eth_getLogs at 100 blocks (40 s of chain); Envio's HyperRPC serves wide ranges from its index.
+  if (hyperRpc) return 10_000;
   return chainId === 31337 ? 2_000 : 100;
 }
 
@@ -33,6 +39,7 @@ export type SyncSummary = { from: number; to: number; logs: number; events: numb
 export async function syncChain(options: { maxRanges?: number } = {}): Promise<SyncSummary> {
   const chain = requireChain();
   const client = publicClient();
+  const logs = logsClient();
   const db = getDb();
   const latest = Number(await client.getBlockNumber());
 
@@ -45,21 +52,21 @@ export async function syncChain(options: { maxRanges?: number } = {}): Promise<S
   }
 
   const addresses = Object.values(watchedContracts(chain)).filter((a): a is Address => a !== null);
-  const size = chunkSize(chain.id);
+  const size = chunkSize(chain.id, chain.logsRpcUrl !== null);
   const first = cursor.block + 1;
   let from = first;
-  let logs = 0;
+  let seen = 0;
   let events = 0;
   for (let i = 0; i < (options.maxRanges ?? 20) && from <= latest; i++) {
     const to = Math.min(latest, from + size - 1);
-    const found = (await client.getLogs({ address: addresses, fromBlock: BigInt(from), toBlock: BigInt(to) })) as Log[];
+    const found = (await logs.getLogs({ address: addresses, fromBlock: BigInt(from), toBlock: BigInt(to) })) as Log[];
     const summary = await ingestLogs(found);
-    logs += found.length;
+    seen += found.length;
     events += summary.events;
     await db.cursors.upsert({ id: CURSOR_ID, block: to, updatedAt: new Date().toISOString() });
     from = to + 1;
   }
-  return { from: first, to: from - 1, logs, events, caughtUp: from > latest };
+  return { from: first, to: from - 1, logs: seen, events, caughtUp: from > latest };
 }
 
 /** How long a submitted relay may go without a receipt before we ask whether it was dropped. */

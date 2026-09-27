@@ -58,7 +58,28 @@ export function publicClient(): PublicClient {
   return cached.client;
 }
 
+let logsCached: { key: string; client: PublicClient } | null = null;
+
+/**
+ * The client the chain sync reads logs with: Envio's HyperRPC when
+ * POLARIS_LOGS_RPC_URL is set (the same JSON-RPC, answered from Envio's
+ * index, with no 100-block cap), else the chain's own RPC.
+ */
+export function logsClient(): PublicClient {
+  const config = requireChain();
+  if (!config.logsRpcUrl) return publicClient();
+  const key = `${config.id}:${config.logsRpcUrl}`;
+  if (!logsCached || logsCached.key !== key) {
+    logsCached = {
+      key,
+      client: createPublicClient({ chain: viemChain(config), transport: http(config.logsRpcUrl, { retryCount: 2, timeout: 30_000 }) }) as PublicClient,
+    };
+  }
+  return logsCached.client;
+}
+
 export function resetClientForTests(): void {
   cached = null;
+  logsCached = null;
   override = null;
 }

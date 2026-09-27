@@ -61,7 +61,11 @@ merchant server ◄── POST https://merchant/webhook (Polaris-Signature: t=�
 "Paid" only ever comes from a transaction's events: the relayer's receipt, or
 the chain sync (`ingest/sync.ts`) for everything the relayer didn't send (CRE
 collections and renewals, liquidations, a buyer paying from their own wallet).
-Each log is handled once, whichever path sees it first.
+Each log is handled once, whichever path sees it first. Set
+`POLARIS_LOGS_RPC_URL` to Envio's HyperRPC for Monad and the chain sync reads
+its logs from Envio's index, 10,000 blocks a request instead of the public
+RPC's 100, so the dashboard, payouts, the buyer's book and every webhook run
+on Envio data.
 
 A session's order id is public, so anyone can settle that order on chain some
 other way. Two things stop that from counting as paid:

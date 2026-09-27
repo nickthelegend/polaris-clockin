@@ -38,6 +38,12 @@ export type ChainConfig = {
   id: number;
   name: string;
   rpcUrl: string;
+  /**
+   * Where the chain sync reads logs (eth_getLogs), when not `rpcUrl`: Envio's
+   * HyperRPC for Monad (POLARIS_LOGS_RPC_URL), which serves wide block ranges
+   * from its index instead of the public RPC's 100-block cap.
+   */
+  logsRpcUrl: string | null;
   explorerUrl: string;
   contracts: ContractAddresses;
   /** The stablecoin's EIP-712 name and version (real AUSD: "Agora Dollar", "1"). */
@@ -240,6 +246,7 @@ function chainFrom(d: Deployment): ChainConfig {
     id,
     name: CHAIN_NAME[id] ?? `Chain ${id}`,
     rpcUrl: env("POLARIS_RPC_URL") ?? DEFAULT_RPC[id] ?? "",
+    logsRpcUrl: env("POLARIS_LOGS_RPC_URL") ?? null,
     explorerUrl: (env("POLARIS_EXPLORER_URL") ?? DEFAULT_EXPLORER[id] ?? "").replace(/\/+$/, ""),
     contracts: contractsFrom(d),
     stablecoinDomain: { name: stable?.name ?? "Agora Dollar", version: stable?.version ?? "1" },
