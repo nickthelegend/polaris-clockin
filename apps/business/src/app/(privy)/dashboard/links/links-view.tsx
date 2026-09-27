@@ -10,6 +10,7 @@ import {
   IconSquareButton,
   Input,
   Menu,
+  Money,
   Notice,
   PrimaryButton,
   SecondaryButton,
@@ -26,7 +27,7 @@ import { ArrowUpRight, Ban, Copy, Link2, MoreHorizontal, Plus, Share2, SlidersHo
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { DataModeNotice, LoadError, StaleNotice } from "@/components/dashboard/common";
+import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
 import { MoneyWidget } from "@/components/dashboard/money-widget";
 import { FigureRow, PageCoin, PageHead } from "@/components/dashboard/page-head";
 import { ModeCoin } from "@/components/dashboard/payment-bits";
@@ -58,14 +59,21 @@ export function LinksView() {
   const pathname = usePathname();
   const params = useSearchParams();
   const [filter, setFilter] = useState<Filter>("all");
-  const [creating, setCreating] = useState(params.get("new") === "1");
+  const [creating, setCreating] = useState(false);
   const [sharing, setSharing] = useState<PaymentLink | null>(null);
   const [turningOff, setTurningOff] = useState<PaymentLink | null>(null);
 
-  // `?new=1` (from the nav's "New link") opens the dialog once, then leaves the URL.
+  // `?new=1` (the nav's "New link", on this page too) opens the dialog each
+  // time it appears, then leaves the URL.
+  const wantsNew = params.get("new") === "1";
+  const [seenNew, setSeenNew] = useState(false);
+  if (wantsNew !== seenNew) {
+    setSeenNew(wantsNew);
+    if (wantsNew) setCreating(true);
+  }
   useEffect(() => {
-    if (params.get("new") === "1") router.replace(pathname, { scroll: false });
-  }, [params, pathname, router]);
+    if (wantsNew) router.replace(pathname, { scroll: false });
+  }, [wantsNew, pathname, router]);
 
   const list = links.data;
   const counts = useMemo(() => ({ all: list?.length ?? 0, active: list?.filter((l) => l.status === "active").length ?? 0 }), [list]);
@@ -80,15 +88,28 @@ export function LinksView() {
       render: (l) => (
         <TableName
           icon={<ModeCoin mode={l.modes.includes("later") ? "later" : (l.modes[0] ?? "now")} text={l.description} />}
-          title={l.description}
-          sub={`${l.usage === "single" ? "Single use" : "Reusable"}${l.expiresAt ? ` · until ${formatDate(l.expiresAt)}` : ""}`}
+          title={
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate">{l.description}</span>
+              {l.sample ? <SampleBadge className="shrink-0" /> : null}
+            </span>
+          }
+          sub={
+            <>
+              {/* On phones the Status column folds in here, like the app's activity rows. */}
+              <span className="sm:hidden">{STATUS[l.status].label} · </span>
+              {l.usage === "single" ? "Single use" : "Reusable"}
+              {l.expiresAt ? ` · until ${formatDate(l.expiresAt)}` : ""}
+            </>
+          }
         />
       ),
     },
     {
       key: "ways",
       header: "Buyer can pay",
-      hideBelow: "lg",
+      // From 1280px: beside the Request widget the table has room for four columns.
+      hideBelow: "xl",
       render: (l) => <span className="whitespace-nowrap text-ui-muted">{l.modes.map((m) => SHORT_MODE[m]).join(" · ")}</span>,
     },
     {
@@ -114,7 +135,7 @@ export function LinksView() {
       key: "actions",
       header: <span className="sr-only">Actions</span>,
       align: "right",
-      render: (l) => <LinkActions link={l} live={live} onShare={() => setSharing(l)} onTurnOff={() => setTurningOff(l)} />,
+      render: (l) => <LinkActions link={l} live={live && !l.sample} onShare={() => setSharing(l)} onTurnOff={() => setTurningOff(l)} />,
     },
   ];
 
@@ -140,11 +161,12 @@ export function LinksView() {
         </Notice>
       ) : null}
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px]">
+      {/* The Overview's layout from 1024px; on phones the Request widget comes first. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px] xl:gap-x-11">
         <section aria-label="Your payment links" className="min-w-0">
           <FigureRow
             caption="Collected through your links"
-            value={collected === undefined ? undefined : money(collected)}
+            value={collected === undefined ? undefined : <Money value={collected / 100} />}
             deltaLabel={list ? `${counts.active} active` : undefined}
             sample={sample}
             right={
@@ -188,7 +210,7 @@ export function LinksView() {
           </div>
         </section>
 
-        <aside aria-label="Request a payment" className="grid min-w-0 content-start gap-3 md:max-w-[480px] xl:max-w-none">
+        <aside aria-label="Request a payment" className="order-first grid min-w-0 content-start gap-3 md:max-w-[480px] lg:order-none lg:max-w-none">
           <MoneyWidget
             defaultTab="request"
             onLinkCreated={(link) => {
@@ -224,16 +246,22 @@ export function LinksView() {
 
 function LinkActions({ link, live, onShare, onTurnOff }: { link: PaymentLink; live: boolean; onShare: () => void; onTurnOff: () => void }) {
   const active = link.status === "active";
+  const why = link.sample ? "Sample links can't be changed" : "Once buyers can open links";
+  const copy = () =>
+    navigator.clipboard
+      .writeText(link.url)
+      .then(() => toast({ title: "Link copied", tone: "success" }))
+      .catch(() => toast({ title: "We couldn't copy the link", description: link.url, tone: "error" }));
   return (
     <span className="inline-flex items-center gap-2">
       <IconSquareButton
         size="sm"
         className="hidden sm:inline-grid"
-        label={live ? `Share “${link.description}”` : "Sharing opens once buyers can open links"}
+        label={live ? `Share “${link.description}”` : link.sample ? "Sample links can't be shared" : "Sharing opens once buyers can open links"}
         icon={<Share2 />}
         onClick={onShare}
         disabled={!live || !active}
-        aria-describedby={live ? undefined : "links-pending"}
+        aria-describedby={live || link.sample ? undefined : "links-pending"}
       />
       <Menu
         label={`More for “${link.description}”`}
@@ -250,7 +278,7 @@ function LinkActions({ link, live, onShare, onTurnOff }: { link: PaymentLink; li
           icon={<Share2 />}
           className="sm:hidden"
           disabled={!live || !active}
-          description={live ? undefined : "Once buyers can open links"}
+          description={live ? undefined : why}
           onSelect={onShare}
         >
           Share
@@ -258,12 +286,18 @@ function LinkActions({ link, live, onShare, onTurnOff }: { link: PaymentLink; li
         <Menu.Item
           icon={<Copy />}
           disabled={!live || !active}
-          description={live ? undefined : "Once buyers can open links"}
-          onSelect={() => void navigator.clipboard.writeText(link.url).then(() => toast({ title: "Link copied", tone: "success" }))}
+          description={live ? undefined : why}
+          onSelect={() => void copy()}
         >
           Copy link
         </Menu.Item>
-        <Menu.Item icon={<Ban />} tone="danger" disabled={!active} onSelect={onTurnOff} description={active ? "It stops taking payments" : "Already closed"}>
+        <Menu.Item
+          icon={<Ban />}
+          tone="danger"
+          disabled={!active || link.sample}
+          onSelect={onTurnOff}
+          description={link.sample ? why : active ? "It stops taking payments" : "Already closed"}
+        >
           Turn off
         </Menu.Item>
       </Menu>
@@ -313,7 +347,12 @@ function NewLinkDialog({
     setErrors({});
   };
 
-  const toggle = (m: PayMode) => setModes((cur) => (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]));
+  const toggle = (m: PayMode) => {
+    const next = modes.includes(m) ? modes.filter((x) => x !== m) : [...modes, m];
+    setModes(next);
+    // A subscription charges every month: it needs a link that stays open.
+    if (next.includes("subscribe")) setUsage("reusable");
+  };
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -373,7 +412,7 @@ function NewLinkDialog({
             hint={quote ? `Pay in 4: 4 × ${money(quote.each)} at 10% APR, paid by the buyer. You get ${money(cents!)} at checkout.` : undefined}
           />
           <fieldset className="grid gap-2">
-            <legend className="mb-2 text-[14px] font-medium">Ways to pay</legend>
+            <legend className="mb-2 text-[14px] font-medium text-ui-muted">Ways to pay</legend>
             <div className="flex flex-wrap gap-2">
               {(["now", "later", "subscribe"] as const).map((m) => (
                 <Chip key={m} variant="pill" selected={modes.includes(m)} onClick={() => toggle(m)}>
@@ -391,7 +430,7 @@ function NewLinkDialog({
           </fieldset>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <span className="text-[14px] font-medium" id="usage-label">
+              <span className="text-[14px] font-medium text-ui-muted" id="usage-label">
                 Use
               </span>
               <SegmentedControl<LinkUsage>
@@ -401,9 +440,10 @@ function NewLinkDialog({
                 onValueChange={setUsage}
                 options={[
                   { value: "reusable", label: "Reusable" },
-                  { value: "single", label: "Single use" },
+                  { value: "single", label: "Single use", disabled: modes.includes("subscribe") },
                 ]}
               />
+              {modes.includes("subscribe") ? <p className="text-[13px] text-ui-muted">Subscriptions need a reusable link.</p> : null}
             </div>
             <Select<ExpiryKey>
               label="Expires"

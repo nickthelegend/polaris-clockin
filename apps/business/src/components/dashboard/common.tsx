@@ -3,7 +3,7 @@
 import { Button, EmptyState, ErrorState, Notice, PanelCard, StatusPill, cn, type PanelCardProps } from "@polaris/ui";
 import { RotateCcw, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import { formatAgo } from "@/lib/data/format";
 import { useSample, type QueryState } from "@/lib/session";
@@ -111,7 +111,7 @@ export function DataModeNotice({ empty, className }: { empty: boolean; className
   if (sample.reason === "server") {
     return (
       <Notice tone="warn" className={cn("mb-5", className)} icon={<Sparkles />} title="This server shows demo data">
-        Payments, plans and payouts marked Sample are invented, and they reset when the server restarts.
+        Payments, plans and payouts marked Sample are invented. They stay labelled until this server is connected to Monad.
       </Notice>
     );
   }
@@ -137,13 +137,23 @@ export function DataModeNotice({ empty, className }: { empty: boolean; className
   );
 }
 
-/** Development only: "Dev mock session" for a few seconds, then a small amber dot that says it on hover. */
+/**
+ * Development only: "Dev mock session" for a few seconds, then a small amber
+ * dot that says it on hover. Never in captures: not for an automated browser
+ * (`navigator.webdriver`) or with `?capture=1`.
+ */
 function MockNote() {
   const [folded, setFolded] = useState(false);
+  const capturing = useSyncExternalStore(
+    () => () => undefined,
+    () => navigator.webdriver || new URLSearchParams(window.location.search).has("capture"),
+    () => true,
+  );
   useEffect(() => {
     const t = setTimeout(() => setFolded(true), 4000);
     return () => clearTimeout(t);
   }, []);
+  if (capturing) return null;
   return (
     <p
       role="note"

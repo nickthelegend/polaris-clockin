@@ -26,10 +26,12 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { Address, ModeBadge, PaymentStatusBadge, TxLink, downloadCsv } from "@/components/dashboard/bits";
+import { Address, CopyAction, DrawerActions, ExplorerAction, ModeBadge, PaymentStatusBadge, TxLink, downloadCsv } from "@/components/dashboard/bits";
 import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
 import { FigureRow, PageHead } from "@/components/dashboard/page-head";
 import { MODE_COLOR, PaymentName, paymentPill } from "@/components/dashboard/payment-bits";
+import { explorerTx } from "@/lib/chain";
+import { periodSummary } from "@/lib/data/analytics";
 import { formatDateTime, MODE_LABEL, money } from "@/lib/data/format";
 import type { PayMode, Payment } from "@/lib/data/types";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
@@ -38,7 +40,6 @@ type StatusFilter = "all" | "succeeded" | "failed";
 type ModeFilter = "all" | PayMode;
 
 const PAGE = 40;
-const DAY = 86_400_000;
 
 export function PaymentsView() {
   const payments = useQuery((d) => d.listPayments(), { refreshMs: 30_000 });
@@ -118,7 +119,7 @@ export function PaymentsView() {
         <section aria-label="All payments" className="min-w-0">
           <FigureRow
             caption="Gross, last 30 days"
-            value={summary ? money(summary.gross) : undefined}
+            value={summary ? <Money value={summary.gross / 100} /> : undefined}
             delta={summary?.delta}
             deltaSuffix="vs the 30 days before"
             deltaLabel={summary && summary.delta === null ? "New" : undefined}
@@ -209,7 +210,11 @@ export function PaymentsView() {
           </div>
         </section>
 
-        <aside aria-label="Payments summary" className="grid min-w-0 content-start gap-3 md:grid-cols-2 xl:grid-cols-1">
+        {/* The summary comes first on phones, and stays in view beside the table from 1280px. */}
+        <aside
+          aria-label="Payments summary"
+          className="order-first grid min-w-0 content-start items-start gap-3 md:grid-cols-2 xl:sticky xl:top-6 xl:order-none xl:grid-cols-1 xl:self-start"
+        >
           {summary ? (
             <BalanceSummaryCard
               label={
@@ -218,7 +223,7 @@ export function PaymentsView() {
                   {sample.on ? <SampleBadge /> : null}
                 </span>
               }
-              value={money(summary.net)}
+              value={<Money value={summary.net / 100} />}
               stats={[
                 { label: "Fees", value: money(summary.fees) },
                 { label: "Paid", value: summary.count.toLocaleString("en-US") },
@@ -239,20 +244,33 @@ export function PaymentsView() {
               <Skeleton shape="tile" height={140} className="mt-4" />
             )}
           </PanelCard>
-          <PrimaryButton asChild size="lg" block icon={<Link2 />} className="xl:mt-1">
-            <Link href="/dashboard/links?new=1">New payment link</Link>
-          </PrimaryButton>
-          <SecondaryButton size="lg" block iconRight={<Download />} onClick={exportCsv} disabled={!filtered.length}>
-            Export CSV
-          </SecondaryButton>
-          <p className="px-1 text-[13px] leading-relaxed text-ui-muted md:col-span-2 xl:col-span-1">
-            Pay now and subscriptions cost 0.5% per payment. Pay in 4 costs you nothing: the buyer pays 10% APR to Polaris, and you are paid in full at
-            checkout.
-          </p>
+          <div className="hidden gap-3 xl:mt-1 xl:grid">
+            <SummaryActions onExport={exportCsv} canExport={filtered.length > 0} />
+          </div>
         </aside>
+        {/* Below 1280px the actions follow the table, so the summary alone leads. */}
+        <div className="grid gap-3 md:max-w-[480px] xl:hidden">
+          <SummaryActions onExport={exportCsv} canExport={filtered.length > 0} />
+        </div>
       </div>
 
       <PaymentDrawer payment={open} sample={sample.on} onClose={() => setOpen(null)} />
+    </>
+  );
+}
+
+function SummaryActions({ onExport, canExport }: { onExport: () => void; canExport: boolean }) {
+  return (
+    <>
+      <PrimaryButton asChild size="lg" block icon={<Link2 />}>
+        <Link href="/dashboard/links?new=1">New payment link</Link>
+      </PrimaryButton>
+      <SecondaryButton size="lg" block iconRight={<Download />} onClick={onExport} disabled={!canExport}>
+        Export CSV
+      </SecondaryButton>
+      <p className="px-1 text-[13px] leading-relaxed text-ui-muted">
+        Pay now and subscriptions cost 0.5% per payment. Pay in 4 costs you nothing: the buyer pays 10% APR to Polaris, and you are paid in full at checkout.
+      </p>
     </>
   );
 }
@@ -283,29 +301,10 @@ const COLUMNS: TableColumn<Payment>[] = [
   },
 ];
 
-/** The last 30 days from when the page opened, against the 30 before. */
+/** The last 30 days, the Overview's window, against the 30 before. */
 function useSummary(payments: Payment[] | undefined) {
   const [openedAt] = useState(() => Date.now());
-  return useMemo(() => {
-    if (!payments) return null;
-    const since = openedAt - 30 * DAY;
-    const before = since - 30 * DAY;
-    const at = (p: Payment) => new Date(p.createdAt).getTime();
-    const recent = payments.filter((p) => at(p) >= since);
-    const paid = recent.filter((p) => p.status === "succeeded");
-    const prev = payments.filter((p) => p.status === "succeeded" && at(p) >= before && at(p) < since).reduce((a, p) => a + p.amountCents, 0);
-    const gross = paid.reduce((a, p) => a + p.amountCents, 0);
-    const byMode = (m: PayMode) => paid.filter((p) => p.mode === m).reduce((a, p) => a + p.amountCents, 0);
-    return {
-      gross,
-      fees: paid.reduce((a, p) => a + p.feeCents, 0),
-      net: paid.reduce((a, p) => a + p.netCents, 0),
-      count: paid.length,
-      failed: recent.length - paid.length,
-      delta: prev > 0 ? Math.round(((gross - prev) / prev) * 1000) / 10 : null,
-      modes: (["now", "later", "subscribe"] as const).map((mode) => ({ mode, share: gross ? Math.round((byMode(mode) / gross) * 100) : 0 })),
-    };
-  }, [payments, openedAt]);
+  return useMemo(() => (payments ? periodSummary(payments, { days: 30, now: openedAt }) : null), [payments, openedAt]);
 }
 
 function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; sample: boolean; onClose: () => void }) {
@@ -327,7 +326,7 @@ function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; 
           </div>
           <KeyValueGrid
             className="mt-6"
-            variant="surface"
+            variant="raised"
             items={[
               { label: "Amount", value: money(p.amountCents) },
               { label: "Fee", value: p.mode === "later" ? "$0.00 (Pay in 4)" : money(p.feeCents) },
@@ -338,7 +337,7 @@ function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; 
           <DetailsList
             className="mt-4"
             size="sm"
-            variant="surface"
+            variant="raised"
             items={[
               { label: "Date", value: formatDateTime(p.createdAt) },
               { label: "Order", value: p.orderId },
@@ -347,12 +346,23 @@ function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; 
               { label: "Transaction", value: <TxLink hash={p.txHash} sample={sample} /> },
             ]}
           />
-          {p.mode === "later" && p.status === "succeeded" ? (
-            <SecondaryButton asChild size="lg" block icon={<CalendarClock />} className="mt-5">
-              <Link href={`/dashboard/plans?order=${encodeURIComponent(p.orderId)}`}>Open the Pay in 4 plan</Link>
-            </SecondaryButton>
-          ) : null}
         </Drawer.Body>
+      ) : null}
+      {p ? (
+        <DrawerActions>
+          <ExplorerAction href={p.txHash && !sample ? explorerTx(p.txHash) : null} reason={sample ? "Sample: no transaction" : "Not on chain yet"}>
+            View transaction
+          </ExplorerAction>
+          {p.mode === "later" && p.status === "succeeded" ? (
+            <SecondaryButton asChild size="md" icon={<CalendarClock />} className="bg-ui-surface-2 hover:bg-ui-surface-3">
+              <Link href={`/dashboard/plans?order=${encodeURIComponent(p.orderId)}`}>Pay in 4 plan</Link>
+            </SecondaryButton>
+          ) : (
+            <CopyAction value={p.orderId} what="order ID">
+              Copy order ID
+            </CopyAction>
+          )}
+        </DrawerActions>
       ) : null}
     </Drawer>
   );

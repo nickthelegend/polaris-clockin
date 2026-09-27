@@ -5,6 +5,7 @@ import {
   Button,
   Chip,
   CopyButton,
+  DeltaChip,
   DetailsList,
   Dialog,
   DollarCoin,
@@ -23,7 +24,6 @@ import {
   SwapToggle,
   TextTabs,
   cn,
-  toast,
 } from "@polaris/ui";
 import { ArrowUpFromLine, ArrowUpRight, Check, Info, Link2, QrCode as QrIcon, RefreshCw, Settings, WalletCards } from "lucide-react";
 import Link from "next/link";
@@ -66,15 +66,24 @@ function figure(cents: number): string {
   return (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-/** The balance's change over the last 24 hours: what came in, less what went out. */
-function balanceChange(balance: number, payments: Payment[] | undefined, history: Payout[], now = Date.now()): number | null {
+/**
+ * The balance's change over the last 24 hours, in cents: what came in, less
+ * what went out. In dollars rather than percent, which reads oddly on a
+ * balance that is paid out often ("+114.62%").
+ */
+function balanceChange(payments: Payment[] | undefined, history: Payout[], now = Date.now()): number | null {
   if (!payments) return null;
   const since = now - 86_400_000;
   const inflow = payments.filter((p) => p.status === "succeeded" && Date.parse(p.createdAt) >= since).reduce((s, p) => s + p.netCents, 0);
   const outflow = history.filter((p) => p.status !== "failed" && Date.parse(p.createdAt) >= since).reduce((s, p) => s + p.amountCents, 0);
-  const before = balance - inflow + outflow;
-  if (before <= 0) return null;
-  return Math.round(((balance - before) / before) * 10_000) / 100;
+  const change = inflow - outflow;
+  return change === 0 ? null : change;
+}
+
+/** "0x5e61 42e0 3BD4 …": an address in groups of four, easy to check against another copy. */
+export function groupedAddress(address: string): string {
+  const body = address.slice(6).match(/.{1,4}/g) ?? [];
+  return [address.slice(0, 6), ...body].join(" ");
 }
 
 export type MoneyTab = "withdraw" | "request";
@@ -195,8 +204,11 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
 
   const cents = parseAmount(amount);
   const over = cents !== null && cents > balance;
-  const change = useMemo(() => (state ? balanceChange(balance, payments, state.history) : null), [state, balance, payments]);
+  const change = useMemo(() => (state ? balanceChange(payments, state.history) : null), [state, payments]);
   const ready = !blocker && Boolean(wallet) && state !== undefined;
+  // A control that can't work yet is disabled, with its reason under it.
+  const empty = state !== undefined && balance === 0;
+  const reason = blocker ?? (empty ? "Nothing to withdraw yet. Your first payment lands here in under a second." : null);
 
   const toReview = () => {
     if (cents === null) return setError("Enter an amount, like 250 or 99.50.");
@@ -262,7 +274,7 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
             }}
             inputLabel="Amount to withdraw, in dollars"
             invalid={over || (typed !== null && typed.trim() !== "" && cents === null)}
-            inputProps={{ disabled: !ready, "aria-describedby": error ? "withdraw-error" : undefined }}
+            inputProps={{ disabled: !ready || empty, "aria-describedby": error ? "withdraw-error" : undefined }}
             metaLabel="Balance"
             meta={
               <button
@@ -294,16 +306,46 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
           {error}
         </p>
       ) : null}
-      <PrimaryButton size="lg" block className="mt-1" icon={<ArrowUpFromLine />} disabled={!ready} onClick={toReview} aria-describedby={blocker ? "withdraw-blocked" : undefined}>
-        {cents !== null && !over ? `Withdraw ${money(cents)}` : "Withdraw"}
-      </PrimaryButton>
-      <SecondaryButton size="lg" block iconRight={<WalletCards />} onClick={() => setEditing(true)} disabled={!wallet}>
-        {destination ? "Change payout address" : "Choose a payout address"}
-      </SecondaryButton>
-      {blocker ? (
+      {destination ? (
+        <>
+          <PrimaryButton
+            size="lg"
+            block
+            className="mt-1"
+            icon={<ArrowUpFromLine />}
+            disabled={!ready || empty}
+            onClick={toReview}
+            aria-describedby={reason ? "withdraw-blocked" : undefined}
+          >
+            {cents !== null && cents > 0 && !over ? `Withdraw ${money(cents)}` : "Withdraw"}
+          </PrimaryButton>
+          <SecondaryButton size="lg" block iconRight={<WalletCards />} onClick={() => setEditing(true)} disabled={!wallet}>
+            Change payout address
+          </SecondaryButton>
+        </>
+      ) : (
+        <>
+          {/* No address yet: choosing one is the next step, so it takes the lime button. */}
+          <PrimaryButton
+            size="lg"
+            block
+            className="mt-1"
+            icon={<WalletCards />}
+            onClick={() => setEditing(true)}
+            disabled={!wallet || !ready}
+            aria-describedby={reason ? "withdraw-blocked" : undefined}
+          >
+            Choose a payout address
+          </PrimaryButton>
+          <SecondaryButton size="lg" block iconRight={<Link2 />} onClick={onSwitch}>
+            Request a payment
+          </SecondaryButton>
+        </>
+      )}
+      {reason ? (
         <p id="withdraw-blocked" className="flex gap-2 px-1 text-[13px] leading-snug text-ui-muted">
           <Info aria-hidden size={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          {blocker}
+          {reason}
         </p>
       ) : null}
       <BalanceSummaryCard
@@ -313,9 +355,12 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
             {sample.on ? <SampleBadge /> : null}
           </span>
         }
-        value={money(balance)}
-        delta={change === null ? undefined : change}
-        title={change !== null ? "Change in the last 24 hours" : undefined}
+        value={<Money value={balance / 100} />}
+        badge={
+          change === null ? undefined : (
+            <DeltaChip value={change} variant="strong" label={`${change > 0 ? "+" : "−"}${money(Math.abs(change))} today`} title="Change in the last 24 hours" />
+          )
+        }
         stats={[
           { label: "Network fee", value: "$0.00" },
           { label: "You receive", value: money(cents !== null && !over ? cents : 0) },
@@ -382,7 +427,9 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
               />
               <div className="rounded-ui-tile bg-ui-surface-2 px-5 py-4">
                 <p className="text-[13px] text-ui-muted">To</p>
-                <p className="mt-1 font-mono text-[14px] leading-relaxed break-all">{review.to}</p>
+                <p className="mt-1 max-w-[26ch] font-mono text-[15px] leading-relaxed text-balance" title={review.to} aria-label={review.to}>
+                  {groupedAddress(review.to)}
+                </p>
               </div>
               {failure ? (
                 <Notice tone="down" size="sm" role="alert">
@@ -445,7 +492,7 @@ function AddressDialog({
     onOpenChange(false);
   };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} size="sm" title="Payout address" description="Where this withdrawal goes: an exchange deposit address, a treasury, a bank on-ramp.">
+    <Dialog open={open} onOpenChange={onOpenChange} size="md" title="Payout address" description="Where this withdrawal goes: an exchange deposit address, a treasury, a bank on-ramp.">
       <form onSubmit={save} noValidate className="flex min-h-0 flex-1 flex-col">
         <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-4">
           <Input
@@ -512,9 +559,9 @@ function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: P
     setBusy(true);
     try {
       const created = await data.createLink({ description: description.trim(), amountCents: cents!, modes, usage: "reusable", expiresInHours: null });
+      // The Link ready card takes the cards' place and confirms it: no toast.
       setLink(created);
       onCreated?.(created);
-      toast({ title: "Link created", description: created.description, tone: "success" });
     } catch (err) {
       const field = err instanceof DataError ? err.field : undefined;
       const message = errorMessage(err);
@@ -537,56 +584,60 @@ function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: P
 
   return (
     <>
-      <SwapStack
-        top={
-          <SwapCard coin={<DollarCoin size={42} />} symbol="USD" caption="You request">
-            <input
-              aria-label="Amount to request, in dollars"
-              aria-invalid={Boolean(errors.amount) || undefined}
-              inputMode="decimal"
-              autoComplete="off"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => {
-                setAmount(e.target.value);
-                setErrors((x) => ({ ...x, amount: undefined }));
-              }}
-              className={cn(
-                "ui-figure w-full bg-transparent font-satoshi text-[34px] leading-none font-medium tracking-[-0.03em] outline-none placeholder:text-ui-dim sm:text-[40px]",
-                "rounded-[8px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus",
-                errors.amount ? "text-ui-down" : "text-ui-text",
-              )}
-            />
-            <input
-              aria-label="What it's for"
-              aria-invalid={Boolean(errors.description) || undefined}
-              placeholder="What it's for: Brand identity package"
-              maxLength={120}
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                setErrors((x) => ({ ...x, description: undefined }));
-              }}
-              className="mt-3 w-full rounded-[8px] bg-transparent text-[15px] text-ui-text outline-none placeholder:text-ui-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus"
-            />
-          </SwapCard>
-        }
-        toggle={<SwapToggle label="Switch to Withdraw: send your balance out" onClick={onSwitch} />}
-        bottom={
-          <SwapCard coin={<PolarisCoin size={42} />} symbol="Buyer can pay" caption="Ways">
-            <div role="group" aria-label="Ways the buyer can pay" className="flex flex-wrap gap-2">
-              {WAYS.map((w) => (
-                <Chip key={w.mode} variant="pill" selected={modes.includes(w.mode)} onClick={() => toggle(w.mode)} title={MODE_LABEL[w.mode]}>
-                  {w.label}
-                </Chip>
-              ))}
-            </div>
-            <p className="ui-figure mt-3 text-[14px] text-ui-muted">
-              {quote ? `In 4: 4 × ${money(quote.each)} at 10% APR, paid by the buyer` : modes.includes("later") ? "Pay in 4 from $20.00" : "Paid in full, in dollars"}
-            </p>
-          </SwapCard>
-        }
-      />
+      {link ? (
+        <LinkReady link={link} blocker={blocker} sample={sampleLinks} />
+      ) : (
+        <SwapStack
+          top={
+            <SwapCard coin={<DollarCoin size={42} />} symbol="USD" caption="You request">
+              <input
+                aria-label="Amount to request, in dollars"
+                aria-invalid={Boolean(errors.amount) || undefined}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  setErrors((x) => ({ ...x, amount: undefined }));
+                }}
+                className={cn(
+                  "ui-figure w-full bg-transparent font-satoshi text-[34px] leading-none font-medium tracking-[-0.03em] outline-none placeholder:text-ui-dim sm:text-[40px]",
+                  "rounded-[8px] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus",
+                  errors.amount ? "text-ui-down" : "text-ui-text",
+                )}
+              />
+              <input
+                aria-label="What it's for"
+                aria-invalid={Boolean(errors.description) || undefined}
+                placeholder="What it's for: Brand identity package"
+                maxLength={120}
+                value={description}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  setErrors((x) => ({ ...x, description: undefined }));
+                }}
+                className="mt-3 w-full rounded-[8px] bg-transparent text-[15px] text-ui-text outline-none placeholder:text-ui-muted focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ui-focus"
+              />
+            </SwapCard>
+          }
+          toggle={<SwapToggle label="Switch to Withdraw: send your balance out" onClick={onSwitch} />}
+          bottom={
+            <SwapCard coin={<PolarisCoin size={42} />} symbol="Buyer can pay" caption="Ways">
+              <div role="group" aria-label="Ways the buyer can pay" className="flex flex-wrap gap-2">
+                {WAYS.map((w) => (
+                  <Chip key={w.mode} variant="pill" selected={modes.includes(w.mode)} onClick={() => toggle(w.mode)} title={MODE_LABEL[w.mode]}>
+                    {w.label}
+                  </Chip>
+                ))}
+              </div>
+              <p className="ui-figure mt-3 text-[14px] text-ui-muted">
+                {quote ? `In 4: 4 × ${money(quote.each)} at 10% APR, paid by the buyer` : modes.includes("later") ? "Pay in 4 from $20.00" : "Paid in full, in dollars"}
+              </p>
+            </SwapCard>
+          }
+        />
+      )}
       {errorText ? (
         <p role="alert" className="px-1 text-[14px] text-ui-down">
           {errorText}
@@ -606,12 +657,10 @@ function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: P
           <Link href="/dashboard/links">All payment links</Link>
         </SecondaryButton>
       )}
-      {link ? (
-        <LinkReady link={link} blocker={blocker} sample={sampleLinks} />
-      ) : (
+      {link ? null : (
         <BalanceSummaryCard
           label="You receive"
-          value={money(cents ? cents - (modes.length === 1 && modes[0] === "later" ? 0 : fee) : 0)}
+          value={<Money value={(cents ? cents - (modes.length === 1 && modes[0] === "later" ? 0 : fee) : 0) / 100} />}
           badge={
             <StatusPill tone="lime" size="sm">
               {modes.includes("later") ? "100% up front" : "In 0.8 s"}
@@ -628,37 +677,44 @@ function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: P
   );
 }
 
+/**
+ * The new link, in the two cards' place and about their height, so the
+ * buttons under it stay put: the QR code, what it's for, the amount, and
+ * the link with Copy and Open.
+ */
 function LinkReady({ link, blocker, sample }: { link: PaymentLink; blocker: string | null; sample: boolean }) {
   return (
-    <div className="rounded-ui-panel border border-ui-hairline-strong p-4" aria-live="polite">
-      <div className="flex items-start gap-4">
+    <div className="flex min-h-[336px] flex-col rounded-ui-panel bg-ui-surface-1 p-5" aria-live="polite">
+      <p className="flex items-center gap-2 text-[14px] text-ui-muted">
+        <Check aria-hidden size={16} strokeWidth={2.25} className="text-ui-lime-text" />
+        Link ready
+        {sample ? <SampleBadge className="ml-auto" /> : null}
+      </p>
+      <div className="mt-4 flex min-w-0 flex-1 items-center gap-5">
         {blocker ? null : (
-          <span className="shrink-0 overflow-hidden rounded-[14px]">
-            <QrCode value={link.url} label={`QR code for ${link.description}`} size={104} />
+          <span className="shrink-0 overflow-hidden rounded-[16px]">
+            <QrCode value={link.url} label={`QR code for ${link.description}`} size={132} />
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 text-[14px] text-ui-muted">
-            Link ready
-            {sample ? <SampleBadge /> : null}
-          </p>
-          <p className="mt-1 truncate text-[17px] font-medium">{link.description}</p>
-          <p className="ui-figure mt-0.5 text-[14px] text-ui-lime-text">{money(link.amountCents)}</p>
-          {blocker ? (
-            <p className="mt-2 text-[13px] leading-snug text-ui-muted">{blocker} Sharing and the QR code switch on then.</p>
-          ) : (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <CopyButton value={link.url} label="link" variant="button" buttonVariant="lime" size="sm" />
-              <Button asChild variant="outline" size="sm" icon={<ArrowUpRight />}>
-                <a href={link.url} target="_blank" rel="noreferrer">
-                  Open
-                </a>
-              </Button>
-            </div>
-          )}
+          <p className="line-clamp-2 text-[18px] leading-snug font-medium">{link.description}</p>
+          <Money value={link.amountCents / 100} className="mt-1.5 block text-[30px] leading-none font-medium tracking-[-0.03em]" />
+          <p className="mt-2 text-[13px] text-ui-muted">{link.modes.map((m) => MODE_LABEL[m]).join(" · ")}</p>
         </div>
       </div>
-      {!blocker ? <code className="mt-3 block truncate rounded-[12px] bg-ui-surface-1 px-3 py-2 font-mono text-[12.5px] text-ui-muted">{link.url}</code> : null}
+      {blocker ? (
+        <p className="mt-4 text-[13px] leading-snug text-ui-muted">{blocker} Sharing and the QR code switch on then.</p>
+      ) : (
+        <div className="mt-4 flex min-w-0 items-center gap-2 rounded-ui-field bg-ui-canvas p-1.5 pl-3.5">
+          <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ui-muted">{link.url}</code>
+          <Button asChild variant="outline" size="sm" icon={<ArrowUpRight />}>
+            <a href={link.url} target="_blank" rel="noreferrer">
+              Open
+            </a>
+          </Button>
+          <CopyButton value={link.url} label="link" variant="button" buttonVariant="lime" size="sm" />
+        </div>
+      )}
     </div>
   );
 }

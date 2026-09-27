@@ -61,12 +61,67 @@ export function salesByMode(payments: Payment[], { days = 30, now = Date.now() }
   const start = startOfDay(now) - (days - 1) * DAY;
   const totals: Record<PayMode, number> = { now: 0, later: 0, subscribe: 0 };
   for (const p of paid(payments)) if (at(p) >= start) totals[p.mode] += p.amountCents;
-  const sum = totals.now + totals.later + totals.subscribe;
-  return (["now", "later", "subscribe"] as const).map((mode) => ({
-    mode,
-    cents: totals[mode],
-    share: sum ? Math.round((totals[mode] / sum) * 100) : 0,
-  }));
+  const modes = ["now", "later", "subscribe"] as const;
+  const shares = wholeShares(modes.map((m) => totals[m]));
+  return modes.map((mode, i) => ({ mode, cents: totals[mode], share: shares[i]! }));
+}
+
+/**
+ * Whole percentages that always add up to 100 (largest remainder): the
+ * rounded-down shares, then one more point to the biggest remainders.
+ */
+export function wholeShares(values: number[]): number[] {
+  const sum = values.reduce((s, v) => s + v, 0);
+  if (sum <= 0) return values.map(() => 0);
+  const exact = values.map((v) => (v / sum) * 100);
+  const out = exact.map(Math.floor);
+  let left = 100 - out.reduce((s, v) => s + v, 0);
+  const order = exact.map((v, i) => ({ i, r: v - Math.floor(v) })).sort((a, b) => b.r - a.r);
+  for (const { i } of order) {
+    if (left <= 0) break;
+    out[i]! += 1;
+    left -= 1;
+  }
+  return out;
+}
+
+export type PeriodSummary = {
+  gross: Cents;
+  fees: Cents;
+  net: Cents;
+  /** Paid payments. */
+  count: number;
+  failed: number;
+  /** Gross against the same number of days before; null with nothing to compare. */
+  delta: number | null;
+  modes: ModeSplit;
+};
+
+/**
+ * The last `days` (today and the days before, from local midnight), the
+ * same window as `salesByMode`, so the Overview and Payments agree.
+ */
+export function periodSummary(payments: Payment[], { days = 30, now = Date.now() } = {}): PeriodSummary {
+  const start = startOfDay(now) - (days - 1) * DAY;
+  const prevStart = start - days * DAY;
+  let gross = 0;
+  let fees = 0;
+  let net = 0;
+  let count = 0;
+  let failed = 0;
+  let prev = 0;
+  for (const p of payments) {
+    const t = at(p);
+    if (t >= start && t <= now) {
+      if (p.status === "succeeded") {
+        gross += p.amountCents;
+        fees += p.feeCents;
+        net += p.netCents;
+        count += 1;
+      } else failed += 1;
+    } else if (p.status === "succeeded" && t >= prevStart && t < start) prev += p.amountCents;
+  }
+  return { gross, fees, net, count, failed, delta: pctChange(gross, prev), modes: salesByMode(payments, { days, now }) };
 }
 
 export type WeekCustomers = {
@@ -169,9 +224,11 @@ const MINUTE = 60_000;
  */
 export const SERIES_FRAMES: Record<SeriesFrame, { span: number; step: number; window: number; windowLabel: string; versus: string }> = {
   "1h": { span: HOUR, step: MINUTE, window: 10 * MINUTE, windowLabel: "10 min", versus: "vs the hour before" },
-  "24h": { span: DAY, step: 15 * MINUTE, window: 3 * HOUR, windowLabel: "3 h", versus: "vs yesterday" },
-  "1w": { span: 7 * DAY, step: 2 * HOUR, window: DAY, windowLabel: "24 h", versus: "vs last week" },
-  "1m": { span: 30 * DAY, step: 8 * HOUR, window: 3 * DAY, windowLabel: "3 days", versus: "vs last month" },
+  // Short windows sampled often, so the line has a price chart's texture
+  // (a rise for each burst of sales) rather than a few smooth humps.
+  "24h": { span: DAY, step: 10 * MINUTE, window: HOUR, windowLabel: "1 h", versus: "vs yesterday" },
+  "1w": { span: 7 * DAY, step: HOUR, window: 6 * HOUR, windowLabel: "6 h", versus: "vs last week" },
+  "1m": { span: 30 * DAY, step: 4 * HOUR, window: DAY, windowLabel: "24 h", versus: "vs last month" },
 };
 
 export type SalesSeries = {

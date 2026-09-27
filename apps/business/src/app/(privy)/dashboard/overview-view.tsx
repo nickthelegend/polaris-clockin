@@ -8,6 +8,9 @@ import {
   DeltaChip,
   DollarCoin,
   DonutChart,
+  Money,
+  PrimaryButton,
+  SecondaryButton,
   GradientLineChart,
   PairHeader,
   PolarisCoin,
@@ -19,11 +22,11 @@ import {
   type ChartType,
   type StatusPillTone,
 } from "@polaris/ui";
-import { ArrowRight, BadgeCheck, Layers, ShieldCheck, Users, Workflow } from "lucide-react";
+import { ArrowRight, BadgeCheck, Check, Layers, Link2, ShieldCheck, Sparkles, Users, Workflow } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { MoneyWidget } from "@/components/dashboard/money-widget";
 import { MODE_COLOR, PaymentName, paymentPill } from "@/components/dashboard/payment-bits";
@@ -56,23 +59,31 @@ export function OverviewView() {
       <h1 className="sr-only">Overview, {merchant.businessName}</h1>
       <StaleNotice queries={[overview, payments, plans] as QueryState<unknown>[]} />
       <RegistrationNotice className="mb-6" />
-      <DataModeNotice empty={empty} />
+      {/* When nothing has sold, the chart and the checklist below say what to do. */}
+      <DataModeNotice empty={false} />
 
       {/* Ref E: the chart and the table on the left, the widget on the right. */}
       <div className="grid grid-cols-[minmax(0,1fr)] gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px] xl:gap-x-11">
-        <SalesChart payments={payments} sample={sample.on} className="lg:col-start-1 lg:row-start-1" />
+        <SalesChart payments={payments} sample={sample.on} empty={empty} className="lg:col-start-1 lg:row-start-1" />
         <MoneyWidget payments={list} className="lg:col-start-2 lg:row-span-2 lg:row-start-1" />
         <RecentPayments payments={payments} sample={sample.on} className="lg:col-start-1 lg:row-start-2" />
       </div>
 
-      <h2 className="mt-14 text-[22px] leading-tight font-medium tracking-[-0.02em] sm:mt-16">Your business this month</h2>
-      <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <CustomersPanel payments={list} error={payments.error && !list ? payments : null} sample={sample.on} />
-        <ModesPanel payments={list} sample={sample.on} />
-        <ExposurePanel overview={overview.data} plans={plans.data} sample={sample.on} className="md:col-span-2 xl:col-span-1" />
-        <CollectionsPanel plans={plans.data} collector={overview.data?.collector} sample={sample.on} />
-        <EnvioFeed payments={list} plans={plans.data} sample={sample.on} className="xl:col-span-2" />
-      </div>
+      {empty ? (
+        // Nothing has sold yet: one checklist instead of five empty cards.
+        <GettingStarted />
+      ) : (
+        <>
+          <h2 className="mt-14 text-[22px] leading-tight font-medium tracking-[-0.02em] sm:mt-16">Your business this month</h2>
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <CustomersPanel payments={list} error={payments.error && !list ? payments : null} sample={sample.on} />
+            <ModesPanel payments={list} sample={sample.on} />
+            <ExposurePanel overview={overview.data} plans={plans.data} sample={sample.on} className="md:col-span-2 xl:col-span-1" />
+            <CollectionsPanel plans={plans.data} collector={overview.data?.collector} sample={sample.on} />
+            <EnvioFeed payments={list} plans={plans.data} sample={sample.on} className="xl:col-span-2" />
+          </div>
+        </>
+      )}
     </>
   );
 }
@@ -102,7 +113,8 @@ function timeLabel(frame: SeriesFrame) {
   };
 }
 
-function SalesChart({ payments, sample, className }: { payments: QueryState<Payment[]>; sample: boolean; className?: string }) {
+function SalesChart({ payments, sample, empty, className }: { payments: QueryState<Payment[]>; sample: boolean; empty: boolean; className?: string }) {
+  const preview = useSample();
   const [metric, setMetric] = useState<Metric>("sales");
   const [frame, setFrame] = useState<SeriesFrame>("24h");
   const [type, setType] = useState<ChartType>("line");
@@ -131,7 +143,7 @@ function SalesChart({ payments, sample, className }: { payments: QueryState<Paym
           {series ? (
             <>
               <span className="ui-figure text-[36px] leading-none font-medium tracking-[-0.035em] sm:text-[44px]" title={`Paid over ${FRAME_TITLE[frame]}`}>
-                {money(series.grossCents)}
+                <Money value={series.grossCents / 100} />
               </span>
               <DeltaChip
                 value={series.deltaPct}
@@ -165,7 +177,26 @@ function SalesChart({ payments, sample, className }: { payments: QueryState<Paym
             formatAxis={axis}
             formatTime={time}
             formatBubbleNote={null}
-            empty={`No ${metric === "sales" ? "sales" : m.label.replace(" / USD", "")} in ${FRAME_TITLE[frame]}`}
+            lastLabel={frame === "1h" || frame === "24h" ? "Now" : "Today"}
+            empty={
+              <div className="grid justify-items-center gap-4">
+                <p className="text-[15px] text-ui-muted">
+                  {empty ? "No sales yet. Your first one draws this line." : `No ${metric === "sales" ? "sales" : m.label.replace(" / USD", "")} in ${FRAME_TITLE[frame]}`}
+                </p>
+                {empty ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <PrimaryButton asChild size="sm" icon={<Link2 />}>
+                      <Link href="/dashboard/links?new=1">New payment link</Link>
+                    </PrimaryButton>
+                    {preview.canToggle ? (
+                      <SecondaryButton size="sm" icon={<Sparkles />} onClick={() => preview.setPreview(true)}>
+                        Preview with sample data
+                      </SecondaryButton>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            }
           />
         ) : (
           <CandlestickChart
@@ -263,18 +294,115 @@ function CustomersPanel({ payments, error, sample }: { payments?: Payment[]; err
               <DeltaChip value={week.deltaPct} suffix="vs last week" size="sm" decimals={1} />
             )}
           </div>
-          <BarChart
-            className="mt-6"
-            label="Buyers per day this week"
-            data={week.days.map((d) => ({ label: d.label, value: d.value }))}
-            defaultSelected={week.days.findIndex((d) => d.today)}
-            height={236}
-            formatValue={(v) => `${v} ${v === 1 ? "buyer" : "buyers"}`}
-            formatTick={(v) => String(Math.round(v))}
-          />
+          <FillHeight min={236} className="mt-6">
+            {(h) => (
+              <BarChart
+                label="Buyers per day this week"
+                data={week.days.map((d) => ({ label: d.label, value: d.value }))}
+                defaultSelected={week.days.findIndex((d) => d.today)}
+                height={h}
+                formatValue={(v) => `${v} ${v === 1 ? "buyer" : "buyers"}`}
+                formatTick={(v) => String(Math.round(v))}
+              />
+            )}
+          </FillHeight>
         </>
       )}
     </Panel>
+  );
+}
+
+/**
+ * A chart that fills the rest of its card: the card stretches to its row's
+ * tallest, and this measures the room left (at least `min` px, less the
+ * labels under the bars). Absolutely positioned inside, so the chart never
+ * props the card open and the row can shrink again.
+ */
+function FillHeight({ min, className, children }: { min: number; className?: string; children: (height: number) => ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(min);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeight(Math.max(min, Math.floor(el.getBoundingClientRect().height) - BAR_LABELS)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [min]);
+  return (
+    <div ref={ref} className={cn("relative flex-1", className)} style={{ minHeight: min + BAR_LABELS }}>
+      <div className="absolute inset-x-0 top-0">{children(height)}</div>
+    </div>
+  );
+}
+
+/** The day labels under BarChart's bars. */
+const BAR_LABELS = 34;
+
+/* ── Getting started: until the first sale ──────────────────────────────── */
+
+function GettingStarted() {
+  const links = useQuery((d) => d.listLinks());
+  const preview = useSample();
+  const hasLink = (links.data?.length ?? 0) > 0;
+  const steps = [
+    {
+      title: "Create a payment link",
+      body: "An amount and what it's for. Buyers choose Pay now, Pay in 4 or a subscription.",
+      done: hasLink,
+      action: (
+        <PrimaryButton asChild size="sm" icon={<Link2 />}>
+          <Link href="/dashboard/links?new=1">New payment link</Link>
+        </PrimaryButton>
+      ),
+    },
+    {
+      title: "Share it",
+      body: "Send the link, show its QR code, or put the checkout on your site with the SDK.",
+      done: false,
+      action: (
+        <SecondaryButton asChild size="sm" iconRight={<ArrowRight />}>
+          <Link href={hasLink ? "/dashboard/links" : "/dashboard/developers"}>{hasLink ? "Your links" : "The SDK"}</Link>
+        </SecondaryButton>
+      ),
+    },
+    {
+      title: "Your first payment",
+      body: "It lands in your balance within a second of the buyer confirming, in full, even on Pay in 4.",
+      done: false,
+      action: preview.canToggle ? (
+        <SecondaryButton size="sm" icon={<Sparkles />} onClick={() => preview.setPreview(true)}>
+          Preview with sample data
+        </SecondaryButton>
+      ) : null,
+    },
+  ];
+  return (
+    <section aria-labelledby="getting-started" className="mt-14 sm:mt-16">
+      <h2 id="getting-started" className="text-[22px] leading-tight font-medium tracking-[-0.02em]">
+        Getting started
+      </h2>
+      <ol className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+        {steps.map((step, i) => (
+          <li key={step.title} className="flex flex-col rounded-ui-panel border border-ui-hairline-strong p-5 sm:p-6">
+            <span
+              aria-hidden
+              className={cn(
+                "grid size-9 place-items-center rounded-full text-[15px] font-semibold",
+                step.done ? "bg-ui-lime-button text-[#121418]" : "bg-ui-surface-1 text-ui-muted",
+              )}
+            >
+              {step.done ? <Check size={17} strokeWidth={2.5} /> : i + 1}
+            </span>
+            <h3 className="mt-4 text-[18px] leading-tight font-medium tracking-[-0.015em]">
+              {step.title}
+              {step.done ? <span className="sr-only"> (done)</span> : null}
+            </h3>
+            <p className="mt-2 text-[14px] leading-relaxed text-ui-muted">{step.body}</p>
+            {step.action && !step.done ? <div className="mt-auto pt-5">{step.action}</div> : null}
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 
@@ -290,7 +418,7 @@ function ModesPanel({ payments, sample }: { payments?: Payment[]; sample: boolea
       ) : total === 0 ? (
         <PanelEmpty icon={<Layers />} title="No sales in the last 30 days" description="Pay now, Pay in 4 and subscriptions split here once buyers pay." />
       ) : (
-        <div className="mt-5 flex flex-col items-center gap-6">
+        <div className="mt-5 flex flex-1 flex-col items-center gap-6">
           <DonutChart
             label="Sales by payment mode, last 30 days"
             size={212}
@@ -300,7 +428,7 @@ function ModesPanel({ payments, sample }: { payments?: Payment[]; sample: boolea
             showTags={false}
             centerLabel="Total"
             centerValue={`$${Math.round(total / 100).toLocaleString("en-US")}`}
-            className="shrink-0"
+            className="my-auto shrink-0"
           />
           <ProgressLegend className="w-full min-w-0" items={split.map((m) => ({ label: MODE_LABEL[m.mode], value: m.share, color: MODE_COLOR[m.mode] }))} />
         </div>

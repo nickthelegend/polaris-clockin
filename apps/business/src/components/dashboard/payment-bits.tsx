@@ -2,6 +2,8 @@
 
 import { Coin, TableName, type CoinTone, type StatusPillTone } from "@polaris/ui";
 
+import { SampleBadge } from "./common";
+
 import { shortAddress } from "@/lib/data/format";
 import type { PayMode, Payment } from "@/lib/data/types";
 
@@ -31,13 +33,30 @@ export function ModeCoin({ mode, text, size = 28 }: { mode: PayMode; text: strin
   );
 }
 
-/** The first column: the coin and the buyer, with what they bought under it when there's room. */
+/**
+ * The first column: the coin and the buyer, with what they bought under it
+ * when there's room. On phones, where the Status column is hidden, the sub
+ * line leads with it ("Pay in 4 · Website audit"), like the app's activity
+ * rows; a row from a server's sample book carries the Sample chip.
+ */
 export function PaymentName({ p, sub }: { p: Payment; sub?: boolean }) {
   return (
     <TableName
       icon={<ModeCoin mode={p.mode} text={p.description} />}
-      title={<span className="ui-figure">{shortAddress(p.buyer, 6, 4)}</span>}
-      sub={sub ? p.description : undefined}
+      title={
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="ui-figure truncate">{shortAddress(p.buyer, 6, 4)}</span>
+          {p.sample ? <SampleBadge className="shrink-0" /> : null}
+        </span>
+      }
+      sub={
+        sub ? (
+          <>
+            <span className="sm:hidden">{paymentPill(p).text} · </span>
+            {p.description}
+          </>
+        ) : undefined
+      }
     />
   );
 }

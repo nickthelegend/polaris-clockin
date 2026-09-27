@@ -21,12 +21,13 @@ import {
   type TableColumn,
 } from "@polaris/ui";
 import { ArrowUpFromLine, CalendarClock, Landmark, Zap } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
-import { Address, PayoutStatusBadge, TxLink } from "@/components/dashboard/bits";
+import { Address, CopyAction, DrawerActions, ExplorerAction, PayoutStatusBadge, TxLink } from "@/components/dashboard/bits";
 import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
 import { checkAddress, MoneyWidget } from "@/components/dashboard/money-widget";
 import { FigureRow, PageCoin, PageHead } from "@/components/dashboard/page-head";
+import { explorerTx } from "@/lib/chain";
 import { errorMessage } from "@/lib/data";
 import { formatDateTime, money, shortAddress } from "@/lib/data/format";
 import type { AutoPayouts, Payout } from "@/lib/data/types";
@@ -99,7 +100,7 @@ export function PayoutsView() {
           <section aria-label="Your balance" className="min-w-0">
             <FigureRow
               caption="Available to withdraw"
-              value={payouts.error && !state ? "—" : state ? money(state.balanceCents) : undefined}
+              value={payouts.error && !state ? "—" : state ? <Money value={state.balanceCents / 100} /> : undefined}
               deltaLabel={state ? "AUSD on Monad" : undefined}
               sample={sample.on}
               right={wallet ? <WalletPill address={wallet} label="payout account address" maxWidth={300} /> : null}
@@ -153,7 +154,13 @@ export function PayoutsView() {
           </section>
         </div>
 
-        <MoneyWidget payouts={payouts} payments={payments.data} settingsHref="#automatic" className="lg:col-start-2 lg:row-start-1 lg:self-start" />
+        {/* The page's main action: first on phones, on the right from 1024px. */}
+        <MoneyWidget
+          payouts={payouts}
+          payments={payments.data}
+          settingsHref="#automatic"
+          className="order-first lg:order-none lg:col-start-2 lg:row-start-1 lg:self-start xl:sticky xl:top-6"
+        />
       </div>
 
       <PayoutDrawer payout={open} sample={sample.on} onClose={() => setOpen(null)} />
@@ -161,7 +168,7 @@ export function PayoutsView() {
   );
 }
 
-function Stat({ label, value, className }: { label: string; value: string | undefined; className?: string }) {
+function Stat({ label, value, className }: { label: string; value: ReactNode | undefined; className?: string }) {
   return (
     <div className={`min-w-0 rounded-[20px] bg-ui-surface-1 px-4 py-3.5 ${className ?? ""}`}>
       <dt className="truncate text-[13px] text-ui-muted">{label}</dt>
@@ -252,7 +259,9 @@ function AutoPayoutsPanel({
       {!auto ? (
         <Skeleton shape="tile" height={200} className="mt-5" />
       ) : (
-        <div className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:gap-6">
+        // One column, in the order it's used: the switch, where it pays out
+        // to, then its state, then how it's kept safe.
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-4">
           <div className="grid content-start gap-4">
             <div className="rounded-[20px] bg-ui-surface-1 px-4 py-3.5">
               <Toggle
@@ -290,12 +299,22 @@ function AutoPayoutsPanel({
             ) : null}
           </div>
           <div className="grid content-start gap-4">
+            {/* Full width, so the short address is never cut again. */}
             <DetailsList
               size="sm"
               variant="surface"
               items={[
                 { label: "Status", value: enabled ? (blocker ? "On, not running" : "On") : "Off" },
-                { label: "Pays out to", value: auto.payoutAddress ? shortAddress(auto.payoutAddress) : "Not set" },
+                {
+                  label: "Pays out to",
+                  value: auto.payoutAddress ? (
+                    <span className="font-mono text-[13px] whitespace-nowrap" title={auto.payoutAddress}>
+                      {shortAddress(auto.payoutAddress, 6, 4)}
+                    </span>
+                  ) : (
+                    "Not set"
+                  ),
+                },
                 { label: "Next payout", value: enabled && !blocker && auto.nextRunAt ? formatDateTime(auto.nextRunAt) : "—" },
               ]}
             />
@@ -344,19 +363,29 @@ function PayoutDrawer({ payout, sample, onClose }: { payout: Payout | null; samp
           <Money value={p.amountCents / 100} className="text-[44px] leading-none font-medium tracking-[-0.035em]" />
           <KeyValueGrid
             className="mt-6"
-            variant="surface"
+            variant="raised"
             items={[
               { label: "Amount", value: money(p.amountCents) },
               { label: "Network fee", value: "$0.00" },
             ]}
           />
-          <DetailsList className="mt-4" size="sm" variant="surface" items={items} />
+          <DetailsList className="mt-4" size="sm" variant="raised" items={items} />
           {p.status === "queued" ? (
-            <p className="mt-4 rounded-[20px] bg-ui-surface-1 px-5 py-4 text-[14px] leading-relaxed text-ui-muted">
+            <p className="mt-4 rounded-[20px] bg-ui-surface-2 px-5 py-4 text-[14px] leading-relaxed text-ui-muted">
               Queued means your signed withdrawal is waiting for the relayer. It turns Paid, with its transaction, once it&rsquo;s on chain.
             </p>
           ) : null}
         </Drawer.Body>
+      ) : null}
+      {p ? (
+        <DrawerActions>
+          <ExplorerAction href={p.txHash && !sample ? explorerTx(p.txHash) : null} reason={sample ? "Sample: no transaction" : "Not on chain yet"}>
+            View on explorer
+          </ExplorerAction>
+          <CopyAction value={p.destination} what="destination address">
+            Copy address
+          </CopyAction>
+        </DrawerActions>
       ) : null}
     </Drawer>
   );

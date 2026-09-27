@@ -23,10 +23,11 @@ import { CalendarClock, Check, Clock, RotateCcw, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
-import { Address, PlanStateBadge } from "@/components/dashboard/bits";
+import { Address, CopyAction, DrawerActions, ExplorerAction, PlanStateBadge } from "@/components/dashboard/bits";
 import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
 import { FigureRow, PageCoin, PageHead } from "@/components/dashboard/page-head";
 import { ModeCoin } from "@/components/dashboard/payment-bits";
+import { explorerAddress } from "@/lib/chain";
 import { formatDate, formatDue, money, payInFourQuote, PLAN_INTERVAL_DAYS, shortAddress } from "@/lib/data/format";
 import type { Plan, PlanFilter } from "@/lib/data/types";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
@@ -97,7 +98,7 @@ export function PlansView() {
         <section aria-label="The Pay in 4 ledger" className="min-w-0">
           <FigureRow
             caption="Still owed by buyers"
-            value={s ? money(s.outstanding) : undefined}
+            value={s ? <Money value={s.outstanding / 100} /> : undefined}
             deltaLabel={s ? `${s.open} open ${s.open === 1 ? "plan" : "plans"}` : undefined}
             sample={sample.on}
             right={
@@ -157,7 +158,11 @@ export function PlansView() {
           </div>
         </section>
 
-        <aside aria-label="Pay in 4 summary" className="grid min-w-0 content-start gap-3 md:grid-cols-2 xl:grid-cols-1">
+        {/* The summary comes first on phones, and stays in view beside the ledger from 1280px. */}
+        <aside
+          aria-label="Pay in 4 summary"
+          className="order-first grid min-w-0 content-start items-start gap-3 md:max-w-[560px] xl:sticky xl:top-6 xl:order-none xl:max-w-none xl:self-start"
+        >
           {s ? (
             <BalanceSummaryCard
               label={
@@ -166,7 +171,7 @@ export function PlansView() {
                   {sample.on ? <SampleBadge /> : null}
                 </span>
               }
-              value={money(s.principal)}
+              value={<Money value={s.principal / 100} />}
               badge={
                 <StatusPill tone="lime" size="sm">
                   100% at checkout
@@ -181,35 +186,44 @@ export function PlansView() {
           ) : (
             <Skeleton shape="card" height={170} />
           )}
-          <PanelCard title="How Pay in 4 works" padding="md">
-            <div className="mt-4 rounded-[20px] bg-ui-surface-1 p-4">
-              <p className="text-[14px] text-ui-muted">A $200.00 order</p>
-              <p className="ui-figure mt-1 text-[28px] leading-none font-medium tracking-[-0.025em]">4 × {money(EXAMPLE.each)}</p>
-              <Ticks done={0} total={4} className="mt-4" />
-              <p className="ui-figure mt-3 text-[13px] text-ui-muted">
-                Every {PLAN_INTERVAL_DAYS} days · 10% APR · {money(EXAMPLE.interest)} interest · {money(EXAMPLE.total)} in total
-              </p>
-            </div>
-            <ul className="mt-4 grid gap-2.5 text-[14px] leading-snug">
-              <li className="flex gap-2.5">
-                <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
-                You get the whole order at checkout, with no fee.
-              </li>
-              <li className="flex gap-2.5">
-                <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
-                The buyer pays 10% APR to Polaris, pro-rated over the four weeks.
-              </li>
-              <li className="flex gap-2.5">
-                <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
-                Chainlink CRE collects each payment and retries a missed one; the risk is ours.
-              </li>
-            </ul>
-          </PanelCard>
+          <HowItWorks className="hidden xl:flex" />
         </aside>
+        {/* Below 1280px it follows the ledger, so the summary alone leads. */}
+        <HowItWorks className="md:max-w-[560px] xl:hidden" />
       </div>
 
       <PlanDrawer plan={open} sample={sample.on} onClose={() => setOpen(null)} />
     </>
+  );
+}
+
+/** The worked example and the three promises, beside the ledger. */
+function HowItWorks({ className }: { className?: string }) {
+  return (
+    <PanelCard title="How Pay in 4 works" padding="md" className={className}>
+      <div className="mt-4 rounded-[20px] bg-ui-surface-1 p-4">
+        <p className="text-[14px] text-ui-muted">A $200.00 order</p>
+        <p className="ui-figure mt-1 text-[28px] leading-none font-medium tracking-[-0.025em]">4 × {money(EXAMPLE.each)}</p>
+        <Ticks done={0} total={4} className="mt-4" />
+        <p className="ui-figure mt-3 text-[13px] text-ui-muted">
+          Every {PLAN_INTERVAL_DAYS} days · 10% APR · {money(EXAMPLE.interest)} interest · {money(EXAMPLE.total)} in total
+        </p>
+      </div>
+      <ul className="mt-4 grid gap-2.5 text-[14px] leading-snug">
+        <li className="flex gap-2.5">
+          <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
+          You get the whole order at checkout, with no fee.
+        </li>
+        <li className="flex gap-2.5">
+          <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
+          The buyer pays 10% APR to Polaris, pro-rated over the four weeks.
+        </li>
+        <li className="flex gap-2.5">
+          <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
+          Chainlink CRE collects each payment and retries a missed one; the risk is ours.
+        </li>
+      </ul>
+    </PanelCard>
   );
 }
 
@@ -218,7 +232,25 @@ const COLUMNS: TableColumn<Plan>[] = [
     key: "plan",
     header: "Buyer",
     render: (p) => (
-      <TableName icon={<ModeCoin mode="later" text={p.description} />} title={<span className="ui-figure">{shortAddress(p.buyer, 6, 4)}</span>} sub={p.description} />
+      <TableName
+        icon={<ModeCoin mode="later" text={p.description} />}
+        title={
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="ui-figure truncate">{shortAddress(p.buyer, 6, 4)}</span>
+            {p.sample ? <SampleBadge className="shrink-0" /> : null}
+          </span>
+        }
+        sub={
+          <>
+            {/* On phones the Paid, Next payment and State columns fold in here: the page's key facts. */}
+            <span className="inline-flex max-w-full items-center gap-2 align-middle sm:hidden">
+              <Ticks done={p.installmentsPaid} late={p.state === "dunning" ? 1 : 0} total={p.installmentCount} size="sm" className="w-16 shrink-0" />
+              <span className={cn("truncate", p.state === "dunning" && "text-ui-pill-amber-text")}>{phoneLine(p)}</span>
+            </span>
+            <span className="hidden sm:inline">{p.description}</span>
+          </>
+        }
+      />
     ),
   },
   {
@@ -258,6 +290,13 @@ const COLUMNS: TableColumn<Plan>[] = [
     ),
   },
 ];
+
+/** "Retrying · 1 day overdue", "Next in 5 days", "Repaid": a plan's state in a few words. */
+function phoneLine(p: Plan): string {
+  if (p.state === "dunning") return `Retrying${p.nextDueAt ? ` · ${formatDue(p.nextDueAt).toLowerCase()}` : ""}`;
+  if (p.state === "collecting") return p.nextDueAt ? `Next ${formatDue(p.nextDueAt).toLowerCase()}` : "Collecting";
+  return p.state === "repaid" ? "Repaid" : "Written off";
+}
 
 function useSummary(plans?: Plan[]) {
   return useMemo(() => {
@@ -327,7 +366,7 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
           </div>
           <KeyValueGrid
             className="mt-6"
-            variant="surface"
+            variant="raised"
             items={[
               { label: "Paid to you up front", value: money(p.principalCents) },
               { label: "The buyer repays", value: money(p.totalCents) },
@@ -340,7 +379,7 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
             {schedule(p).map((s) => {
               const step = STEP[s.status];
               return (
-                <li key={s.index} className="flex items-center gap-3 rounded-[18px] bg-ui-surface-1 px-4 py-3">
+                <li key={s.index} className="flex items-center gap-3 rounded-[18px] bg-ui-surface-2 px-4 py-3">
                   <span aria-hidden className={cn("grid size-8 shrink-0 place-items-center rounded-full", step.well)}>
                     {step.icon}
                   </span>
@@ -364,7 +403,7 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
           <DetailsList
             className="mt-4"
             size="sm"
-            variant="surface"
+            variant="raised"
             items={[
               { label: "Buyer", value: <Address value={p.buyer} label="buyer's address" explorer={!sample} /> },
               { label: "Order", value: p.orderId },
@@ -372,6 +411,16 @@ function PlanDrawer({ plan, sample, onClose }: { plan: Plan | null; sample: bool
             ]}
           />
         </Drawer.Body>
+      ) : null}
+      {p ? (
+        <DrawerActions>
+          <ExplorerAction href={sample ? null : explorerAddress(p.buyer)} reason="Sample: no account">
+            Buyer on explorer
+          </ExplorerAction>
+          <CopyAction value={p.buyer} what="buyer's address">
+            Copy buyer
+          </CopyAction>
+        </DrawerActions>
       ) : null}
     </Drawer>
   );

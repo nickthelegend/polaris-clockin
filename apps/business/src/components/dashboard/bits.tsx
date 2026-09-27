@@ -1,7 +1,8 @@
 "use client";
 
-import { CopyButton, StatusPill, type StatusPillTone } from "@polaris/ui";
-import { ArrowUpRight } from "lucide-react";
+import { CopyButton, Drawer, PrimaryButton, SecondaryButton, StatusPill, toast, type StatusPillTone } from "@polaris/ui";
+import { ArrowUpRight, Copy } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { MODE_LABEL, PLAN_STATE_LABEL, shortAddress } from "@/lib/data/format";
@@ -113,4 +114,43 @@ export function downloadCsv(filename: string, header: string[], rows: (string | 
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/* ── A drawer's actions: ref E's full-width pair at the bottom ─────────── */
+
+/** The footer of a record's drawer: the lime action first, the dark one second. */
+export function DrawerActions({ children }: { children: ReactNode }) {
+  return <Drawer.Footer className="grid grid-cols-2 gap-3 border-t-0 pt-2 [&>*]:w-full">{children}</Drawer.Footer>;
+}
+
+/** Open a transaction or an account in the explorer; disabled, saying why, when there is none. */
+export function ExplorerAction({ href, children, reason }: { href: string | null; children: ReactNode; reason: string }) {
+  return href ? (
+    <PrimaryButton asChild size="md" iconRight={<ArrowUpRight />}>
+      <a href={href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    </PrimaryButton>
+  ) : (
+    <PrimaryButton size="md" disabled>
+      {reason}
+    </PrimaryButton>
+  );
+}
+
+/** Copy a value, in the dark button raised off the drawer's surface. */
+export function CopyAction({ value, what, children }: { value: string; what: string; children: ReactNode }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title: `Copied the ${what}`, tone: "success", duration: 2200 });
+    } catch {
+      toast({ title: `We couldn't copy the ${what}`, description: value, tone: "error" });
+    }
+  };
+  return (
+    <SecondaryButton size="md" icon={<Copy />} onClick={() => void copy()} className="bg-ui-surface-2 hover:bg-ui-surface-3">
+      {children}
+    </SecondaryButton>
+  );
 }
