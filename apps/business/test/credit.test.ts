@@ -1,3 +1,4 @@
+import { concat, encodeFunctionData, parseAbi, type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -7,6 +8,7 @@ import { GET as creditGet } from "@/app/api/public/credit/[account]/route";
 import { GET as messagesGet } from "@/app/api/public/credit/[account]/messages/route";
 import { signCreCallback, verifyCreSignature } from "@/server/credit/callback-signature";
 import { linkMessage, underwriteConsentMessage } from "@/server/credit/messages";
+import { configureExplainForTests, reportFromForwarderCall } from "@/server/credit/explain";
 import { configureUnderwritingForTests, runUnderwritingQueue } from "@/server/credit/underwriting";
 import { getDb } from "@/server/db";
 
@@ -44,7 +46,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => configureUnderwritingForTests({ fetch: null }));
+afterEach(() => {
+  configureUnderwritingForTests({ fetch: null });
+  configureExplainForTests({ fetch: null });
+});
 
 const messages = async (account: string, wallet?: string) =>
   (await json(await messagesGet(request("GET", `/api/public/credit/${account}/messages${wallet ? `?wallet=${wallet}` : ""}`), params({ account })))).body.data;
@@ -231,5 +236,69 @@ describe("POST /api/cre/callback", () => {
     expect(header).toBe("t=1790000000,v1=f192598aa9e2545b3fc47aae778a5d16611bc08687a22d1575226dfece7f4501");
     expect(verifyCreSignature("s3cret", '{"id":"1"}', header, 1_790_000_100)).toEqual({ ok: true, timestamp: 1_790_000_000 });
     expect(verifyCreSignature("s3cret", '{"id":"2"}', header, 1_790_000_100)).toMatchObject({ ok: false });
+  });
+});
+
+describe("the buyer's reasons come from what the DON attested (Nansen and friends), via the gateway", () => {
+  const FORWARDER = parseAbi(["function report(address receiver, bytes rawReport, bytes reportContext, bytes[] signatures)"]);
+  const body = `0x${"02".padStart(64, "0")}${"ab".repeat(64)}` as Hex; // any report body: the gateway decodes it
+  const forwarderCall = (report: Hex) =>
+    encodeFunctionData({ abi: FORWARDER, functionName: "report", args: ["0x3333333333333333333333333333333333333333", concat([`0x${"00".repeat(109)}`, report]), "0x", []] });
+
+  it("cuts the forwarder's 109-byte metadata off the raw report", () => {
+    expect(reportFromForwarderCall(forwarderCall(body))).toBe(body);
+    expect(reportFromForwarderCall("0x12345678")).toBeNull();
+  });
+
+  it("explains an applied decision once, from the report in its transaction, with each line's provider", async () => {
+    env = setupServer({ CRE_UNDERWRITING_TRIGGER_URL: TRIGGER, POLARIS_CRE_CALLBACK_SECRET: SECRET, UNDERWRITING_GATEWAY_URL: "http://127.0.0.1:3535/", UNDERWRITING_API_TOKEN: "gw-token" });
+    env.chain.reads.profileOf = () => profile({ underwritten: true, score: 640 });
+    env.chain.reads.creditLimitOf = () => 350_000_000n;
+    env.chain.reads.activeDebtOf = () => 0n;
+    const account = privateKeyToAccount(generatePrivateKey()).address;
+    const txHash = `0x${"ef".repeat(32)}` as Hex;
+    env.chain.transactions.set(txHash, { input: forwarderCall(body) });
+
+    const asked: Array<{ url: string; auth: string | null; body: Record<string, unknown> }> = [];
+    configureExplainForTests({
+      fetch: (async (url: string, init: RequestInit) => {
+        asked.push({ url: String(url), auth: new Headers(init.headers).get("authorization"), body: JSON.parse(String(init.body)) });
+        return Response.json({
+          kind: 2,
+          items: [
+            {
+              user: account,
+              decision: {
+                score: 640,
+                limit: "350000000",
+                reasons: [
+                  { text: "You've used this account for 2 years · +48", points: 48, kind: "plus", provider: "nansen" },
+                  { text: "Funded from a major exchange · +10", points: 10, kind: "plus", provider: "nansen" },
+                ],
+              },
+            },
+          ],
+        });
+      }) as typeof fetch,
+    });
+
+    const body2 = JSON.stringify({ id: txHash, type: "credit.underwritten", user: account, score: 640, txHash });
+    await crePost(new Request("http://localhost:3100/api/cre/callback", { method: "POST", headers: { "polaris-signature": signCreCallback(SECRET, body2, Math.floor(Date.now() / 1000)), "x-forwarded-for": "127.0.0.1" }, body: body2 }), params({}));
+    const s = await status(account);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toMatchObject({ url: "http://127.0.0.1:3535/v1/explain", auth: "Bearer gw-token", body: { report: body, activeDebt: "0" } });
+    expect(s.decision.explanation).toMatchObject({ score: 640, limitUnits: "350000000", source: "gateway" });
+    expect(s.decision.explanation.reasons.map((r: { provider: string }) => r.provider)).toEqual(["nansen", "nansen"]);
+    // Explained once, then kept.
+    await status(account);
+    expect(asked).toHaveLength(1);
+  });
+
+  it("shows the decision without reasons when there is no gateway", async () => {
+    const account = privateKeyToAccount(generatePrivateKey()).address;
+    const txHash = `0x${"aa".repeat(32)}` as Hex;
+    const raw = JSON.stringify({ id: txHash, type: "credit.underwritten", user: account, score: 600, txHash });
+    await crePost(new Request("http://localhost:3100/api/cre/callback", { method: "POST", headers: { "polaris-signature": signCreCallback(SECRET, raw, Math.floor(Date.now() / 1000)), "x-forwarded-for": "127.0.0.1" }, body: raw }), params({}));
+    expect((await status(account)).decision).toMatchObject({ status: "applied", explanation: null });
   });
 });

@@ -118,6 +118,8 @@ export type ServerConfig = {
    * callbacks to /api/cre/callback carry.
    */
   cre: { underwritingTriggerUrl: string | null; minTriggerIntervalMs: number; callbackSecret: string | null };
+  /** The underwriting gateway (apps/gateway), which explains an attested decision in the buyer's words. */
+  underwriting: { gatewayUrl: string | null; apiToken: string | null };
   /**
    * How many proxies we run in front of this server, each appending to
    * X-Forwarded-For: the client's IP is that many entries from the right
@@ -376,6 +378,10 @@ function build(): ServerConfig {
       underwritingTriggerUrl: env("CRE_UNDERWRITING_TRIGGER_URL") ?? null,
       minTriggerIntervalMs: Math.max(0, int("CRE_TRIGGER_MIN_INTERVAL_MS", 30_000)),
       callbackSecret: env("POLARIS_CRE_CALLBACK_SECRET") ?? null,
+    },
+    underwriting: {
+      gatewayUrl: (env("UNDERWRITING_GATEWAY_URL") ?? "").replace(/\/+$/, "") || null,
+      apiToken: env("UNDERWRITING_API_TOKEN") ?? null,
     },
     // POLARIS_TRUST_PROXY=1 (the older setting) means one proxy.
     trustedProxies: Math.max(0, int("POLARIS_TRUSTED_PROXIES", flag("POLARIS_TRUST_PROXY") ? 1 : 0)),

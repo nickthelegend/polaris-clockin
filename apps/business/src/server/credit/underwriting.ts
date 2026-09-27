@@ -14,6 +14,7 @@ import { getConfig } from "../env";
 import { HttpError } from "../http";
 import { consume, LIMITS } from "../ratelimit";
 import { address, signature } from "../relayer/parse";
+import { explainUnderwriting } from "./explain";
 import { evidenceStaleness, linkMessage, underwriteConsentMessage } from "./messages";
 
 /**
@@ -240,9 +241,28 @@ export async function runUnderwritingQueue(nowMs = Date.now()): Promise<Underwri
   return summary;
 }
 
+/**
+ * Explain a decision once, from the report the DON wrote (explain.ts), and
+ * keep the answer on the decision. A failure is kept as "no explanation"
+ * with a log line; the decision itself stands either way.
+ */
+export async function explainDecision(accountLower: string): Promise<void> {
+  const db = getDb();
+  const decision = await db.creditDecisions.get(accountLower);
+  if (!decision || decision.explanation !== undefined || !decision.txHash || !getConfig().underwriting.gatewayUrl) return;
+  let explanation = null;
+  try {
+    explanation = await explainUnderwriting(getAddress(accountLower), decision.txHash, decision.linkedWallet !== null);
+  } catch (error) {
+    console.error(`[credit] couldn't explain the decision for ${accountLower}`, error);
+  }
+  await db.creditDecisions.update(accountLower, (d) => (d.callbackId === decision.callbackId ? { ...d, explanation } : d));
+}
+
 /** Where an account's credit stands: the line on chain, the latest request, and what the workflow decided. */
 export async function creditStatus(account: Address) {
   const db = getDb();
+  await explainDecision(account.toLowerCase());
   const [chainState, request, decision] = await Promise.all([
     onChainProfile(account).catch(() => null),
     db.underwritingRequests.findOne({ account: account.toLowerCase() }, { orderBy: "createdAt", direction: "desc" }),
@@ -262,7 +282,16 @@ export async function creditStatus(account: Address) {
       : null,
     request: request ? toPublic(request) : null,
     decision: decision
-      ? { status: decision.status, score: decision.score, reason: decision.reason, linkedWallet: decision.linkedWallet, txHash: decision.txHash, at: decision.at }
+      ? {
+          status: decision.status,
+          score: decision.score,
+          reason: decision.reason,
+          linkedWallet: decision.linkedWallet,
+          txHash: decision.txHash,
+          at: decision.at,
+          /** The reasons, line by line, each with the provider behind it ("nansen", "zerion", …). */
+          explanation: decision.explanation ?? null,
+        }
       : null,
   };
 }
@@ -294,5 +323,6 @@ export async function recordDecision(input: {
   for (const r of open) {
     await db.underwritingRequests.update(r.id, (x) => ({ ...x, state: "done", doneAt: at, error: input.status === "applied" ? null : input.reason }));
   }
+  if (input.txHash) afterResponse("credit: explain", () => explainDecision(id));
 }
 

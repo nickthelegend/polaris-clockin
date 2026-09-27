@@ -59,6 +59,8 @@ export class FakeChain {
   dropNext = false;
   /** Mine every transaction, but let waitForTransactionReceipt time out (the relay answers "submitted"). */
   slowReceipts = false;
+  /** Transactions someone else sent (a CRE report through the forwarder), by hash. */
+  transactions = new Map<Hex, { input: Hex; to?: Address }>();
   /** Hashes the node no longer knows. */
   dropped = new Set<Hex>();
   /** The relayer's mined nonce count, when a test wants it apart from what was sent (a replaced transaction). */
@@ -118,6 +120,8 @@ export class FakeChain {
         return this.sent.length;
       },
       getTransaction: async ({ hash }: { hash: Hex }) => {
+        const known = this.transactions.get(hash);
+        if (known) return { hash, ...known };
         const tx = this.sent.find((t) => t.hash === hash);
         if (!tx || this.dropped.has(hash)) throw new Error(`Transaction with hash "${hash}" could not be found.`);
         return tx;

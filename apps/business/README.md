@@ -224,6 +224,10 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
    `collections.run` callback runs the chain sync at once.
 5. `GET /api/public/credit/{account}`: the line and score from ScoreManager
    now, the latest request, and the workflow's decision with its reason.
+   With `UNDERWRITING_GATEWAY_URL`, the decision also carries the buyer's
+   reasons, line by line with the provider behind each (Nansen, Zerion):
+   the facts the DON attested are read from the report in the forwarder
+   transaction and explained by the gateway's `POST /v1/explain`, once.
 
 ## Environment
 
