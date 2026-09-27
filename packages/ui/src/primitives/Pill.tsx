@@ -99,8 +99,8 @@ export type ChipProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"
   icon?: ReactNode;
   /** A trailing count ("Pending 3"). */
   count?: number;
-  /** `plain` (ref C's timeframe chips) or `outline` (filter chips). */
-  variant?: "plain" | "outline" | "solid";
+  /** `plain` (ref C's timeframe chips), `outline` (filter chips), `solid`, or `pill` (ref E's option chips). */
+  variant?: "plain" | "outline" | "solid" | "pill";
   size?: "sm" | "md";
   chevron?: boolean;
 };
@@ -135,6 +135,11 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
             : "border border-ui-hairline-strong text-ui-text hover:bg-ui-surface-2"),
         variant === "solid" &&
           (selected ? "bg-ui-lime text-ui-on-lime" : "bg-ui-surface-2 text-ui-text hover:bg-ui-surface-3"),
+        // Ref E: an option chip in the status pills' colours (lime when on, a hairline when off).
+        variant === "pill" &&
+          (selected
+            ? "border border-transparent bg-ui-pill-lime text-ui-pill-lime-text"
+            : "border border-ui-hairline-strong text-ui-muted hover:text-ui-text"),
         className,
       )}
       {...props}

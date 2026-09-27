@@ -5,7 +5,7 @@ import { DeltaChip } from "./Chips";
 
 export type BalanceStat = { label: ReactNode; value: ReactNode };
 
-export type BalanceSummaryCardProps = Omit<HTMLAttributes<HTMLDivElement>, "title"> & {
+export type BalanceSummaryCardProps = HTMLAttributes<HTMLDivElement> & {
   /** "Available Balance". */
   label: ReactNode;
   /** "293.0187 ETH". */
