@@ -124,24 +124,30 @@ export function PaymentsView() {
             deltaSuffix="vs the 30 days before"
             deltaLabel={summary && summary.delta === null ? "New" : undefined}
             sample={sample.on}
-            right={
-              <TimeframeChips<StatusFilter>
-                aria-label="Filter by status"
-                options={[
-                  { value: "all", label: `All ${counts.all}` },
-                  { value: "succeeded", label: `Paid ${counts.succeeded}` },
-                  { value: "failed", label: `Failed ${counts.failed}` },
-                ]}
-                value={status}
-                onValueChange={(v) => {
-                  setStatus(v);
-                  setLimit(PAGE);
-                }}
-              />
-            }
           />
 
-          <div className="mt-7 flex flex-col gap-2 sm:flex-row">
+          {/* The table covers every payment, not the figure's 30 days, so its
+              filters sit with it and say so. */}
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+            <h2 className="text-[15px] font-medium">
+              Every payment <span className="font-normal text-ui-muted">· all time</span>
+            </h2>
+            <TimeframeChips<StatusFilter>
+              aria-label="Filter by status, all time"
+              options={[
+                { value: "all", label: `All ${counts.all}` },
+                { value: "succeeded", label: `Paid ${counts.succeeded}` },
+                { value: "failed", label: `Failed ${counts.failed}` },
+              ]}
+              value={status}
+              onValueChange={(v) => {
+                setStatus(v);
+                setLimit(PAGE);
+              }}
+            />
+          </div>
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Input
               hideLabel
               label="Search payments"
@@ -210,10 +216,11 @@ export function PaymentsView() {
           </div>
         </section>
 
-        {/* The summary comes first on phones, and stays in view beside the table from 1280px. */}
+        {/* The Net card comes first on phones (By mode follows the table there),
+            and the summary stays in view beside the table from 1280px. */}
         <aside
           aria-label="Payments summary"
-          className="order-first grid min-w-0 content-start items-start gap-3 md:grid-cols-2 xl:sticky xl:top-6 xl:order-none xl:grid-cols-1 xl:self-start"
+          className="order-first grid min-w-0 content-start items-start gap-3 md:max-w-[560px] xl:sticky xl:top-6 xl:order-none xl:max-w-none xl:self-start"
         >
           {summary ? (
             <BalanceSummaryCard
@@ -233,29 +240,38 @@ export function PaymentsView() {
           ) : (
             <Skeleton shape="card" height={170} />
           )}
-          <PanelCard title="By mode" subtitle="Share of gross, last 30 days" padding="md">
-            {summary ? (
-              <ProgressLegend
-                className="mt-5"
-                direction="column"
-                items={summary.modes.map((m) => ({ label: MODE_LABEL[m.mode], value: m.share, color: MODE_COLOR[m.mode] }))}
-              />
-            ) : (
-              <Skeleton shape="tile" height={140} className="mt-4" />
-            )}
-          </PanelCard>
+          <ByMode summary={summary} className="hidden xl:flex" />
           <div className="hidden gap-3 xl:mt-1 xl:grid">
             <SummaryActions onExport={exportCsv} canExport={filtered.length > 0} />
           </div>
         </aside>
-        {/* Below 1280px the actions follow the table, so the summary alone leads. */}
-        <div className="grid gap-3 md:max-w-[480px] xl:hidden">
-          <SummaryActions onExport={exportCsv} canExport={filtered.length > 0} />
+        {/* Below 1280px By mode and the actions follow the table, so the Net card alone leads. */}
+        <div className="grid items-start gap-3 md:grid-cols-2 xl:hidden">
+          <ByMode summary={summary} />
+          <div className="grid gap-3">
+            <SummaryActions onExport={exportCsv} canExport={filtered.length > 0} />
+          </div>
         </div>
       </div>
 
       <PaymentDrawer payment={open} sample={sample.on} onClose={() => setOpen(null)} />
     </>
+  );
+}
+
+function ByMode({ summary, className }: { summary: ReturnType<typeof useSummary>; className?: string }) {
+  return (
+    <PanelCard title="By mode" subtitle="Share of gross, last 30 days" padding="md" className={className}>
+      {summary ? (
+        <ProgressLegend
+          className="mt-5"
+          direction="column"
+          items={summary.modes.map((m) => ({ label: MODE_LABEL[m.mode], value: m.share, color: MODE_COLOR[m.mode] }))}
+        />
+      ) : (
+        <Skeleton shape="tile" height={140} className="mt-4" />
+      )}
+    </PanelCard>
   );
 }
 
