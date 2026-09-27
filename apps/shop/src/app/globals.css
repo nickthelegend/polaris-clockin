@@ -243,6 +243,24 @@
   }
 }
 
+/* The hero's words rise into place on first paint: CSS, so they don't wait for hydration or need JavaScript. */
+@layer components {
+  .hero-rise {
+    animation: hero-rise 1s var(--ease-out-expo) var(--rise-delay, 0s) both;
+  }
+  @keyframes hero-rise {
+    from {
+      opacity: 0;
+      transform: translateY(18px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-rise {
+      animation: none;
+    }
+  }
+}
+
 /* Photographs open like a shutter as they come into view (see components/reveal.tsx). */
 @layer components {
   .reveal {
