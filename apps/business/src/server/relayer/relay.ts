@@ -27,7 +27,7 @@ import { getConfig, type ChainConfig } from "../env";
 import { HttpError } from "../http";
 import { consume, LIMITS } from "../ratelimit";
 import { dropAfterMs } from "../ingest/sync";
-import { orderKeyOf, openSessionForPayment } from "../sessions/sessions";
+import { ensureQuoted, orderKeyOf, openSessionForPayment } from "../sessions/sessions";
 import { periodSeconds } from "../sessions/params";
 import { carry, fromRecord, type RelayResult } from "./carry";
 import { address, bad, bytes32, deadline, signature, text, uint, vrs } from "./parse";
@@ -222,6 +222,7 @@ async function pay(body: Record<string, unknown>, chain: ChainConfig): Promise<R
   const { v, r, s } = vrs(sig);
   const relayId = relayIdOf("pay", sig);
   await assertNothingInFlight(session.id, relayId);
+  await ensureQuoted(session, merchant);
   const result = await carry({
     kind: "pay",
     relayId,
@@ -279,6 +280,7 @@ async function openPlan(body: Record<string, unknown>, chain: ChainConfig): Prom
   countVerified(buyer);
   const relayId = relayIdOf("openPlan", sig, permitSig ?? "0x");
   await assertNothingInFlight(session.id, relayId);
+  await ensureQuoted(session, merchant);
   const result = await carry({
     kind: "openPlan",
     relayId,
@@ -334,6 +336,7 @@ async function subscribe(body: Record<string, unknown>, chain: ChainConfig): Pro
   countVerified(buyer);
   const relayId = relayIdOf("subscribe", sig, permitSig ?? "0x");
   await assertNothingInFlight(session.id, relayId);
+  await ensureQuoted(session, merchant);
   const result = await carry({
     kind: "subscribe",
     relayId,

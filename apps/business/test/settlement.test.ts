@@ -74,7 +74,7 @@ describe("the session's price is pinned on chain before the session is handed ou
     expect(await getDb().sessions.count()).toBe(0);
   });
 
-  it("pins every payment link session too, and bounds how fast one link can be opened", async () => {
+  it("pins a payment link session's price when it is paid, not when anyone opens it, and bounds how fast one link can be opened", async () => {
     await getDb().links.insert({
       id: "pl_ratelimited01",
       merchantId: merchant.userId,
@@ -90,8 +90,26 @@ describe("the session's price is pinned on chain before the session is handed ou
       createdAt: new Date().toISOString(),
     });
     const open = () => openLinkRoute(request("POST", "/api/public/links/pl_ratelimited01/checkout"), params({ id: "pl_ratelimited01" }));
-    expect((await open()).status).toBe(201);
-    expect(env.chain.quotes[0]?.amount).toBe(15_000_000n);
+    const opened = await json(await open());
+    expect(opened.status).toBe(201);
+    // Opening a public link costs the relayer nothing: no transaction until someone pays.
+    expect(env.chain.sent).toHaveLength(0);
+
+    // A verified payment pins the price first, then pays.
+    const pub = opened.body.data;
+    const auth = await signPayNow(buyer, merchant.account.address, pub.chain.orderId, 15_000_000n);
+    const paid = await json(await relayRoute(request("POST", "/api/relay", { body: { type: "pay", sessionId: pub.id, buyer: buyer.address, ...auth } }), params({})));
+    expect(paid.status).toBe(200);
+    expect(env.chain.sent.map((t) => t.functionName)).toEqual(["quoteOrder", "pay"]);
+    expect(env.chain.quotes[0]).toMatchObject({ orderKey: pub.chain.orderKey, amount: 15_000_000n });
+    expect((await getDb().sessions.get(pub.id))?.chain.quote).toMatchObject({ amountUnits: "15000000" });
+
+    // A junk signature never gets as far as the quote.
+    const other = (await json(await open())).body.data;
+    const junk = { ...(await signPayNow(buyer, merchant.account.address, other.chain.orderId, 15_000_000n)), signature: `0x${"11".repeat(65)}` };
+    expect((await relayRoute(request("POST", "/api/relay", { body: { type: "pay", sessionId: other.id, buyer: buyer.address, ...junk } }), params({}))).status).toBe(400);
+    expect(env.chain.quotes).toHaveLength(1);
+
     const statuses: number[] = [];
     for (let i = 0; i < 12; i++) statuses.push((await open()).status);
     expect(statuses).toContain(429);

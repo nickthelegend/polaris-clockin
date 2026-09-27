@@ -94,7 +94,18 @@ async function settleExpiry(s: CheckoutSessionRecord): Promise<CheckoutSessionRe
 export async function createSession(
   merchant: MerchantRecord,
   input: CreateSessionInput,
-  options: { linkId?: string | null; ttlSeconds?: number; livemode?: boolean } = {},
+  options: {
+    linkId?: string | null;
+    ttlSeconds?: number;
+    livemode?: boolean;
+    /**
+     * When to pin the price on chain: `now` (a merchant's server created the
+     * session), or `on-pay` (anyone opened a public payment link: pinned by
+     * the relay once a buyer's signature has verified, so opening links
+     * costs the relayer nothing).
+     */
+    quote?: "now" | "on-pay";
+  } = {},
 ): Promise<CheckoutSessionRecord> {
   const config = getConfig();
   const chain = requireChain();
@@ -113,7 +124,7 @@ export async function createSession(
     });
   }
 
-  const quote = await pinPrice(merchant, id, orderKey, centsToUnits(input.amountCents), chainOrderId);
+  const quote = options.quote === "on-pay" ? null : await pinPrice(merchant, id, orderKey, centsToUnits(input.amountCents), chainOrderId);
 
   const now = new Date();
   const record: CheckoutSessionRecord = {
@@ -185,6 +196,17 @@ async function pinPrice(merchant: MerchantRecord, sessionId: string, orderKey: H
       headers: { "Retry-After": "2" },
     });
   }
+}
+
+/**
+ * Pin a session's price before its first payment is relayed, if it isn't
+ * pinned yet (a payment-link session, see `createSession`). Called by the
+ * relay after the buyer's signature has verified.
+ */
+export async function ensureQuoted(session: CheckoutSessionRecord, merchant: MerchantRecord): Promise<void> {
+  if (session.chain.quote || getConfig().relayer.mode === "off") return;
+  const quote = await pinPrice(merchant, session.id, session.chain.orderKey, centsToUnits(session.amountCents), session.chain.orderId);
+  await getDb().sessions.update(session.id, (s) => ({ ...s, chain: { ...s.chain, quote } }));
 }
 
 export async function retrieveSession(merchant: MerchantRecord, id: string): Promise<CheckoutSessionRecord> {
@@ -519,7 +541,7 @@ export async function openLink(linkId: string): Promise<CheckoutSessionRecord> {
   }
   const merchant = await db.merchants.get(link.merchantId);
   if (!merchant) throw new HttpError(404, "not_found", "This payment link doesn't exist.");
-  // Opening a link pins a price on chain (one relayer transaction): bounded per link as well as per IP.
+  // Each open makes a session (the price is pinned on chain only when someone pays it): bounded per link and per IP.
   consume(LIMITS.linkOpen, link.id);
   const modes = link.modes.filter((m) => m !== "subscribe" || link.usage === "reusable");
   return createSession(
@@ -535,6 +557,6 @@ export async function openLink(linkId: string): Promise<CheckoutSessionRecord> {
       orderId: `link-${link.id}-${newId("o", 10).slice(2)}`,
       metadata: { linkId: link.id },
     },
-    { linkId: link.id, ttlSeconds: 3600 },
+    { linkId: link.id, ttlSeconds: 3600, quote: "on-pay" },
   );
 }
