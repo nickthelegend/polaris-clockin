@@ -347,27 +347,31 @@ browser.
 
 ### In the CRE workflow
 
+The workflow that runs this is `workflows/src/underwriting/` (package
+`@polaris/cre-workflows`; see its [README](../../workflows/README.md)). In
+node mode each node drives the recipes with `runSync`, sending every request
+through CRE's HTTP client with `cacheSettings: { store: true, maxAge: "300s" }`
+(the SDK 1.22.0 shape; `{ readFromCache, maxAgeMs }` from the docs does not
+typecheck) and the key added per provider; then `underwrite()` derives the
+Facts, and the DON agrees on them field by field:
+
 ```ts
-import { accountRecipe, linkedRecipe, runSync, underwrite, type Reply } from "@polarispay/underwriting/core";
+import { accountRecipe, all, linkedRecipe, runSync, underwrite } from "@polarispay/underwriting/core";
 
 const now = Math.floor(runtime.now().getTime() / 1000); // DON time, identical on every node
-// In node mode: send each request the recipe asks for, adding the key from secrets.
-const send = (spec): Reply => {
-  const res = http.sendRequest(nodeRuntime, { url: withKey(spec), method: spec.method, body: b64(spec.body),
-    multiHeaders: headers(spec), cacheSettings: { readFromCache: true, maxAgeMs: 600_000 } }).result();
-  return { ok: true, status: res.statusCode, body: JSON.parse(new TextDecoder().decode(res.body)) };
-};
-const account = runSync(accountRecipe(user, { now, accountBalance }), send);   // accountBalance: two EVM reads
-const linked = wallet ? runSync(linkedRecipe(wallet, { now }), send) : null;
-// ...consensus on the evidence (identical aggregation: the cache makes every node's replies the same)...
-const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked?.evidence, linkVerified });
-if (!out.final) throw new Error(`not final: ${out.missing.join(", ")}`); // no report; the app retries
+const [account, linked] = runSync(all([accountRecipe(user, { now, accountBalance }), linkedRecipe(wallet, { now })]), send);
+const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked.evidence, linkVerified });
+if (!out.final) return; // no report: missing evidence is never attested as zero
 if (!out.attest) return { status: "thin", gaps: out.decision.thinFile }; // a thin file: no report, no retry
-runtime.report(prepareReportRequest(out.report));                       // abi.encode(uint8 2, [(user, linkedWallet, Facts)])
+runtime.report(prepareReportRequest(out.report)); // abi.encode(uint8 2, [(user, linkedWallet, Facts)])
 ```
 
 `linkVerified` is the workflow's own check of the wallet's signature over
-`linkMessage({ account, wallet, issuedAt, nonce })` (viem's `verifyMessage`).
+`linkMessage(...)`, done before any provider call. The report the workflow
+signs is the deployed `UnderwritingReceiver`'s batch,
+`abi.encode(uint8 2, (address user, address linkedWallet, Facts)[])`, not
+`encodeUnderwriteReport`'s single-item `(uint8, address, Facts)`; the Facts
+words are the same.
 
 ## Known unknowns
 

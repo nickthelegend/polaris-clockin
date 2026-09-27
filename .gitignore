@@ -30,3 +30,12 @@ indexer/.envio/
 # CRE
 cre/**/.cre/
 cre/**/tmp/
+# CRE workflows (workflows/): the CLI, local chain state and build output
+workflows/.tools/
+workflows/.local/
+workflows/*/config.local.json
+workflows/underwriting/payload.json
+workflows/**/*.wasm
+workflows/**/.cre/
+workflows/**/tmp/
+workflows/**/.cre_build_tmp.js

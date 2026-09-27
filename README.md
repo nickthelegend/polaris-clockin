@@ -94,6 +94,7 @@ bars, gradient lines), cards, bottom sheets, drawers and dialogs.
 | `packages/contracts` | Solidity: loan engine, payments, score manager, collateral vault, merchant registry, batch settlement, plus the Metropolis additions |
 | `packages/underwriting` | Nansen-powered underwriting: provider clients, the Facts the DON attests, the score and Pay in 4 decision, plain-language reasons. See its [README](packages/underwriting/README.md) |
 | `apps/gateway` | Serves the underwriting API on port 3510. See its [README](apps/gateway/README.md) |
+| `workflows` | The Chainlink CRE workflows: `polaris-collections` (cron) and `polaris-underwrite` (HTTP), the credit engine's orchestration layer. See its [README](workflows/README.md) |
 | `packages/sdk` | `polarispay-sdk` |
 | `docs/plan.md` | The hackathon plan: positioning, sponsors, scope, schedule |
 
@@ -109,6 +110,8 @@ pnpm install
 pnpm contracts:test
 pnpm --filter @polarispay/underwriting test   # runs on labelled fixtures; no keys needed
 pnpm --filter @polarispay/gateway start       # the underwriting API on :3510
+pnpm --filter @polaris/cre-workflows test     # the CRE workflows on the SDK's test runtime
+pnpm --filter @polaris/cre-workflows e2e:local  # both workflows against real contracts on a local node
 ```
 
 *TBD: deployment to Monad testnet, the apps and services.*
@@ -165,6 +168,8 @@ in `packages/brand` are the team's own artwork.
 - [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) (MIT)
 - [Hardhat](https://hardhat.org) (MIT)
 - [ethers](https://github.com/ethers-io/ethers.js) (MIT)
+- [Chainlink CRE SDK](https://www.npmjs.com/package/@chainlink/cre-sdk) (BUSL-1.1, a dependency of `workflows/`), the CRE CLI and `ReceiverTemplate.sol` (MIT)
+- [viem](https://viem.sh), [zod](https://zod.dev), [@noble/curves and @noble/hashes](https://paulmillr.com/noble/) (MIT)
 
 ## License
 

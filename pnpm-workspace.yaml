@@ -2,3 +2,9 @@ packages:
   - "packages/*"
   - "apps/*"
   - "services/*"
+  - "workflows"
+
+# Packages whose install scripts may run. `bun` puts its platform binary in
+# place; the CRE workflows compile to WASM with it (workflows/README.md).
+onlyBuiltDependencies:
+  - bun

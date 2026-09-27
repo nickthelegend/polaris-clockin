@@ -1,0 +1,26 @@
+# Chainlink CRE project settings (https://docs.chain.link/cre/reference/project-configuration-ts).
+# Every `cre` command runs from this folder, the project root, with `-T <target>`.
+# Target names must match the ones in each workflow's workflow.yaml.
+# RPC URLs may use ${VAR} from ./.env or the shell.
+
+# A local Hardhat node standing in for Monad testnet (chain id 10143, port 8620),
+# with Chainlink's simulation forwarder address planted on it:
+#   pnpm --filter @polaris/cre-workflows chain:local
+# `cre workflow simulate --broadcast` against this target never touches a public chain.
+local-settings:
+  rpcs:
+    - chain-name: monad-testnet
+      url: http://127.0.0.1:8620
+
+# Monad testnet through Chainlink's simulation forwarder: `cre workflow simulate`.
+staging-settings:
+  rpcs:
+    - chain-name: monad-testnet
+      url: https://testnet-rpc.monad.xyz
+
+# Monad testnet through the production KeystoneForwarder: `cre workflow deploy`
+# once Early Access is granted. Use a dedicated RPC (QuickNode, Dwellir).
+production-settings:
+  rpcs:
+    - chain-name: monad-testnet
+      url: ${MONAD_TESTNET_RPC_URL}

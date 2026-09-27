@@ -1,0 +1,21 @@
+{
+  "chainSelectorName": "monad-testnet",
+  "receiver": null,
+  "scoreManager": null,
+  "forwarder": "0xF8344CFd5c43616a4366C34E3EEE75af79a74482",
+  "stablecoins": ["0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC", "0x534b2f3A21130d7a60830c2Df862319e593943A3"],
+  "authorizedKeys": null,
+  "secrets": { "nansen": "NANSEN_API_KEY", "zerion": "ZERION_API_KEY", "etherscan": "ETHERSCAN_API_KEY" },
+  "recipe": {
+    "accountZerionChain": "monad-test-v2",
+    "accountChainId": 10143,
+    "historyRpcUrls": ["https://ethereum-rpc.publicnode.com", "https://mainnet.base.org"],
+    "liquidationChainIds": [1, 42161, 137],
+    "useNansenLabels": false
+  },
+  "httpBudget": 15,
+  "cacheMaxAgeSeconds": 300,
+  "allowPartial": false,
+  "gas": { "overhead": "300000", "headroomBps": 1500, "min": "400000", "max": "3000000" },
+  "callback": null
+}
