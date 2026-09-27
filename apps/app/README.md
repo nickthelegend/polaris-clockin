@@ -255,10 +255,18 @@ stand-in, so dropping the files in needs no code change:
   list is empty (the demo's sample people have made-up addresses).
 - Send-by-link activity: the API doesn't record sends yet (the Envio
   indexer's `send(linkKey)` would); a link's own state is read from the chain.
-- The `/pay/[id]` screen doesn't yet call `src/lib/checkout-return.ts`, so a
-  popup checkout doesn't post its result to the merchant page.
 - *Raise your limit* connects the history wallet through the browser's own
   provider (an extension, or a wallet app's browser); WalletConnect for a
-  wallet on another device is not wired yet.
+  wallet on another device is not wired yet. On `pnpm demo:local` (chain
+  31337, `NEXT_PUBLIC_LOCAL_DEMO=1`) a stand-in key signs when the browser
+  has no wallet, and the screen says its history is a sample.
 - Receipts only you can read (plan §3.5) and the opt-in recovery key.
-- Local-currency rates are placeholders.
+- Local-currency figures use fixed sample rates, and say "sample rate" next to
+  every one; a live feed is not wired.
+
+The hosted checkout (`/pay/[id]`) speaks polarispay-sdk's v1 postMessage
+protocol (`src/lib/checkout-return.ts`): `ready` on load (`expired` for an
+expired session), `completed` the moment the payment is final, `canceled`
+when the buyer backs out; a popup closes itself, a redirect goes to the
+session's `successUrl` or `cancelUrl`. It opens on the mode the merchant's
+page chose (the session's first mode).

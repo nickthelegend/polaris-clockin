@@ -24,8 +24,8 @@ Monad: one decides who gets credit, the other collects what is owed.
                          │  one signed report, gas = its own estimate + 15%          │      ├▶ chargeDue
                          │  receipt read back: skip reasons → dunning events         │      └▶ liquidate
                          └───────────────────────────────┬───────────────────────────┘
-                                                         └──▶ signed callback for the Polaris API
-                                                              (no API route receives it yet, see Status)
+                                                         └──▶ signed callback to the Polaris API
+                                                              (POST /api/cre/callback in apps/business)
                                                               installment.failed (allowance_lost | insufficient_funds) …
 ```
 
@@ -59,7 +59,7 @@ Monad: one decides who gets credit, the other collects what is owed.
 | Bounty requirement (Chainlink CRE, plan §3) | Where it is met |
 |---|---|
 | Build a CRE workflow | [`collections/main.ts`](collections/main.ts) → [`src/collections/workflow.ts`](src/collections/workflow.ts), [`underwriting/main.ts`](underwriting/main.ts) → [`src/underwriting/workflow.ts`](src/underwriting/workflow.ts); `project.yaml`, `workflow.yaml`, `secrets.yaml`, per-target configs |
-| Used as an orchestration layer | Cron + HTTP triggers; EVM reads (`checkTasks`, `profileOf`, `linkedUserOf`, `balanceOf`, gas estimates, receipts); HTTP with consensus (Envio, Nansen, Zerion, Etherscan, RPC); signed reports written through the forwarder; a signed callback for the Polaris API (sent and verifiable; the API route that consumes it is not written yet) |
+| Used as an orchestration layer | Cron + HTTP triggers; EVM reads (`checkTasks`, `profileOf`, `linkedUserOf`, `balanceOf`, gas estimates, receipts); HTTP with consensus (Envio, Nansen, Zerion, Etherscan, RPC); signed reports written through the forwarder; a signed callback the Polaris API verifies and acts on (`apps/business` `POST /api/cre/callback`) |
 | Simulate or deploy | `cre workflow simulate … --broadcast` against the local Monad stand-in or Monad testnet (needs `cre login`, see below); `cre workflow build` compiles both to WASM without a login |
 
 ## One command
@@ -393,9 +393,10 @@ with against what it used:
 | `cre workflow simulate` | needs `cre login` (a CRE account): not run here. The commands are above; `local-settings` keeps `--broadcast` off public chains |
 | Monad testnet | waits for `deploy:monad` (the deployer is unfunded), then `configure staging` |
 | Deploy to the DON | waits for Early Access |
-| The Polaris API side of the callback | **not written**: no route in `apps/business` receives it yet. `verifyCallback` and the event types are exported for one (`POST /api/cre/callback` on the API's branch, verifying with the secret the workflows hold as `POLARIS_CALLBACK_SECRET`). Until it exists, the committed configs set `callback: null`; dunning runs on the business app's own chain sync of `TaskSkipped`, and a new credit line reaches the app as `UnderwritingApplied` on chain. A `thin`, `incomplete` or `rejected` run leaves nothing on chain, so until the route exists the app cannot tell the buyer why no line opened |
-| Firing `polaris-underwrite` from the product | not wired: `triggerSimulatedUnderwriting` and `underwriteConsentMessage` are exported, but no API route calls them yet (an authenticated `POST /api/credit/underwrite` on the API's branch: the app has the buyer's account sign the consent, the route queues one run per 30 s) |
-| The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` (snapshot at metropolis/indexer 3987062 until that branch merges; then delete `test/fixtures/indexer/`) |
+| The Polaris API side of the callback | done: `apps/business` `POST /api/cre/callback` verifies the HMAC (`POLARIS_CRE_CALLBACK_SECRET`), records `credit.underwritten` / `credit.refused` / `credit.thin` for the app, and runs the chain sync on `collections.run`. The committed configs keep `callback: null` until a deployment has an API URL to put there |
+| Firing `polaris-underwrite` from the product | done: the app's **Raise your limit** (Bring your history) signs the consent and the history wallet's proof; `apps/business` `POST /api/credit/underwrite` verifies both and fires the HTTP trigger at most once per 30 s (`CRE_UNDERWRITING_TRIGGER_URL`) |
+| Without a CRE login | `pnpm --filter @polaris/cre-workflows trigger:local` (`scripts/local-trigger.mjs`) serves the same trigger URL on a local chain: each request runs this `polaris-underwrite` handler on the SDK's test runtime (fixture evidence, the local forwarder) and posts its signed callback. `pnpm demo:local` starts it; `docs/demo` shows a run opening a $1,000 line |
+| The indexer schema | `DUE_CANDIDATES_QUERY` is the indexer client's `DUE_CANDIDATES`, validated against `packages/indexer/schema.graphql` (the test still reads a snapshot in `test/fixtures/indexer/`) |
 | Dunning backoff without the indexer | not applied: the chain fallback has no failure history, so it retries a short buyer every run. Keep the indexer configured in production; a run that falls back says so (`indexerError`, and a callback) |
 
 ## Limits that shaped this (docs/research/cre.md §8)
