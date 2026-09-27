@@ -3,7 +3,8 @@
 // The mock of the Polaris API (src/app/api/dev-polaris) lives in *.dev.ts(x)
 // files that next.config.ts only treats as routes for `next dev`. This check
 // proves it: after `next build`, no route manifest and no compiled route may
-// mention dev-polaris.
+// mention dev-polaris, and no server chunk may carry the mock's code (its
+// secrets holder, its API paths) or the constant secret it used to ship with.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -29,8 +30,27 @@ if (existsSync(appDir)) {
   problems.push("no .next/server/app: run next build first");
 }
 
+// The mock's code, or a secret it once shipped with, anywhere in the server bundle.
+const MARKERS = ["whsec_halcyon", "halcyonDevMock", "__halcyonDevMockSecrets", "/api/dev-polaris/api/v1"];
+const serverDir = path.join(dist, "server");
+if (existsSync(serverDir)) {
+  const scan = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) scan(full);
+      else if (/\.(js|mjs|cjs|json|html|rsc)$/.test(entry.name)) {
+        const text = readFileSync(full, "utf8");
+        for (const marker of MARKERS) {
+          if (text.includes(marker)) problems.push(`${path.relative(dist, full)} contains "${marker}"`);
+        }
+      }
+    }
+  };
+  scan(serverDir);
+}
+
 if (problems.length > 0) {
   console.error("The dev mock of the Polaris API is in this production build:\n  " + problems.join("\n  "));
   process.exit(1);
 }
-console.log("OK: no dev-polaris routes in the production build.");
+console.log("OK: no dev-polaris routes or dev mock code in the production build.");

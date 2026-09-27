@@ -11,6 +11,7 @@ import {
   type WebhookEvent,
 } from "polarispay-sdk/server";
 
+import { devMockBuild, devMockInternalOrigin, devMockSecrets } from "./dev-polaris/guard";
 import type { BrowserPolarisConfig } from "./polaris-config";
 
 export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "polarispay-sdk/server";
@@ -34,14 +35,14 @@ type Address = `0x${string}`;
  *
  * In `next dev` with POLARIS_API_BASE unset, the shop talks to its own dev
  * mock of the Polaris API under /api/dev-polaris instead. That can't happen
- * in production: NODE_ENV must be "development", and the mock's routes aren't
- * compiled into a production build at all (see next.config.ts).
+ * in production: whether the build may use the mock is decided when it is
+ * built (HALCYON_DEV_MOCK, inlined by next.config.ts), the mock's routes
+ * aren't compiled into a production build at all, and its secrets are random
+ * per dev server process, never constants in the repository.
  */
 
-// Keys are letters and digits after the prefix: the SDK refuses anything else.
-export const DEV_MOCK_SECRET_KEY = "sk_test_halcyonDevMock0001";
-export const DEV_MOCK_PUBLISHABLE_KEY = "pk_test_halcyonDevMock0001";
-export const DEV_MOCK_WEBHOOK_SECRET = "whsec_halcyon_dev_mock";
+/** Public by design (the relayer takes it); the mock's secret key and webhook secret are random, see devMockSecrets(). */
+export const DEV_MOCK_PUBLISHABLE_KEY = "pk_test_devmock0001";
 export const DEV_MOCK_MERCHANT: Address = "0x4a1c000000000000000000000000000000000000";
 export const DEV_MOCK_PATH = "/api/dev-polaris";
 
@@ -67,17 +68,21 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 export function resolvePolarisConfig(env: Env, origin: string): PolarisConfig {
   const apiBase = env.POLARIS_API_BASE?.trim();
   if (!apiBase) {
-    if (env.NODE_ENV !== "development") {
+    // `devMockBuild()` is a literal "0" === "1" in a production bundle, so this branch can't run there.
+    if (!devMockBuild() || env.NODE_ENV !== "development") {
       return { ok: false, reason: "POLARIS_API_BASE isn't set. Payments are off until it points at the Polaris API." };
     }
-    const mockBase = `${origin}${DEV_MOCK_PATH}`;
+    // The shop's server reaches its mock on a fixed local origin, never one a request names.
+    const mockBase = `${devMockInternalOrigin(env)}${DEV_MOCK_PATH}`;
+    // Only the mock's own random secrets: a real POLARIS_SECRET_KEY is never sent to the mock.
+    const secrets = devMockSecrets();
     return {
       ok: true,
       target: "dev-mock",
       baseUrl: mockBase,
-      secretKey: env.POLARIS_SECRET_KEY?.trim() || DEV_MOCK_SECRET_KEY,
-      webhookSecret: env.POLARIS_WEBHOOK_SECRET?.trim() || DEV_MOCK_WEBHOOK_SECRET,
-      publishableKey: env.NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY?.trim() || DEV_MOCK_PUBLISHABLE_KEY,
+      secretKey: secrets.secretKey,
+      webhookSecret: secrets.webhookSecret,
+      publishableKey: DEV_MOCK_PUBLISHABLE_KEY,
       // The mock serves its test checkout from this app, so that is the origin messages come from.
       checkoutOrigin: origin,
       relayUrl: `${mockBase}/api/v1/relay`,
@@ -91,6 +96,8 @@ export function resolvePolarisConfig(env: Env, origin: string): PolarisConfig {
     ["NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY", env.NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY],
     ["NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN", env.NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN],
     ["POLARIS_MERCHANT_ADDRESS", env.POLARIS_MERCHANT_ADDRESS],
+    // In production, success and cancel URLs come from SHOP_URL, never from a request's Host header.
+    ...(env.NODE_ENV === "production" ? [["SHOP_URL", env.SHOP_URL] as const] : []),
   ].filter(([, value]) => !value?.trim());
   if (missing.length > 0) {
     return { ok: false, reason: `Set ${missing.map(([name]) => name).join(", ")} to take payments through Polaris.` };

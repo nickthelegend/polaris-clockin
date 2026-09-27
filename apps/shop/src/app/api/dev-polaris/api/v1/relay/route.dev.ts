@@ -1,8 +1,7 @@
 import { after } from "next/server";
 
-import { devMockEnabled, notFound } from "@/lib/dev-polaris/guard";
+import { devMockEnabled, devMockInternalOrigin, notFound } from "@/lib/dev-polaris/guard";
 import { apiError, deliver, mockKeys, relayPayment, type RelayRequest } from "@/lib/dev-polaris/mock";
-import { requestOrigin } from "@/lib/origin";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +25,8 @@ export async function POST(req: Request) {
   }
   const result = await relayPayment((body ?? {}) as Partial<RelayRequest>);
   if (!result.ok) return apiError(result.status, "invalid_request_error", result.code, result.message);
-  const webhookUrl = `${requestOrigin(req)}/api/webhooks/polaris`;
+  // Never a Host the caller chose: signed events only ever go to this server.
+  const webhookUrl = `${devMockInternalOrigin()}/api/webhooks/polaris`;
   after(async () => {
     // Monad finalises in under a second; the mock waits about that long.
     await new Promise((r) => setTimeout(r, 900));

@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Halcyon, a demo store that takes payment through Polaris: Pay now, Pay in 4 on Polaris credit, subscriptions, and direct wallet payment.",
   "scripts": {
-    "dev": "pnpm --filter polarispay-sdk build && next dev -p 3600",
+    "dev": "pnpm --filter polarispay-sdk build && next dev -H 127.0.0.1 -p 3600",
     "build": "pnpm --filter polarispay-sdk build && next build && node scripts/assert-no-dev-mock.mjs",
     "start": "next start -p 3600",
     "lint": "eslint .",

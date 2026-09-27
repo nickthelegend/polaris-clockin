@@ -5,8 +5,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import nextConfig from "../next.config";
-import { devMockEnabled } from "@/lib/dev-polaris/guard";
-import { MOCK_DOMAIN, MOCK_PAYMENTS, completeSession, createSession, relayPayment, resetMockState, type RelayRequest } from "@/lib/dev-polaris/mock";
+import { devMockEnabled, devMockSecrets } from "@/lib/dev-polaris/guard";
+import { MOCK_DOMAIN, MOCK_PAYMENTS, completeSession, createSession, mockKeys, relayPayment, resetMockState, type RelayRequest } from "@/lib/dev-polaris/mock";
 import { browserConfig, resolvePolarisConfig } from "@/lib/polaris";
 
 const buyer = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
@@ -20,26 +20,53 @@ describe("the dev mock can't exist in production", () => {
     const dev = nextConfig(PHASE_DEVELOPMENT_SERVER);
     expect(dev.pageExtensions).toContain("dev.ts");
     expect(dev.pageExtensions).toContain("dev.tsx");
+    expect(dev.env).toEqual({ HALCYON_DEV_MOCK: "1" });
     for (const phase of [PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER]) {
       expect(nextConfig(phase).pageExtensions).toEqual(["tsx", "ts"]);
+      // Inlined into the bundle: a production build can't switch the mock on at runtime.
+      expect(nextConfig(phase).env).toEqual({ HALCYON_DEV_MOCK: "0" });
     }
   });
 
-  it("answers only in development, and never over a configured backend", () => {
+  it("answers only in a development build under development, and never over a configured backend", () => {
+    vi.stubEnv("HALCYON_DEV_MOCK", "1");
     expect(devMockEnabled({ NODE_ENV: "development" })).toBe(true);
     expect(devMockEnabled({ NODE_ENV: "production" })).toBe(false);
     expect(devMockEnabled({ NODE_ENV: "test" })).toBe(false);
     expect(devMockEnabled({ NODE_ENV: "development", POLARIS_API_BASE: "http://localhost:3100" })).toBe(false);
+    // A production build started with NODE_ENV=development (the review's forgery) still has no mock.
+    vi.stubEnv("HALCYON_DEV_MOCK", "0");
+    expect(devMockEnabled({ NODE_ENV: "development" })).toBe(false);
   });
 
-  it("is never chosen as the Polaris backend outside development", () => {
+  it("is never chosen as the Polaris backend outside a development build", () => {
+    vi.stubEnv("HALCYON_DEV_MOCK", "1");
     expect(resolvePolarisConfig({ NODE_ENV: "production" }, "https://shop.example")).toMatchObject({ ok: false });
     expect(resolvePolarisConfig({ NODE_ENV: "test" }, "https://shop.example")).toMatchObject({ ok: false });
-    expect(resolvePolarisConfig({ NODE_ENV: "development" }, "http://localhost:3600")).toMatchObject({
-      ok: true,
-      target: "dev-mock",
-      baseUrl: "http://localhost:3600/api/dev-polaris",
-    });
+    expect(resolvePolarisConfig({ NODE_ENV: "development" }, "http://localhost:3600")).toMatchObject({ ok: true, target: "dev-mock" });
+    vi.stubEnv("HALCYON_DEV_MOCK", "0");
+    expect(resolvePolarisConfig({ NODE_ENV: "development" }, "http://localhost:3600")).toMatchObject({ ok: false });
+  });
+
+  it("reaches the mock on a fixed local origin, whatever Host a request names", () => {
+    vi.stubEnv("HALCYON_DEV_MOCK", "1");
+    for (const origin of ["http://localhost:3600", "http://attacker.example:3634"]) {
+      expect(resolvePolarisConfig({ NODE_ENV: "development" }, origin)).toMatchObject({ baseUrl: "http://127.0.0.1:3600/api/dev-polaris" });
+    }
+    expect(resolvePolarisConfig({ NODE_ENV: "development", PORT: "3611" }, "http://x")).toMatchObject({ baseUrl: "http://127.0.0.1:3611/api/dev-polaris" });
+  });
+
+  it("uses random per-process secrets, and never sends the mock a real key", () => {
+    vi.stubEnv("HALCYON_DEV_MOCK", "1");
+    const env = { NODE_ENV: "development", POLARIS_SECRET_KEY: "sk_test_realkey123", POLARIS_WEBHOOK_SECRET: "whsec_real" };
+    const config = resolvePolarisConfig(env, "http://localhost:3600");
+    if (!config.ok) throw new Error(config.reason);
+    expect(config.secretKey).not.toBe("sk_test_realkey123");
+    expect(config.webhookSecret).not.toBe("whsec_real");
+    expect(config.secretKey).toBe(devMockSecrets().secretKey);
+    expect(config.webhookSecret).toMatch(/^whsec_[0-9a-f]{48}$/);
+    expect(config.secretKey).toMatch(/^sk_test_[0-9a-f]{32}$/);
+    expect(mockKeys(env)).toMatchObject({ secretKey: config.secretKey, webhookSecret: config.webhookSecret });
   });
 
   it("uses a real backend whenever POLARIS_API_BASE is set, and demands every key for it", () => {

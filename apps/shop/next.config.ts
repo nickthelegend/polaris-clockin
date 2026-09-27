@@ -10,6 +10,11 @@ import type { NextConfig } from "next";
  * has no mock to reach, whatever the environment says. Each mock route also
  * refuses to answer outside NODE_ENV=development, and
  * scripts/assert-no-dev-mock.mjs fails the build if one ever slips in.
+ *
+ * HALCYON_DEV_MOCK is inlined into the bundle when it's built ("1" for `next
+ * dev`, "0" for `next build`), so the shop's own switch to the mock (in
+ * src/lib/polaris.ts) is decided at build time too, not by the NODE_ENV a
+ * production server happens to start with.
  */
 const PAGE_EXTENSIONS = ["tsx", "ts"];
 const DEV_ONLY_EXTENSIONS = ["dev.tsx", "dev.ts"];
@@ -32,6 +37,7 @@ export default function config(phase: string): NextConfig {
     // The demo is recorded against `next dev`; keep Next's badge out of the shot
     // (it also sits where the "Built with Polaris" button does).
     devIndicators: false,
+    env: { HALCYON_DEV_MOCK: dev ? "1" : "0" },
     pageExtensions: dev ? [...DEV_ONLY_EXTENSIONS, ...PAGE_EXTENSIONS] : PAGE_EXTENSIONS,
     // The workspace root, so a parent directory's lockfile is never mistaken for it.
     turbopack: { root: path.resolve(process.cwd(), "../..") },

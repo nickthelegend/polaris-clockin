@@ -6,7 +6,9 @@ import { MONAD_TESTNET, quotePayIn4, type CheckoutMode, type CheckoutSession, ty
 import { signWebhookPayload } from "polarispay-sdk/server";
 import { encodePacked, keccak256, recoverTypedDataAddress, type Hex } from "viem";
 
-import { DEV_MOCK_MERCHANT, DEV_MOCK_PATH, DEV_MOCK_PUBLISHABLE_KEY, DEV_MOCK_SECRET_KEY, DEV_MOCK_WEBHOOK_SECRET, payInFourApr } from "@/lib/polaris";
+import { DEV_MOCK_MERCHANT, DEV_MOCK_PATH, DEV_MOCK_PUBLISHABLE_KEY, payInFourApr } from "@/lib/polaris";
+
+import { devMockSecrets } from "./guard";
 
 type Address = `0x${string}`;
 
@@ -57,12 +59,18 @@ export interface MockKeys {
   merchant: Address;
 }
 
+/**
+ * The mock's keys. The secret key and webhook secret are random for this dev
+ * server process (see devMockSecrets), and the mock never takes a real key
+ * from the environment: a developer's POLARIS_SECRET_KEY stays theirs.
+ */
 export function mockKeys(env: Record<string, string | undefined> = process.env): MockKeys {
+  const secrets = devMockSecrets();
   return {
-    secretKey: env.POLARIS_SECRET_KEY?.trim() || DEV_MOCK_SECRET_KEY,
-    publishableKey: env.NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY?.trim() || DEV_MOCK_PUBLISHABLE_KEY,
-    webhookSecret: env.POLARIS_WEBHOOK_SECRET?.trim() || DEV_MOCK_WEBHOOK_SECRET,
-    merchant: (env.POLARIS_MERCHANT_ADDRESS?.trim() as Address) || DEV_MOCK_MERCHANT,
+    secretKey: secrets.secretKey,
+    publishableKey: DEV_MOCK_PUBLISHABLE_KEY,
+    webhookSecret: secrets.webhookSecret,
+    merchant: /^0x[0-9a-fA-F]{40}$/.test(env.POLARIS_MERCHANT_ADDRESS?.trim() ?? "") ? (env.POLARIS_MERCHANT_ADDRESS!.trim() as Address) : DEV_MOCK_MERCHANT,
   };
 }
 

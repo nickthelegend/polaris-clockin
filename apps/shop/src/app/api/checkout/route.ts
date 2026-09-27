@@ -77,8 +77,11 @@ export async function POST(req: Request) {
   if (order.payment.sessionId) order = (await nextSessionAttempt(order.id)) ?? order;
   try {
     const { session, log } = await createCheckoutSession(order, origin);
-    await attachSession(order.id, session, log);
-    return Response.json({ order: summary(order), reused: created.reused, checkout: { sessionId: session.id, url: session.url } });
+    // The dev mock lives on a fixed local origin; its test checkout page is
+    // this same app, so the browser opens it on the origin it's already on.
+    const url = config.target === "dev-mock" ? new URL(new URL(session.url).pathname, origin).href : session.url;
+    await attachSession(order.id, { ...session, url }, log);
+    return Response.json({ order: summary(order), reused: created.reused, checkout: { sessionId: session.id, url } });
   } catch (e) {
     const log = (e as { sdkLog?: SdkCall }).sdkLog;
     if (log) await appendSdkLog(order.id, [log]);

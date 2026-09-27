@@ -28,11 +28,11 @@ function polarisFetch(respond?: (call: Call) => Response | undefined) {
   });
 }
 
-function post(body: unknown, key?: string) {
+function post(body: unknown, key?: string, extra: Record<string, string> = {}) {
   return POST(
     new Request("https://shop.test/api/checkout", {
       method: "POST",
-      headers: { "content-type": "application/json", ...(key ? { "idempotency-key": key } : {}) },
+      headers: { "content-type": "application/json", ...(key ? { "idempotency-key": key } : {}), ...extra },
       body: JSON.stringify(body),
     }),
   );
@@ -180,6 +180,27 @@ describe("POST /api/checkout (wallet)", () => {
     expect(json.wallet).toEqual({ merchant: "0x1111111111111111111111111111111111111111", amount: "349.00", orderId: json.order.id });
     expect(json.order.id).toMatch(/^hc_[a-z2-7]{20}$/);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("POST /api/checkout (the store's origin)", () => {
+  const forged = { "x-forwarded-host": "attacker.example", "x-forwarded-proto": "https" };
+
+  it("ignores X-Forwarded-Host unless TRUST_PROXY=1", async () => {
+    await post(checkoutBody(), "hc_attempt_fwd_1", forged);
+    expect(calls[0]!.body!.successUrl).toMatch(/^https:\/\/shop\.test\/orders\//);
+    vi.stubEnv("TRUST_PROXY", "1");
+    await post(checkoutBody(), "hc_attempt_fwd_2", forged);
+    expect(calls[1]!.body!.successUrl).toMatch(/^https:\/\/attacker\.example\/orders\//);
+  });
+
+  it("takes success and cancel URLs from SHOP_URL, which production requires", async () => {
+    vi.stubEnv("SHOP_URL", "https://halcyon.example");
+    await post(checkoutBody(), "hc_attempt_pinned_1", forged);
+    expect(calls[0]!.body!.successUrl).toMatch(/^https:\/\/halcyon\.example\/orders\//);
+    vi.stubEnv("SHOP_URL", "");
+    vi.stubEnv("NODE_ENV", "production");
+    expect((await post(checkoutBody(), "hc_attempt_pinned_2")).status).toBe(503);
   });
 });
 

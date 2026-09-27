@@ -85,17 +85,29 @@ answers the store with the SDK's own `createCheckoutMessage` (`ready`, then
 the developer drawer, *Collect instalment* and *Charge the next month* fire
 the webhooks Polaris would send a week or a month later.
 
-The mock can't run in production:
+The mock can't run in production, and can't be abused in development:
 
 - its route files are named `route.dev.ts` / `page.dev.tsx`, and
   `next.config.ts` only includes those extensions for the development server,
   so a production build doesn't contain them at all;
+- whether the shop may switch to the mock is decided when it's built:
+  `next.config.ts` inlines `HALCYON_DEV_MOCK` (`"1"` for `next dev`, `"0"`
+  for `next build`), so a production build started with
+  `NODE_ENV=development` still has no mock;
 - `pnpm --filter @polaris/shop build` ends with
   `scripts/assert-no-dev-mock.mjs`, which fails the build if any
-  `dev-polaris` route is in `.next`;
-- each mock route also answers 404 unless `NODE_ENV=development` and
-  `POLARIS_API_BASE` is unset, and the shop only ever points at the mock under
-  the same two conditions (tested in `test/dev-mock.test.ts`).
+  `dev-polaris` route, or any of the mock's code, is in `.next/server`;
+- each mock route also answers 404 unless it's a development build under
+  `NODE_ENV=development` with `POLARIS_API_BASE` unset, and the shop only
+  ever points at the mock under the same conditions;
+- the mock's secret key and webhook secret are random for each dev server
+  process, never constants in the repository, so nobody can sign a webhook
+  the shop accepts; a real `POLARIS_SECRET_KEY` in your env is never sent to
+  the mock;
+- the shop reaches the mock on `http://127.0.0.1:$PORT`, never on a host
+  taken from a request header, and `pnpm dev` binds to `127.0.0.1` so other
+  machines on the network can't reach the dev server at all (all tested in
+  `test/dev-mock.test.ts`).
 
 **Direct wallet payments and the mock.** The SDK's `pay()` reads the chain
 through the buyer's wallet before it asks for a signature (the token's
@@ -129,8 +141,11 @@ contracts are deployed.
 4. `pnpm --filter @polaris/shop dev`. Setting `POLARIS_API_BASE` switches the
    mock off.
 
-In production (`next build && next start`) all six values are required; with
-any missing, checkout shows *Payments are switched off* instead of guessing.
+In production (`next build && next start`) all six values are required, plus
+`SHOP_URL` (the store's public URL, which success and cancel URLs are built
+from instead of the request's `Host`); with any missing, checkout shows
+*Payments are switched off* instead of guessing. Behind a proxy that sets
+`X-Forwarded-Host`, set `TRUST_PROXY=1`; otherwise those headers are ignored.
 
 `POLARIS_PAY_IN_4_APR_BPS` sets the Pay in 4 price the store advertises: 0
 (the default) is interest-free, 1000 is the loan engine's 10% APR. The copy
