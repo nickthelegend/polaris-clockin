@@ -85,7 +85,7 @@ export function PlansDesktop() {
               value={plans.value ? <Money value={n(left)} /> : undefined}
               deltaLabel={plans.value ? `${open.length} open ${open.length === 1 ? "plan" : "plans"}` : undefined}
               right={
-                <TimeframeChips
+                <TimeframeChips<Show>
                   aria-label="Show"
                   options={[
                     { value: "all", label: `All ${all.length}` },

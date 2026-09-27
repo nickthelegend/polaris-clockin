@@ -19,6 +19,7 @@ import { useState } from "react";
 import { MerchantAvatar, merchantBrand } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
+import { CreditDesktop } from "@/desktop/credit";
 import { useOwner } from "@/lib/account/hooks";
 import { getCreditLine, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
@@ -143,7 +144,7 @@ export function CreditSheet() {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function CreditRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Credit line" snapPoints={["full"]} cold={cold}>
+    <RouteSheet label="Credit line" snapPoints={["full"]} cold={cold} desktop={{ as: "page", content: <CreditDesktop /> }}>
       <CreditSheet />
     </RouteSheet>
   );

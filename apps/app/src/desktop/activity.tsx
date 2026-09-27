@@ -125,7 +125,7 @@ export function ActivityDesktop() {
               deltaLabel={month ? `+${dollars(month.in)} in` : undefined}
               deltaTitle="What came into your dollar account in the same 30 days"
               right={
-                <TimeframeChips
+                <TimeframeChips<Quick>
                   aria-label="Show"
                   options={QUICK.map((x) => ({ value: x.value, label: list ? `${x.label} ${counts(x.value)}` : x.label }))}
                   value={quick}

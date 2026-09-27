@@ -42,7 +42,7 @@ const axis = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2
 const dollars = (v: number) => `$${axis(v)}`;
 
 function timeLabel(frame: Frame) {
-  return (t: string | number) => {
+  return (t: string | number | Date) => {
     const d = new Date(t);
     if (frame === "1h" || frame === "24h") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     if (frame === "1w") return d.toLocaleDateString("en-US", { weekday: "short" });

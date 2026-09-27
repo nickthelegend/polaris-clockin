@@ -103,7 +103,7 @@ export function InsightsDesktop() {
     };
   }, [activity.value, plans.value, now, r.days, range]);
 
-  const time = (t: string | number) => new Date(t).toLocaleDateString("en-US", r.days <= 7 ? { weekday: "short" } : { month: "short", day: "numeric" });
+  const time = (t: string | number | Date) => new Date(t).toLocaleDateString("en-US", r.days <= 7 ? { weekday: "short" } : { month: "short", day: "numeric" });
 
   return (
     <>
@@ -118,7 +118,7 @@ export function InsightsDesktop() {
               deltaSuffix={r.versus}
               deltaLabel={data && data.delta === null ? "Nothing to compare yet" : undefined}
               right={
-                <TimeframeChips
+                <TimeframeChips<Period>
                   aria-label="Period"
                   options={RANGES.map((x) => ({ value: x.value, label: x.label, title: x.title }))}
                   value={range}

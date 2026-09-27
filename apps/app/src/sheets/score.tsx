@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
+import { ScoreDesktop } from "@/desktop/credit";
 import { SuccessSheet } from "@/components/success-sheet";
 import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
@@ -223,7 +224,7 @@ export function ScoreSheet() {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function ScoreRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Credit score" snapPoints={["full"]} cold={cold}>
+    <RouteSheet label="Credit score" snapPoints={["full"]} cold={cold} desktop={{ as: "page", content: <ScoreDesktop /> }}>
       <ScoreSheet />
     </RouteSheet>
   );
