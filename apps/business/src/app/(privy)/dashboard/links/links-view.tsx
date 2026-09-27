@@ -1,46 +1,49 @@
 "use client";
 
 import {
-  Avatar,
-  Badge,
   Button,
-  Card,
   Chip,
   CopyButton,
+  DataTable,
   Dialog,
   EmptyState,
-  IconButton,
+  IconSquareButton,
   Input,
   Menu,
-  Money,
   Notice,
+  PrimaryButton,
+  SecondaryButton,
   SegmentedControl,
   Select,
-  Skeleton,
-  Tab,
-  TabList,
-  Tabs,
+  StatusPill,
+  TableName,
+  TimeframeChips,
   toast,
-  type BadgeTone,
+  type StatusPillTone,
+  type TableColumn,
 } from "@polaris/ui";
-import { ArrowUpRight, Ban, Copy, Link2, MoreHorizontal, Plus, Share2 } from "lucide-react";
+import { ArrowUpRight, Ban, Copy, Link2, MoreHorizontal, Plus, Share2, SlidersHorizontal } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
+import { DataModeNotice, LoadError, StaleNotice } from "@/components/dashboard/common";
+import { MoneyWidget } from "@/components/dashboard/money-widget";
+import { FigureRow, PageCoin, PageHead } from "@/components/dashboard/page-head";
+import { ModeCoin } from "@/components/dashboard/payment-bits";
 import { DownloadQrButton, QrCode } from "@/components/qr";
-import { DashboardHeader } from "@/components/shell/dashboard-shell";
 import { DataError, errorMessage } from "@/lib/data";
 import { formatDate, MODE_LABEL, money, parseAmount, payInFourQuote } from "@/lib/data/format";
 import type { LinkStatus, LinkUsage, PayMode, PaymentLink } from "@/lib/data/types";
 import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
-const STATUS: Record<LinkStatus, { tone: BadgeTone; label: string }> = {
+const STATUS: Record<LinkStatus, { tone: StatusPillTone; label: string }> = {
   active: { tone: "lime", label: "Active" },
-  used: { tone: "neutral", label: "Used" },
+  used: { tone: "purple", label: "Used" },
   expired: { tone: "neutral", label: "Expired" },
   inactive: { tone: "neutral", label: "Off" },
 };
+
+const SHORT_MODE: Record<PayMode, string> = { now: "Now", later: "In 4", subscribe: "Monthly" };
 
 type Filter = "all" | "active" | "closed";
 
@@ -59,28 +62,75 @@ export function LinksView() {
   const [sharing, setSharing] = useState<PaymentLink | null>(null);
   const [turningOff, setTurningOff] = useState<PaymentLink | null>(null);
 
-  // `?new=1` (from the overview's "New link") opens the dialog once, then leaves the URL.
+  // `?new=1` (from the nav's "New link") opens the dialog once, then leaves the URL.
   useEffect(() => {
     if (params.get("new") === "1") router.replace(pathname, { scroll: false });
   }, [params, pathname, router]);
 
   const list = links.data;
-  const counts = useMemo(
-    () => ({ all: list?.length ?? 0, active: list?.filter((l) => l.status === "active").length ?? 0 }),
-    [list],
-  );
+  const counts = useMemo(() => ({ all: list?.length ?? 0, active: list?.filter((l) => l.status === "active").length ?? 0 }), [list]);
+  const collected = useMemo(() => (list ? list.reduce((s, l) => s + l.collectedCents, 0) : undefined), [list]);
   const filtered = (list ?? []).filter((l) => (filter === "all" ? true : filter === "active" ? l.status === "active" : l.status !== "active"));
+  const live = !blocker;
+
+  const columns: TableColumn<PaymentLink>[] = [
+    {
+      key: "link",
+      header: "Link",
+      render: (l) => (
+        <TableName
+          icon={<ModeCoin mode={l.modes.includes("later") ? "later" : (l.modes[0] ?? "now")} text={l.description} />}
+          title={l.description}
+          sub={`${l.usage === "single" ? "Single use" : "Reusable"}${l.expiresAt ? ` · until ${formatDate(l.expiresAt)}` : ""}`}
+        />
+      ),
+    },
+    {
+      key: "ways",
+      header: "Buyer can pay",
+      hideBelow: "lg",
+      render: (l) => <span className="whitespace-nowrap text-ui-muted">{l.modes.map((m) => SHORT_MODE[m]).join(" · ")}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      hideBelow: "sm",
+      render: (l) => <StatusPill tone={STATUS[l.status].tone}>{STATUS[l.status].label}</StatusPill>,
+    },
+    {
+      key: "amount",
+      header: "Amount",
+      align: "right",
+      render: (l) => (
+        <span className="flex flex-col items-end">
+          <span className="ui-figure font-medium">{money(l.amountCents)}</span>
+          <span className="ui-figure text-[13px] whitespace-nowrap text-ui-muted">
+            {l.paymentsCount} paid · {money(l.collectedCents)}
+          </span>
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: <span className="sr-only">Actions</span>,
+      align: "right",
+      render: (l) => <LinkActions link={l} live={live} onShare={() => setSharing(l)} onTurnOff={() => setTurningOff(l)} />,
+    },
+  ];
 
   return (
     <>
-      <DashboardHeader
+      <PageHead
         title="Payment links"
-        description="One link, three ways to pay: in full, in four payments on Polaris credit, or by subscription."
-        actions={
-          <Button variant="lime" size="md" icon={<Plus />} onClick={() => setCreating(true)}>
-            New link
-          </Button>
-        }
+        coins={[
+          <PageCoin key="l" tone="teal">
+            <Link2 />
+          </PageCoin>,
+          <PageCoin key="d" tone="blue">
+            <span className="text-[26px] font-bold">$</span>
+          </PageCoin>,
+        ]}
+        actions={<IconSquareButton label="New payment link" icon={<Plus />} tone="solid" active onClick={() => setCreating(true)} />}
       />
       <StaleNotice queries={[links as QueryState<unknown>]} />
       {sample ? <DataModeNotice empty={false} /> : null}
@@ -90,63 +140,69 @@ export function LinksView() {
         </Notice>
       ) : null}
 
-      <Card padding="none" className="min-w-0">
-        <div className="px-4 pt-4 sm:px-5 sm:pt-5">
-          <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)} variant="pill">
-            <TabList aria-label="Filter links">
-              <Tab value="all" count={counts.all}>
-                All
-              </Tab>
-              <Tab value="active" count={counts.active}>
-                Active
-              </Tab>
-              <Tab value="closed" count={counts.all - counts.active}>
-                Closed
-              </Tab>
-            </TabList>
-          </Tabs>
-        </div>
-
-        {links.error && !list ? (
-          <LoadError query={links as QueryState<unknown>} title="We couldn't load your links" />
-        ) : !list ? (
-          <div className="grid gap-2 p-4 sm:p-5">
-            {Array.from({ length: 4 }, (_, i) => (
-              <Skeleton key={i} shape="row" height={84} />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={<Link2 />}
-            title={list.length ? "Nothing here" : "No payment links yet"}
-            description={
-              list.length
-                ? "No links match this filter."
-                : "Create one for an invoice, a product or a service. Buyers choose how to pay; you're paid in full."
-            }
-            action={
-              list.length ? null : (
-                <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setCreating(true)}>
-                  New link
-                </Button>
-              )
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+        <section aria-label="Your payment links" className="min-w-0">
+          <FigureRow
+            caption="Collected through your links"
+            value={collected === undefined ? undefined : money(collected)}
+            deltaLabel={list ? `${counts.active} active` : undefined}
+            sample={sample}
+            right={
+              <TimeframeChips<Filter>
+                aria-label="Filter links"
+                options={[
+                  { value: "all", label: `All ${counts.all}` },
+                  { value: "active", label: `Active ${counts.active}` },
+                  { value: "closed", label: `Closed ${counts.all - counts.active}` },
+                ]}
+                value={filter}
+                onValueChange={setFilter}
+              />
             }
           />
-        ) : (
-          <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 p-3 sm:p-4">
-            {filtered.map((link) => (
-              <LinkRow
-                key={link.id}
-                link={link}
-                sample={sample}
-                live={!blocker}
-                onShare={() => setSharing(link)}
-                onTurnOff={() => setTurningOff(link)}
+          <p className="mt-3 max-w-[560px] text-[15px] leading-relaxed text-ui-muted">
+            One link, three ways to pay: in full, in four payments on Polaris credit, or by subscription. You&rsquo;re paid in full either way.
+          </p>
+
+          <div className="mt-6">
+            {links.error && !list ? (
+              <LoadError query={links as QueryState<unknown>} title="We couldn't load your links" />
+            ) : list && filtered.length === 0 ? (
+              <EmptyState
+                icon={<Link2 />}
+                title={list.length ? "Nothing here" : "No payment links yet"}
+                description={
+                  list.length ? "No links match this filter." : "Create one for an invoice, a product or a service. Buyers choose how to pay; you're paid in full."
+                }
+                action={
+                  list.length ? null : (
+                    <PrimaryButton size="sm" icon={<Plus />} onClick={() => setCreating(true)}>
+                      New link
+                    </PrimaryButton>
+                  )
+                }
               />
-            ))}
-          </ul>
-        )}
-      </Card>
+            ) : (
+              <DataTable caption="Payment links" loading={!list} loadingRows={6} columns={columns} rows={filtered} rowKey={(l) => l.id} />
+            )}
+          </div>
+        </section>
+
+        <aside aria-label="Request a payment" className="grid min-w-0 content-start gap-3">
+          <MoneyWidget
+            defaultTab="request"
+            onLinkCreated={(link) => {
+              links.mutate((current) => [link, ...(current ?? [])]);
+              setFilter("all");
+            }}
+            requestSecondary={
+              <SecondaryButton size="lg" block iconRight={<SlidersHorizontal />} onClick={() => setCreating(true)}>
+                More options
+              </SecondaryButton>
+            }
+          />
+        </aside>
+      </div>
 
       <NewLinkDialog
         open={creating}
@@ -166,89 +222,42 @@ export function LinksView() {
   );
 }
 
-function LinkRow({
-  link,
-  sample,
-  live,
-  onShare,
-  onTurnOff,
-}: {
-  link: PaymentLink;
-  sample: boolean;
-  live: boolean;
-  onShare: () => void;
-  onTurnOff: () => void;
-}) {
-  const status = STATUS[link.status];
+function LinkActions({ link, live, onShare, onTurnOff }: { link: PaymentLink; live: boolean; onShare: () => void; onTurnOff: () => void }) {
   const active = link.status === "active";
   return (
-    <li className="flex flex-col gap-4 rounded-ui-row bg-ui-surface-2 p-4 sm:flex-row sm:items-center sm:px-5">
-      <div className="flex min-w-0 flex-1 items-center gap-3.5">
-        <Avatar name={link.description} size="md" decorative />
-        <div className="min-w-0">
-          <p className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-[16px] font-medium">{link.description}</span>
-            {sample ? <SampleBadge /> : null}
-          </p>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            <Badge tone={status.tone} dot>
-              {status.label}
-            </Badge>
-            {link.modes.map((m) => (
-              <Badge key={m} tone="neutral">
-                {MODE_LABEL[m]}
-              </Badge>
-            ))}
-            <span className="text-[13px] text-ui-muted">
-              · {link.usage === "single" ? "Single use" : "Reusable"}
-              {link.expiresAt ? ` · until ${formatDate(link.expiresAt)}` : ""}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center justify-between gap-4 sm:justify-end">
-        <div className="text-left sm:text-right">
-          <Money value={link.amountCents / 100} className="text-[17px] font-medium" />
-          <p className="text-[13px] text-ui-muted">
-            {link.paymentsCount} paid · {money(link.collectedCents)}
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <IconButton
-            label={live ? `Share “${link.description}”` : "Sharing opens once buyers can open links"}
-            icon={<Share2 />}
-            tone="surface"
-            size="md"
-            className="bg-ui-surface-3"
-            onClick={onShare}
-            disabled={!live || !active}
-            aria-describedby={live ? undefined : "links-pending"}
-          />
-          <Menu
-            label={`More for “${link.description}”`}
-            align="end"
-            width={260}
-            trigger={
-              <span className="grid size-11 place-items-center rounded-full bg-ui-surface-3 text-ui-text">
-                <MoreHorizontal aria-hidden size={20} strokeWidth={1.75} />
-              </span>
-            }
-          >
-            <Menu.Item
-              icon={<Copy />}
-              disabled={!live || !active}
-              description={live ? undefined : "Once buyers can open links"}
-              onSelect={() => void navigator.clipboard.writeText(link.url).then(() => toast({ title: "Link copied", tone: "success" }))}
-            >
-              Copy link
-            </Menu.Item>
-            <Menu.Item icon={<Ban />} tone="danger" disabled={!active} onSelect={onTurnOff} description={active ? "It stops taking payments" : "Already closed"}>
-              Turn off
-            </Menu.Item>
-          </Menu>
-        </div>
-      </div>
-    </li>
+    <span className="inline-flex items-center gap-2">
+      <IconSquareButton
+        size="sm"
+        label={live ? `Share “${link.description}”` : "Sharing opens once buyers can open links"}
+        icon={<Share2 />}
+        onClick={onShare}
+        disabled={!live || !active}
+        aria-describedby={live ? undefined : "links-pending"}
+      />
+      <Menu
+        label={`More for “${link.description}”`}
+        align="end"
+        width={260}
+        triggerClassName="rounded-[12px] active:scale-100"
+        trigger={
+          <span className="grid size-9 place-items-center rounded-[12px] border border-ui-hairline-strong bg-ui-square text-[#a7a9ad] transition-colors hover:text-ui-text">
+            <MoreHorizontal aria-hidden size={17} strokeWidth={1.75} />
+          </span>
+        }
+      >
+        <Menu.Item
+          icon={<Copy />}
+          disabled={!live || !active}
+          description={live ? undefined : "Once buyers can open links"}
+          onSelect={() => void navigator.clipboard.writeText(link.url).then(() => toast({ title: "Link copied", tone: "success" }))}
+        >
+          Copy link
+        </Menu.Item>
+        <Menu.Item icon={<Ban />} tone="danger" disabled={!active} onSelect={onTurnOff} description={active ? "It stops taking payments" : "Already closed"}>
+          Turn off
+        </Menu.Item>
+      </Menu>
+    </span>
   );
 }
 
@@ -351,13 +360,13 @@ function NewLinkDialog({
             onChange={(e) => setAmount(e.target.value)}
             error={errors.amountCents}
             trailing="USD"
-            hint={quote ? `Pay in 4: 4 × ${money(quote.each)}, paid by the buyer. You get ${money(cents!)} today.` : undefined}
+            hint={quote ? `Pay in 4: 4 × ${money(quote.each)} at 10% APR, paid by the buyer. You get ${money(cents!)} at checkout.` : undefined}
           />
           <fieldset className="grid gap-2">
             <legend className="mb-2 text-[14px] font-medium">Ways to pay</legend>
             <div className="flex flex-wrap gap-2">
               {(["now", "later", "subscribe"] as const).map((m) => (
-                <Chip key={m} variant="solid" selected={modes.includes(m)} onClick={() => toggle(m)}>
+                <Chip key={m} variant="pill" selected={modes.includes(m)} onClick={() => toggle(m)}>
                   {MODE_LABEL[m]}
                 </Chip>
               ))}
@@ -404,9 +413,9 @@ function NewLinkDialog({
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="submit" variant="lime" loading={busy} icon={<Plus />}>
+          <PrimaryButton type="submit" loading={busy} icon={<Plus />}>
             Create link
-          </Button>
+          </PrimaryButton>
         </Dialog.Footer>
       </form>
     </Dialog>

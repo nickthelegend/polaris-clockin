@@ -1,45 +1,58 @@
 "use client";
 
-import { Badge, CopyButton, type BadgeTone } from "@polaris/ui";
+import { CopyButton, StatusPill, type StatusPillTone } from "@polaris/ui";
 import { ArrowUpRight } from "lucide-react";
 
 import { explorerAddress, explorerTx } from "@/lib/chain";
 import { MODE_LABEL, PLAN_STATE_LABEL, shortAddress } from "@/lib/data/format";
 import type { PayMode, PaymentStatus, PayoutStatus, PlanState } from "@/lib/data/types";
 
-export function ModeBadge({ mode }: { mode: PayMode }) {
-  const tone: BadgeTone = mode === "later" ? "purple" : mode === "subscribe" ? "warn" : "neutral";
-  return <Badge tone={tone}>{MODE_LABEL[mode]}</Badge>;
+/*
+  Every state as one of ref E's status pills: lime (paid, done), purple (Pay
+  in 4), teal (in progress, recurring), amber (retrying, at risk), red (failed).
+*/
+
+type PillSize = "sm" | "md";
+
+const MODE_TONE: Record<PayMode, StatusPillTone> = { now: "lime", later: "purple", subscribe: "teal" };
+
+export function ModeBadge({ mode, size = "sm" }: { mode: PayMode; size?: PillSize }) {
+  return (
+    <StatusPill tone={MODE_TONE[mode]} size={size}>
+      {MODE_LABEL[mode]}
+    </StatusPill>
+  );
 }
 
-export function PaymentStatusBadge({ status }: { status: PaymentStatus }) {
+export function PaymentStatusBadge({ status, size = "sm" }: { status: PaymentStatus; size?: PillSize }) {
   return status === "succeeded" ? (
-    <Badge tone="up" dot>
+    <StatusPill tone="lime" size={size}>
       Paid
-    </Badge>
+    </StatusPill>
   ) : (
-    <Badge tone="down" dot>
+    <StatusPill tone="red" size={size}>
       Failed
-    </Badge>
+    </StatusPill>
   );
 }
 
-const PLAN_TONE: Record<PlanState, BadgeTone> = { collecting: "lime", dunning: "warn", repaid: "up", written_off: "down" };
+const PLAN_TONE: Record<PlanState, StatusPillTone> = { collecting: "teal", dunning: "amber", repaid: "lime", written_off: "red" };
 
-export function PlanStateBadge({ state }: { state: PlanState }) {
+export function PlanStateBadge({ state, size = "sm" }: { state: PlanState; size?: PillSize }) {
   return (
-    <Badge tone={PLAN_TONE[state]} dot>
+    <StatusPill tone={PLAN_TONE[state]} size={size}>
       {PLAN_STATE_LABEL[state]}
-    </Badge>
+    </StatusPill>
   );
 }
 
-export function PayoutStatusBadge({ status }: { status: PayoutStatus }) {
-  const tone: BadgeTone = status === "paid" ? "up" : status === "queued" ? "info" : "down";
+const PAYOUT_TONE: Record<PayoutStatus, StatusPillTone> = { paid: "lime", queued: "teal", failed: "red" };
+
+export function PayoutStatusBadge({ status, size = "sm" }: { status: PayoutStatus; size?: PillSize }) {
   return (
-    <Badge tone={tone} dot>
+    <StatusPill tone={PAYOUT_TONE[status]} size={size}>
       {status === "paid" ? "Paid" : status === "queued" ? "Queued" : "Failed"}
-    </Badge>
+    </StatusPill>
   );
 }
 
@@ -58,7 +71,7 @@ export function Address({ value, label, explorer = true }: { value: string; labe
           rel="noreferrer"
           aria-label={`Open the ${label} in the Monad explorer`}
           title="Open in the explorer"
-          className="grid size-8 place-items-center rounded-full text-ui-muted transition-colors hover:bg-ui-surface-2 hover:text-ui-text"
+          className="grid size-8 place-items-center rounded-full text-ui-muted transition-colors hover:bg-ui-surface-1 hover:text-ui-lime-active"
         >
           <ArrowUpRight aria-hidden size={16} strokeWidth={1.75} />
         </a>

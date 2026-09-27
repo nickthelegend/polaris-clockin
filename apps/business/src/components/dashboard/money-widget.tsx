@@ -28,7 +28,7 @@ import {
 import { ArrowUpFromLine, ArrowUpRight, Check, Info, Link2, QrCode as QrIcon, RefreshCw, Settings, WalletCards } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import { getAddress, isAddress, zeroAddress } from "viem";
 
 import { PayoutStatusBadge } from "@/components/dashboard/bits";
@@ -89,6 +89,8 @@ export type MoneyWidgetProps = {
   onLinkCreated?: (link: PaymentLink) => void;
   /** Where the settings square goes. */
   settingsHref?: string;
+  /** Replaces REQUEST's dark button ("All payment links"), e.g. on the Links page itself. */
+  requestSecondary?: ReactNode;
   className?: string;
 };
 
@@ -98,7 +100,15 @@ export type MoneyWidgetProps = {
  * "Change payout address" and the outlined balance card); REQUEST creates a
  * payment link (amount and description over the ways a buyer can pay).
  */
-export function MoneyWidget({ defaultTab = "withdraw", payments, payouts: shared, onLinkCreated, settingsHref = "/dashboard/payouts#automatic", className }: MoneyWidgetProps) {
+export function MoneyWidget({
+  defaultTab = "withdraw",
+  payments,
+  payouts: shared,
+  onLinkCreated,
+  settingsHref = "/dashboard/payouts#automatic",
+  requestSecondary,
+  className,
+}: MoneyWidgetProps) {
   const [tab, setTab] = useState<MoneyTab>(defaultTab);
   const own = useQuery((d) => d.getPayouts(), { refreshMs: shared ? undefined : 30_000 });
   const payouts = shared ?? own;
@@ -137,7 +147,7 @@ export function MoneyWidget({ defaultTab = "withdraw", payments, payouts: shared
         {tab === "withdraw" ? <WithdrawPanel payouts={payouts} payments={payments} onSwitch={() => setTab("request")} /> : null}
       </div>
       <div role="tabpanel" id={`${id}-panel-request`} aria-labelledby={`${id}-tab-request`} hidden={tab !== "request"} className="grid min-w-0 gap-3">
-        {tab === "request" ? <RequestPanel onCreated={onLinkCreated} onSwitch={() => setTab("withdraw")} /> : null}
+        {tab === "request" ? <RequestPanel onCreated={onLinkCreated} onSwitch={() => setTab("withdraw")} secondary={requestSecondary} /> : null}
       </div>
 
       <Dialog open={qr} onOpenChange={setQr} size="sm" title="Your payout wallet" description="Send AUSD on Monad to this address to top up your balance.">
@@ -470,7 +480,7 @@ const WAYS: { mode: PayMode; label: string }[] = [
   { mode: "subscribe", label: "Monthly" },
 ];
 
-function RequestPanel({ onCreated, onSwitch }: { onCreated?: (link: PaymentLink) => void; onSwitch: () => void }) {
+function RequestPanel({ onCreated, onSwitch, secondary }: { onCreated?: (link: PaymentLink) => void; onSwitch: () => void; secondary?: ReactNode }) {
   const data = useDashboardData();
   const blocker = useReadiness().links;
   const { reason } = useSample();
@@ -590,9 +600,11 @@ function RequestPanel({ onCreated, onSwitch }: { onCreated?: (link: PaymentLink)
           Create link
         </PrimaryButton>
       )}
-      <SecondaryButton asChild size="lg" block iconRight={<ArrowUpRight />}>
-        <Link href="/dashboard/links">All payment links</Link>
-      </SecondaryButton>
+      {secondary ?? (
+        <SecondaryButton asChild size="lg" block iconRight={<ArrowUpRight />}>
+          <Link href="/dashboard/links">All payment links</Link>
+        </SecondaryButton>
+      )}
       {link ? (
         <LinkReady link={link} blocker={blocker} sample={sampleLinks} />
       ) : (

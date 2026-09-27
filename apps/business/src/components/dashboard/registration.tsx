@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Notice, toast, type BadgeTone } from "@polaris/ui";
+import { Button, Notice, StatusPill, toast, type StatusPillTone } from "@polaris/ui";
 import { BadgeCheck } from "lucide-react";
 import { useState } from "react";
 
@@ -11,12 +11,12 @@ import { useRegisterMerchant } from "@/lib/payouts";
 import { useReadiness } from "@/lib/session";
 import { TxLink } from "./bits";
 
-const LABEL: Record<RegistrationState, { tone: BadgeTone; text: string }> = {
+const LABEL: Record<RegistrationState, { tone: StatusPillTone; text: string }> = {
   none: { tone: "neutral", text: "Not registered" },
-  submitted: { tone: "info", text: "Registering" },
-  registered: { tone: "lime", text: "Registered" },
-  active: { tone: "up", text: "Active" },
-  failed: { tone: "down", text: "Didn't go through" },
+  submitted: { tone: "teal", text: "Registering" },
+  registered: { tone: "purple", text: "Registered" },
+  active: { tone: "lime", text: "Active" },
+  failed: { tone: "red", text: "Didn't go through" },
 };
 
 export function registrationOf(merchant: Merchant): RegistrationState {
@@ -27,9 +27,9 @@ export function registrationOf(merchant: Merchant): RegistrationState {
 export function RegistrationBadge({ merchant }: { merchant: Merchant }) {
   const l = LABEL[registrationOf(merchant)];
   return (
-    <Badge tone={l.tone} dot>
+    <StatusPill tone={l.tone} size="sm">
       {l.text}
-    </Badge>
+    </StatusPill>
   );
 }
 

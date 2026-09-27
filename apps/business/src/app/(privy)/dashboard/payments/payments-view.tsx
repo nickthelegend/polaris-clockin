@@ -1,33 +1,35 @@
 "use client";
 
 import {
-  Avatar,
-  Button,
-  Card,
-  CellStack,
+  BalanceSummaryCard,
+  DataTable,
   DetailsList,
   Drawer,
   EmptyState,
+  IconSquareButton,
   Input,
   KeyValueGrid,
   Money,
+  PanelCard,
+  PrimaryButton,
+  ProgressLegend,
+  SecondaryButton,
   Select,
   Skeleton,
-  Tab,
-  TabList,
-  Table,
-  Tabs,
-  TxRow,
+  StatusPill,
+  TimeframeChips,
+  cn,
   type TableColumn,
 } from "@polaris/ui";
-import { ArrowLeftRight, CalendarClock, Download, Search } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, Download, Link2, Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { Address, ModeBadge, PaymentStatusBadge, TxLink, downloadCsv } from "@/components/dashboard/bits";
 import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
-import { DashboardHeader } from "@/components/shell/dashboard-shell";
+import { FigureRow, PageHead } from "@/components/dashboard/page-head";
+import { MODE_COLOR, PaymentName, paymentPill } from "@/components/dashboard/payment-bits";
 import { formatDateTime, MODE_LABEL, money } from "@/lib/data/format";
 import type { PayMode, Payment } from "@/lib/data/types";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
@@ -36,6 +38,7 @@ type StatusFilter = "all" | "succeeded" | "failed";
 type ModeFilter = "all" | PayMode;
 
 const PAGE = 40;
+const DAY = 86_400_000;
 
 export function PaymentsView() {
   const payments = useQuery((d) => d.listPayments(), { refreshMs: 30_000 });
@@ -100,39 +103,44 @@ export function PaymentsView() {
     );
 
   const shown = filtered.slice(0, limit);
+  const summary = useSummary(list);
 
   return (
     <>
-      <DashboardHeader
+      <PageHead
         title="Payments"
-        description="Every payment to your links and checkouts, newest first. Rows open the full record."
-        actions={
-          <Button variant="outline" size="md" icon={<Download />} onClick={exportCsv} disabled={!filtered.length}>
-            Export CSV
-          </Button>
-        }
+        actions={<IconSquareButton label="Export these payments as CSV" icon={<Download />} onClick={exportCsv} disabled={!filtered.length} />}
       />
       <StaleNotice queries={[payments as QueryState<unknown>]} />
       <DataModeNotice empty={list !== undefined && list.length === 0} />
 
-      <Summary payments={list} sample={sample.on} />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-10 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+        <section aria-label="All payments" className="min-w-0">
+          <FigureRow
+            caption="Gross, last 30 days"
+            value={summary ? money(summary.gross) : undefined}
+            delta={summary?.delta}
+            deltaSuffix="vs the 30 days before"
+            deltaLabel={summary && summary.delta === null ? "New" : undefined}
+            sample={sample.on}
+            right={
+              <TimeframeChips<StatusFilter>
+                aria-label="Filter by status"
+                options={[
+                  { value: "all", label: `All ${counts.all}` },
+                  { value: "succeeded", label: `Paid ${counts.succeeded}` },
+                  { value: "failed", label: `Failed ${counts.failed}` },
+                ]}
+                value={status}
+                onValueChange={(v) => {
+                  setStatus(v);
+                  setLimit(PAGE);
+                }}
+              />
+            }
+          />
 
-      <Card padding="none" className="mt-4 min-w-0">
-        <div className="flex flex-col gap-3 px-4 pt-4 sm:px-5 sm:pt-5 lg:flex-row lg:items-center lg:justify-between">
-          <Tabs value={status} onValueChange={(v) => setStatus(v as StatusFilter)} variant="pill">
-            <TabList aria-label="Filter by status">
-              <Tab value="all" count={counts.all}>
-                All
-              </Tab>
-              <Tab value="succeeded" count={counts.succeeded}>
-                Paid
-              </Tab>
-              <Tab value="failed" count={counts.failed}>
-                Failed
-              </Tab>
-            </TabList>
-          </Tabs>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="mt-7 flex flex-col gap-2 sm:flex-row">
             <Input
               hideLabel
               label="Search payments"
@@ -143,8 +151,8 @@ export function PaymentsView() {
                 setQuery(e.target.value);
                 setLimit(PAGE);
               }}
-              wrapperClassName="w-full sm:w-[300px]"
-              className="h-11"
+              wrapperClassName="w-full sm:flex-1"
+              className="h-12"
             />
             <Select<ModeFilter>
               aria-label="Payment mode"
@@ -162,162 +170,142 @@ export function PaymentsView() {
               ]}
             />
           </div>
-        </div>
 
-        {payments.error && !list ? (
-          <LoadError query={payments as QueryState<unknown>} title="We couldn't load your payments" />
-        ) : !list ? (
-          <div className="grid gap-2 p-4 sm:p-5">
-            {Array.from({ length: 6 }, (_, i) => (
-              <Skeleton key={i} shape="row" height={60} />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState
-            icon={list.length ? <Search /> : <ArrowLeftRight />}
-            title={list.length ? "No payments match" : "No payments yet"}
-            description={
-              list.length
-                ? "Try another word, or clear the filters."
-                : "Share a payment link and each payment appears here the moment it settles."
-            }
-            action={
-              list.length ? null : (
-                <Button asChild variant="lime" size="sm">
-                  <Link href="/dashboard/links?new=1">New payment link</Link>
-                </Button>
-              )
-            }
-          />
-        ) : (
-          <>
-            {/* From 1280px: the ledger. */}
-            <div className="hidden xl:block">
-              <Table
-                className="mt-3 pb-2"
+          <div className="mt-4">
+            {payments.error && !list ? (
+              <LoadError query={payments as QueryState<unknown>} title="We couldn't load your payments" />
+            ) : list && filtered.length === 0 ? (
+              <EmptyState
+                icon={list.length ? <Search /> : <ArrowLeftRight />}
+                title={list.length ? "No payments match" : "No payments yet"}
+                description={list.length ? "Try another word, or clear the filters." : "Share a payment link and each payment appears here the moment it settles."}
+                action={
+                  list.length ? null : (
+                    <PrimaryButton asChild size="sm" icon={<Link2 />}>
+                      <Link href="/dashboard/links?new=1">New payment link</Link>
+                    </PrimaryButton>
+                  )
+                }
+              />
+            ) : (
+              <DataTable
                 caption="Payments"
-                columns={columns(sample.on)}
+                loading={!list}
+                loadingRows={8}
+                columns={COLUMNS}
                 rows={shown}
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setOpen(p)}
                 selectedKey={open?.id}
               />
-            </div>
-            {/* Below 1280px: card rows, amounts and status always visible. */}
-            <ul className="grid grid-cols-[minmax(0,1fr)] gap-2 p-3 sm:p-4 xl:hidden">
-              {shown.map((p) => (
-                <li key={p.id}>
-                  <TxRow
-                    variant="card"
-                    leading={<Avatar name={p.description} size="md" decorative />}
-                    title={
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span className="truncate">{p.description}</span>
-                        {sample.on ? <SampleBadge /> : null}
-                      </span>
-                    }
-                    subtitle={`${MODE_LABEL[p.mode]} · ${formatDateTime(p.createdAt)}`}
-                    value={
-                      <span className={p.status === "failed" ? "text-ui-muted line-through" : undefined}>{money(p.amountCents)}</span>
-                    }
-                    subAmount={p.status === "failed" ? "Failed" : p.feeCents ? `Net ${money(p.netCents)}` : "No fee"}
-                    onClick={() => setOpen(p)}
-                    aria-label={`${p.description}, ${money(p.amountCents)}, ${p.status === "failed" ? "failed" : "paid"}. Open the payment.`}
-                  />
-                </li>
-              ))}
-            </ul>
+            )}
             {filtered.length > shown.length ? (
-              <div className="flex justify-center border-t border-ui-hairline p-4">
-                <Button variant="outline" size="sm" onClick={() => setLimit((l) => l + PAGE)}>
+              <div className="mt-4 flex justify-center">
+                <SecondaryButton size="md" onClick={() => setLimit((l) => l + PAGE)}>
                   Show {Math.min(PAGE, filtered.length - shown.length)} more
-                </Button>
+                </SecondaryButton>
               </div>
             ) : null}
-          </>
-        )}
-      </Card>
+          </div>
+        </section>
+
+        <aside aria-label="Payments summary" className="grid min-w-0 content-start gap-3">
+          {summary ? (
+            <BalanceSummaryCard
+              label={
+                <span className="flex items-center gap-2">
+                  Net to you, 30 days
+                  {sample.on ? <SampleBadge /> : null}
+                </span>
+              }
+              value={money(summary.net)}
+              stats={[
+                { label: "Fees", value: money(summary.fees) },
+                { label: "Paid", value: summary.count.toLocaleString("en-US") },
+                { label: "Failed", value: summary.failed.toLocaleString("en-US") },
+              ]}
+            />
+          ) : (
+            <Skeleton shape="card" height={170} />
+          )}
+          <PanelCard title="By mode" subtitle="Share of gross, last 30 days" padding="md">
+            {summary ? (
+              <ProgressLegend
+                className="mt-5"
+                direction="column"
+                items={summary.modes.map((m) => ({ label: MODE_LABEL[m.mode], value: m.share, color: MODE_COLOR[m.mode] }))}
+              />
+            ) : (
+              <Skeleton shape="tile" height={140} className="mt-4" />
+            )}
+          </PanelCard>
+          <PrimaryButton asChild size="lg" block icon={<Link2 />} className="mt-1">
+            <Link href="/dashboard/links?new=1">New payment link</Link>
+          </PrimaryButton>
+          <SecondaryButton size="lg" block iconRight={<Download />} onClick={exportCsv} disabled={!filtered.length}>
+            Export CSV
+          </SecondaryButton>
+          <p className="px-1 text-[13px] leading-relaxed text-ui-muted">
+            Pay now and subscriptions cost 0.5% per payment. Pay in 4 costs you nothing: the buyer pays 10% APR to Polaris, and you are paid in full at
+            checkout.
+          </p>
+        </aside>
+      </div>
 
       <PaymentDrawer payment={open} sample={sample.on} onClose={() => setOpen(null)} />
     </>
   );
 }
 
-function columns(sample: boolean): TableColumn<Payment>[] {
-  return [
-    {
-      key: "payment",
-      header: "Payment",
-      render: (p) => (
-        <div className="flex min-w-0 items-center gap-3">
-          <Avatar name={p.description} size="sm" decorative />
-          <CellStack
-            title={
-              <span className="flex items-center gap-2">
-                <span className="truncate">{p.description}</span>
-                {sample ? <SampleBadge /> : null}
-              </span>
-            }
-            sub={p.orderId}
-          />
-        </div>
-      ),
+const COLUMNS: TableColumn<Payment>[] = [
+  { key: "customer", header: "Customer", render: (p) => <PaymentName p={p} sub /> },
+  { key: "order", header: "Order", hideBelow: "lg", render: (p) => <span className="ui-figure whitespace-nowrap text-ui-muted">{p.orderId}</span> },
+  { key: "date", header: "Date", hideBelow: "md", render: (p) => <span className="whitespace-nowrap text-ui-muted">{formatDateTime(p.createdAt)}</span> },
+  {
+    key: "status",
+    header: "Status",
+    hideBelow: "sm",
+    render: (p) => {
+      const pill = paymentPill(p);
+      return <StatusPill tone={pill.tone}>{pill.text}</StatusPill>;
     },
-    { key: "mode", header: "Mode", render: (p) => <ModeBadge mode={p.mode} /> },
-    { key: "status", header: "Status", render: (p) => <PaymentStatusBadge status={p.status} /> },
-    { key: "date", header: "Date", render: (p) => <span className="whitespace-nowrap text-ui-muted">{formatDateTime(p.createdAt)}</span> },
-    { key: "fee", header: "Fee", align: "right", render: (p) => <span className="text-ui-muted">{money(p.feeCents)}</span> },
-    {
-      key: "amount",
-      header: "Amount",
-      align: "right",
-      render: (p) => (
-        <span className={p.status === "failed" ? "text-ui-muted line-through" : "font-medium"}>{money(p.amountCents)}</span>
-      ),
-    },
-  ];
-}
+  },
+  {
+    key: "amount",
+    header: "Amount",
+    align: "right",
+    render: (p) => (
+      <span className="flex flex-col items-end">
+        <span className={cn("ui-figure", p.status === "failed" ? "text-ui-muted line-through" : "font-medium")}>{money(p.amountCents)}</span>
+        <span className="ui-figure text-[13px] text-ui-muted">{p.status === "failed" ? "Failed" : p.feeCents ? `Net ${money(p.netCents)}` : "No fee"}</span>
+      </span>
+    ),
+  },
+];
 
-function Summary({ payments, sample }: { payments?: Payment[]; sample: boolean }) {
-  // "The last 30 days" from when the page opened.
+/** The last 30 days from when the page opened, against the 30 before. */
+function useSummary(payments: Payment[] | undefined) {
   const [openedAt] = useState(() => Date.now());
-  const s = useMemo(() => {
+  return useMemo(() => {
     if (!payments) return null;
-    const since = openedAt - 30 * 86_400_000;
-    const recent = payments.filter((p) => p.status === "succeeded" && new Date(p.createdAt).getTime() >= since);
+    const since = openedAt - 30 * DAY;
+    const before = since - 30 * DAY;
+    const at = (p: Payment) => new Date(p.createdAt).getTime();
+    const recent = payments.filter((p) => at(p) >= since);
+    const paid = recent.filter((p) => p.status === "succeeded");
+    const prev = payments.filter((p) => p.status === "succeeded" && at(p) >= before && at(p) < since).reduce((a, p) => a + p.amountCents, 0);
+    const gross = paid.reduce((a, p) => a + p.amountCents, 0);
+    const byMode = (m: PayMode) => paid.filter((p) => p.mode === m).reduce((a, p) => a + p.amountCents, 0);
     return {
-      gross: recent.reduce((a, p) => a + p.amountCents, 0),
-      fees: recent.reduce((a, p) => a + p.feeCents, 0),
-      net: recent.reduce((a, p) => a + p.netCents, 0),
-      count: recent.length,
+      gross,
+      fees: paid.reduce((a, p) => a + p.feeCents, 0),
+      net: paid.reduce((a, p) => a + p.netCents, 0),
+      count: paid.length,
+      failed: recent.length - paid.length,
+      delta: prev > 0 ? Math.round(((gross - prev) / prev) * 1000) / 10 : null,
+      modes: (["now", "later", "subscribe"] as const).map((mode) => ({ mode, share: gross ? Math.round((byMode(mode) / gross) * 100) : 0 })),
     };
   }, [payments, openedAt]);
-  if (!s) return <Skeleton shape="tile" height={84} />;
-  return (
-    <div className="relative">
-      <KeyValueGrid
-        columns={4}
-        variant="surface"
-        items={[
-          { label: "Gross, 30 days", value: <Money value={s.gross / 100} /> },
-          { label: "Fees", value: <Money value={s.fees / 100} /> },
-          { label: "Net to you", value: <Money value={s.net / 100} /> },
-          {
-            label: "Paid payments",
-            // One Sample chip for the whole strip, beside its shortest figure.
-            value: sample ? (
-              <span className="flex items-center gap-2">
-                {s.count.toLocaleString("en-US")}
-                <SampleBadge />
-              </span>
-            ) : (
-              s.count.toLocaleString("en-US")
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
 }
 
 function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; sample: boolean; onClose: () => void }) {
@@ -329,17 +317,17 @@ function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; 
       {p ? (
         <Drawer.Body>
           <div className="flex items-center gap-3 pb-5">
-            <Avatar name={p.description} size="lg" decorative />
-            <CellStack title={p.description} sub={formatDateTime(p.createdAt)} />
+            <PaymentName p={p} sub />
             {sample ? <SampleBadge className="ml-auto" /> : null}
           </div>
-          <Money value={p.amountCents / 100} className="text-[44px] leading-none font-semibold tracking-[-0.035em]" />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <PaymentStatusBadge status={p.status} />
-            <ModeBadge mode={p.mode} />
+          <Money value={p.amountCents / 100} className="text-[44px] leading-none font-medium tracking-[-0.035em]" />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <PaymentStatusBadge status={p.status} size="md" />
+            <ModeBadge mode={p.mode} size="md" />
           </div>
           <KeyValueGrid
             className="mt-6"
+            variant="surface"
             items={[
               { label: "Amount", value: money(p.amountCents) },
               { label: "Fee", value: p.mode === "later" ? "$0.00 (Pay in 4)" : money(p.feeCents) },
@@ -350,7 +338,9 @@ function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; 
           <DetailsList
             className="mt-4"
             size="sm"
+            variant="surface"
             items={[
+              { label: "Date", value: formatDateTime(p.createdAt) },
               { label: "Order", value: p.orderId },
               { label: "Buyer", value: <Address value={p.buyer} label="buyer's address" explorer={!sample} /> },
               { label: "Link", value: p.linkId ?? "Checkout" },
@@ -358,9 +348,9 @@ function PaymentDrawer({ payment, sample, onClose }: { payment: Payment | null; 
             ]}
           />
           {p.mode === "later" && p.status === "succeeded" ? (
-            <Button asChild variant="outline" size="md" icon={<CalendarClock />} className="mt-5" block>
+            <SecondaryButton asChild size="lg" block icon={<CalendarClock />} className="mt-5">
               <Link href={`/dashboard/plans?order=${encodeURIComponent(p.orderId)}`}>Open the Pay in 4 plan</Link>
-            </Button>
+            </SecondaryButton>
           ) : null}
         </Drawer.Body>
       ) : null}

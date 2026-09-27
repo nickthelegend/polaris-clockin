@@ -4,7 +4,6 @@ import {
   BarChart,
   CandlestickChart,
   ChartTypeToggle,
-  Coin,
   DataTable,
   DeltaChip,
   DollarCoin,
@@ -15,11 +14,9 @@ import {
   ProgressLegend,
   Skeleton,
   StatusPill,
-  TableName,
   TimeframeChips,
   cn,
   type ChartType,
-  type CoinTone,
   type StatusPillTone,
 } from "@polaris/ui";
 import { ArrowRight, BadgeCheck, Layers, ShieldCheck, Users, Workflow } from "lucide-react";
@@ -29,6 +26,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { MoneyWidget } from "@/components/dashboard/money-widget";
+import { MODE_COLOR, PaymentName, paymentPill } from "@/components/dashboard/payment-bits";
 import { DataModeNotice, LoadError, Panel, PanelEmpty, SampleBadge, SeeAll, StaleNotice, useNow } from "@/components/dashboard/common";
 import { RegistrationNotice } from "@/components/dashboard/registration";
 import { customersThisWeek, salesByMode, salesSeries, SERIES_FRAMES, type SeriesFrame } from "@/lib/data/analytics";
@@ -37,14 +35,6 @@ import { getCollectionsRun, getIndexedEvents, getUnderwritingReasons, placeholde
 import type { Overview, PayMode, Payment, Plan } from "@/lib/data/types";
 import { useMerchant } from "@/lib/merchant-context";
 import { useQuery, useSample, type QueryState } from "@/lib/session";
-
-/** Each mode in ref E's pill colours: lime, purple, teal. */
-export const MODE_COLOR: Record<PayMode, string> = {
-  now: "var(--ui-lime-button)",
-  later: "var(--ui-pill-purple-text)",
-  subscribe: "var(--ui-pill-teal-text)",
-};
-const MODE_COIN: Record<PayMode, CoinTone> = { now: "lime", later: "purple", subscribe: "teal" };
 
 /**
  * The Overview is ref E's main screen, mapped to Polaris: the sales chart
@@ -104,7 +94,7 @@ const axis = (v: number) => v.toLocaleString("en-US", { minimumFractionDigits: 2
 const dollars = (v: number) => `$${axis(v)}`;
 
 function timeLabel(frame: SeriesFrame) {
-  return (t: string | number) => {
+  return (t: string | number | Date) => {
     const d = new Date(t);
     if (frame === "1h" || frame === "24h") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
     if (frame === "1w") return d.toLocaleDateString("en-US", { weekday: "short", hour: "numeric" });
@@ -194,29 +184,6 @@ function SalesChart({ payments, sample, className }: { payments: QueryState<Paym
 }
 
 /* ── Recent payments: ref E's borderless table with status pills ────────── */
-
-/** A payment's pill, in ref E's colours: how it was paid, or that it failed. */
-export function paymentPill(p: Payment): { tone: StatusPillTone; text: string } {
-  if (p.status === "failed") return { tone: "red", text: "Failed" };
-  if (p.mode === "later") return { tone: "purple", text: "Pay in 4" };
-  if (p.mode === "subscribe") return { tone: "teal", text: "Subscription" };
-  return { tone: "lime", text: "Paid" };
-}
-
-/** The first column: a small coin in the mode's colour and the buyer, like the reference's exchange column. */
-export function PaymentName({ p, sub }: { p: Payment; sub?: boolean }) {
-  return (
-    <TableName
-      icon={
-        <Coin tone={MODE_COIN[p.mode]} size={28}>
-          <span className="text-[13px]">{p.description.trim()[0]?.toUpperCase() ?? "·"}</span>
-        </Coin>
-      }
-      title={<span className="ui-figure">{shortAddress(p.buyer, 6, 4)}</span>}
-      sub={sub ? p.description : undefined}
-    />
-  );
-}
 
 function RecentPayments({ payments, sample, className }: { payments: QueryState<Payment[]>; sample: boolean; className?: string }) {
   const router = useRouter();
