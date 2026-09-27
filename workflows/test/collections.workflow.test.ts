@@ -1,18 +1,21 @@
 /**
  * The collections handler under the CRE SDK's test runtime: candidates in,
  * one report out, failures turned into dunning events. The EVM and HTTP
- * capabilities are the SDK's own mocks (@chainlink/cre-sdk/test).
+ * capabilities are the SDK's own mocks (@chainlink/cre-sdk/test). The last
+ * block is the instant retry: the same delivery path, fired by the EVM log
+ * trigger on PolarisCheckout.Reauthorized.
  */
 
 import { describe, expect } from "bun:test";
-import { cre, type CronPayload } from "@chainlink/cre-sdk";
+import { cre, type CronPayload, type EVMLog } from "@chainlink/cre-sdk";
 import { addContractMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
-import { collectionsReceiverAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
-import { type Address, encodeErrorResult, type Hex, parseAbi } from "viem";
+import { collectionsReceiverAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
+import { type Address, encodeErrorResult, type Hex, hexToBytes, parseAbi } from "viem";
 import { verifyCallback } from "../src/shared/callback.ts";
 import { DUE_CANDIDATES_QUERY } from "../src/collections/candidates.ts";
 import { ACTION, decodeCollectionsReport, type Task } from "../src/collections/tasks.ts";
-import { type CollectionsConfig, configSchema, onCron } from "../src/collections/workflow.ts";
+import { REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
+import { type CollectionsConfig, configSchema, initWorkflow, onCron, onReauthorized } from "../src/collections/workflow.ts";
 import { b64, eventLog, fakeTxHash, hexOf, receiptJson, type TestLog } from "./helpers/evm.ts";
 import { type CreRequestLike, toSent } from "./helpers/fixtures-http.ts";
 import { answerHasura } from "./helpers/hasura.ts";
@@ -67,6 +70,8 @@ interface Chain {
   nextChargeAt?: Record<string, bigint>;
   /** A receiver that guards simulated deliveries by origin; without it, simulationTransmitter() reverts. */
   transmitter?: Address;
+  /** CollectionsReceiver.dueTasksFor(buyer): the instant retry's one read. */
+  dueFor?: (buyer: Address) => Array<{ action: number; id: bigint }>;
 }
 
 /** Wire the EVM mock to a small fake chain and record what the workflow did. */
@@ -80,6 +85,7 @@ function fakeChain(chain: Chain) {
     countReads: 0,
     dueReads: [] as string[],
     estimates: [] as Array<{ from: string; to: string }>,
+    dueForReads: [] as string[],
   };
 
   const engine = addContractMock(evm, { address: ENGINE, abi: polarisLoanEngineAbi });
@@ -111,6 +117,10 @@ function fakeChain(chain: Chain) {
     abi: chain.transmitter ? [...collectionsReceiverAbi, ...parseAbi(["function simulationTransmitter() view returns (address)"])] : collectionsReceiverAbi,
   });
   if (chain.transmitter) receiver.simulationTransmitter = () => chain.transmitter;
+  receiver.dueTasksFor = (buyer: unknown) => {
+    seen.dueForReads.push(String(buyer).toLowerCase());
+    return chain.dueFor?.(buyer as Address) ?? [];
+  };
   receiver.checkTasks = (tasks: unknown) => {
     seen.checkCalls++;
     const list = tasks as Array<{ action: number; id: bigint }>;
@@ -497,4 +507,131 @@ test("behind a simulation transmitter, gas is estimated for the whole delivery f
   expect(guarded.estimates).toEqual([{ from: transmitter, to: FORWARDER.toLowerCase() }]);
   // The whole delivery was estimated, so no forwarder overhead on top: estimate + 15%.
   expect(guarded.gasLimits[0]).toBe((300_000n * 11_500n) / 10_000n);
+});
+
+describe("the instant retry: an EVM log trigger on PolarisCheckout.Reauthorized", () => {
+  const CHECKOUT = "0x00000000000000000000000000000000c4ec0a17" as Address;
+  const BUYER = "0x90F79bf6EB2c4f870365E785982E1f101E93b906" as Address;
+  const REAUTH_TX = fakeTxHash("reauthorize");
+  const CALLBACK = { url: "https://api.polaris.test/v1/cre/collections", secretId: "POLARIS_CALLBACK_SECRET" };
+  const secrets = new Map([["main", new Map([["POLARIS_CALLBACK_SECRET", SECRET]])]]);
+  const withRetry = (over: Partial<CollectionsConfig> = {}) => baseConfig({ retry: { checkout: CHECKOUT, confidence: "FINALIZED" }, ...over });
+
+  /** The log the DON hands the handler, shaped as the EVM capability's Log. */
+  const reauthorizedLog = (over: { address?: Address; topic0?: Hex; removed?: boolean } = {}): EVMLog => {
+    const l = eventLog(polarisCheckoutAbi, "Reauthorized", over.address ?? CHECKOUT, { buyer: BUYER, value: 150_000_000n, deadline: 1_790_430_000n });
+    const topics = over.topic0 ? [over.topic0, ...l.topics.slice(1)] : l.topics;
+    return {
+      address: hexToBytes(l.address),
+      topics: topics.map((t) => hexToBytes(t)),
+      txHash: hexToBytes(REAUTH_TX),
+      blockHash: hexToBytes(fakeTxHash("block")),
+      data: hexToBytes(l.data),
+      eventSig: hexToBytes(topics[0]!),
+      blockNumber: { absVal: Uint8Array.of(0x03, 0xf3, 0x01, 0x3c), sign: 1n },
+      txIndex: 0,
+      index: 1,
+      removed: over.removed ?? false,
+    } as unknown as EVMLog;
+  };
+  const retry = (config: CollectionsConfig, log = reauthorizedLog(), withSecrets = false) =>
+    JSON.parse(onReauthorized(newTestRuntime(withSecrets ? secrets : null, { timeProvider: () => NOW_MS }, config), log));
+
+  test("its topic0 is keccak256 of Reauthorized(address,uint256,uint256), as the contracts' deployment record says", () => {
+    expect(REAUTHORIZED_TOPIC).toBe("0xd76c9fffb0eee17b94b2c5c485c1dcadfb48e50f9089e879e50c163b8ce02d73");
+    expect(eventLog(polarisCheckoutAbi, "Reauthorized", CHECKOUT, { buyer: BUYER, value: 1n, deadline: 1n }).topics[0]).toBe(REAUTHORIZED_TOPIC);
+  });
+
+  test("is trigger 1 next to the cron, filtered on PolarisCheckout and Reauthorized, finalized logs only; retry: null leaves the cron alone", () => {
+    const handlers = initWorkflow(withRetry());
+    expect(handlers).toHaveLength(2);
+    const filter = (handlers[1]!.trigger as unknown as { config: { addresses: Uint8Array[]; topics: Array<{ values: Uint8Array[] }>; confidence: number } })
+      .config;
+    expect(filter.addresses.map(hexOf)).toEqual([CHECKOUT.toLowerCase() as Hex]);
+    expect(filter.topics.map((t) => t.values.map(hexOf))).toEqual([[REAUTHORIZED_TOPIC]]);
+    expect(filter.confidence).toBe(2); // CONFIDENCE_LEVEL_FINALIZED
+    expect(initWorkflow(baseConfig())).toHaveLength(1);
+  });
+
+  test("collects the buyer's due instalments at once, through the cron's report, and tells the API which trigger fired", () => {
+    const seen = fakeChain({
+      loanCount: 0n,
+      subscriptionCount: 0n,
+      ready: () => false,
+      dueFor: () => [
+        { action: ACTION.COLLECT_INSTALLMENT, id: 7n },
+        { action: ACTION.COLLECT_INSTALLMENT, id: 9n },
+      ],
+      outcome: () => ({ executed: 50_383_562n }),
+    });
+    const sent = httpRecorder(() => ({ status: 202 }));
+    const out = retry(withRetry({ callback: CALLBACK }), reauthorizedLog(), true);
+
+    expect(seen.dueForReads).toEqual([BUYER.toLowerCase()]);
+    expect(seen.countReads).toBe(0); // no candidate scan: the event names the buyer
+    expect(seen.checkCalls).toBe(0);
+    expect(seen.reports).toEqual([
+      [
+        { action: ACTION.COLLECT_INSTALLMENT, id: 7n },
+        { action: ACTION.COLLECT_INSTALLMENT, id: 9n },
+      ],
+    ]);
+    expect(out).toMatchObject({
+      status: "written",
+      source: "event",
+      trigger: { kind: "log", event: "Reauthorized", buyer: BUYER, txHash: REAUTH_TX, logIndex: 1 },
+      executed: 2,
+      callbackStatus: 202,
+    });
+    expect(verifyCallback(SECRET, sent[0]!.body!, sent[0]!.headers["polaris-signature"], NOW_MS / 1000).ok).toBe(true);
+    const body = JSON.parse(sent[0]!.body!);
+    expect(body).toMatchObject({ type: "collections.run", id: out.txHash, trigger: { kind: "log", buyer: BUYER }, candidates: { source: "event" } });
+    expect(body.events.filter((e: { type: string }) => e.type === "installment.collected")).toHaveLength(2);
+  });
+
+  test("nothing due yet (re-signed before the instalment fell due): no write, no callback, the cron collects it later", () => {
+    const seen = fakeChain({ loanCount: 0n, subscriptionCount: 0n, ready: () => false, dueFor: () => [] });
+    const sent = httpRecorder(() => ({ status: 202 }));
+    const out = retry(withRetry({ callback: CALLBACK }), reauthorizedLog(), true);
+    expect(out).toMatchObject({ status: "idle", source: "event", txHash: null, tasks: [] });
+    expect(seen.reports).toHaveLength(0);
+    expect(seen.estimates).toHaveLength(0);
+    expect(sent).toHaveLength(0);
+  });
+
+  test("a buyer whose balance is still short is dunned again, from the same receipt reading as the cron's", () => {
+    fakeChain({
+      loanCount: 0n,
+      subscriptionCount: 0n,
+      ready: () => false,
+      dueFor: () => [{ action: ACTION.COLLECT_INSTALLMENT, id: 7n }],
+      outcome: () => ({ skipped: loanErr("InsufficientBalance", [1_000_000n, 50_383_562n]) }),
+    });
+    const sent = httpRecorder(() => ({ status: 202 }));
+    const out = retry(withRetry({ callback: CALLBACK }), reauthorizedLog(), true);
+    expect(out).toMatchObject({ status: "written", skipped: 1 });
+    expect(JSON.parse(sent[0]!.body!).events).toEqual([expect.objectContaining({ type: "installment.failed", loanId: "7", reason: "insufficient_funds" })]);
+  });
+
+  test("never acts on a log it did not read from PolarisCheckout's Reauthorized, nor on one a reorg removed", () => {
+    const seen = fakeChain({ loanCount: 0n, subscriptionCount: 0n, ready: () => false, dueFor: () => [{ action: 1, id: 7n }] });
+    expect(() => retry(withRetry(), reauthorizedLog({ address: "0x00000000000000000000000000000000000bad00" }))).toThrow(/not PolarisCheckout/);
+    expect(() => retry(withRetry(), reauthorizedLog({ topic0: fakeTxHash("Approval") }))).toThrow(/is not Reauthorized/);
+    expect(() => retry(baseConfig(), reauthorizedLog())).toThrow(/retry is null/);
+    expect(retry(withRetry(), reauthorizedLog({ removed: true }))).toMatchObject({ status: "idle", note: "the Reauthorized log was removed by a reorg" });
+    expect(seen.dueForReads).toHaveLength(0);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("a report holds at most maxTasksPerReport; the rest wait for the cron, and the run says so", () => {
+    const seen = fakeChain({
+      loanCount: 0n,
+      subscriptionCount: 0n,
+      ready: () => false,
+      dueFor: () => Array.from({ length: 4 }, (_, i) => ({ action: ACTION.COLLECT_INSTALLMENT, id: BigInt(i + 1) })),
+    });
+    const out = retry(withRetry({ maxTasksPerReport: 3 }));
+    expect(seen.reports[0]).toHaveLength(3);
+    expect(out.note).toContain("1 more due instalment(s)");
+  });
 });
