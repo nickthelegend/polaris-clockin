@@ -30,9 +30,16 @@ a store embeds a payment provider.
 Pages: `/`, `/shop`, `/products/[slug]`, `/cart`, `/checkout`,
 `/orders/[id]`. Screenshots of each page and each checkout path, at 1440×900
 and 390×844, are in [`docs/design/shop`](../../docs/design/shop): `desktop-*`
-and `mobile-*`, plus `popup-*` for the checkout window on desktop. They were
-taken against the dev mock, with motion settled; the wallet screens use a
-scripted EIP-1193 test wallet in place of MetaMask.
+and `mobile-*`, plus `popup-*` for the Polaris window on desktop (440×700,
+the inside of the window the SDK opens). Each numbered path runs from the
+checkout to the receipt: Pay now (12), Pay in 4 with the developer drawer
+and a collected instalment (13), Subscribe (14), canceling (15), the window
+closed without paying (22), a wallet payment (16), the wrong network (17)
+and a declined signature (18). Also shown: invalid details (19), the 404
+(20), the phone menu (21), the phone buy bar (03b) and keyboard focus on
+the payment choice (23). They were taken against the dev mock, with motion
+settled; the wallet screens use a scripted EIP-1193 test wallet in place of
+MetaMask.
 
 ## The integration
 
