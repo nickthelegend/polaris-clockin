@@ -26,13 +26,13 @@ export function PurchasePanel({ product, aprBps }: { product: Product; aprBps: n
 
   useEffect(() => () => timers.current.forEach((t) => window.clearTimeout(t)), []);
 
-  // On phones, a buy bar follows the page once the panel's own button has scrolled out of view.
+  // On phones, a buy bar follows the page whenever the panel's own button is out of view, above or below.
   useEffect(() => {
     const button = buttonRef.current;
     if (!button || typeof IntersectionObserver === "undefined") return;
     const phone = window.matchMedia("(max-width: 1023px)");
     const observer = new IntersectionObserver(([entry]) => {
-      const shown = phone.matches && !!entry && !entry.isIntersecting && entry.boundingClientRect.top > 0;
+      const shown = phone.matches && !!entry && !entry.isIntersecting;
       setBarShown(shown);
       setBuyBar(shown);
     });

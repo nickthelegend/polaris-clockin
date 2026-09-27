@@ -45,7 +45,7 @@ export interface CategoryCrop {
 
 export const CATEGORIES: { id: Category; name: string; blurb: string; image: string; crop: CategoryCrop }[] = [
   // The room scene: Halcyon One resting on the lounge chair.
-  { id: "audio", name: "Audio", blurb: "Headphones and speakers, tuned for long listening.", image: "/products/hero.jpg", crop: { x: 84, y: 56, zoom: 1.9 } },
+  { id: "audio", name: "Audio", blurb: "Headphones and speakers, tuned for long listening.", image: "/products/hero.jpg", crop: { x: 88, y: 58, zoom: 1.55 } },
   // The corner: the chair, the side table and the Arc lamp.
   { id: "home", name: "Home", blurb: "Light and seating for the room you spend the evening in.", image: "/products/hero.jpg", crop: { x: 70, y: 50, zoom: 1 } },
   // The instant camera on the side table.

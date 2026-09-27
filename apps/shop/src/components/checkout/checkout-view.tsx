@@ -479,7 +479,7 @@ export function CheckoutView({
   const noWallet = hasWallet === false;
 
   return (
-    <div className="mx-auto max-w-[1440px] px-4 pt-8 sm:px-6 lg:px-10 lg:pt-12">
+    <div className="mx-auto max-w-[1440px] px-4 pt-8 sm:px-6 lg:px-10 lg:pt-8">
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-16">
         <div className="lg:col-span-7">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -492,7 +492,7 @@ export function CheckoutView({
             <OrderSummary lines={lines} subtotal={subtotal} shipping={shipping} total={total} mode={method === "polaris" ? mode : null} aprBps={aprBps} collapsible />
           </div>
 
-          <form noValidate onSubmit={(e) => e.preventDefault()} className="mt-6 lg:mt-8" aria-describedby={notice ? "checkout-notice" : undefined}>
+          <form noValidate onSubmit={(e) => e.preventDefault()} className="mt-6" aria-describedby={notice ? "checkout-notice" : undefined}>
             {editing ? (
               <ContactFields
                 value={buyer}
@@ -508,10 +508,12 @@ export function CheckoutView({
             )}
 
             <section aria-labelledby="payment-title" className={editing ? "mt-12" : "mt-8"}>
-              <h2 id="payment-title" className="display text-[1.9rem]">
-                Payment
-              </h2>
-              <p className="mt-1 text-[0.95rem] text-muted">Every payment is confirmed before anything ships.</p>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <h2 id="payment-title" className="display text-[1.9rem]">
+                  Payment
+                </h2>
+                <p className="text-[0.92rem] text-muted">Confirmed before anything ships.</p>
+              </div>
 
               <PaymentOptions
                 method={method}

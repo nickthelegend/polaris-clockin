@@ -72,6 +72,9 @@ export function PaymentOptions({
   const modeName = useId();
 
   const plan = payIn4(total, aprBps);
+  const opens = coarsePointer
+    ? "Polaris opens to confirm, then brings you back here. You don\u2019t need a card."
+    : "Polaris opens in its own window to confirm. You don\u2019t need a card.";
   const [today] = useState(() => Date.now());
   const payInFourAllowed = total >= 5000;
 
@@ -134,21 +137,18 @@ export function PaymentOptions({
                   {plan.interestFree
                     ? `No interest, ${formatUsd(plan.total)} in total. `
                     : `${formatUsd(plan.interest)} interest (${aprLabel(plan.aprBps)}), ${formatUsd(plan.total)} in total. `}
-                  Halcyon is paid in full today.
+                  Halcyon is paid in full today. {opens}
                 </p>
               </div>
             ) : mode === "subscribe" ? (
               <p className="mt-4 text-[0.9rem] leading-relaxed text-muted" suppressHydrationWarning>
-                {formatUsd(total)} today, then on the {ordinal(new Date(today).getDate())} of every month. Skip or cancel any time.
+                {formatUsd(total)} today, then on the {ordinal(new Date(today).getDate())} of every month. Skip or cancel any time. {opens}
               </p>
             ) : (
-              <p className="mt-4 text-[0.9rem] leading-relaxed text-muted">Pay the full {formatUsd(total)} now, confirmed with Face ID.</p>
+              <p className="mt-4 text-[0.9rem] leading-relaxed text-muted">
+                Pay the full {formatUsd(total)} now, confirmed with Face ID. {opens}
+              </p>
             )}
-            <p className="mt-2 text-[0.9rem] text-muted">
-              {coarsePointer
-                ? "Polaris opens to confirm, then brings you back here. You don\u2019t need a card."
-                : "Polaris opens in its own window to confirm. You don\u2019t need a card."}
-            </p>
           </div>
         </Expand>
       </div>
