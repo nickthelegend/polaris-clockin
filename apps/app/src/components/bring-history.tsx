@@ -1,12 +1,32 @@
 "use client";
 
 import { AdaptiveSheet, Button, DetailsList, ListGroup, ListRow, Sheet } from "@polaris/ui";
-import { Clock, Globe, ShieldCheck, Wallet } from "lucide-react";
+import { Clock, Globe, ScanFace, ShieldCheck, Wallet } from "lucide-react";
 import { useState } from "react";
-import type { CreditLine } from "@/lib/data";
+import { createAccount, describeAccountError, toAccountError } from "@/lib/account";
+import { useAccountState } from "@/lib/account/hooks";
+import type { CreditLine, CreditReason } from "@/lib/data";
 import { usd } from "@/lib/money";
 import { bringHistory, LOCAL_HISTORY_WALLET } from "@/lib/underwriting";
 import { ReasonLabel } from "./reason-label";
+
+/**
+ * The reasons "Your limit went up" lists: every one a data provider stands
+ * behind (Nansen), then the strongest others, three or more in all.
+ */
+export function limitReasons(reasons: CreditReason[]): CreditReason[] {
+  const positive = reasons.filter((r) => r.points > 0);
+  const sourced = positive.filter((r) => r.source);
+  const others = positive.filter((r) => !r.source).slice(0, Math.max(2, 3 - sourced.length));
+  return positive.filter((r) => sourced.includes(r) || others.includes(r));
+}
+
+/** What a failed raise says: the account's own sentence for Face ID problems, the review's reason otherwise. */
+function raiseError(error: unknown): string {
+  const account = toAccountError(error);
+  if (account.kind !== "unknown") return describeAccountError(account);
+  return error instanceof Error && error.message ? error.message : "We couldn't raise your limit this time.";
+}
 
 /**
  * "Raise your limit": the one optional step that may say "wallet", because
@@ -22,6 +42,9 @@ export function BringHistorySheet({
   credit: CreditLine | undefined;
 }) {
   const [state, setState] = useState<"idle" | "working" | "done" | "reviewing">("idle");
+  // A buyer who opened a link on a new phone has no account yet: the same tap creates it.
+  const account = useAccountState();
+  const newBuyer = account.status === "none";
   const [error, setError] = useState<string | null>(null);
   // Each opening starts fresh.
   const [wasOpen, setWasOpen] = useState(open);
@@ -51,10 +74,7 @@ export function BringHistorySheet({
             <p className="-mt-2 text-[15px] text-ui-muted">is your Pay later limit now.</p>
             <DetailsList
               size="sm"
-              items={credit.reasons
-                .filter((r) => r.points > 0)
-                .slice(0, 3)
-                .map((r) => ({ label: <ReasonLabel reason={r} />, value: <span className="text-ui-up">+{r.points}</span> }))}
+              items={limitReasons(credit.reasons).map((r) => ({ label: <ReasonLabel reason={r} />, value: <span className="text-ui-up">+{r.points}</span> }))}
             />
           </>
         ) : state === "reviewing" ? (
@@ -95,21 +115,23 @@ export function BringHistorySheet({
           <Button
             variant="lime"
             size="lg"
-            icon={<Wallet />}
+            icon={newBuyer ? <ScanFace /> : <Wallet />}
             loading={state === "working"}
             disabled={credit?.historyLinked}
             onClick={async () => {
               setState("working");
               setError(null);
               try {
+                // Face ID starts inside the tap (WebKit wants it in the gesture). It creates the account; the review then reuses that session.
+                if (newBuyer) await createAccount();
                 setState((await bringHistory()) === "applied" ? "done" : "reviewing");
               } catch (e) {
-                setError(e instanceof Error ? e.message : "We couldn't raise your limit this time.");
+                setError(raiseError(e));
                 setState("idle");
               }
             }}
           >
-            {credit?.historyLinked ? "History already linked" : "Connect your wallet"}
+            {credit?.historyLinked ? "History already linked" : newBuyer ? "Continue with Face ID" : "Connect your wallet"}
           </Button>
         )}
       </Sheet.Footer>
