@@ -147,11 +147,17 @@ describe("POST /api/relay type=pay (Pay now)", () => {
     expect((await json(await relay({ ...body, chainId: 10143 }))).body.error.code).toBe("wrong_chain");
   });
 
-  it("rate-limits one account's requests", async () => {
+  it("rate-limits one account's verified requests (junk signatures don't count against the account they name)", async () => {
     const session = await newSession(merchant);
-    const body = { ...(await payNowBody(session)), signature: `0x${"11".repeat(65)}` };
+    const junk = { ...(await payNowBody(session)), signature: `0x${"11".repeat(65)}` };
+    const junkStatuses: number[] = [];
+    for (let i = 0; i < 8; i++) junkStatuses.push((await relay(junk, { "x-forwarded-for": "198.51.100.40" })).status);
+    expect(junkStatuses).not.toContain(429);
+
+    env.chain.reverts.set("pay", encodeErrorResult({ abi: polarisCheckoutAbi, errorName: "OrderAlreadySettled", args: [orderKey(merchant.account.address, session.orderId)] }));
+    const body = await payNowBody(session);
     const statuses: number[] = [];
-    for (let i = 0; i < 8; i++) statuses.push((await relay(body)).status);
+    for (let i = 0; i < 8; i++) statuses.push((await relay(body, { "x-forwarded-for": "198.51.100.41" })).status);
     expect(statuses).toContain(429);
   });
 

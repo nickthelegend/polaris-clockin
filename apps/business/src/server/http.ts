@@ -98,13 +98,32 @@ export function preflight(req: Request, policy: CorsPolicy): Response {
   return new Response(null, { status: headers["Access-Control-Allow-Origin"] ? 204 : 403, headers });
 }
 
-/** The caller's IP, trusting X-Forwarded-For only behind a proxy we run. */
-export function clientIp(req: Request, trustProxy: boolean): string {
-  if (trustProxy) {
-    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    if (forwarded) return forwarded;
-    const real = req.headers.get("x-real-ip")?.trim();
-    if (real) return real;
+/**
+ * The caller's IP, for per-IP rate limits, or null when there is none to
+ * be had.
+ *
+ * Route handlers never see the socket, so the address comes from
+ * `X-Forwarded-For`, read from the right: every proxy appends the address
+ * it received the request from, so the rightmost entries are the ones our
+ * own infrastructure wrote and everything left of them is whatever the
+ * client sent. With `trustedProxies` proxies in front of us (the platform's
+ * edge, a load balancer), the client is the entry that many places from
+ * the right; the leftmost entry, which a client controls, is never used.
+ *
+ * With no proxy (`trustedProxies` 0), Next itself sets `X-Forwarded-For` to
+ * the socket's address when the request has none, so the rightmost entry is
+ * the socket address. A client talking to Next directly can still send its
+ * own header, which is why production runs behind a proxy and says how many
+ * (`POLARIS_TRUSTED_PROXIES`; env.ts flags it when unset).
+ */
+export function clientIp(req: Request, trustedProxies: number): string | null {
+  const hops = (req.headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+  if (hops.length === 0) {
+    const real = trustedProxies > 0 ? req.headers.get("x-real-ip")?.trim() : undefined;
+    return real || null;
   }
-  return "local";
+  return hops[Math.max(0, hops.length - Math.max(1, trustedProxies))] ?? null;
 }

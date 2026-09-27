@@ -123,7 +123,8 @@ export function signIn(merchant: Partial<AuthedMerchant> & { userId: string }): 
 }
 
 export function request(method: string, url: string, init: { body?: unknown; headers?: Record<string, string> } = {}): Request {
-  const headers: Record<string, string> = { ...init.headers };
+  // What Next adds from the socket when the client sent no X-Forwarded-For.
+  const headers: Record<string, string> = { "x-forwarded-for": "127.0.0.1", ...init.headers };
   if (init.body !== undefined) headers["content-type"] = "application/json";
   return new Request(`http://localhost:3100${url}`, { method, headers, body: init.body === undefined ? undefined : JSON.stringify(init.body) });
 }

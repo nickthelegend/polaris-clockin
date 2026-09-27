@@ -10,6 +10,11 @@ import { HttpError } from "./http";
  * `burst`. Per-process: behind several instances the effective limit is
  * multiplied, which is acceptable for abuse control (money is protected by
  * signatures, not by this).
+ *
+ * At most MAX_BUCKETS keys are kept. When a new key would exceed that, the
+ * least recently used bucket is dropped (a Map iterates in insertion order,
+ * and every use moves its key to the end), so churning through fresh keys
+ * can only ever evict idle buckets, never reset everyone's.
  */
 
 type Bucket = { tokens: number; updatedMs: number };
@@ -22,21 +27,29 @@ export const LIMITS = {
   publicPerIp: { name: "public-ip", perMinute: 240, burst: 60 },
   apiPerKey: { name: "api-key", perMinute: 300, burst: 100 },
   onboardPerMerchant: { name: "onboard", perMinute: 6, burst: 3 },
+  /** Opening a payment link costs a relayer transaction (the price quote). */
+  linkOpen: { name: "link-open", perMinute: 20, burst: 10 },
 } as const satisfies Record<string, Limit>;
 
 const buckets = new Map<string, Bucket>();
-const MAX_BUCKETS = 50_000;
+let maxBuckets = 50_000;
 
 /** Take one token or throw a 429 with Retry-After. */
 export function consume(limit: Limit, key: string, nowMs = Date.now()): void {
   const id = `${limit.name}:${key}`;
   const ratePerMs = limit.perMinute / 60_000;
   let b = buckets.get(id);
-  if (!b) {
-    if (buckets.size >= MAX_BUCKETS) buckets.clear();
+  if (b) {
+    buckets.delete(id); // re-inserted below: most recently used last
+  } else {
+    while (buckets.size >= maxBuckets) {
+      const oldest = buckets.keys().next().value;
+      if (oldest === undefined) break;
+      buckets.delete(oldest);
+    }
     b = { tokens: limit.burst, updatedMs: nowMs };
-    buckets.set(id, b);
   }
+  buckets.set(id, b);
   b.tokens = Math.min(limit.burst, b.tokens + (nowMs - b.updatedMs) * ratePerMs);
   b.updatedMs = nowMs;
   if (b.tokens < 1) {
@@ -46,6 +59,11 @@ export function consume(limit: Limit, key: string, nowMs = Date.now()): void {
   b.tokens -= 1;
 }
 
-export function resetRateLimitsForTests(): void {
+export function resetRateLimitsForTests(options: { maxBuckets?: number } = {}): void {
   buckets.clear();
+  maxBuckets = options.maxBuckets ?? 50_000;
+}
+
+export function bucketCountForTests(): number {
+  return buckets.size;
 }

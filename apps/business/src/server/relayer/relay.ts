@@ -98,6 +98,17 @@ async function assertSigner(expected: Address, recover: Promise<Address>, what: 
 }
 
 /**
+ * Count a request against the account that signed it, once every signature
+ * in it has been verified. Never before: a request naming someone else's
+ * account with a junk signature would otherwise spend that account's
+ * allowance and lock them out of checkout. Unverified requests are bounded
+ * by the per-IP limit in front of the route (auth.ts `withSignedRequest`).
+ */
+function countVerified(signer: Address): void {
+  consume(LIMITS.relayPerSigner, getAddress(signer));
+}
+
+/**
  * One settlement per checkout: while a relay for this session is in flight,
  * a second, different signature (Pay now after Pay in 4, a double tap with a
  * fresh signature) is refused instead of being sent to revert on chain. The
@@ -171,7 +182,6 @@ async function pay(body: Record<string, unknown>, chain: ChainConfig): Promise<R
   const { session, merchant } = await openSessionForPayment(body.sessionId);
   if (!session.modes.includes("now")) throw new HttpError(400, "mode_not_offered", "This checkout doesn't offer paying in full.");
   const buyer = address(body, "buyer");
-  consume(LIMITS.relayPerSigner, buyer);
   const validAfter = uint(body, "validAfter");
   const validBefore = deadline(uint(body, "validBefore"), "validBefore");
   const sig = signature(body, "signature");
@@ -190,6 +200,7 @@ async function pay(body: Record<string, unknown>, chain: ChainConfig): Promise<R
     }),
     "payment",
   );
+  countVerified(buyer);
   const { v, r, s } = vrs(sig);
   const relayId = relayIdOf("pay", sig);
   await assertNothingInFlight(session.id, relayId);
@@ -219,7 +230,6 @@ async function openPlan(body: Record<string, unknown>, chain: ChainConfig): Prom
     throw new HttpError(400, "mode_not_offered", "Pay in 4 isn't available for this amount.");
   }
   const buyer = address(body, "intent.buyer");
-  consume(LIMITS.relayPerSigner, buyer);
   const principal = uint(body, "intent.principal");
   const installments = Number(uint(body, "intent.installments", { max: 0xffffffffn }));
   const interval = uint(body, "intent.interval", { max: 0xffffffffffffffffn });
@@ -248,6 +258,7 @@ async function openPlan(body: Record<string, unknown>, chain: ChainConfig): Prom
     "plan",
   );
   const { permit, sig: permitSig } = await permitOf(body, buyer, chain.contracts.loanEngine, chain);
+  countVerified(buyer);
   const relayId = relayIdOf("openPlan", sig, permitSig ?? "0x");
   await assertNothingInFlight(session.id, relayId);
   const result = await carry({
@@ -269,7 +280,6 @@ async function subscribe(body: Record<string, unknown>, chain: ChainConfig): Pro
   if (!session.modes.includes("subscribe") || !session.subscription) throw new HttpError(400, "mode_not_offered", "This checkout doesn't offer a subscription.");
   if (!session.chain.subscriptionPlanId) throw new HttpError(409, "plan_not_ready", "This subscription is still being set up. Try again in a moment.");
   const buyer = address(body, "intent.buyer");
-  consume(LIMITS.relayPerSigner, buyer);
   const planId = uint(body, "intent.planId");
   const pricePerPeriod = uint(body, "intent.pricePerPeriod");
   const period = uint(body, "intent.periodSeconds", { max: 0xffffffffffffffffn });
@@ -303,6 +313,7 @@ async function subscribe(body: Record<string, unknown>, chain: ChainConfig): Pro
     "subscription",
   );
   const { permit, sig: permitSig } = await permitOf(body, buyer, chain.contracts.payments, chain);
+  countVerified(buyer);
   const relayId = relayIdOf("subscribe", sig, permitSig ?? "0x");
   await assertNothingInFlight(session.id, relayId);
   const result = await carry({
@@ -326,7 +337,6 @@ export function sendNonce(linkKey: Address, expiresAt: bigint): Hex {
 
 async function send(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
   const sender = address(body, "sender");
-  consume(LIMITS.relayPerSigner, sender);
   const linkKey = address(body, "linkKey");
   const amount = uint(body, "amount");
   if (amount === 0n) bad("amount", "amount must be more than zero.");
@@ -359,6 +369,7 @@ async function send(body: Record<string, unknown>, chain: ChainConfig): Promise<
     }),
     "link",
   );
+  countVerified(sender);
   const a = vrs(sig);
   const k = vrs(linkSig);
   const result = await carry({
@@ -378,7 +389,6 @@ async function send(body: Record<string, unknown>, chain: ChainConfig): Promise<
 async function claim(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
   const linkKey = address(body, "linkKey");
   const to = address(body, "to");
-  consume(LIMITS.relayPerSigner, linkKey);
   const claimDeadline = deadline(uint(body, "deadline"), "deadline", { maxAheadSeconds: 3600 });
   const sig = signature(body, "signature");
   await assertSigner(
@@ -392,6 +402,7 @@ async function claim(body: Record<string, unknown>, chain: ChainConfig): Promise
     }),
     "claim",
   );
+  countVerified(linkKey);
   const { v, r, s } = vrs(sig);
   const result = await carry({
     kind: "claim",
@@ -411,7 +422,6 @@ async function cancelSend(body: Record<string, unknown>, chain: ChainConfig): Pr
   if (!link.sender || getAddress(link.sender) === "0x0000000000000000000000000000000000000000") {
     throw new HttpError(404, "link_not_found", "This link has already been claimed or cancelled.");
   }
-  consume(LIMITS.relayPerSigner, link.sender);
   await assertSigner(
     link.sender,
     recoverTypedDataAddress({
@@ -423,6 +433,7 @@ async function cancelSend(body: Record<string, unknown>, chain: ChainConfig): Pr
     }),
     "cancel",
   );
+  countVerified(link.sender);
   const { v, r, s } = vrs(sig);
   const result = await carry({
     kind: "cancelSend",
@@ -446,7 +457,6 @@ async function repay(body: Record<string, unknown>, chain: ChainConfig): Promise
   const client = publicClient();
   const loan = (await client.readContract({ address: chain.contracts.loanEngine, abi: polarisLoanEngineAbi, functionName: "getLoan", args: [loanId] })) as { borrower: Address };
   if (!loan.borrower || /^0x0{40}$/i.test(loan.borrower)) throw new HttpError(404, "plan_not_found", "We couldn't find that plan.");
-  consume(LIMITS.relayPerSigner, loan.borrower);
   const nonce = (await client.readContract({ address: chain.contracts.loanEngine, abi: polarisLoanEngineAbi, functionName: "nonces", args: [loan.borrower] })) as bigint;
   await assertSigner(
     loan.borrower,
@@ -459,6 +469,7 @@ async function repay(body: Record<string, unknown>, chain: ChainConfig): Promise
     }),
     "repayment",
   );
+  countVerified(loan.borrower);
   const result = await carry({
     kind: "repay",
     relayId: relayIdOf("repay", sig),
@@ -477,7 +488,6 @@ async function cancelSubscription(body: Record<string, unknown>, chain: ChainCon
     subscriber: Address;
   };
   if (!sub.subscriber || /^0x0{40}$/i.test(sub.subscriber)) throw new HttpError(404, "subscription_not_found", "We couldn't find that subscription.");
-  consume(LIMITS.relayPerSigner, sub.subscriber);
   await assertSigner(
     sub.subscriber,
     recoverTypedDataAddress({
@@ -489,6 +499,7 @@ async function cancelSubscription(body: Record<string, unknown>, chain: ChainCon
     }),
     "cancellation",
   );
+  countVerified(sub.subscriber);
   const { v, r, s } = vrs(sig);
   const result = await carry({
     kind: "cancelSubscription",
@@ -526,6 +537,7 @@ export async function relayTransfer(input: {
     }),
     "transfer",
   );
+  countVerified(input.from);
   const { v, r, s } = vrs(input.signature);
   return carry({
     kind: input.kind ?? "transfer",
@@ -543,7 +555,6 @@ export async function relayTransfer(input: {
 
 async function transfer(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
   const from = address(body, "from");
-  consume(LIMITS.relayPerSigner, from);
   const result = await relayTransfer({
     chain,
     from,
@@ -604,7 +615,6 @@ export async function handleSdkRelay(merchant: MerchantRecord, body: Record<stri
   const contract = address(body, "contract");
   if (contract !== chain.contracts.payments) throw new HttpError(400, "wrong_contract", "The relayer only calls PolarisPayments here.", { param: "contract" });
   const payer = address(body, "payer");
-  consume(LIMITS.relayPerSigner, payer);
   const merchantAddress = address(body, "merchant");
   if (!merchant.walletAddress || merchantAddress !== merchant.walletAddress) {
     throw new HttpError(403, "wrong_merchant", "This key can only take payments to its own business.", { param: "merchant" });
@@ -630,6 +640,7 @@ export async function handleSdkRelay(merchant: MerchantRecord, body: Record<stri
     }),
     "payment",
   );
+  countVerified(payer);
   const { v, r, s } = vrs(sig);
   const result = await carry({
     kind: "payWithAuthorization",

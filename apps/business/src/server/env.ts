@@ -85,7 +85,12 @@ export type ServerConfig = {
   receiptTimeoutMs: number;
   /** Background loops (webhooks, chain sync, payouts) in this process. */
   workers: boolean;
-  trustProxy: boolean;
+  /**
+   * How many proxies we run in front of this server, each appending to
+   * X-Forwarded-For: the client's IP is that many entries from the right
+   * (http.ts `clientIp`). 0 means Next is exposed directly.
+   */
+  trustedProxies: number;
 };
 
 const DEFAULT_RPC: Record<number, string> = {
@@ -327,7 +332,8 @@ function build(): ServerConfig {
     },
     receiptTimeoutMs: int("RELAYER_RECEIPT_TIMEOUT_MS", 15_000),
     workers: flag("POLARIS_WORKERS", !production),
-    trustProxy: flag("POLARIS_TRUST_PROXY"),
+    // POLARIS_TRUST_PROXY=1 (the older setting) means one proxy.
+    trustedProxies: Math.max(0, int("POLARIS_TRUSTED_PROXIES", flag("POLARIS_TRUST_PROXY") ? 1 : 0)),
   };
 }
 
@@ -350,6 +356,9 @@ export function productionProblems(config = getConfig()): string[] {
   if (!config.keyPepper) problems.push("POLARIS_KEY_PEPPER is not set: secret keys would be stored as plain SHA-256.");
   if (!config.cronSecret) problems.push("CRON_SECRET is not set: the cron routes are closed.");
   if (config.relayer.mode === "local") problems.push("The relayer signs with a raw key.");
+  if (config.trustedProxies === 0) {
+    problems.push("POLARIS_TRUSTED_PROXIES is not set: per-IP rate limits can't tell a client's own X-Forwarded-For from the one our proxy wrote.");
+  }
   return problems;
 }
 

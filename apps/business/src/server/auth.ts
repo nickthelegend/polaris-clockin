@@ -9,7 +9,7 @@ import type { Address } from "@/lib/data/types";
 import { ChainNotConfigured } from "./chain/client";
 import { getDb } from "./db";
 import { getConfig } from "./env";
-import { corsHeaders, failFrom, fail, HttpError, newRequestId, preflight, type CorsPolicy } from "./http";
+import { clientIp, corsHeaders, failFrom, fail, HttpError, newRequestId, preflight, type CorsPolicy } from "./http";
 import { PolicyViolation } from "./policy/relayer";
 import { getPrivy } from "./privy";
 import { consume, LIMITS, type Limit } from "./ratelimit";
@@ -300,13 +300,16 @@ function wrap<A, Ctx>(
 
 const appCors = (): CorsPolicy => ({ kind: "list", origins: getConfig().appOrigins });
 
+/**
+ * The per-IP rate-limit key: the client's address (http.ts `clientIp`),
+ * never a constant every caller would share. A request we can't place is
+ * refused rather than pooled with others; behind Next or any proxy that
+ * doesn't happen.
+ */
 function clientKey(req: Request): string {
-  const { trustProxy } = getConfig();
-  if (trustProxy) {
-    const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-    if (forwarded) return forwarded;
-  }
-  return "local";
+  const ip = clientIp(req, getConfig().trustedProxies);
+  if (!ip) throw new HttpError(400, "client_unidentified", "We couldn't tell where this request came from.");
+  return ip;
 }
 
 /**
