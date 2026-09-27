@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { DEMO_MODE } from "@/lib/api";
 import { receiptUrl } from "@/lib/chain";
 import type { ActivityItem } from "@/lib/data";
 import { longDate, time } from "@/lib/dates";
@@ -62,15 +63,17 @@ export function ReceiptSheet({ item, onClose }: { item: ActivityItem | null; onC
               ]}
             />
           </div>
-          <a
-            href={receiptUrl(item.txHash)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="press mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-btn bg-pill text-[15px] font-medium text-fg"
-          >
-            View receipt
-            <Icon name="external" size={18} />
-          </a>
+          {DEMO_MODE ? null : (
+            <a
+              href={receiptUrl(item.txHash)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="press mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-btn bg-pill text-[15px] font-medium text-fg"
+            >
+              View receipt
+              <Icon name="external" size={18} />
+            </a>
+          )}
         </div>
       ) : null}
     </Sheet>

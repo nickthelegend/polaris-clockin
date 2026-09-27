@@ -31,15 +31,16 @@ function ausdAddress(): Address | null {
 }
 
 /**
- * The EIP-712 domain for AUSD transfers, or null when AUSD isn't configured
- * (withdrawals are then recorded without a wallet signature, as sample data).
+ * The EIP-712 domain for AUSD transfers from this build's environment, or
+ * null when it isn't set (`networkAusdDomain` then reads it from the server).
  * The name and version must match AUSD's `eip712Domain()`.
  */
 export function ausdDomain() {
   const verifyingContract = ausdAddress();
   if (!verifyingContract) return null;
   return {
-    name: process.env.NEXT_PUBLIC_AUSD_EIP712_NAME || "AUSD",
+    // AUSD's EIP-712 name is "Agora Dollar", not its ERC-20 name (docs/research/ausd.md §4.2).
+    name: process.env.NEXT_PUBLIC_AUSD_EIP712_NAME || "Agora Dollar",
     version: process.env.NEXT_PUBLIC_AUSD_EIP712_VERSION || "1",
     chainId: DEFAULT_CHAIN.id,
     verifyingContract,

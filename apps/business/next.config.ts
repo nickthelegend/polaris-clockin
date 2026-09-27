@@ -8,6 +8,8 @@ const config: NextConfig = {
   // The Privy Node SDK verifies tokens with `jose` and signs wallet requests with
   // node:crypto. Keep it out of the server bundle so it loads as plain Node.
   serverExternalPackages: ["@privy-io/node"],
+  // @polaris/db ships TypeScript sources (it is a workspace package).
+  transpilePackages: ["@polaris/db"],
   async headers() {
     return [
       {

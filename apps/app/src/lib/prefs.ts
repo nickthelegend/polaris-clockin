@@ -51,6 +51,11 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
+/** The name the buyer chose on this device, outside React (the data layer). Empty during server render. */
+export function prefsName(): string {
+  return typeof window === "undefined" ? "" : read().name;
+}
+
 export function usePrefs(): Prefs {
   return useSyncExternalStore(subscribe, read, () => EMPTY);
 }

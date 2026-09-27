@@ -1,0 +1,78 @@
+import "server-only";
+
+import type { MerchantRecord } from "@polaris/db";
+import type { Address } from "viem";
+
+import { getDb } from "./db";
+
+/**
+ * A buyer's book as the Polaris app shows it: their Pay in 4 plans, their
+ * subscriptions and their payments to Polaris merchants, from the records
+ * the chain sync keeps (every one of them came from a chain event).
+ *
+ * Public by address, so only what the chain already shows: amounts,
+ * schedules, the merchant's name and address, transaction hashes. Never a
+ * checkout's description, order id or metadata, which are the merchant's
+ * and the buyer's business, not an address-holder's.
+ */
+
+const LIMIT = 100;
+
+function merchantView(m: MerchantRecord | undefined, fallback: string) {
+  return { id: m?.publicId ?? null, name: m?.businessName ?? "Polaris merchant", address: (m?.walletAddress ?? fallback) as Address };
+}
+
+export async function buyerBook(address: Address) {
+  const db = getDb();
+  const who = address.toLowerCase();
+  const [plans, subscriptions, payments] = await Promise.all([
+    db.plans.find({ borrower: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
+    db.subscriptions.find({ subscriber: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
+    db.payments.find({ payer: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
+  ]);
+  const ids = [...new Set([...plans, ...subscriptions, ...payments].map((r) => r.merchantId))];
+  const merchants = new Map((await Promise.all(ids.map((id) => db.merchants.get(id)))).filter((m): m is MerchantRecord => m !== null).map((m) => [m.id, m]));
+  const merchantOf = (id: string) => merchantView(merchants.get(id), "0x0000000000000000000000000000000000000000");
+
+  return {
+    address,
+    plans: plans
+      .filter((p) => !p.sample)
+      .map((p) => ({
+        id: p.id,
+        merchant: merchantOf(p.merchantId),
+        principalUnits: p.principalUnits,
+        totalOwedUnits: p.totalOwedUnits,
+        repaidUnits: p.repaidUnits,
+        installments: p.installments,
+        installmentsPaid: p.installmentsPaid,
+        intervalSeconds: p.intervalSeconds,
+        /** Unix seconds; instalment i (0-based) is due at startedAt + (i+1)·interval. */
+        startedAt: p.startedAt,
+        state: p.state,
+        openedTxHash: p.openedTxHash,
+        createdAt: p.createdAt,
+      })),
+    subscriptions: subscriptions.map((s) => ({
+      id: s.id,
+      planId: s.planId,
+      merchant: merchantOf(s.merchantId),
+      priceUnits: s.priceUnits,
+      periodSeconds: s.periodSeconds,
+      periodsCharged: s.periodsCharged,
+      nextChargeAt: s.nextChargeAt,
+      status: s.status,
+      createdAt: s.createdAt,
+    })),
+    payments: payments
+      .filter((p) => !p.sample && !p.mismatch)
+      .map((p) => ({
+        id: p.id,
+        kind: p.kind,
+        merchant: merchantOf(p.merchantId),
+        amountUnits: p.amountUnits,
+        txHash: p.txHash,
+        createdAt: p.createdAt,
+      })),
+  };
+}

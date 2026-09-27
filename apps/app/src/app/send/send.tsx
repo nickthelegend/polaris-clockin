@@ -311,15 +311,17 @@ function Sent({ sent }: { sent: { receipt: RelayReceipt; amount: bigint; to: Per
         </p>
       </div>
       <div className="mt-auto flex flex-col gap-[13.5px] pt-8">
-        <a
-          href={sent.receipt.explorerUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] font-medium tracking-[-0.02em] shadow-surface"
-        >
-          View receipt
-          <Icon name="external" size={18} />
-        </a>
+        {sent.receipt.explorerUrl ? (
+          <a
+            href={sent.receipt.explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] font-medium tracking-[-0.02em] shadow-surface"
+          >
+            View receipt
+            <Icon name="external" size={18} />
+          </a>
+        ) : null}
         <Button onClick={() => router.push("/")}>Done</Button>
       </div>
     </main>

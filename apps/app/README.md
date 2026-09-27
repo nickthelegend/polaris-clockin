@@ -40,7 +40,31 @@ inlined at build time, and public.
 | `NEXT_PUBLIC_RPC_URL` | viem's default for the chain | Read-only RPC (EIP-712 domains, permit nonces) |
 | `NEXT_PUBLIC_EXPLORER_URL` | `https://testnet.monadvision.com` | Where "View receipt" goes |
 | `NEXT_PUBLIC_AUSD_ADDRESS` | AUSD on Monad testnet | The dollar token |
-| `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. Unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
+| `NEXT_PUBLIC_POLARIS_API_URL` | unset | Polaris for Business (e.g. `http://localhost:3100`): the relayer (`POST /api/relay`), checkout sessions and payment links (`/api/public/…`), and the network's contracts and EIP-712 domains (`/api/public/network`). Unset: the stub relayer and sample links. |
+| `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
+
+## With Polaris for Business (the real relayer)
+
+Set `NEXT_PUBLIC_POLARIS_API_URL` to the business app (`http://localhost:3100`
+locally) and every Confirm goes to its relayer, `POST /api/relay`; checkout
+links (`/pay/cs_test_…` from a merchant's `polarispay-sdk` session,
+`/pay/pl_…` from a dashboard payment link) load from its public API. Against
+a local Hardhat node also set `NEXT_PUBLIC_CHAIN_ID=31337` and
+`NEXT_PUBLIC_RPC_URL=http://127.0.0.1:<node port>`: the app refuses to sign
+for a network other than the one it was built for.
+
+With the API set, nothing on screen is sample data (`src/lib/data/live.ts`):
+the balance is `AUSD.balanceOf` read from the chain; plans, subscriptions and
+activity come from `/api/public/buyers/{address}` (the API's records of chain
+events); the credit line, score and reasons from `/api/public/credit/{address}`
+(ScoreManager and the CRE workflow's explained decision); a send link's state
+from `PolarisSend`. *Raise your limit* signs the account's consent (Face ID)
+and the history wallet's link proof (its own prompt), and the API fires the
+CRE underwriting workflow (`src/lib/underwriting.ts`).
+
+Without it, the app is the offline demo and says so on every screen
+("Demo mode · sample data, nothing is on chain"): the stub relayer's receipts
+are marked `simulated` and never link a made-up hash to the explorer.
 
 ## Face ID accounts
 
@@ -118,8 +142,12 @@ because it is for people who already have one.
 | `src/lib/account/` | The Mera account layer, capability check, dev signer |
 | `src/lib/sign/` | EIP-712 builders for `PlanIntent`, `SubscribeIntent`, ERC-3009, ERC-2612, `Claim`, `Cancel`, `CancelSubscription`; domain reading (ERC-5267); nonce derivations |
 | `src/lib/actions.ts` | Each money action: build, sign, relay |
-| `src/lib/relayer.ts` | The typed relayer client. **A stub for now**: it returns a made-up receipt |
-| `src/lib/data/` | The data interface every screen reads; `mock.ts` is placeholder data behind it |
+| `src/lib/relayer.ts` | The relayer client: `POST {NEXT_PUBLIC_POLARIS_API_URL}/api/relay`, errors mapped to `RelayError` with the server's message for the buyer. Without the API, a local stub |
+| `src/lib/network.ts`, `src/lib/api.ts` | The network (contracts and EIP-712 domains) from Polaris for Business; the fetch helper |
+| `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
+| `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
+| `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data) without |
+| `src/lib/underwriting.ts` | Pay in 4 credit: consent and link-proof signatures, the CRE underwriting request, waiting for the decision |
 | `src/components/` | The design system: buttons, cards, sheets, keypad, QR, tab bar |
 | `public/assets/` | Generated images, picked up as soon as they exist (see below) |
 
@@ -135,10 +163,14 @@ stand-in, so dropping the files in needs no code change:
 
 ## Not built yet
 
-- The relayer and indexer: receipts are simulated, and all balances, plans and
-  activity are placeholder data (`src/lib/data/mock.ts`).
-- *Raise your limit* simulates the WalletConnect signature and the
-  underwriting call.
-- Pay early has no signed early-repayment entry point on the loan engine yet.
+- Contacts: there is no address book yet, so with the API set the contact
+  list is empty (the demo's sample people have made-up addresses).
+- Send-by-link activity: the API doesn't record sends yet (the Envio
+  indexer's `send(linkKey)` would); a link's own state is read from the chain.
+- The `/pay/[id]` screen doesn't yet call `src/lib/checkout-return.ts`, so a
+  popup checkout doesn't post its result to the merchant page.
+- *Raise your limit* connects the history wallet through the browser's own
+  provider (an extension, or a wallet app's browser); WalletConnect for a
+  wallet on another device is not wired yet.
 - Receipts only you can read (plan §3.5) and the opt-in recovery key.
 - Local-currency rates are placeholders.
