@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 
-import { formatUsd, quotePayIn4, toCents, type AmountInput, type PayIn4Quote } from "../money.js";
+import { formatUsdAmount, quotePayIn4, toCents, type AmountInput, type PayIn4Quote } from "../money.js";
 import { PolarisMark } from "./PolarisMark.js";
 import { PolarisStyles } from "./styles.js";
 
@@ -24,21 +24,27 @@ export type PolarisMessagingProps = {
   style?: CSSProperties;
 };
 
+const HOUR = 3_600;
+const DAY = 86_400;
+const WEEK = 7 * DAY;
+
 /**
  * When an instalment falls due, from checkout: "in 1 week", "tomorrow",
- * "in 3 days", "in 5 min". Never "today": PolarisLoanEngine collects nothing
- * at checkout, and the first instalment is one interval out.
+ * "in 3 days", "in 2 hours", "in 5 min". Never "today": PolarisLoanEngine
+ * collects nothing at checkout, and the first instalment is one interval out.
  */
 function describeDue(dueInSeconds: number): string {
-  const week = 7 * 86_400;
-  const day = 86_400;
-  if (dueInSeconds % week === 0) {
-    const n = dueInSeconds / week;
+  if (dueInSeconds % WEEK === 0) {
+    const n = dueInSeconds / WEEK;
     return n === 1 ? "in 1 week" : `in ${n} weeks`;
   }
-  if (dueInSeconds % day === 0) {
-    const n = dueInSeconds / day;
+  if (dueInSeconds % DAY === 0) {
+    const n = dueInSeconds / DAY;
     return n === 1 ? "tomorrow" : `in ${n} days`;
+  }
+  if (dueInSeconds % HOUR === 0) {
+    const n = dueInSeconds / HOUR;
+    return n === 1 ? "in 1 hour" : `in ${n} hours`;
   }
   const minutes = Math.max(1, Math.round(dueInSeconds / 60));
   return minutes === 1 ? "in 1 min" : `in ${minutes} min`;
@@ -49,11 +55,11 @@ function capitalise(text: string): string {
 }
 
 function cadence(seconds: number): string {
-  const week = 7 * 86_400;
-  if (seconds === week) return "every week";
-  if (seconds % week === 0) return `every ${seconds / week} weeks`;
-  if (seconds % 86_400 === 0) return seconds === 86_400 ? "every day" : `every ${seconds / 86_400} days`;
-  return `every ${Math.max(1, Math.round(seconds / 60))} minutes`;
+  if (seconds % WEEK === 0) return seconds === WEEK ? "every week" : `every ${seconds / WEEK} weeks`;
+  if (seconds % DAY === 0) return seconds === DAY ? "every day" : `every ${seconds / DAY} days`;
+  if (seconds % HOUR === 0) return seconds === HOUR ? "every hour" : `every ${seconds / HOUR} hours`;
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return minutes === 1 ? "every minute" : `every ${minutes} minutes`;
 }
 
 function inRange(amount: AmountInput, min: AmountInput, max: AmountInput): boolean {
@@ -67,7 +73,7 @@ function inRange(amount: AmountInput, min: AmountInput, max: AmountInput): boole
 
 /** "$50.38" with the dollar sign dimmed, the design system's money style. */
 function Money({ value }: { value: string }) {
-  const text = formatUsd(toCents(value));
+  const text = formatUsdAmount(value);
   return (
     <>
       <span className="plrs-hero__dim">{text.slice(0, 1)}</span>
@@ -136,7 +142,7 @@ export function PolarisMessaging({
   if (!quote) return null;
 
   const count = quote.installments.length;
-  const each = formatUsd(toCents(quote.each));
+  const each = formatUsdAmount(quote.each);
   const first = quote.installments[0]!;
 
   return (
@@ -189,8 +195,8 @@ export function PolarisMessaging({
           </p>
           <p className="plrs-sub">
             {quote.interestFree
-              ? `${formatUsd(toCents(quote.total))} in total, no interest.`
-              : `${formatUsd(toCents(quote.total))} in total, including ${formatUsd(toCents(quote.interest))} interest (${quote.aprBps / 100}% APR).`}
+              ? `${formatUsdAmount(quote.total)} in total, no interest.`
+              : `${formatUsdAmount(quote.total)} in total, including ${formatUsdAmount(quote.interest)} interest (${quote.aprBps / 100}% APR).`}
           </p>
 
           <ol className="plrs-sched" style={{ ["--plrs-n" as string]: String(Math.min(count, 6)) }} aria-label="Payment schedule">
@@ -198,7 +204,7 @@ export function PolarisMessaging({
               <li key={row.index}>
                 <span className="plrs-tick" aria-hidden="true" />
                 <span className="plrs-when">{capitalise(describeDue(row.dueInSeconds))}</span>
-                <span className="plrs-amt">{formatUsd(toCents(row.amount))}</span>
+                <span className="plrs-amt">{formatUsdAmount(row.amount)}</span>
               </li>
             ))}
           </ol>
@@ -208,8 +214,8 @@ export function PolarisMessaging({
             <li>Continue with Face ID. No app to install, no password, no seed phrase.</li>
             <li>
               {count === 1
-                ? `Nothing to pay today. Your payment of ${formatUsd(toCents(first.amount))} is ${describeDue(first.dueInSeconds)}, collected automatically.`
-                : `Nothing to pay today. Your first payment of ${formatUsd(toCents(first.amount))} is ${describeDue(first.dueInSeconds)}, and the rest follow ${cadence(quote.intervalSeconds)}, automatically.`}
+                ? `Nothing to pay today. Your payment of ${formatUsdAmount(first.amount)} is ${describeDue(first.dueInSeconds)}, collected automatically.`
+                : `Nothing to pay today. Your first payment of ${formatUsdAmount(first.amount)} is ${describeDue(first.dueInSeconds)}, and the rest follow ${cadence(quote.intervalSeconds)}, automatically.`}
             </li>
           </ol>
 

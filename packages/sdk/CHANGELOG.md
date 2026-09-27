@@ -75,6 +75,10 @@ Polaris on Monad, with Stripe's ergonomics.
   Monad) was told "You cancelled the request." `pay()` and the 0.2 flows now
   answer "Switch your wallet to Monad Testnet to pay." with a `wrong_chain`
   `PolarisError` as `cause`, and never ask for a signature.
+- `PolarisMessaging` and `PolarisCheckoutButton` threw while rendering when a
+  quoted figure rounded to $0.00 (a minutes-long demo plan's interest, or a
+  cart of a few cents). They show $0.00 instead, and hourly plans read
+  "In 1 hour … every hour" rather than "In 60 min".
 
 ## 0.2.1
 

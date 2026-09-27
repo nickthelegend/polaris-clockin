@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PAY_IN_4, formatBaseUnits, formatUsd, normaliseAmount, quotePayIn4, toBaseUnits, toCents } from "../src/money.js";
+import { PAY_IN_4, formatBaseUnits, formatUsd, formatUsdAmount, normaliseAmount, quotePayIn4, toBaseUnits, toCents } from "../src/money.js";
 
 describe("amounts", () => {
   it("canonicalises decimal strings and exact numbers", () => {
@@ -30,6 +30,11 @@ describe("amounts", () => {
   it("formats USD deterministically", () => {
     expect(formatUsd(128_450n)).toBe("$1,284.50");
     expect(formatUsd(5_038n)).toBe("$50.38");
+    // The quote's own figures, zero included: a four-minute plan's interest rounds to "0.00".
+    expect(formatUsdAmount("50.38")).toBe("$50.38");
+    expect(formatUsdAmount("0.00")).toBe("$0.00");
+    expect(formatUsdAmount("1234.50")).toBe("$1,234.50");
+    expect(() => formatUsdAmount("50.3")).toThrow(/two-decimal/);
     expect(formatUsd(-100n)).toBe("−$1.00");
     expect(formatUsd(123_456_789_012n)).toBe("$1,234,567,890.12");
   });

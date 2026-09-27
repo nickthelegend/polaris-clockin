@@ -106,6 +106,17 @@ export function formatUsdMicros(micros: bigint): string {
   return formatUsd(microsToCents(micros));
 }
 
+/**
+ * A figure the SDK itself formatted ("50.38", "0.00") as "$50.38". Unlike
+ * `formatUsd(toCents(…))` it accepts zero: a plan's interest or a tiny
+ * instalment can round to "0.00", and a price tag must not throw on it.
+ */
+export function formatUsdAmount(value: string): string {
+  const match = /^(\d+)\.(\d{2})$/.exec(value);
+  if (!match) throw invalidRequest("invalid_amount", `Expected a two-decimal amount like "50.38", got ${JSON.stringify(value)}.`);
+  return formatUsd(BigInt(match[1]!) * 100n + BigInt(match[2]!));
+}
+
 function normalise(input: AmountInput, param: string): string {
   if (typeof input === "number") {
     if (!Number.isFinite(input)) {
