@@ -231,6 +231,8 @@ async function main() {
     CRON_SECRET: "e2e-cron-secret",
     NEXT_TELEMETRY_DISABLED: "1",
   };
+  // The server imports @polarispay/underwriting's compiled core: build it if it is missing or stale.
+  await run(process.execPath, [join(APP_DIR, "scripts", "ensure-deps.mjs")], { cwd: APP_DIR, quiet: true, shell: false });
   const next = join(APP_DIR, "node_modules", "next", "dist", "bin", "next");
   background("next", process.execPath, [next, "dev", "--port", String(APP_PORT)], { cwd: APP_DIR, env: serverEnv, shell: false });
   const health = await until("Polaris for Business", async () => {
