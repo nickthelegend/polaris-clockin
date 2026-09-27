@@ -352,6 +352,23 @@ async function main() {
     POLARIS_MERCHANT_ADDRESS: merchant.address,
     SHOP_URL,
     SHOP_DATA_DIR: join(DEMO, "shop"),
+    // Direct wallet payments sign for this chain's contracts (development builds only).
+    POLARIS_LOCAL_CHAIN: JSON.stringify({
+      chainId: deployment.chainId,
+      name: "Local Hardhat",
+      rpcUrl: RPC,
+      explorer: "",
+      stablecoin: at("Stablecoin"),
+      payments: at("PolarisPayments"),
+      loanEngine: at("PolarisLoanEngine"),
+      scoreManager: at("ScoreManager"),
+      collateralVault: at("CollateralVault"),
+      checkout: at("PolarisCheckout"),
+      send: at("PolarisSend"),
+      merchantRegistry: at("MerchantRegistry"),
+      collector: at("CollectionsReceiver"),
+      batchSettlement: at("BatchSettlement"),
+    }),
   };
   log(`starting Halcyon, the demo shop, on ${SHOP_URL}…`);
   background("shop", process.execPath, [nextBin(SHOP), "dev", "-H", "127.0.0.1", "-p", String(PORTS.shop)], { cwd: SHOP, env: shopEnv });

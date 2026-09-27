@@ -17,6 +17,20 @@ export type { CheckoutMode, CheckoutResult, PayResult, PayStage, Polaris, Polari
 export const DEV_MOCK_PAYMENTS = "0x000000000000000000000000000000000000dEaD" as const;
 const DEV_MOCK_CHAIN: PolarisChain = { ...MONAD_TESTNET, payments: DEV_MOCK_PAYMENTS };
 
+/** The chain direct wallet payments sign for: `pnpm demo:local`'s, the dev mock's stand-in, or Monad testnet. */
+export function chainFor(config: BrowserPolarisConfig): PolarisChain {
+  if (config.ok && config.chain) {
+    return {
+      ...MONAD_TESTNET,
+      ...config.chain,
+      key: "local",
+      testnet: true,
+      deployment: { source: "pnpm demo:local", deployedAt: null },
+    };
+  }
+  return config.ok && config.target === "dev-mock" ? DEV_MOCK_CHAIN : MONAD_TESTNET;
+}
+
 /** The browser client for this store, or null when payments are off (or during SSR). */
 export function makePolaris(config: BrowserPolarisConfig): Polaris | null {
   if (!config.ok || typeof window === "undefined") return null;
@@ -25,6 +39,6 @@ export function makePolaris(config: BrowserPolarisConfig): Polaris | null {
     publishableKey: config.publishableKey,
     checkoutOrigin: config.checkoutOrigin ?? origin,
     relayUrl: new URL(config.relayUrl, origin).toString(),
-    chain: config.target === "dev-mock" ? DEV_MOCK_CHAIN : MONAD_TESTNET,
+    chain: chainFor(config),
   });
 }

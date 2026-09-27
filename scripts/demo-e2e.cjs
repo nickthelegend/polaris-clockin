@@ -204,6 +204,100 @@ async function confirmInPopup(popup, prefix) {
     await page.close();
   }
 
+  // ── Subscribe: the Coffee Club, monthly, in the Polaris popup ──────────
+  {
+    const page = await context.newPage();
+    await page.goto(`${SHOP}/checkout?subscribe=coffee-club`, { waitUntil: "networkidle", timeout: 240000 });
+    await settle(page, 1000);
+    await shot(page, "50-subscribe-1-shop-checkout");
+    const main = (await buttons(page)).find((t) => /^Subscribe ·/.test(t));
+    const [popup] = await Promise.all([context.waitForEvent("page", { timeout: 60000 }), page.getByRole("button", { name: main }).first().click()]);
+    await until("the checkout in the popup", async () => popup.url().includes("/pay/"), 60000, 300);
+    await settle(popup, 3000);
+    await until("the subscribe button", async () => (await buttons(popup)).some((t) => /^Subscribe/.test(t)), 90000);
+    await shot(popup, "50-subscribe-2-app-checkout-popup");
+    const sub = (await buttons(popup)).find((t) => /^Subscribe/.test(t));
+    await popup.getByRole("button", { name: sub }).first().click();
+    await confirmInPopup(popup, "50-subscribe-3");
+    const closed = await until("the popup to close after subscribing", async () => popup.isClosed(), 90000, 300).catch(() => false);
+    step("Subscribe: the popup posted its result and closed itself", Boolean(closed));
+    await until("the shop's order page", async () => page.url().includes("/orders/"), 60000, 300);
+    await until("the subscription order to read as paid", async () => {
+      await page.reload({ waitUntil: "networkidle" });
+      return (await page.getByText(/Thank you/).count()) > 0;
+    }, 90000, 3000);
+    await settle(page, 1500);
+    await shot(page, "50-subscribe-4-shop-order");
+    step("Subscribe: the Coffee Club order is paid, the first month charged on chain", true, page.url().replace(SHOP, ""));
+    await page.close();
+  }
+
+  // ── Pay directly with a wallet: polarispay-sdk's pay(), one signature, relayed ──
+  {
+    const { privateKeyToAccount, generatePrivateKey } = require(require.resolve("viem/accounts", { paths: [require("path").join(__dirname, "..", "apps", "business")] }));
+    const wallet = privateKeyToAccount(generatePrivateKey());
+    const rpcUrl = process.env.RPC || "http://127.0.0.1:8545";
+    const faucet = process.env.FAUCET || "http://127.0.0.1:3650";
+    await fetch(`${faucet}/mint`, { method: "POST", headers: { "content-type": "application/json", origin: APP }, body: JSON.stringify({ address: wallet.address }) });
+    const page = await context.newPage();
+    // A browser wallet: this key signs; everything else is the local node's answer.
+    await page.exposeFunction("__polarisDemoWallet", async (method, paramsJson) => {
+      const params = JSON.parse(paramsJson || "[]");
+      try {
+        if (method === "eth_requestAccounts" || method === "eth_accounts") return JSON.stringify({ result: [wallet.address] });
+        if (method === "eth_signTypedData_v4") {
+          const typed = JSON.parse(params[1]);
+          const { EIP712Domain: _unused, ...types } = typed.types;
+          return JSON.stringify({ result: await wallet.signTypedData({ domain: typed.domain, types, primaryType: typed.primaryType, message: typed.message }) });
+        }
+        if (method === "wallet_switchEthereumChain") return JSON.stringify({ result: null });
+        const res = await fetch(rpcUrl, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+        const body = await res.json();
+        return JSON.stringify(body.error ? { error: body.error } : { result: body.result });
+      } catch (e) {
+        return JSON.stringify({ error: { code: -32603, message: String(e) } });
+      }
+    });
+    await page.addInitScript(() => {
+      window.ethereum = {
+        isMetaMask: true,
+        async request({ method, params }) {
+          const out = JSON.parse(await window.__polarisDemoWallet(method, JSON.stringify(params || [])));
+          if (out.error) {
+            const e = new Error(out.error.message);
+            e.code = out.error.code;
+            throw e;
+          }
+          return out.result;
+        },
+        on() {},
+        removeListener() {},
+      };
+    });
+    await page.goto(`${SHOP}/products/keys-75`, { waitUntil: "networkidle", timeout: 240000 });
+    await page.evaluate(() => localStorage.removeItem("halcyon.bag.v1"));
+    await page.reload({ waitUntil: "networkidle" });
+    await settle(page, 800);
+    await page.getByRole("button", { name: /Add to bag/ }).click();
+    await sleep(1200);
+    await page.goto(`${SHOP}/checkout`, { waitUntil: "networkidle", timeout: 120000 });
+    await settle(page, 1000);
+    await page.getByText("Pay directly with a wallet", { exact: true }).first().click();
+    await sleep(800);
+    await shot(page, "60-wallet-1-shop-checkout");
+    const pay = (await buttons(page)).find((t) => /wallet|Pay \$/i.test(t) && !/Built with/.test(t));
+    await page.getByRole("button", { name: pay }).first().click();
+    await until("the wallet order page", async () => page.url().includes("/orders/"), 120000, 500);
+    await until("the wallet order to read as paid", async () => {
+      await page.reload({ waitUntil: "networkidle" });
+      return (await page.getByText(/Thank you/).count()) > 0;
+    }, 90000, 3000);
+    await settle(page, 1500);
+    await shot(page, "60-wallet-2-shop-order-paid");
+    step("Direct wallet payment: one signature, relayed gas-free by Polaris, the order paid by webhook", true, page.url().replace(SHOP, ""));
+    await page.close();
+  }
+
   // ── The app afterwards ───────────────────────────────────────────────
   await app.goto(APP + "/", { waitUntil: "networkidle" });
   await settle(app, 4000);

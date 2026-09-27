@@ -63,7 +63,7 @@ and `DEMO_FAUCET_PORT`. Logs and state are in `.demo/`.
 `pnpm demo:e2e` ([`scripts/demo-e2e.cjs`](scripts/demo-e2e.cjs), needs
 Playwright: `PLAYWRIGHT_MODULE=<path>`) drives that run headless and writes the
 screenshots in [`docs/demo`](docs/demo). The committed ones are from a run in
-which all 12 steps passed:
+which all 15 steps passed:
 
 | Step | Screenshot |
 |---|---|
@@ -75,6 +75,8 @@ which all 12 steps passed:
 | The CRE underwriting workflow opens a $1,000 line on chain, with its reasons | [`20-payin4-6-limit-raised`](docs/demo/20-payin4-6-limit-raised.png) |
 | 4 × $87.92, nothing due today; confirm | [`20-payin4-7-app-checkout-with-line`](docs/demo/20-payin4-7-app-checkout-with-line.png), [`20-payin4-8-app-confirm`](docs/demo/20-payin4-8-app-confirm.png) |
 | The shop's order, paid through a Polaris plan (`plan.opened` webhook) | [`20-payin4-9-shop-order-plan`](docs/demo/20-payin4-9-shop-order-plan.png) |
+| Subscribe: the Coffee Club, monthly, in the Polaris popup; the first month charged on chain | [`50-subscribe-2-app-checkout-popup`](docs/demo/50-subscribe-2-app-checkout-popup.png), [`50-subscribe-4-shop-order`](docs/demo/50-subscribe-4-shop-order.png) |
+| Pay directly with a wallet: `polarispay-sdk` `pay()`, one signature, relayed gas-free | [`60-wallet-1-shop-checkout`](docs/demo/60-wallet-1-shop-checkout.png), [`60-wallet-2-shop-order-paid`](docs/demo/60-wallet-2-shop-order-paid.png) |
 | The buyer's app afterwards: balance, credit line, the plan | [`30-app-home-after`](docs/demo/30-app-home-after.png), [`31-app-credit-line`](docs/demo/31-app-credit-line.png), [`32-app-pay-in-4-plans`](docs/demo/32-app-pay-in-4-plans.png) |
 | The dashboard: payments, Envio feed and credit reasons, the plan, registration | [`40-dashboard-overview`](docs/demo/40-dashboard-overview.png), [`41-dashboard-panels`](docs/demo/41-dashboard-panels.png), [`42-dashboard-payments`](docs/demo/42-dashboard-payments.png), [`43-dashboard-pay-in-4`](docs/demo/43-dashboard-pay-in-4.png), [`44-dashboard-settings-registered`](docs/demo/44-dashboard-settings-registered.png) |
 
@@ -111,7 +113,7 @@ the API. Each app's README lists its environment.
 | The Polaris app | `pnpm --filter @polaris/app typecheck`, `lint`, `check:signatures`, `build` | 43 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 84 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
-| End to end | `pnpm demo:local` + `pnpm demo:e2e` | 12 of 12 steps; [`docs/demo`](docs/demo) |
+| End to end | `pnpm demo:local` + `pnpm demo:e2e` | 15 of 15 steps (Pay now, Pay in 4 with CRE underwriting, Subscribe, direct wallet pay, the dashboard); [`docs/demo`](docs/demo) |
 | | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
 | | `pnpm --filter @polarispay/contracts e2e:local` | all nine flows; the buyer, sender and freelancer never hold MON |
 | | `pnpm --filter @polaris/cre-workflows e2e:local` | 7 passing (both workflows against real contracts on a local node) |

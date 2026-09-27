@@ -11,7 +11,7 @@ import { fetchOrder } from "@/lib/checkout-client";
 import { formatUsd } from "@/lib/money";
 import type { Order } from "@/lib/orders/types";
 import { PolarisLockup } from "@/components/polaris-lockup";
-import { MONAD_TESTNET } from "@/lib/polaris-client";
+import { chainFor } from "@/lib/polaris-client";
 import { useShop } from "@/lib/shop-context";
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -305,6 +305,9 @@ function PaymentBlock({
 }) {
   const [canceling, setCanceling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const { polarisConfig } = useShop();
+  // Where a receipt's transaction can be seen: Monad testnet's explorer, or none on a local chain.
+  const explorer = chainFor(polarisConfig).explorer;
   const paid = order.status === "paid";
   const manageUrl = checkoutOrigin ? `${checkoutOrigin}/insights?view=plans` : null;
 
@@ -487,8 +490,10 @@ function PaymentBlock({
         <p className="mt-5 border-t border-hair pt-4 text-[0.88rem] text-muted">
           {devMock ? (
             <>Test transaction {short(order.payment.txHash, 10, 6)} (dev mock: nothing was sent on chain)</>
+          ) : !explorer ? (
+            <>Transaction {short(order.payment.txHash, 10, 6)} (a local chain, no explorer)</>
           ) : (
-            <a href={`${MONAD_TESTNET.explorer}/tx/${order.payment.txHash}`} target="_blank" rel="noreferrer" className="link inline-flex items-center gap-1.5">
+            <a href={`${explorer}/tx/${order.payment.txHash}`} target="_blank" rel="noreferrer" className="link inline-flex items-center gap-1.5">
               View receipt on the explorer <ExternalIcon size={14} />
             </a>
           )}

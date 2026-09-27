@@ -9,7 +9,7 @@ import { FLAT_SHIPPING, FREE_SHIPPING_THRESHOLD, getOption, getProduct } from "@
 import { CheckoutError, fetchOrder, logBrowserCalls, newAttemptId, placeOrder, type CheckoutPayload } from "@/lib/checkout-client";
 import { formatUsd } from "@/lib/money";
 import { payIn4 } from "@/lib/pay-in-4";
-import { MONAD_TESTNET, PolarisCheckoutButton, isPolarisError, type CheckoutResult, type PayResult, type PolarisError } from "@/lib/polaris-client";
+import { PolarisCheckoutButton, chainFor, isPolarisError, type CheckoutResult, type PayResult, type PolarisError } from "@/lib/polaris-client";
 import { useShop } from "@/lib/shop-context";
 
 import { ContactFields, ContactSummary, DEMO_BUYER, FIELD_NAMES, validateBuyer, type BuyerForm } from "./contact-fields";
@@ -21,8 +21,6 @@ import { ACTIVE_STEP, WalletSteps, type WalletPhase } from "./wallet-steps";
 type Notice = { tone: "info" | "error"; text: string; at: "top" | "inline"; working?: boolean } | null;
 
 type Eip1193 = { request(args: { method: string; params?: unknown[] }): Promise<unknown> };
-
-const MONAD_CHAIN_HEX = `0x${MONAD_TESTNET.chainId.toString(16)}`;
 
 const WALLET_LABEL: Partial<Record<WalletPhase, string>> = {
   connecting: "Connecting your wallet…",
@@ -57,6 +55,9 @@ export function CheckoutView({
   const shop = useShop();
   const router = useRouter();
   const { polaris, polarisConfig, setCurrentOrderId } = shop;
+  // The network a wallet payment signs on: Monad testnet, or `pnpm demo:local`'s chain.
+  const chain = useMemo(() => chainFor(polarisConfig), [polarisConfig]);
+  const chainHex = `0x${chain.chainId.toString(16)}`;
 
   const lines: SummaryLine[] = useMemo(() => {
     if (subscription) {
@@ -327,7 +328,7 @@ export function CheckoutView({
     // On another network: say so, and offer the switch, before the wallet or the store is asked for anything.
     try {
       const chainId = await eth.request({ method: "eth_chainId" });
-      if (typeof chainId === "string" && chainId.toLowerCase() !== MONAD_CHAIN_HEX) {
+      if (typeof chainId === "string" && chainId.toLowerCase() !== chainHex) {
         moveWallet("idle");
         setNeedsSwitch(true);
         return;
@@ -397,7 +398,7 @@ export function CheckoutView({
       await sleep(1000);
     }
     toReceipt(orderId, "wallet");
-  }, [polaris, valid, revealInvalid, place, router, setCurrentOrderId, moveWallet, walletMessage, toReceipt]);
+  }, [polaris, valid, revealInvalid, place, router, setCurrentOrderId, moveWallet, walletMessage, toReceipt, chainHex]);
 
   /** Switch the wallet to Monad Testnet (adding it if the wallet has never seen it), then carry on paying. */
   const switchNetwork = useCallback(async () => {
@@ -407,18 +408,18 @@ export function CheckoutView({
     setWalletError(null);
     try {
       try {
-        await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: MONAD_CHAIN_HEX }] });
+        await eth.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
       } catch (e) {
         if ((e as { code?: unknown }).code !== 4902) throw e;
         await eth.request({
           method: "wallet_addEthereumChain",
           params: [
             {
-              chainId: MONAD_CHAIN_HEX,
-              chainName: MONAD_TESTNET.name,
-              rpcUrls: [MONAD_TESTNET.rpcUrl],
-              blockExplorerUrls: [MONAD_TESTNET.explorer],
-              nativeCurrency: MONAD_TESTNET.nativeCurrency,
+              chainId: chainHex,
+              chainName: chain.name,
+              rpcUrls: [chain.rpcUrl],
+              ...(chain.explorer ? { blockExplorerUrls: [chain.explorer] } : {}),
+              nativeCurrency: chain.nativeCurrency,
             },
           ],
         });
@@ -426,7 +427,7 @@ export function CheckoutView({
     } catch {
       if (alive.current) {
         setSwitching(false);
-        setWalletError("Your wallet stayed on the other network. Switch to Monad Testnet in your wallet, then try again.");
+        setWalletError(`Your wallet stayed on the other network. Switch to ${chain.name} in your wallet, then try again.`);
       }
       return;
     }
@@ -434,7 +435,7 @@ export function CheckoutView({
     setSwitching(false);
     setNeedsSwitch(false);
     void payFromWallet();
-  }, [payFromWallet]);
+  }, [payFromWallet, chain, chainHex]);
 
   const onPolarisClickCapture = useCallback(
     (e: MouseEvent) => {

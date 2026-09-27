@@ -171,7 +171,7 @@ Polaris window is then the mock's test checkout.
    NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN=http://localhost:3000
    POLARIS_WEBHOOK_SECRET=whsec_…
    POLARIS_MERCHANT_ADDRESS=0x…          # the store's payout address
-   # POLARIS_RELAY_URL=…                 # defaults to {POLARIS_API_BASE}/api/v1/relay
+   # POLARIS_RELAY_URL=…                 # defaults to {POLARIS_API_BASE}/api/v1/relay/payments
    ```
 
 4. `pnpm --filter @polaris/shop dev`. Setting `POLARIS_API_BASE` switches the

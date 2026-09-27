@@ -14,7 +14,7 @@ import {
 
 import { randomBytes } from "node:crypto";
 
-import type { BrowserPolarisConfig } from "./polaris-config";
+import type { BrowserPolarisConfig, LocalChain } from "./polaris-config";
 
 export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "polarispay-sdk/server";
 export type { CheckoutSession, WebhookEvent as PolarisEvent } from "polarispay-sdk/server";
@@ -31,7 +31,7 @@ type Address = `0x${string}`;
  *   POLARIS_SECRET_KEY                   sk_test_… from Polaris for Business
  *   POLARIS_WEBHOOK_SECRET               whsec_… for /api/webhooks/polaris
  *   POLARIS_MERCHANT_ADDRESS             the store's payout address, for direct wallet payments
- *   POLARIS_RELAY_URL                    optional; defaults to {POLARIS_API_BASE}/api/v1/relay
+ *   POLARIS_RELAY_URL                    optional; defaults to {POLARIS_API_BASE}/api/v1/relay/payments
  *   NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY  pk_test_…
  *   NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN  where hosted checkout pages live (the Polaris app)
  *
@@ -155,13 +155,56 @@ export function resolvePolarisConfig(env: Env, origin: string): PolarisConfig {
     webhookSecret: env.POLARIS_WEBHOOK_SECRET!.trim(),
     publishableKey: env.NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY!.trim(),
     checkoutOrigin: new URL(env.NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN!.trim()).origin,
-    relayUrl: env.POLARIS_RELAY_URL?.trim() || `${baseUrl}/api/v1/relay`,
+    // The API's direct-pay relay route (apps/business: POST /api/v1/relay/payments).
+    relayUrl: env.POLARIS_RELAY_URL?.trim() || `${baseUrl}/api/v1/relay/payments`,
     merchant: env.POLARIS_MERCHANT_ADDRESS!.trim() as Address,
   };
 }
 
 export function polarisConfig(origin: string): PolarisConfig {
   return resolvePolarisConfig(process.env, origin);
+}
+
+const ADDRESS_FIELDS = [
+  "stablecoin",
+  "payments",
+  "loanEngine",
+  "scoreManager",
+  "collateralVault",
+  "checkout",
+  "send",
+  "merchantRegistry",
+  "collector",
+  "batchSettlement",
+] as const;
+
+/**
+ * `pnpm demo:local`'s chain, from POLARIS_LOCAL_CHAIN (a JSON object: chainId,
+ * name, rpcUrl, explorer and each Polaris contract). Development only: the
+ * NODE_ENV test folds to false in a production build, so a deployed store
+ * always pays on Monad. Null when unset or malformed.
+ */
+export function localChain(env: Env = process.env): LocalChain | null {
+  if (process.env.NODE_ENV !== "development") return null;
+  const raw = env.POLARIS_LOCAL_CHAIN?.trim();
+  if (!raw) return null;
+  try {
+    const c = JSON.parse(raw) as Record<string, unknown>;
+    if (!Number.isInteger(c.chainId) || typeof c.rpcUrl !== "string") return null;
+    const zero = "0x0000000000000000000000000000000000000000";
+    const addresses = Object.fromEntries(
+      ADDRESS_FIELDS.map((k) => [k, typeof c[k] === "string" && ADDRESS.test(c[k] as string) ? c[k] : zero]),
+    ) as Pick<LocalChain, (typeof ADDRESS_FIELDS)[number]>;
+    return {
+      chainId: c.chainId as number,
+      name: typeof c.name === "string" ? c.name : "Local chain",
+      rpcUrl: c.rpcUrl,
+      explorer: typeof c.explorer === "string" ? c.explorer : "",
+      ...addresses,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** What the browser may know: no secrets. Passed from server components as props. */
@@ -179,6 +222,7 @@ export function browserConfig(): BrowserPolarisConfig {
     checkoutOrigin: mock ? null : config.checkoutOrigin,
     relayUrl: mock ? `${DEV_MOCK_PATH}/api/v1/relay` : config.relayUrl,
     payInFourAprBps,
+    chain: localChain(process.env),
   };
 }
 
