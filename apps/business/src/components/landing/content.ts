@@ -227,28 +227,3 @@ export const closing = {
   heading: ["Your first link", "in a minute."],
   sub: "Sign in, name your business, share a link. Your payout account is created for you.",
 };
-
-/** Daily payment volume in $K for the hero's candle panel: a steady run-up with two dips. */
-export const heroCandles = (() => {
-  const path = [
-    74, 70, 69, 71, 68, 79, 95, 101, 103, 104, 102, 105, 88, 77, 76, 99, 103, 106, 110, 116, 117, 115, 113, 112, 116, 124, 128.06,
-  ];
-  // A tiny deterministic wobble (no Math.random: the server and the browser must agree).
-  const wobble = (i: number, k: number) => ((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1 + 1) % 1;
-  let prev = path[0]! + 2;
-  return path.map((close, i) => {
-    const open = i === 12 ? 105 : i === 13 ? 86 : i === 15 ? 78 : prev + (wobble(i, 1) - 0.5) * 2;
-    const high = Math.max(open, close) + wobble(i, 2) * 6 + 0.5;
-    const low = Math.min(open, close) - wobble(i, 3) * 5 - 0.5;
-    prev = close;
-    return {
-      t: `2026-08-${String(i + 1).padStart(2, "0")}T12:00:00Z`,
-      o: Number(open.toFixed(2)),
-      h: Number(high.toFixed(2)),
-      l: Number(low.toFixed(2)),
-      c: Number(close.toFixed(2)),
-    };
-  });
-})();
-
-export const heroSalesSpark = [18, 21, 19.5, 20, 22.6, 17.8, 18.4, 21.2, 23.1, 17.6, 20.8, 22.2, 19.4, 18.3, 23.6];
