@@ -173,7 +173,9 @@ function reportKind(body) {
  * under `thresholds` (defaults: GUARDIAN_DEFAULTS). 0 means healthy.
  */
 function guardianReasons(a, thresholds = GUARDIAN_DEFAULTS) {
-  const t = { ...GUARDIAN_DEFAULTS, ...thresholds };
+  // An ethers Result (GuardianReceiver.thresholds()) spreads as indices only.
+  const given = typeof thresholds?.toObject === "function" ? thresholds.toObject() : thresholds;
+  const t = { ...GUARDIAN_DEFAULTS, ...given };
   const big = (v) => BigInt(v);
   let reasons = 0;
   if (big(a.price) < big(t.minPrice)) reasons |= GUARDIAN_REASON.DEPEG;

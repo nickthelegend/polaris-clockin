@@ -355,7 +355,7 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         _latest = a;
         uint80 round = latestRound + 1;
         latestRound = round;
-        _rounds[round] = Round({answer: SafeCast.toInt192(_lendableUsd(a)), observedAt: a.observedAt});
+        _rounds[round] = Round({answer: SafeCast.toInt192(SafeCast.toInt256(_lendableUsd(a))), observedAt: a.observedAt});
         emit CreditGuardUpdated(round, a.creditPaused, a.reasons, a);
     }
 
