@@ -90,7 +90,8 @@ describe("resolveCheckoutUrl", () => {
 });
 
 describe("openCheckout", () => {
-  it("opens a centred popup and resolves with the completed result", async () => {
+  it("opens a centred popup and resolves with the completed result, leaving the receipt up for a moment", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     const { launcher, popup, open } = setup();
     const promise = launcher.openCheckout(SESSION);
 
@@ -112,8 +113,12 @@ describe("openCheckout", () => {
       planId: "17",
       subscriptionId: null,
     });
-    expect(popup.close).toHaveBeenCalled();
     expect(document.querySelector("[data-polaris-checkout-overlay]")).toBeNull();
+    // The checkout closes itself after its receipt; the SDK only makes sure, later.
+    expect(popup.close).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(3_500);
+    expect(popup.close).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it("ignores messages from another origin, another window, or another session", async () => {

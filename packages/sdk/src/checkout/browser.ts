@@ -15,6 +15,9 @@ export const DEFAULT_CHECKOUT_ORIGIN = "https://pay.polarispay.app";
 /** The Polaris app's dev server (`pnpm --filter app dev`). */
 export const DEV_CHECKOUT_ORIGIN = "http://localhost:3000";
 
+/** The hosted checkout closes itself 2.5 s after its receipt; past this, a completed popup still open is closed by the SDK. */
+const COMPLETED_CLOSE_FALLBACK_MS = 3_500;
+
 export type CheckoutDisplay = "auto" | "popup" | "redirect";
 
 export type OpenCheckoutOptions = {
@@ -270,11 +273,18 @@ export function createCheckoutLauncher(config: { checkoutOrigin: string }, envFa
         if (done) return;
         done = true;
         cleanup();
-        try {
-          if (!popup.closed) popup.close();
-        } catch {
-          /* ignore */
-        }
+        const close = () => {
+          try {
+            if (!popup.closed) popup.close();
+          } catch {
+            /* ignore */
+          }
+        };
+        // A completed checkout shows its receipt for a moment and closes itself
+        // (after 2.5 s); closing it at once would cut that off. Close it here only
+        // if it is still open well after that.
+        if (result.status === "completed") setTimeout(close, COMPLETED_CLOSE_FALLBACK_MS);
+        else close();
         resolve(result);
       }
 

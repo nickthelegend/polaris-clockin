@@ -524,7 +524,10 @@ The hosted checkout posts to `window.opener` with the origin of the session's
 ```
 
 It's opened with `?display=popup`; in that mode it posts its result and closes
-instead of redirecting. It must not send `Cross-Origin-Opener-Policy:
+instead of redirecting. `openCheckout` resolves the moment `completed` arrives
+but leaves the window open, so the buyer sees the receipt; the checkout closes
+itself 2.5 s later (the SDK closes it at 3.5 s if it is still open). A canceled
+or expired checkout is closed at once. It must not send `Cross-Origin-Opener-Policy:
 same-origin`, which would sever `window.opener`. `createCheckoutMessage()` builds
 these messages.
 
