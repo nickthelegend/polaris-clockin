@@ -9,11 +9,14 @@ import { currencyForLocale, formatLocal, type Micros } from "./money";
  * storage being unavailable.
  */
 
-type Prefs = { name: string; currency: string | null };
+/** Which account the Home card shows (the Select account sheet sets it). */
+export type HomeAccount = "dollar" | "later" | "boost";
+
+type Prefs = { name: string; currency: string | null; homeAccount: HomeAccount };
 
 const KEY = "polaris.prefs.v1";
 const EVENT = "polaris:prefs";
-const EMPTY: Prefs = { name: "", currency: null };
+const EMPTY: Prefs = { name: "", currency: null, homeAccount: "dollar" };
 
 let cachedRaw: string | null | undefined;
 let cached: Prefs = EMPTY;
@@ -32,6 +35,8 @@ function read(): Prefs {
     cached = {
       name: typeof parsed.name === "string" ? parsed.name.slice(0, 40) : "",
       currency: typeof parsed.currency === "string" ? parsed.currency : null,
+      homeAccount:
+        parsed.homeAccount === "later" || parsed.homeAccount === "boost" ? parsed.homeAccount : "dollar",
     };
   } catch {
     cached = EMPTY;
