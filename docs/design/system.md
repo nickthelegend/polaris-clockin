@@ -150,7 +150,7 @@ teal `#63B59C`, pink `#F8D2D1`, sage `#B0CCC0`, sky `#C5DBF2`.
      - "USD · AUSD" labels, then `$1,284.50` with a +2.1% delta
      - `ActionRow` (Add, Receive, Send, More)
    - `QuickTransfer` (send by link to contacts).
-   - Recent transactions as `TxRow`s: merchant logo circle, time, amount, and
+   - "Recent activity" as `TxRow`s: merchant logo circle, time, amount, and
      the Pay in 4 instalment as the sub-amount.
    - `BottomNav` variant A: Insights · Cards · **Home** · Links · Profile.
 3. **Send (ref A screen 2):**
@@ -175,8 +175,10 @@ teal `#63B59C`, pink `#F8D2D1`, sage `#B0CCC0`, sky `#C5DBF2`.
    - a dark **Pay early** and a white **Raise limit**
 7. **Checkout /pay/[id] (ref C screen 3 + ref B):**
    - `ScreenHeader` with the merchant name and a share button
-   - a `KeyValueGrid` (Amount, Pay in 4, Interest, First payment) and a
-     `DetailsList` (Merchant, Order, Due dates)
+   - a `KeyValueGrid` (Pay in 4, Interest, First payment, Due today) and a
+     `DetailsList` (Merchant, Order, the four due dates). Pay in 4 charges
+     nothing at checkout: payment 1 falls one interval after the plan opens,
+     as `PolarisLoanEngine.installmentDueAt(i) = startedAt + (i+1) × interval`
    - `SegmentedControl` Pay now | Pay in 4
    - a purple **Pay in 4** and a lime **Pay now**
 8. **Activity (ref D screen 3):** `TxRow`s grouped by day, with filter chips.

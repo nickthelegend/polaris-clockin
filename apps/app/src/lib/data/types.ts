@@ -115,6 +115,10 @@ export type ActivityItem = {
   txHash: Hex;
   /** Only indexed chain events are "settled" (plan §5.6). */
   status: "settled" | "pending";
+  /** The Pay in 4 plan it belongs to (plan-opened and instalment rows). */
+  planId?: string;
+  /** A send link's key, so its sender can take an unclaimed link back. */
+  linkKey?: Address;
 };
 
 export type PlanOffer = {
@@ -122,7 +126,7 @@ export type PlanOffer = {
   /** Seconds between instalments. */
   interval: number;
   aprBps: number;
-  /** One amount per instalment; the last absorbs the rounding. */
+  /** One amount per instalment, on the loan engine's ceil ladder. */
   amounts: Micros[];
   total: Micros;
   interest: Micros;

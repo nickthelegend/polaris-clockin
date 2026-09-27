@@ -1,4 +1,4 @@
-import type { ActivityItem, CreditLine, Plan, Subscription } from "./data";
+import { type ActivityItem, type CreditLine, dueAt, type Plan, type Subscription } from "./data";
 import { shortDate, time } from "./dates";
 import { type Micros, toNumber, usd } from "./money";
 
@@ -11,6 +11,15 @@ const MS_DAY = 86_400_000;
 
 /** Dollars as a number, for the @polaris/ui components (which take dollars). */
 export const n = (micros: Micros): number => toNumber(micros);
+
+/**
+ * Whether a row moved money in or out of the dollar account. Opening a Pay in 4
+ * plan doesn't: the merchant is paid from the credit pool, and the buyer's
+ * money moves later, one instalment at a time.
+ */
+export function movesBalance(item: ActivityItem): boolean {
+  return item.kind !== "plan-opened";
+}
 
 /** Signed dollars for a row: negative is money out. */
 export function signed(item: ActivityItem): number {
@@ -38,8 +47,9 @@ export function subAmount(item: ActivityItem): string {
     case "payment":
       return "Paid in full";
     case "instalment":
-    case "plan-opened":
       return part ? `Pay in 4 · ${part[1]} of ${part[2]}` : "Pay in 4";
+    case "plan-opened":
+      return "Pay in 4 · nothing today";
     case "subscription":
       return "Subscription";
     case "sent-link":
@@ -61,7 +71,7 @@ export function subAmount(item: ActivityItem): string {
 export function balanceChange(balance: Micros, activity: ActivityItem[], days = 1, now = Date.now()): number {
   let net = 0n;
   for (const a of activity) {
-    if (now - a.at > days * MS_DAY) continue;
+    if (now - a.at > days * MS_DAY || !movesBalance(a)) continue;
     net += a.direction === "in" ? a.amount : -a.amount;
   }
   const before = balance - net;
@@ -102,7 +112,7 @@ export function spendingByCategory(
 ): { label: SpendingCategory; value: number; amount: number }[] {
   const totals = new Map<SpendingCategory, number>();
   for (const a of activity) {
-    if (a.direction !== "out" || !inPeriod(a, period)) continue;
+    if (a.direction !== "out" || !movesBalance(a) || !inPeriod(a, period)) continue;
     let category: SpendingCategory = "Other";
     if (a.kind === "subscription") category = "Subscriptions";
     else if (a.counterparty.kind === "merchant") category = MERCHANT_CATEGORY[categoryOf(a.counterparty.name) ?? ""] ?? "Other";
@@ -120,7 +130,7 @@ export function dailySpending(activity: ActivityItem[], days: number, now = Date
   const today = startOfDay(now);
   const out = Array.from({ length: days }, () => 0);
   for (const a of activity) {
-    if (a.direction !== "out") continue;
+    if (a.direction !== "out" || !movesBalance(a)) continue;
     const i = days - 1 - Math.round((today - startOfDay(a.at)) / MS_DAY);
     if (i >= 0 && i < days) out[i]! += toNumber(a.amount);
   }
@@ -129,7 +139,7 @@ export function dailySpending(activity: ActivityItem[], days: number, now = Date
 
 export function spentBetween(activity: ActivityItem[], fromDaysAgo: number, toDaysAgo: number, now = Date.now()): number {
   return activity
-    .filter((a) => a.direction === "out" && now - a.at <= fromDaysAgo * MS_DAY && now - a.at > toDaysAgo * MS_DAY)
+    .filter((a) => a.direction === "out" && movesBalance(a) && now - a.at <= fromDaysAgo * MS_DAY && now - a.at > toDaysAgo * MS_DAY)
     .reduce((s, a) => s + toNumber(a.amount), 0);
 }
 
@@ -208,7 +218,7 @@ export type Notice = {
 export function notices(
   activity: ActivityItem[],
   credit: CreditLine | undefined,
-  subscriptions: Subscription[],
+  { plans, subscriptions }: { plans: Plan[]; subscriptions: Subscription[] },
   now = Date.now(),
 ): Notice[] {
   const list: Notice[] = [];
@@ -252,7 +262,16 @@ export function notices(
       list.push({ id: `claimed-${a.id}`, at: a.at, kind: "claimed", title: "Your link was claimed", detail: `${usd(a.amount)} arrived`, href: `/activity/${a.id}` });
     }
     if (a.kind === "plan-opened") {
-      list.push({ id: `plan-${a.id}`, at: a.at, kind: "plan", title: `Pay in 4 with ${a.title}`, detail: "First payment made", href: `/activity/${a.id}` });
+      const plan = plans.find((p) => p.id === a.planId);
+      const first = plan ? plan.instalments[0]?.dueAt ?? dueAt(plan.openedAt, plan.interval, 0) : null;
+      list.push({
+        id: `plan-${a.id}`,
+        at: a.at,
+        kind: "plan",
+        title: `Pay in 4 with ${a.title}`,
+        detail: first ? `First payment ${shortDate(first)}` : "Nothing to pay today",
+        href: plan ? `/plans/${plan.id}` : `/activity/${a.id}`,
+      });
     }
   }
   return list.sort((a, b) => b.at - a.at);

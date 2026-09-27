@@ -9,7 +9,7 @@ import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
 import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
-import { describeInterval, getPlans } from "@/lib/data";
+import { describeInterval, dueAt, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { longDate, relativeDay, shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
@@ -69,7 +69,8 @@ export function PlanSheet({ id }: { id: string }) {
             { label: "Amount", value: usd(plan.principal) },
             { label: "Pay in 4", value: `${usd(plan.instalments[0]?.amount ?? 0n)} × ${p.total}` },
             { label: "Interest", value: usd(plan.interest) },
-            { label: "First payment", value: shortDate(plan.openedAt) },
+            // Nothing is due when a plan opens: payment 1 is one interval later.
+            { label: "First payment", value: shortDate(plan.instalments[0]?.dueAt ?? dueAt(plan.openedAt, plan.interval, 0)) },
             { label: "Paid so far", value: usd(paidSoFar) },
             { label: "Left to pay", value: usd(p.left) },
           ]}

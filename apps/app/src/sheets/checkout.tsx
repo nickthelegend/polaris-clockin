@@ -17,7 +17,8 @@ import {
 } from "@polaris/ui";
 import { AlertCircle, BadgeCheck, Link2Off, Share2, TrendingUp } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
@@ -25,7 +26,7 @@ import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
-import { describeDuration, describeInterval, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
+import { describeDuration, describeInterval, dueAt, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
@@ -66,17 +67,22 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
   const later = link.modes.later;
   const sub = link.modes.subscription;
   const available = balance.value?.available;
-  const needFor = (m: PayMode) => (m === "now" ? link.amount : m === "later" ? (later?.amounts[0] ?? 0n) : (sub?.price ?? link.amount));
+  // What leaves the dollar account today. Pay in 4 takes nothing at checkout:
+  // the merchant is paid from the credit pool, the first payment is a week on.
+  const needFor = (m: PayMode) => (m === "now" ? link.amount : m === "later" ? 0n : (sub?.price ?? link.amount));
   const short = (m: PayMode) => available !== undefined && state.status !== "none" && available < needFor(m);
   const overLimit = later && credit.value ? credit.value.available < later.total : false;
+  // Payment i falls due (i + 1) intervals after the plan opens (PolarisLoanEngine.installmentDueAt).
+  const payDate = (i: number) => (later && now ? shortDate(dueAt(now, later.interval, i)) : "");
+  const each = later ? usd(later.amounts[0] ?? 0n) : "";
 
   const grid: KeyValue[] =
     mode === "later" && later
       ? [
-          { label: "Amount", value: usd(link.amount) },
-          { label: "Pay in 4", value: `${usd(later.amounts[0] ?? 0n)} × ${later.installments}` },
+          { label: "Pay in 4", value: `${each} × ${later.installments}` },
           { label: "Interest", value: usd(later.interest) },
-          { label: "First payment", value: "Today" },
+          { label: "First payment", value: payDate(0) || "In a week" },
+          { label: "Due today", value: usd(0n) },
         ]
       : mode === "subscription" && sub
         ? [
@@ -106,9 +112,10 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
     { label: "Order", value: link.orderId },
   ];
   if (mode === "later" && later && now) {
-    later.amounts.slice(1).forEach((amount, i) => {
-      const label = i === later.amounts.length - 2 ? "Last payment" : i === 0 ? "Second payment" : "Third payment";
-      details.push({ label, value: `${usd(amount)} · ${shortDate(now + (i + 1) * later.interval * 1000)}` });
+    const ORDINAL = ["First", "Second", "Third"];
+    later.amounts.forEach((amount, i) => {
+      const label = i === later.amounts.length - 1 ? "Last payment" : ORDINAL[i] ? `${ORDINAL[i]} payment` : `Payment ${i + 1}`;
+      details.push({ label, value: `${usd(amount)} · ${payDate(i)}` });
     });
   } else if (mode === "now") {
     details.push({
@@ -135,7 +142,10 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
     }
   }
 
-  const actions: PayMode[] = modes.length > 1 ? [modes.find((m) => m !== "now") ?? modes[1]!, "now"] : modes;
+  // The footer follows the chosen mode: its purple button, then Pay now beside it.
+  const other = mode !== "now" ? mode : modes.find((m) => m !== "now");
+  const actions: PayMode[] =
+    modes.length === 1 ? modes : [...(other ? [other] : []), ...(modes.includes("now") ? (["now"] as const) : [])];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -187,7 +197,8 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
               </p>
             ) : (
               <p className="text-[14px] leading-snug text-ui-muted">
-                Today, then {describeInterval(later.interval)}. {later.aprBps / 100}% a year, {usd(later.total)} in total.
+                First payment in {describeDuration(later.interval)}, then {describeInterval(later.interval)}. {later.aprBps / 100}% a
+                year, {usd(later.total)} in total.
               </p>
             )}
             {!credit.value.historyLinked ? (
@@ -226,14 +237,14 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
         onOpenChange={(open) => !open && setConfirming(null)}
         title={
           confirming === "later" && later
-            ? `Pay ${usd(later.amounts[0] ?? 0n)} today`
+            ? "Start Pay in 4"
             : confirming === "subscription" && sub
               ? `Subscribe for ${usd(sub.price)}`
               : `Pay ${usd(link.amount, { trim: true })}`
         }
         summary={
           confirming === "later" && later
-            ? `To ${link.merchant.name} now, then ${later.installments - 1} more ${describeInterval(later.interval)}. ${usd(later.interest)} interest in total.`
+            ? `${later.installments} × ${each} to ${link.merchant.name}, the first on ${payDate(0)}. Nothing to pay today. ${usd(later.interest)} interest in total.`
             : confirming === "subscription" && sub
               ? `${sub.name} at ${link.merchant.name}, ${describeInterval(sub.periodSeconds)}. Cancel any time in Plans.`
               : `To ${link.merchant.name}, from your dollar account.`
@@ -271,16 +282,19 @@ function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid; onDone
     }
   }, [link, paid]);
 
+  // The plan opened when the relayer's block was final; payment 1 is one interval later.
+  const firstDate = later ? shortDate(dueAt(paid.at, later.interval, 0)) : "";
+  const each = later ? usd(later.amounts[0] ?? 0n) : "";
   const subtitle =
     paid.mode === "later" && later
-      ? `${usd(later.amounts[0] ?? 0n)} to ${link.merchant.name}. Next payment in ${describeDuration(later.interval)}.`
+      ? `${link.merchant.name} is paid. Your first payment of ${each} is on ${firstDate}.`
       : paid.mode === "subscription" && sub
         ? `Subscribed to ${link.merchant.name}. Next charge in ${describeDuration(sub.periodSeconds)}.`
         : `${usd(link.amount)} to ${link.merchant.name}.`;
 
   const rows: KeyValue[] = [{ label: "For", value: link.description }];
   if (paid.mode === "later" && later) {
-    rows.push({ label: "Paid today", value: usd(later.amounts[0] ?? 0n) }, { label: "Plan", value: `${later.installments} × ${usd(later.amounts[0] ?? 0n)}` });
+    rows.push({ label: "First payment", value: `${each} · ${firstDate}` }, { label: "Plan", value: `${later.installments} × ${each}` });
   } else if (paid.mode === "subscription" && sub) {
     rows.push({ label: "Paid today", value: usd(sub.price) }, { label: "Then", value: `${usd(sub.price)} ${describeInterval(sub.periodSeconds)}` });
   } else {
@@ -297,7 +311,7 @@ function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid; onDone
     <SuccessSheet
       open
       onOpenChange={() => done()}
-      title="Paid."
+      title={paid.mode === "later" ? "Done." : "Paid."}
       subtitle={subtitle}
       rows={rows}
       receiptUrl={paid.receipt.explorerUrl}
@@ -308,8 +322,23 @@ function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid; onDone
 
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: PaymentLink | null }) {
+  const router = useRouter();
+  const successUrl = link?.successUrl ?? null;
+  // A buyer who backs out of a checkout they were sent to goes back where they
+  // came from: the merchant's window that opened this one, or its page.
+  const leave = useCallback(() => {
+    if (window.opener) {
+      window.close();
+      // A browser that refuses to close the window leaves us here: go home.
+      window.setTimeout(() => router.replace("/", { scroll: false }), 200);
+    } else if (successUrl) {
+      window.location.assign(successUrl);
+    } else {
+      router.replace("/", { scroll: false });
+    }
+  }, [router, successUrl]);
   return (
-    <RouteSheet label={link ? `Pay ${link.merchant.name}` : "Payment link"} snapPoints={["full"]} cold={cold}>
+    <RouteSheet label={link ? `Pay ${link.merchant.name}` : "Payment link"} snapPoints={["full"]} cold={cold} onColdClose={leave}>
       {link ? (
         <CheckoutSheet link={link} />
       ) : (

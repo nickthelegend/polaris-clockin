@@ -3,7 +3,7 @@ import { mockData } from "./mock";
 import type { PolarisData } from "./types";
 
 export type * from "./types";
-export { DAY, describeDuration, describeInterval, quotePlan, WEEK } from "./quote";
+export { DAY, describeDuration, describeInterval, dueAt, quotePlan, WEEK } from "./quote";
 
 /**
  * The one data source every screen reads through. Today it is placeholder

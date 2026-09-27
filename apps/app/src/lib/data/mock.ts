@@ -1,6 +1,6 @@
 import { type Address, getAddress, type Hex, keccak256, stringToHex } from "viem";
 import { dollars, type Micros } from "../money";
-import { DAY, quotePlan, WEEK } from "./quote";
+import { DAY, dueAt, quotePlan, WEEK } from "./quote";
 import type {
   ActivityItem,
   Balance,
@@ -159,9 +159,10 @@ function planFrom(
   paid: number,
 ): Plan {
   const quote = quotePlan(principal, 4, WEEK, APR_BPS);
+  // Nothing is due when a plan opens: the first payment is a week later.
   const instalments = quote.amounts.map((amount, index) => {
-    const dueAt = openedAt + index * WEEK * 1000;
-    return { index, amount, dueAt, paidAt: index < paid ? dueAt : null };
+    const due = dueAt(openedAt, WEEK, index);
+    return { index, amount, dueAt: due, paidAt: index < paid ? due : null };
   });
   return {
     id,
@@ -190,8 +191,9 @@ type Ledger = {
 
 function seed(): Ledger {
   const t = loadedAt;
-  const lumen = planFrom("plan-lumen", 41n, merchants.lumen, "Studio headphones", dollars(240), t - 8 * MS_DAY, 2);
-  const kora = planFrom("plan-kora", 44n, merchants.kora, "Lisbon to Porto rail pass", dollars(120), t - 2 * MS_DAY, 1);
+  // Opened 15, 9 and 40 days ago; each paid instalment was paid on its due day.
+  const lumen = planFrom("plan-lumen", 41n, merchants.lumen, "Studio headphones", dollars(240), t - 15 * MS_DAY - 4 * MS_HOUR, 2);
+  const kora = planFrom("plan-kora", 44n, merchants.kora, "Lisbon to Porto rail pass", dollars(120), t - 9 * MS_DAY - 3 * MS_HOUR, 1);
   const grinder = planFrom("plan-nomada", 29n, merchants.nomada, "Espresso grinder", dollars(180), t - 40 * MS_DAY, 4);
 
   const item = (
@@ -202,6 +204,7 @@ function seed(): Ledger {
     direction: ActivityItem["direction"],
     amount: Micros,
     at: number,
+    planId?: string,
   ): ActivityItem => ({
     id,
     kind,
@@ -213,6 +216,7 @@ function seed(): Ledger {
     counterparty,
     txHash: fakeTx(id),
     status: "settled",
+    ...(planId ? { planId } : {}),
   });
 
   const m = (merchant: Merchant) => ({ kind: "merchant" as const, name: merchant.name });
@@ -248,16 +252,18 @@ function seed(): Ledger {
       },
     ],
     activity: [
-      item("a-lumen-2", "instalment", m(merchants.lumen), "Instalment 2 of 4", "out", lumen.instalments[1]!.amount, t - 20 * MS_HOUR),
+      item("a-lumen-2", "instalment", m(merchants.lumen), "Studio headphones · 2 of 4", "out", lumen.instalments[1]!.amount, lumen.instalments[1]!.dueAt, lumen.id),
       item("a-marisol", "sent-link", p(marisol), "Sent by link", "out", dollars(50), t - 30 * MS_HOUR),
-      item("a-kora-1", "plan-opened", m(merchants.kora), "Rail pass · 1 of 4", "out", kora.instalments[0]!.amount, t - 2 * MS_DAY - 3 * MS_HOUR),
+      item("a-kora-1", "instalment", m(merchants.kora), "Rail pass · 1 of 4", "out", kora.instalments[0]!.amount, kora.instalments[0]!.dueAt, kora.id),
       item("a-nomada", "payment", m(merchants.nomada), "Flat white and a croissant", "out", dollars(7.8), t - 4 * MS_DAY - 5 * MS_HOUR),
       item("a-jonas", "received", p(jonas), "Received", "in", dollars(1000), t - 6 * MS_DAY - 2 * MS_HOUR),
-      item("a-lumen-1", "plan-opened", m(merchants.lumen), "Studio headphones · 1 of 4", "out", lumen.instalments[0]!.amount, t - 8 * MS_DAY),
+      item("a-lumen-1", "instalment", m(merchants.lumen), "Studio headphones · 1 of 4", "out", lumen.instalments[0]!.amount, lumen.instalments[0]!.dueAt, lumen.id),
+      item("a-kora-0", "plan-opened", m(merchants.kora), "Lisbon to Porto rail pass", "out", kora.principal, kora.openedAt, kora.id),
       item("a-kinetik", "subscription", m(merchants.kinetik), "Monthly membership", "out", dollars(29), t - 9 * MS_DAY - 4 * MS_HOUR),
       item("a-ana", "claimed", p(ana), "Link claimed", "in", dollars(75), t - 12 * MS_DAY - 7 * MS_HOUR),
+      item("a-nomada-4", "instalment", m(merchants.nomada), "Espresso grinder · 4 of 4", "out", grinder.instalments[3]!.amount, grinder.instalments[3]!.dueAt, grinder.id),
+      item("a-lumen-0", "plan-opened", m(merchants.lumen), "Studio headphones", "out", lumen.principal, lumen.openedAt, lumen.id),
       item("a-figura", "subscription", m(merchants.figura), "Figura Pro", "out", dollars(12), t - 18 * MS_DAY),
-      item("a-nomada-4", "instalment", m(merchants.nomada), "Espresso grinder · 4 of 4", "out", grinder.instalments[3]!.amount, t - 19 * MS_DAY),
       item("a-added", "added", { kind: "polaris", name: "Added money" }, "From your bank", "in", dollars(500), t - 21 * MS_DAY),
     ],
     sendLinks: new Map(),
@@ -406,6 +412,8 @@ export const mockLedger = {
     const offer = link.modes.later;
     if (!offer) return null;
     const openedAt = Date.now();
+    // PolarisCheckout.openPlan: the merchant is paid from the credit pool and
+    // nothing leaves the buyer's account. Payment i is due (i + 1) intervals on.
     const plan: Plan = {
       id: `plan-${openedAt}`,
       loanId: ledger.nextLoanId++,
@@ -417,23 +425,23 @@ export const mockLedger = {
       instalments: offer.amounts.map((amount, index) => ({
         index,
         amount,
-        dueAt: openedAt + index * offer.interval * 1000,
-        paidAt: index === 0 ? openedAt : null,
+        dueAt: dueAt(openedAt, offer.interval, index),
+        paidAt: null,
       })),
       status: "active",
       openedAt,
     };
     ledger.plans.unshift(plan);
-    ledger.balance -= offer.amounts[0] ?? 0n;
     ledger.activity.push(
       newTxItem({
         kind: "plan-opened",
         title: link.merchant.name,
-        detail: `${link.description} · 1 of ${offer.installments}`,
+        detail: link.description,
         direction: "out",
-        amount: offer.amounts[0] ?? 0n,
+        amount: link.amount,
         counterparty: { kind: "merchant", name: link.merchant.name },
         txHash,
+        planId: plan.id,
       }),
     );
     changed();
@@ -494,6 +502,7 @@ export const mockLedger = {
         amount: next.amount,
         counterparty: { kind: "merchant", name: plan.merchant.name },
         txHash,
+        planId: plan.id,
       }),
     );
     changed();
@@ -517,6 +526,7 @@ export const mockLedger = {
       amount,
       counterparty: { kind: "polaris", name: "Send link" },
       txHash,
+      linkKey: getAddress(linkKey),
     });
     ledger.activity.push(entry);
     sendActivity.set(getAddress(linkKey), entry.id);

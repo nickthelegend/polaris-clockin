@@ -46,7 +46,7 @@ export function useNotices(): { items: Notice[] | undefined; unread: boolean; se
   const seenAt = useSyncExternalStore(subscribe, readSeen, () => Number.POSITIVE_INFINITY);
 
   const items =
-    activity.value && plans.value ? notices(activity.value, credit.value, plans.value.subscriptions) : undefined;
+    activity.value && plans.value ? notices(activity.value, credit.value, plans.value) : undefined;
   const newest = items?.[0]?.at ?? 0;
 
   return { items, unread: items?.some((i) => i.at > seenAt) ?? false, seenAt, newest };

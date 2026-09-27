@@ -184,9 +184,17 @@ Stripe's own wallet stack.
 | AUSD, USDC, token | $, dollars |
 | blockchain, on-chain, Monad | nothing on the buyer's path. "View receipt" opens the explorer |
 
-One exception: the optional *Bring your history* step (§5.5) says "wallet",
-because it exists for people who already have one. Run a copy pass against this
-table before the freeze.
+Two exceptions:
+
+- The optional *Bring your history* step (§5.5) says "wallet", because it
+  exists for people who already have one.
+- Home's balance card carries a small "USD · AUSD" tag: it names what the
+  dollars are held in, once, for the Agora track. Nowhere else says AUSD.
+
+Lists say "activity", never "transactions": Home's "Recent activity",
+Activity's "All activity", and a row's sheet is "Payment details".
+
+Run a copy pass against this table before the freeze.
 
 ### Numbers for the pitch (check each against the deployed contracts before recording)
 
@@ -770,7 +778,7 @@ Record on real phones, in one take per scene, with a clock on screen.
 | Time | Scene |
 |---|---|
 | **0:00–0:10** | *Invoice for the logo work: $200*, and a link, arrives in a chat. A studio in Buenos Aires is billing a client in Berlin |
-| **0:10–1:00** | The link opens: **$200, or 4 × $50.38.** *Continue with Face ID*, and the account exists: no email, no password. The client picks Pay in 4, confirms with the wallet they already use to bring their history, and sees a **$500 limit with its why** (Nansen-backed). *Confirm* with Face ID shows **"Paid. Next payment in a week."** The clock reads under a minute |
+| **0:10–1:00** | The link opens: **$200, or 4 × $50.38.** *Continue with Face ID*, and the account exists: no email, no password. The client picks Pay in 4, confirms with the wallet they already use to bring their history, and sees a **$500 limit with its why** (Nansen-backed). *Confirm* with Face ID shows **"Done. Studio Sol is paid. Your first payment of $50.38 is on Oct 4."** Nothing leaves their account today The clock reads under a minute |
 | **1:00–1:20** | The studio's dashboard: **+$200.00**, paid in full, 0.8 s later. The plan shows 4 tick marks. Automatic payouts are on |
 | **1:20–1:45** | The studio pays a freelancer in Manila: **$50 → a link → WhatsApp.** The freelancer opens it, taps Face ID, and it has **arrived**. Two countries, no bank, no fee to the recipient |
 | **1:45–2:35** | For the judges. A second deployment runs 60-second instalments so a plan's whole life fits on camera; the buyer's plan above stays on weekly terms. Show, in order: the CRE log collecting instalment 2 on Monad; the explorer transaction; tick 2 of 4 filling in; the `installment.collected` webhook arriving; the Privy policy that locks the relayer; zero gas paid by any user; the Envio query behind the dashboard; tests named for exploits |
