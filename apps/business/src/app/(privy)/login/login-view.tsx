@@ -143,7 +143,7 @@ function Onboarding({ next }: { next: string }) {
   const [formError, setFormError] = useState<string | null>(null);
   // After the name is saved: register the business on Monad (MerchantRegistry),
   // signed by the payout wallet and sent by the relayer, then open the dashboard.
-  const [registering, setRegistering] = useState<{ business: string; step: "wallet" | "sign" | "done" } | null>(null);
+  const [registering, setRegistering] = useState<{ business: string; done: boolean } | null>(null);
   const started = useRef(false);
 
   const named = Boolean(merchant?.businessName);
@@ -164,10 +164,9 @@ function Onboarding({ next }: { next: string }) {
       return () => clearTimeout(t);
     }
     started.current = true;
-    setRegistering((r) => (r ? { ...r, step: "sign" } : r));
     register()
       .then(() => {
-        setRegistering((r) => (r ? { ...r, step: "done" } : r));
+        setRegistering((r) => (r ? { ...r, done: true } : r));
         setTimeout(() => finish(), 700);
       })
       .catch((err: unknown) => finish(errorMessage(err, "Registration didn't go through.")));
@@ -185,7 +184,7 @@ function Onboarding({ next }: { next: string }) {
     try {
       await data.updateMerchant({ businessName: value });
       // Register on chain only where it can work: a chain and a relayer.
-      if (capabilities?.chain && capabilities.relayer) setRegistering({ business: value, step: "wallet" });
+      if (capabilities?.chain && capabilities.relayer) setRegistering({ business: value, done: false });
       else router.replace(next);
     } catch (err) {
       setFormError(err instanceof DataError ? err.message : errorMessage(err, "We couldn't save that. Try again."));
@@ -216,7 +215,10 @@ function Onboarding({ next }: { next: string }) {
     );
   }
 
-  if (registering) return <Registering business={registering.business} step={registering.step} />;
+  if (registering) {
+    const step = registering.done ? "done" : wallet.address ? "sign" : "wallet";
+    return <Registering business={registering.business} step={step} />;
+  }
 
   if (loading || !merchant || named) {
     return (
