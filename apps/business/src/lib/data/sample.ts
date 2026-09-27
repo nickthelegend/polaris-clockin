@@ -1,10 +1,11 @@
-import { payInFourQuote, PLAN_INSTALLMENTS, PLAN_INTERVAL_DAYS, isToday } from "./format";
+import { payInFourQuote, PLAN_INSTALLMENTS, PLAN_INTERVAL_DAYS, isToday, money } from "./format";
 import { linkUrl } from "./links";
 import { DataError, type DashboardData } from "./source";
 import type {
   Address,
   ApiKey,
   AutoPayouts,
+  Capabilities,
   Cents,
   CollectorStatus,
   Merchant,
@@ -99,10 +100,21 @@ export type SampleBook = {
 /** The mock session's merchant. Invented, like every sample merchant. */
 export const SAMPLE_MERCHANT: Merchant = {
   id: "did:privy:dev-mock-session",
+  publicId: "mer_sampleOatEmber01",
   businessName: "Oat & Ember",
   walletAddress: "0x7A3f5C21d0b4E8a96F1c2B3D4e5F60718293A1c2",
   email: "ana@oatandember.studio",
   createdAt: "2026-05-02T10:00:00.000Z",
+  registration: { state: "active", txHash: `0x${"5a".repeat(32)}`, activationTxHash: `0x${"6b".repeat(32)}`, error: null },
+};
+
+/** What the mock session pretends to be connected to: everything, on Monad testnet. */
+export const SAMPLE_CAPABILITIES: Capabilities = {
+  chain: { id: 10143, name: "Monad testnet" },
+  relayer: true,
+  automaticPayouts: true,
+  activation: true,
+  checkoutOrigin: "http://localhost:3000",
 };
 
 function address(r: Rng): Address {
@@ -248,12 +260,74 @@ export function createSampleBook(merchant: Merchant, now = Date.now()): SampleBo
         url: "https://hooks.oatandember.studio/polaris",
         events: ["payment.succeeded", "plan.opened", "installment.collected", "payout.paid"],
         secretHint: "whsec_…9f3c",
-        enabled: true,
         createdAt: createdKey,
       },
     ],
-    deliveries: [],
+    deliveries: sampleDeliveries(now),
   };
+}
+
+/** A short delivery log: two delivered, one that failed and is waiting for its retry. */
+function sampleDeliveries(now: number): WebhookDelivery[] {
+  const url = "https://hooks.oatandember.studio/polaris";
+  const row = (
+    i: number,
+    event: WebhookDelivery["event"],
+    minutesAgo: number,
+    status: number | null,
+    extra: Partial<WebhookDelivery> = {},
+  ): WebhookDelivery => {
+    const at = new Date(now - minutesAgo * 60_000).toISOString();
+    const eventId = `evt_sample0${i}`;
+    const body = JSON.stringify({
+      id: eventId,
+      object: "event",
+      type: event,
+      createdAt: at,
+      livemode: false,
+      merchantId: SAMPLE_MERCHANT.publicId,
+      data: { orderId: `ord_${4180 - i}` },
+    });
+    return {
+      id: `del_sample0${i}`,
+      endpointId: "we_sample01",
+      url,
+      event,
+      eventId,
+      status,
+      durationMs: status ? 180 + i * 37 : null,
+      attempt: 1,
+      test: false,
+      simulated: false,
+      request: {
+        headers: {
+          "content-type": "application/json",
+          "polaris-signature": `t=${Math.floor(Date.parse(at) / 1000)},v1=sample`,
+          "polaris-event": event,
+          "polaris-delivery-attempt": "1",
+        },
+        body,
+      },
+      createdAt: at,
+      state: status && status < 300 ? "succeeded" : "pending",
+      nextAttemptAt: null,
+      attempts: [
+        {
+          at,
+          status,
+          durationMs: status ? 180 + i * 37 : 10_000,
+          error: status ? null : "Timed out after 10 s",
+          responseBody: status && status < 300 ? "ok" : null,
+        },
+      ],
+      ...extra,
+    };
+  };
+  return [
+    row(1, "payment.succeeded", 12, 200),
+    row(2, "plan.opened", 95, 200),
+    row(3, "installment.collected", 240, null, { state: "pending", nextAttemptAt: new Date(now + 9 * 60_000).toISOString() }),
+  ];
 }
 
 function sumNet(payments: Payment[], from: number, to: number): Cents {
@@ -348,15 +422,10 @@ function sampleId(prefix: string) {
   return `${prefix}_${Array.from(bytes, (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 12)}`;
 }
 
-/**
- * The whole DashboardData over one in-memory sample book. Writes change the
- * book for this page load only. Money never moves: withdrawals and automatic
- * payouts refuse, as they do everywhere until the payout rails are live.
- */
 /** A merchant who has just signed up: nothing paid, nothing connected. */
 export function createEmptyBook(merchant: Merchant): SampleBook {
   return {
-    merchant: clone(merchant),
+    merchant: { ...clone(merchant), businessName: null, registration: { state: "none", txHash: null, activationTxHash: null, error: null } },
     links: [],
     payments: [],
     plans: [],
@@ -370,11 +439,65 @@ export function createEmptyBook(merchant: Merchant): SampleBook {
   };
 }
 
+function nextSweep(hourUtc: number, now = Date.now()): string {
+  const d = new Date(now);
+  d.setUTCHours(hourUtc, 0, 0, 0);
+  if (d.getTime() <= now) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString();
+}
+
+function testDelivery(endpoint: WebhookEndpoint, merchantPublicId: string): WebhookDelivery {
+  const eventId = sampleId("evt");
+  const at = new Date().toISOString();
+  const body = JSON.stringify({
+    id: eventId,
+    object: "event",
+    type: "payment.succeeded",
+    createdAt: at,
+    livemode: false,
+    merchantId: merchantPublicId,
+    data: { orderId: "ord_test_sample", metadata: { test: "true" }, mode: "now", amount: "200.00", fee: "1.00", currency: "USD" },
+  });
+  return {
+    id: sampleId("del"),
+    endpointId: endpoint.id,
+    url: endpoint.url,
+    event: "payment.succeeded",
+    eventId,
+    status: 200,
+    durationMs: 212,
+    attempt: 1,
+    test: true,
+    simulated: false,
+    request: {
+      headers: {
+        "content-type": "application/json",
+        "polaris-signature": `t=${Math.floor(Date.now() / 1000)},v1=sample`,
+        "polaris-event": "payment.succeeded",
+        "polaris-delivery-attempt": "1",
+      },
+      body,
+    },
+    createdAt: at,
+    state: "succeeded",
+    nextAttemptAt: null,
+    attempts: [{ at, status: 200, durationMs: 212, error: null, responseBody: "ok" }],
+  };
+}
+
+/**
+ * The whole DashboardData over one in-memory sample book, for the
+ * development-only mock session. Nothing leaves the browser: writes change the
+ * book for this page load, and flows that would move money (withdraw,
+ * automatic payouts, registration) are simulated so every screen can be
+ * captured. Everything it returns carries the "Sample" label in the UI.
+ */
 export function createSampleData(merchant: Merchant = SAMPLE_MERCHANT, { empty = false } = {}): DashboardData {
   let book: SampleBook | null = null;
   const get = () => (book ??= empty ? createEmptyBook(merchant) : createSampleBook(merchant));
 
   return {
+    getCapabilities: async () => clone(SAMPLE_CAPABILITIES),
     getMerchant: async () => {
       await wait(120);
       return clone(get().merchant);
@@ -383,6 +506,45 @@ export function createSampleData(merchant: Merchant = SAMPLE_MERCHANT, { empty =
       await wait();
       get().merchant.businessName = input.businessName;
       return clone(get().merchant);
+    },
+    getRegistration: async () => {
+      await wait();
+      const m = get().merchant;
+      const state = m.registration?.state ?? "none";
+      const needs = (state === "none" || state === "failed") && Boolean(m.businessName);
+      return clone({
+        merchant: m,
+        typedData: needs
+          ? {
+              domain: { name: "MerchantRegistry", version: "1", chainId: 10143, verifyingContract: "0x0000000000000000000000000000000000000001" as Address },
+              types: {
+                Registration: [
+                  { name: "merchant", type: "address" },
+                  { name: "name", type: "string" },
+                  { name: "payoutAddress", type: "address" },
+                  { name: "metadataURI", type: "string" },
+                  { name: "nonce", type: "uint256" },
+                  { name: "deadline", type: "uint256" },
+                ],
+              },
+              primaryType: "Registration" as const,
+              message: {
+                merchant: m.walletAddress ?? "",
+                name: m.businessName ?? "",
+                payoutAddress: m.walletAddress ?? "",
+                metadataURI: "http://localhost:3100/api/public/merchants/mer_sample",
+                nonce: "0",
+                deadline: String(Math.floor(Date.now() / 1000) + 3600),
+              },
+            }
+          : null,
+      });
+    },
+    submitRegistration: async () => {
+      await wait(900);
+      const m = get().merchant;
+      m.registration = { state: "active", txHash: `0x${"5a".repeat(32)}`, activationTxHash: `0x${"6b".repeat(32)}`, error: null };
+      return clone({ merchant: m });
     },
     getOverview: async () => {
       await wait();
@@ -394,7 +556,7 @@ export function createSampleData(merchant: Merchant = SAMPLE_MERCHANT, { empty =
     },
     createLink: async (input) => {
       await wait();
-      const id = sampleId("lnk").slice(4, 14);
+      const id = `pl_${sampleId("x").slice(2, 16)}`;
       const link: PaymentLink = {
         id,
         url: linkUrl(id),
@@ -431,28 +593,82 @@ export function createSampleData(merchant: Merchant = SAMPLE_MERCHANT, { empty =
       const b = get();
       return clone({ balanceCents: b.balanceCents, walletAddress: b.merchant.walletAddress, auto: b.auto, history: b.payouts });
     },
-    withdraw: async () => {
-      await wait();
-      throw new DataError("Sample data can't be withdrawn. Turn sample data off to use your real balance.", 409, "sample_data");
+    withdraw: async (input) => {
+      await wait(700);
+      const b = get();
+      if (input.amountCents > b.balanceCents) {
+        throw new DataError(`You can withdraw up to ${money(b.balanceCents)} right now.`, 400, "insufficient_balance", "amountCents");
+      }
+      b.balanceCents -= input.amountCents;
+      const payout: Payout = {
+        id: sampleId("po"),
+        kind: "manual",
+        status: "queued",
+        amountCents: input.amountCents,
+        destination: input.destination,
+        signed: Boolean(input.authorization),
+        txHash: null,
+        createdAt: new Date().toISOString(),
+      };
+      b.payouts.unshift(payout);
+      return clone(payout);
     },
-    setAutoPayouts: async () => {
-      await wait();
-      throw new DataError("Sample data can't change payout settings. Turn sample data off first.", 409, "sample_data");
+    setAutoPayouts: async (input) => {
+      await wait(600);
+      const b = get();
+      b.auto = {
+        ...b.auto,
+        enabled: input.enabled,
+        payoutAddress: input.payoutAddress ?? b.auto.payoutAddress,
+        policyId: input.enabled ? "sample_policy" : b.auto.policyId,
+        nextRunAt: input.enabled ? nextSweep(b.auto.hourUtc) : null,
+      };
+      return clone(b.auto);
+    },
+    payoutNow: async () => {
+      await wait(900);
+      const b = get();
+      if (!b.auto.enabled || !b.auto.payoutAddress) throw new DataError("Turn on automatic payouts first.", 409, "automatic_payouts_off");
+      if (b.balanceCents <= 0) return { result: "skipped", detail: "There's nothing to pay out." };
+      b.payouts.unshift({
+        id: sampleId("po"),
+        kind: "automatic",
+        status: "queued",
+        amountCents: b.balanceCents,
+        destination: b.auto.payoutAddress,
+        signed: true,
+        txHash: null,
+        createdAt: new Date().toISOString(),
+      });
+      b.balanceCents = 0;
+      return { result: "paid", detail: "Queued for the relayer." };
     },
     listApiKeys: async () => {
       await wait();
       return clone(get().apiKeys);
     },
-    createApiKey: async () => {
+    createApiKey: async (input) => {
       await wait();
-      throw new DataError("Keys arrive with the checkout API.", 409, "not_available");
+      const b = get();
+      const tail = sampleId("k").slice(2, 6);
+      const key: ApiKey = {
+        id: sampleId("key"),
+        name: input.name,
+        publishableKey: `pk_test_sample${sampleId("x").slice(2, 16)}`,
+        secretHint: `sk_test_…${tail}`,
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+      };
+      b.apiKeys.unshift(key);
+      return { key: clone(key), secret: `sk_test_sample_not_a_real_key_${tail}` };
     },
     revokeApiKey: async (keyId) => {
       await wait();
       const b = get();
-      if (!b.apiKeys.some((k) => k.id === keyId)) throw new DataError("That key doesn't exist.", 404, "not_found");
+      const key = b.apiKeys.find((k) => k.id === keyId);
+      if (!key) throw new DataError("That key doesn't exist.", 404, "not_found");
       b.apiKeys = b.apiKeys.filter((k) => k.id !== keyId);
-      return { id: keyId, revoked: true };
+      return clone(key);
     },
     listWebhooks: async () => {
       await wait();
@@ -467,81 +683,62 @@ export function createSampleData(merchant: Merchant = SAMPLE_MERCHANT, { empty =
         url: input.url,
         events: input.events,
         secretHint: "whsec_…d41e",
-        enabled: true,
         createdAt: new Date().toISOString(),
       };
       b.webhooks.push(endpoint);
       return { endpoint: clone(endpoint), secret: "whsec_sample_not_a_real_secret_d41e" };
     },
-    updateWebhook: async (endpointId, input) => {
-      await wait();
-      const endpoint = get().webhooks.find((w) => w.id === endpointId);
-      if (!endpoint) throw new DataError("That endpoint doesn't exist.", 404, "not_found");
-      Object.assign(endpoint, input);
-      return clone(endpoint);
-    },
     deleteWebhook: async (endpointId) => {
       await wait();
       const b = get();
+      const endpoint = b.webhooks.find((w) => w.id === endpointId);
+      if (!endpoint) throw new DataError("That endpoint doesn't exist.", 404, "not_found");
       b.webhooks = b.webhooks.filter((w) => w.id !== endpointId);
-      return { id: endpointId, deleted: true };
+      b.deliveries = b.deliveries.filter((d) => d.endpointId !== endpointId);
+      return clone(endpoint);
     },
     sendTestEvent: async (endpointId) => {
       await wait(420);
       const b = get();
       const endpoint = b.webhooks.find((w) => w.id === endpointId);
       if (!endpoint) throw new DataError("That endpoint doesn't exist.", 404, "not_found");
-      const eventId = sampleId("evt");
-      const body = JSON.stringify({
-        eventId,
-        event: "payment.succeeded",
-        createdAt: new Date().toISOString(),
-        merchantId: b.merchant.id,
-        livemode: false,
-        test: true,
-        data: { orderId: "ord_test_sample", amount: "200.00", currency: "USD", mode: "now", description: "Test event from the Polaris dashboard" },
-      });
-      const delivery: WebhookDelivery = {
-        id: sampleId("del"),
-        endpointId,
-        url: endpoint.url,
-        event: "payment.succeeded",
-        eventId,
-        status: null,
-        durationMs: null,
-        attempt: 1,
-        test: true,
-        simulated: true,
-        request: {
-          headers: {
-            "content-type": "application/json",
-            "polaris-signature": `t=${Math.floor(Date.now() / 1000)},v1=sample`,
-            "polaris-event": "payment.succeeded",
-            "polaris-delivery-attempt": "1",
-          },
-          body,
-        },
-        createdAt: new Date().toISOString(),
-      };
-      b.deliveries.unshift(delivery);
-      return clone(delivery);
+      const d = testDelivery(endpoint, b.merchant.publicId ?? "mer_sample");
+      b.deliveries.unshift(d);
+      return clone(d);
+    },
+    retryDelivery: async (deliveryId) => {
+      await wait(500);
+      const d = get().deliveries.find((x) => x.id === deliveryId);
+      if (!d) throw new DataError("That delivery doesn't exist.", 404, "not_found");
+      const at = new Date().toISOString();
+      d.attempt += 1;
+      d.status = 200;
+      d.durationMs = 204;
+      d.state = "succeeded";
+      d.nextAttemptAt = null;
+      d.attempts = [...(d.attempts ?? []), { at, status: 200, durationMs: 204, error: null, responseBody: "ok" }];
+      return clone(d);
     },
   };
 }
 
 /**
  * The preview for a real merchant: sample money views over their own live
- * links, keys and webhooks.
+ * links, keys and webhooks. Nothing that would move money works here.
  */
 export function withSampleMoney(live: DashboardData, merchant: Merchant): DashboardData {
   const sample = createSampleData(merchant);
+  const refuse = async (): Promise<never> => {
+    throw new DataError("Sample data can't be paid out. Turn the preview off to use your real balance.", 409, "sample_data");
+  };
   return {
     ...live,
     getOverview: sample.getOverview,
     listPayments: sample.listPayments,
     listPlans: sample.listPlans,
     getPayouts: sample.getPayouts,
-    withdraw: sample.withdraw,
-    setAutoPayouts: sample.setAutoPayouts,
+    withdraw: refuse,
+    setAutoPayouts: refuse,
+    payoutNow: refuse,
   };
 }

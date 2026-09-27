@@ -16,9 +16,10 @@ import {
 
 import { DEV_MOCK_SAMPLE, useAuth } from "./auth-context";
 import { createHttpData, errorMessage, type DashboardData } from "./data";
-import { SERVER_DEMO_DATA } from "./data/demo";
 import { createSampleData, withSampleMoney } from "./data/sample";
 import type { Merchant } from "./data/types";
+import { readiness, type Readiness, type SampleReason } from "./features";
+import { MerchantContext } from "./merchant-context";
 
 /* ── The live data source, bound to the session ─────────────────────────── */
 
@@ -97,8 +98,8 @@ function writePreview(on: boolean) {
 export type SampleState = {
   /** Sample data is on screen: label every card and row that shows it. */
   on: boolean;
-  /** Why: the dev mock session, the server's demo book, or the viewer's preview. */
-  reason: "mock" | "server" | "preview" | null;
+  /** Why: the dev mock session, a server with no chain (its sample book), or the viewer's preview. */
+  reason: SampleReason;
   /** Only the viewer's own preview can be switched off. */
   canToggle: boolean;
   setPreview: (on: boolean) => void;
@@ -124,7 +125,7 @@ export function SampleProvider({ merchant, children }: { merchant: Merchant; chi
   );
 
   const reason: SampleState["reason"] =
-    mock && DEV_MOCK_SAMPLE ? "mock" : SERVER_DEMO_DATA ? "server" : preview ? "preview" : null;
+    mock && DEV_MOCK_SAMPLE ? "mock" : merchant.sample ? "server" : preview ? "preview" : null;
   const data = useMemo(
     () => (reason === "preview" ? withSampleMoney(live, merchant) : live),
     // The merchant's id is enough: the sample book is seeded from it.
@@ -252,4 +253,15 @@ export function useQuery<T>(load: (data: DashboardData) => Promise<T>, options: 
     reload,
     mutate,
   };
+}
+
+/**
+ * Whether withdraw, automatic payouts, links and registration can work now,
+ * from what the server is connected to and whether sample data is on. Each
+ * value is null when ready, otherwise the reason to show beside the control.
+ */
+export function useReadiness(): Readiness {
+  const capabilities = useContext(MerchantContext)?.capabilities;
+  const { reason } = useSample();
+  return useMemo(() => readiness(capabilities, reason), [capabilities, reason]);
 }

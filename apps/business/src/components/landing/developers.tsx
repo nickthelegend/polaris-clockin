@@ -8,9 +8,9 @@ import { developers } from "./content";
 import { SectionIntro, Shell } from "./section";
 
 /**
- * "Ten lines of code": the SDK snippet from docs/plan.md §5.8 (the API
- * polarispay-sdk 0.3 ships) in React, Node and HTML. Marked as a preview and not
- * copyable: the checkout-session API it calls isn't served yet.
+ * "Ten lines of code": polarispay-sdk 0.3.0 as it ships (createPolarisServer,
+ * checkout.sessions.create, webhooks.verify, the React button) in React,
+ * Node and HTML, against this server's checkout-session API.
  */
 export function Developers() {
   return (
@@ -33,6 +33,7 @@ export function Developers() {
           <CodeBlock
             aria-label="SDK example"
             note={developers.note}
+            copyable
             defaultKey="node"
             samples={developers.samples.map((s) => ({ ...s }))}
             className="shadow-[0_40px_100px_-40px_rgb(0_0_0/0.9)]"

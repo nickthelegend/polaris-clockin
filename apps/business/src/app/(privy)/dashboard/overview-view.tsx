@@ -35,6 +35,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { DataModeNotice, Panel, PanelEmpty, SampleBadge, SeeAll, StaleNotice, useNow, LoadError } from "@/components/dashboard/common";
+import { RegistrationNotice } from "@/components/dashboard/registration";
 import { DashboardHeader, greeting } from "@/components/shell/dashboard-shell";
 import { averageClose, customersThisWeek, salesByMode, salesSummary, volumeCandles, type VolumeFrame } from "@/lib/data/analytics";
 import { formatAgo, MODE_LABEL, money, shortAddress } from "@/lib/data/format";
@@ -78,6 +79,7 @@ export function OverviewView() {
         }
       />
       <StaleNotice queries={[overview, payments, plans] as QueryState<unknown>[]} />
+      <RegistrationNotice className="mb-5" />
       <DataModeNotice empty={empty} />
 
       <StatRow overview={overview.data} payments={list} loading={!overview.data || !list} sample={sample.on} />
@@ -94,7 +96,7 @@ export function OverviewView() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
         <ExposurePanel overview={overview.data} plans={plans.data} sample={sample.on} />
-        <CollectionsPanel plans={plans.data} sample={sample.on} />
+        <CollectionsPanel plans={plans.data} collector={overview.data?.collector} sample={sample.on} />
         <EnvioFeed payments={list} plans={plans.data} sample={sample.on} className="lg:col-span-2 xl:col-span-1" />
       </div>
     </>
@@ -412,12 +414,19 @@ function Figure({ label, value, note, tone }: { label: string; value: string; no
 
 /* ── Collections: the Chainlink CRE workflow's last and next run ────────── */
 
-function CollectionsPanel({ plans, sample }: { plans?: Plan[]; sample: boolean }) {
+function CollectionsPanel({ plans, collector, sample }: { plans?: Plan[]; collector?: Overview["collector"]; sample: boolean }) {
   const now = useNow(1000);
-  const run = useMemo(() => (plans ? getCollectionsRun({ sample, plans }) : null), [plans, sample]);
-  // Keep the placeholder's clock moving: the next run is always the next minute.
-  const nextAt = run && run.source !== "not_connected" ? Math.ceil((now - 4000) / 60_000) * 60_000 + 4000 : null;
-  const lastAt = nextAt ? nextAt - 60_000 : null;
+  const run = useMemo(() => (plans ? getCollectionsRun({ sample, plans, collector }) : null), [plans, sample, collector]);
+  // The placeholder's clock keeps moving (the next run is always the next
+  // minute); a live run shows its real report time.
+  const nextAt =
+    run?.source === "placeholder"
+      ? Math.ceil((now - 4000) / 60_000) * 60_000 + 4000
+      : run?.source === "live"
+        ? Date.parse(run.data.nextRunAt)
+        : null;
+  const lastAt = run?.source === "live" ? Date.parse(run.data.lastRun.at) : nextAt ? nextAt - 60_000 : null;
+  const ago = (ms: number) => (ms < 90_000 ? `${Math.max(0, Math.round(ms / 1000))} s ago` : formatAgo(new Date(now - ms).toISOString(), now));
   return (
     <Panel title="Collections" subtitle="Chainlink CRE workflow" sample={sample}>
       {!run ? (
@@ -429,28 +438,38 @@ function CollectionsPanel({ plans, sample }: { plans?: Plan[]; sample: boolean }
           <div className="mt-5 grid grid-cols-2 gap-2.5">
             <div className="rounded-ui-tile bg-ui-surface-2 px-4 py-3">
               <p className="text-[13px] text-ui-muted">Last run</p>
-              <p className="ui-figure mt-1 text-[19px] leading-tight font-medium">{lastAt ? `${Math.max(0, Math.round((now - lastAt) / 1000))} s ago` : "—"}</p>
+              <p className="ui-figure mt-1 text-[19px] leading-tight font-medium">{lastAt ? ago(now - lastAt) : "—"}</p>
             </div>
             <div className="rounded-ui-tile bg-ui-surface-2 px-4 py-3">
               <p className="text-[13px] text-ui-muted">Next run</p>
-              <p className="ui-figure mt-1 text-[19px] leading-tight font-medium">{nextAt ? `in ${Math.max(0, Math.round((nextAt - now) / 1000))} s` : "—"}</p>
+              <p className="ui-figure mt-1 text-[19px] leading-tight font-medium">
+                {nextAt ? (nextAt > now ? `in ${Math.round((nextAt - now) / 1000)} s` : run.data.state === "running" ? "due now" : "overdue") : "—"}
+              </p>
             </div>
           </div>
           <dl className="mt-4 grid gap-2 text-[14px]">
             <Line label="Schedule" value={`${run.data.schedule} · ${run.data.workflow}`} />
             <Line label="Plans checked" value={String(run.data.lastRun.checked)} />
-            <Line label="Collected last run" value={`${run.data.lastRun.collected} · ${money(run.data.lastRun.collectedCents)}`} />
+            {run.data.lastRun.collected !== null ? (
+              <Line label="Collected last run" value={`${run.data.lastRun.collected} · ${money(run.data.lastRun.collectedCents ?? 0)}`} />
+            ) : (
+              <Line label="Workflow" value={run.data.state === "running" ? "Reporting" : run.data.state === "degraded" ? "Late" : "Stopped"} />
+            )}
             <Line label="Retrying" value={String(run.data.lastRun.retrying)} />
           </dl>
           {run.data.lastRun.skipped.length ? (
             <p className="mt-3 text-[13px] leading-snug text-ui-muted">{run.data.lastRun.skipped[0]!.reason}.</p>
           ) : null}
-          <p className="mt-4 text-[12px] text-ui-muted">Instalments collected, last 12 runs</p>
-          <div className="mt-2 flex h-10 items-end gap-1" aria-hidden>
-            {run.data.history.map((n, i) => (
-              <span key={i} className={cn("flex-1 rounded-full", n ? "bg-ui-lime" : "bg-ui-surface-3")} style={{ height: `${n ? 30 + n * 30 : 18}%` }} />
-            ))}
-          </div>
+          {run.data.history.length ? (
+            <>
+              <p className="mt-4 text-[12px] text-ui-muted">Instalments collected, last 12 runs</p>
+              <div className="mt-2 flex h-10 items-end gap-1" aria-hidden>
+                {run.data.history.map((n, i) => (
+                  <span key={i} className={cn("flex-1 rounded-full", n ? "bg-ui-lime" : "bg-ui-surface-3")} style={{ height: `${n ? 30 + n * 30 : 18}%` }} />
+                ))}
+              </div>
+            </>
+          ) : null}
         </>
       )}
     </Panel>

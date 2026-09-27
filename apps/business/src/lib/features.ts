@@ -1,61 +1,58 @@
-import { ausdDomain } from "./chain";
+import type { Capabilities } from "./data/types";
 
 /**
- * What can actually work today. A control whose service isn't live is
- * disabled, and the reason sits beside it: nothing is left to fail, and
- * nothing claims money moved when it didn't.
- *
- * Each switch is a public env var the team sets once the piece exists.
+ * What can actually work right now, decided from what the server says it is
+ * connected to (GET /api/health: the chain, the relayer, the payout signer).
+ * A control whose service isn't connected is disabled with the reason beside
+ * it: nothing is left to fail, and nothing claims money moved when it didn't.
  */
-
-/** AUSD on Monad, for ERC-3009 withdrawal signatures. */
-export const AUSD_CONFIGURED = ausdDomain() !== null;
-
-/** The relayer that submits signed withdrawals (not built yet). */
-export const PAYOUT_RELAYER_LIVE = process.env.NEXT_PUBLIC_PAYOUT_RELAYER_LIVE === "1";
 
 /** Our payout signer's key quorum, added to a merchant's wallet for automatic payouts. */
 export const PAYOUT_SIGNER_ID = process.env.NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID || "";
 
-/** The daily sweep job that uses the session signer (not built yet). */
-export const PAYOUT_SWEEP_LIVE = process.env.NEXT_PUBLIC_PAYOUT_SWEEP_LIVE === "1";
+/** The demo storefront (apps/shop, "Halcyon"), which pays through polarispay-sdk. */
+export const DEMO_SHOP_URL = process.env.NEXT_PUBLIC_DEMO_SHOP_URL || "http://localhost:3600";
 
-/** One-tap withdraw needs AUSD and the relayer. */
-export const WITHDRAW_READY = AUSD_CONFIGURED && PAYOUT_RELAYER_LIVE;
+/** Where sample data on screen comes from, when it is on. */
+export type SampleReason = "mock" | "server" | "preview" | null;
 
-/** Automatic payouts need withdrawals, the payout signer and the daily sweep. */
-export const AUTO_PAYOUTS_READY = WITHDRAW_READY && Boolean(PAYOUT_SIGNER_ID) && PAYOUT_SWEEP_LIVE;
+export type Readiness = {
+  /** Null when one-tap withdraw works; otherwise why it doesn't, in words. */
+  withdraw: string | null;
+  /** Null when automatic payouts can be switched on. */
+  autoPayouts: string | null;
+  /** Null when buyers can open this merchant's links. */
+  links: string | null;
+  /** Null when the business can be registered on Monad. */
+  registration: string | null;
+};
 
-function missing(parts: [boolean, string][]): string[] {
-  return parts.filter(([ok]) => !ok).map(([, name]) => name);
+const CHECKING = "Checking what this server is connected to…";
+
+/**
+ * Readiness for the dashboard's money controls. The development mock session
+ * simulates everything in the browser (and labels it Sample); the preview
+ * and a server with no chain refuse, with the reason.
+ */
+export function readiness(caps: Capabilities | null | undefined, sample: SampleReason): Readiness {
+  if (sample === "mock") return { withdraw: null, autoPayouts: null, links: null, registration: null };
+  if (sample === "preview") {
+    const reason = "This is the sample preview: there's no real balance behind it. Turn the preview off in your account menu to use your own.";
+    return { withdraw: reason, autoPayouts: reason, links: null, registration: null };
+  }
+  if (!caps) return { withdraw: CHECKING, autoPayouts: CHECKING, links: CHECKING, registration: CHECKING };
+
+  const noChain = caps.chain
+    ? null
+    : "This server isn't connected to Monad yet, so your book is sample data and nothing can move.";
+  const noRelayer = caps.relayer ? null : "Polaris's relayer isn't running on this server yet. It pays the network fee, so nothing can be sent until it is.";
+  const noSigner =
+    caps.automaticPayouts && PAYOUT_SIGNER_ID ? null : "Automatic payouts switch on once the Privy payout signer is set up on this server.";
+
+  return {
+    withdraw: noChain ?? noRelayer,
+    autoPayouts: noChain ?? noRelayer ?? noSigner,
+    links: noChain ? "Buyers can open links once this server is connected to Monad." : noRelayer,
+    registration: noChain ? "Registration on Monad opens once this server is connected to it." : noRelayer,
+  };
 }
-
-function list(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
-export const WITHDRAW_BLOCKER = WITHDRAW_READY
-  ? null
-  : `Withdrawals open once ${list(
-      missing([
-        [AUSD_CONFIGURED, "AUSD on Monad"],
-        [PAYOUT_RELAYER_LIVE, "the payout relayer"],
-      ]),
-    )} ${AUSD_CONFIGURED || PAYOUT_RELAYER_LIVE ? "is" : "are"} connected. Nothing can be sent until then.`;
-
-export const AUTO_PAYOUTS_BLOCKER = AUTO_PAYOUTS_READY
-  ? null
-  : `Automatic payouts switch on once ${list(
-      missing([
-        [WITHDRAW_READY, "withdrawals"],
-        [Boolean(PAYOUT_SIGNER_ID), "the Privy payout signer"],
-        [PAYOUT_SWEEP_LIVE, "the daily sweep"],
-      ]),
-    )} ${[WITHDRAW_READY, Boolean(PAYOUT_SIGNER_ID), PAYOUT_SWEEP_LIVE].filter((x) => !x).length > 1 ? "are" : "is"} live.`;
-
-/** API keys authenticate the checkout-session API, which isn't served yet. */
-export const CHECKOUT_API_LIVE = process.env.NEXT_PUBLIC_CHECKOUT_API_LIVE === "1";
-
-/** The demo storefront, when one is deployed. Without it the landing opens its built-in demo checkout. */
-export const DEMO_SHOP_URL = process.env.NEXT_PUBLIC_DEMO_SHOP_URL || "";

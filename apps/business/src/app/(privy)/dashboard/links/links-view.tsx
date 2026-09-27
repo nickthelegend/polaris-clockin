@@ -31,12 +31,9 @@ import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/component
 import { DownloadQrButton, QrCode } from "@/components/qr";
 import { DashboardHeader } from "@/components/shell/dashboard-shell";
 import { DataError, errorMessage } from "@/lib/data";
-import { SERVER_DEMO_DATA } from "@/lib/data/demo";
 import { formatDate, MODE_LABEL, money, parseAmount, payInFourQuote } from "@/lib/data/format";
-import { PAY_LINKS_LIVE, PAY_LINKS_PENDING_REASON } from "@/lib/data/links";
 import type { LinkStatus, LinkUsage, PayMode, PaymentLink } from "@/lib/data/types";
-import { DEV_MOCK_SAMPLE } from "@/lib/auth-context";
-import { useDashboardData, useQuery, type QueryState } from "@/lib/session";
+import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
 const STATUS: Record<LinkStatus, { tone: BadgeTone; label: string }> = {
   active: { tone: "lime", label: "Active" },
@@ -50,8 +47,10 @@ type Filter = "all" | "active" | "closed";
 export function LinksView() {
   const links = useQuery((d) => d.listLinks());
   // Links are the merchant's own, never the viewer's sample preview; they are
-  // only sample in the mock session or on a demo server.
-  const sample = DEV_MOCK_SAMPLE || SERVER_DEMO_DATA;
+  // only sample in the mock session or on a server with no chain.
+  const { reason } = useSample();
+  const sample = reason === "mock" || reason === "server";
+  const blocker = useReadiness().links;
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -85,9 +84,9 @@ export function LinksView() {
       />
       <StaleNotice queries={[links as QueryState<unknown>]} />
       {sample ? <DataModeNotice empty={false} /> : null}
-      {!PAY_LINKS_LIVE ? (
+      {blocker ? (
         <Notice id="links-pending" tone="info" className="mb-5" title="Buyers can't open links yet">
-          {PAY_LINKS_PENDING_REASON} Links are also kept in this server&rsquo;s memory for now, so a restart clears them.
+          {blocker} You can create links now; sharing, copying and QR codes switch on then.
         </Notice>
       ) : null}
 
@@ -140,6 +139,7 @@ export function LinksView() {
                 key={link.id}
                 link={link}
                 sample={sample}
+                live={!blocker}
                 onShare={() => setSharing(link)}
                 onTurnOff={() => setTurningOff(link)}
               />
@@ -156,7 +156,7 @@ export function LinksView() {
           setFilter("all");
         }}
       />
-      <ShareDialog link={sharing} onClose={() => setSharing(null)} />
+      <ShareDialog link={blocker ? null : sharing} sample={sample} onClose={() => setSharing(null)} />
       <TurnOffDialog
         link={turningOff}
         onClose={() => setTurningOff(null)}
@@ -166,7 +166,19 @@ export function LinksView() {
   );
 }
 
-function LinkRow({ link, sample, onShare, onTurnOff }: { link: PaymentLink; sample: boolean; onShare: () => void; onTurnOff: () => void }) {
+function LinkRow({
+  link,
+  sample,
+  live,
+  onShare,
+  onTurnOff,
+}: {
+  link: PaymentLink;
+  sample: boolean;
+  live: boolean;
+  onShare: () => void;
+  onTurnOff: () => void;
+}) {
   const status = STATUS[link.status];
   const active = link.status === "active";
   return (
@@ -203,14 +215,14 @@ function LinkRow({ link, sample, onShare, onTurnOff }: { link: PaymentLink; samp
         </div>
         <div className="flex items-center gap-1.5">
           <IconButton
-            label={PAY_LINKS_LIVE ? `Share “${link.description}”` : "Sharing opens when checkout goes live"}
+            label={live ? `Share “${link.description}”` : "Sharing opens once buyers can open links"}
             icon={<Share2 />}
             tone="surface"
             size="md"
             className="bg-ui-surface-3"
             onClick={onShare}
-            disabled={!PAY_LINKS_LIVE || !active}
-            aria-describedby={PAY_LINKS_LIVE ? undefined : "links-pending"}
+            disabled={!live || !active}
+            aria-describedby={live ? undefined : "links-pending"}
           />
           <Menu
             label={`More for “${link.description}”`}
@@ -224,8 +236,8 @@ function LinkRow({ link, sample, onShare, onTurnOff }: { link: PaymentLink; samp
           >
             <Menu.Item
               icon={<Copy />}
-              disabled={!PAY_LINKS_LIVE}
-              description={PAY_LINKS_LIVE ? undefined : "When checkout goes live"}
+              disabled={!live || !active}
+              description={live ? undefined : "Once buyers can open links"}
               onSelect={() => void navigator.clipboard.writeText(link.url).then(() => toast({ title: "Link copied", tone: "success" }))}
             >
               Copy link
@@ -305,7 +317,7 @@ function NewLinkDialog({
       onCreated(link);
       toast({
         title: "Link saved",
-        description: PAY_LINKS_LIVE ? "Share it anywhere." : "It can be shared once checkout goes live.",
+        description: "Share it from its row: a link, a QR code, or the checkout itself.",
         tone: "success",
       });
       onOpenChange(false);
@@ -401,16 +413,21 @@ function NewLinkDialog({
   );
 }
 
-/* ── Share (only once links resolve) ────────────────────────────────────── */
+/* ── Share (only once buyers can open links) ─────────────────────────────── */
 
-function ShareDialog({ link, onClose }: { link: PaymentLink | null; onClose: () => void }) {
+function ShareDialog({ link, sample, onClose }: { link: PaymentLink | null; sample: boolean; onClose: () => void }) {
   const [last, setLast] = useState(link);
   if (link && link !== last) setLast(link);
   const l = link ?? last;
   return (
-    <Dialog open={link !== null && PAY_LINKS_LIVE} onOpenChange={(o) => !o && onClose()} size="sm" title="Share link" description={l?.description}>
+    <Dialog open={link !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Share link" description={l?.description}>
       {l ? (
         <Dialog.Body className="grid justify-items-center gap-5">
+          {sample ? (
+            <Notice tone="warn" size="sm" className="w-full">
+              A sample link: it shows how sharing works, but it opens no checkout.
+            </Notice>
+          ) : null}
           <QrCode value={l.url} label={`QR code for ${l.description}`} size={200} />
           <div className="flex w-full min-w-0 items-center gap-2 rounded-ui-field bg-ui-surface-2 p-1.5 pl-4">
             <code className="min-w-0 flex-1 truncate font-mono text-[13px]">{l.url}</code>

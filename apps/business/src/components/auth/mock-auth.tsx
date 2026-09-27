@@ -48,7 +48,12 @@ export function MockAuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => writeSignedOut(true), []);
 
   const value = useMemo<AuthState>(() => {
-    const refuse = async () => Promise.reject(new Error("The development mock session has no wallet."));
+    // No wallet and no API: a "signature" is a placeholder that only the
+    // in-browser sample data source ever sees, so flows can be captured.
+    const fakeSign = async () => {
+      await new Promise((r) => setTimeout(r, 500));
+      return `0x${"00".repeat(65)}` as const;
+    };
     return {
       status: signedOut === null ? "loading" : signedOut ? "signed-out" : "signed-in",
       user: signedOut === false ? { id: SAMPLE_MERCHANT.id, email: SAMPLE_MERCHANT.email } : null,
@@ -60,8 +65,8 @@ export function MockAuthProvider({ children }: { children: ReactNode }) {
       wallet: {
         address: SAMPLE_MERCHANT.walletAddress,
         ready: true,
-        signTypedData: refuse,
-        addPayoutSigner: refuse,
+        signTypedData: fakeSign,
+        addPayoutSigner: async () => undefined,
         removePayoutSigners: async () => undefined,
       },
     };

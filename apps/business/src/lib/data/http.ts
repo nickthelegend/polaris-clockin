@@ -1,6 +1,7 @@
-import { DataError, isSessionEnded, type DashboardData } from "./source";
+import { DataError, isSessionEnded, type DashboardData, type PayoutRun } from "./source";
 import type {
   ApiKey,
+  Capabilities,
   AutoPayouts,
   CreatedApiKey,
   CreatedWebhookEndpoint,
@@ -11,10 +12,20 @@ import type {
   Payout,
   PayoutsState,
   Plan,
+  RegistrationStep,
   WebhookDelivery,
   WebhookEndpoint,
   WebhooksState,
 } from "./types";
+
+/** GET /api/health, as the server sends it (it holds no secrets). */
+type Health = {
+  chain: { id: number; name: string } | null;
+  relayer: { mode: string; address: string | null };
+  activator: string;
+  automaticPayouts: boolean;
+  checkoutOrigin: string;
+};
 
 type TokenSource = () => Promise<string | null>;
 
@@ -54,7 +65,7 @@ export function createHttpData(getAccessToken: TokenSource, options: HttpDataOpt
     }
 
     const payload = (await res.json().catch(() => null)) as
-      | { data?: T; error?: { code?: string; message?: string; field?: string } }
+      | { data?: T; error?: { code?: string; message?: string; param?: string; field?: string } }
       | null;
 
     if (!res.ok) {
@@ -62,7 +73,7 @@ export function createHttpData(getAccessToken: TokenSource, options: HttpDataOpt
         payload?.error?.message ?? `The request failed (${res.status}).`,
         res.status,
         payload?.error?.code ?? "http_error",
-        payload?.error?.field,
+        payload?.error?.param ?? payload?.error?.field,
       );
       if (isSessionEnded(error)) options.onSessionEnded?.(error);
       throw error;
@@ -76,8 +87,20 @@ export function createHttpData(getAccessToken: TokenSource, options: HttpDataOpt
   const id = (value: string) => encodeURIComponent(value);
 
   return {
+    getCapabilities: async () => {
+      const h = await call<Health>("/api/health");
+      return {
+        chain: h.chain ? { id: h.chain.id, name: h.chain.name } : null,
+        relayer: h.relayer.mode !== "off" && Boolean(h.relayer.address),
+        automaticPayouts: h.automaticPayouts,
+        activation: h.activator !== "off",
+        checkoutOrigin: h.checkoutOrigin,
+      } satisfies Capabilities;
+    },
     getMerchant: () => call<Merchant>("/api/me"),
     updateMerchant: (input) => call<Merchant>("/api/me", { method: "POST", body: input }),
+    getRegistration: () => call<RegistrationStep>("/api/merchant/registration"),
+    submitRegistration: (input) => call<{ merchant: Merchant }>("/api/merchant/registration", { method: "POST", body: input }),
     getOverview: () => call<Overview>("/api/overview"),
     listLinks: () => call<PaymentLink[]>("/api/links"),
     createLink: (input) => call<PaymentLink>("/api/links", { method: "POST", body: input }),
@@ -87,14 +110,14 @@ export function createHttpData(getAccessToken: TokenSource, options: HttpDataOpt
     getPayouts: () => call<PayoutsState>("/api/payouts"),
     withdraw: (input) => call<Payout>("/api/payouts", { method: "POST", body: input }),
     setAutoPayouts: (input) => call<AutoPayouts>("/api/payouts/automatic", { method: "POST", body: input }),
+    payoutNow: () => call<PayoutRun>("/api/payouts/automatic/run", { method: "POST" }),
     listApiKeys: () => call<ApiKey[]>("/api/keys"),
     createApiKey: (input) => call<CreatedApiKey>("/api/keys", { method: "POST", body: input }),
-    revokeApiKey: (keyId) => call<{ id: string; revoked: true }>(`/api/keys/${id(keyId)}`, { method: "DELETE" }),
+    revokeApiKey: (keyId) => call<ApiKey>(`/api/keys/${id(keyId)}`, { method: "DELETE" }),
     listWebhooks: () => call<WebhooksState>("/api/webhooks"),
     createWebhook: (input) => call<CreatedWebhookEndpoint>("/api/webhooks", { method: "POST", body: input }),
-    updateWebhook: (endpointId, input) =>
-      call<WebhookEndpoint>(`/api/webhooks/${id(endpointId)}`, { method: "PATCH", body: input }),
-    deleteWebhook: (endpointId) => call<{ id: string; deleted: true }>(`/api/webhooks/${id(endpointId)}`, { method: "DELETE" }),
+    deleteWebhook: (endpointId) => call<WebhookEndpoint>(`/api/webhooks/${id(endpointId)}`, { method: "DELETE" }),
     sendTestEvent: (endpointId) => call<WebhookDelivery>(`/api/webhooks/${id(endpointId)}/test`, { method: "POST" }),
+    retryDelivery: (deliveryId) => call<WebhookDelivery>(`/api/webhooks/deliveries/${id(deliveryId)}/retry`, { method: "POST" }),
   };
 }

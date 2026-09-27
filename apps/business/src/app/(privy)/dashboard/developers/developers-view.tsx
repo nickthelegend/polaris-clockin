@@ -14,56 +14,141 @@ import {
   Menu,
   Notice,
   Skeleton,
-  Toggle,
   toast,
+  type BadgeTone,
 } from "@polaris/ui";
-import { KeyRound, MoreHorizontal, Pencil, Plus, Send, Store, Trash2, TriangleAlert, Webhook } from "lucide-react";
-import { useState } from "react";
+import { KeyRound, MoreHorizontal, Plus, RotateCcw, Send, ShoppingBag, Store, Trash2, TriangleAlert, Webhook } from "lucide-react";
+import { useState, useSyncExternalStore } from "react";
 
-import { SampleBadge, LoadError, Panel, StaleNotice, useNow } from "@/components/dashboard/common";
-import { DemoShopButton } from "@/components/landing/demo-shop";
+import { LoadError, Panel, SampleBadge, StaleNotice, useNow } from "@/components/dashboard/common";
+import { RegistrationBadge, registrationOf, useRegisterAction } from "@/components/dashboard/registration";
 import { developers as sdk } from "@/components/landing/content";
+import { DemoShopButton } from "@/components/landing/demo-shop";
 import { DashboardHeader } from "@/components/shell/dashboard-shell";
-import { DEV_MOCK_SAMPLE } from "@/lib/auth-context";
 import { DataError, errorMessage, WEBHOOK_EVENTS, type ApiKey, type WebhookDelivery, type WebhookEndpoint, type WebhookEventType } from "@/lib/data";
-import { SERVER_DEMO_DATA } from "@/lib/data/demo";
-import { formatAgo, formatDate, formatDateTime } from "@/lib/data/format";
-import { CHECKOUT_API_LIVE } from "@/lib/features";
-import { useDashboardData, useQuery, type QueryState } from "@/lib/session";
+import { formatAgo, formatDate, formatDateTime, formatIn } from "@/lib/data/format";
+import { DEMO_SHOP_URL } from "@/lib/features";
+import { useMerchant } from "@/lib/merchant-context";
+import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
-const KEYS_BLOCKER = "API keys authenticate the checkout-session API, which isn't served yet. Creating keys opens with it.";
+/** This dashboard's origin: the `baseUrl` a merchant's server gives createPolarisServer. */
+function useOrigin(): string {
+  return useSyncExternalStore(
+    () => () => undefined,
+    () => window.location.origin,
+    () => "",
+  );
+}
 
 export function DevelopersView() {
-  // Keys and webhooks are the merchant's own; sample only in the mock session or on a demo server.
-  const sample = DEV_MOCK_SAMPLE || SERVER_DEMO_DATA;
+  // Keys and webhooks are the merchant's own. They are sample only in the
+  // development mock session or on a server with no chain (its sample book).
+  const { reason } = useSample();
+  const sample = reason === "mock" || reason === "server";
   return (
     <>
       <DashboardHeader
         title="Developers"
-        description="Take payments from your own site or app: create a checkout session on your server, send the buyer to it, and hear back by signed webhook. Everything is test mode on Monad testnet."
+        description="Take payments from your own site or app: create a checkout session on your server, send the buyer to it, and fulfil from a signed webhook. Everything is test mode on Monad testnet."
         actions={<DemoShopButton label="See the demo shop" icon={<Store />} variant="outline" size="md" />}
       />
       <div className="grid gap-4">
+        <IntegrationPanel sample={sample} />
         <ApiKeysPanel sample={sample} />
         <WebhooksPanel sample={sample} />
-        <Panel title="Ten lines of code" subtitle="The integration, with polarispay-sdk">
-          {!CHECKOUT_API_LIVE ? (
-            <Notice tone="info" size="sm" className="mt-4">
-              A preview of polarispay-sdk 0.3, which ships with the checkout API. The copy button appears when it runs against
-              this dashboard.
-            </Notice>
-          ) : null}
-          <CodeBlock
-            className="mt-4"
-            aria-label="SDK example"
-            note={CHECKOUT_API_LIVE ? undefined : sdk.note}
-            copyable={CHECKOUT_API_LIVE}
-            defaultKey="node"
-            samples={sdk.samples.map((s) => ({ ...s }))}
-          />
-        </Panel>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="xl:col-span-8">
+            <CodeBlock className="mt-5" aria-label="SDK example" note={sdk.note} copyable defaultKey="node" samples={sdk.samples.map((s) => ({ ...s }))} />
+          </Panel>
+          <DemoShopPanel className="xl:col-span-4" />
+        </div>
       </div>
     </>
+  );
+}
+
+/* ── The integration: who you are to the API ────────────────────────────── */
+
+function IntegrationPanel({ sample }: { sample: boolean }) {
+  const { merchant, capabilities } = useMerchant();
+  const origin = useOrigin();
+  const blocker = useReadiness().registration;
+  const { run, busy, error } = useRegisterAction();
+  const state = registrationOf(merchant);
+  const canRegister = !blocker && (state === "none" || state === "failed");
+
+  return (
+    <Panel title="Your integration" sample={sample} subtitle="What your server needs, and where your business stands on Monad">
+      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <DetailsList
+          size="sm"
+          items={[
+            {
+              label: "Merchant ID",
+              value: merchant.publicId ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <code className="font-mono text-[13px]">{merchant.publicId}</code>
+                  <CopyButton value={merchant.publicId} label="merchant ID" tone="ghost" />
+                </span>
+              ) : (
+                "Assigned on first sign-in"
+              ),
+            },
+            {
+              label: "baseUrl",
+              value: origin ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <code className="font-mono text-[13px]">{origin}</code>
+                  <CopyButton value={origin} label="API base URL" tone="ghost" />
+                </span>
+              ) : (
+                "…"
+              ),
+            },
+            { label: "Checkout", value: <code className="font-mono text-[13px]">{capabilities?.checkoutOrigin ?? "…"}</code> },
+          ]}
+        />
+        <div className="grid content-start gap-3">
+          <DetailsList
+            size="sm"
+            items={[
+              { label: "Network", value: capabilities?.chain ? `${capabilities.chain.name} (${capabilities.chain.id})` : "Not connected" },
+              { label: "MerchantRegistry", value: <RegistrationBadge merchant={merchant} /> },
+            ]}
+          />
+          {canRegister ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3">
+              <p className="text-[13px] text-ui-muted">{error ?? "One confirmation with your payout account. Polaris pays the fee."}</p>
+              <Button variant="lime" size="sm" loading={busy} onClick={() => void run()}>
+                Register
+              </Button>
+            </div>
+          ) : blocker && state === "none" ? (
+            <p className="text-[13px] text-ui-muted">{blocker}</p>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function DemoShopPanel({ className }: { className?: string }) {
+  return (
+    <Panel title="See it in a shop" subtitle="Halcyon, a demo store on polarispay-sdk" className={className}>
+      <div className="mt-5 grid flex-1 content-between gap-5 rounded-ui-tile bg-ui-surface-2 p-5">
+        <div className="grid gap-3">
+          <span className="grid size-12 place-items-center rounded-full bg-ui-lime text-ui-on-lime">
+            <ShoppingBag aria-hidden size={22} strokeWidth={1.75} />
+          </span>
+          <p className="text-[15px] leading-relaxed text-ui-muted">
+            Buy anything with <span className="text-ui-text">Pay now</span>, <span className="text-ui-text">Pay in 4</span> on
+            Polaris credit or straight from a wallet, and watch the order follow its webhooks.
+          </p>
+          <code className="truncate font-mono text-[13px] text-ui-muted">{DEMO_SHOP_URL}</code>
+        </div>
+        <DemoShopButton label="Open the demo shop" variant="lime" size="md" className="justify-self-start" />
+      </div>
+    </Panel>
   );
 }
 
@@ -101,24 +186,12 @@ function ApiKeysPanel({ sample }: { sample: boolean }) {
       sample={sample}
       subtitle="pk_test_… is safe in a browser. sk_test_… stays on your server; we show it once and keep only a hash."
       action={
-        <Button
-          variant="lime"
-          size="sm"
-          icon={<Plus />}
-          onClick={() => setCreating(true)}
-          disabled={!CHECKOUT_API_LIVE}
-          aria-describedby={CHECKOUT_API_LIVE ? undefined : "keys-blocked"}
-        >
-          {CHECKOUT_API_LIVE ? "Create key" : "Available with the checkout API"}
+        <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setCreating(true)}>
+          Create key
         </Button>
       }
     >
       <StaleNotice queries={[keys as QueryState<unknown>]} />
-      {!CHECKOUT_API_LIVE ? (
-        <p id="keys-blocked" className="mt-3 text-[13px] text-ui-muted">
-          {KEYS_BLOCKER}
-        </p>
-      ) : null}
       {keys.error && !list ? (
         <LoadError query={keys as QueryState<unknown>} title="We couldn't load your keys" />
       ) : !list ? (
@@ -128,12 +201,20 @@ function ApiKeysPanel({ sample }: { sample: boolean }) {
           size="sm"
           icon={<KeyRound />}
           title="No keys yet"
-          description={CHECKOUT_API_LIVE ? "Create one, then set it as POLARIS_SECRET_KEY on your server." : "Keys arrive with the checkout API."}
+          description="Create one, then set it as POLARIS_SECRET_KEY on your server."
+          action={
+            <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setCreating(true)}>
+              Create key
+            </Button>
+          }
         />
       ) : (
         <ul className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-2">
           {list.map((k) => (
-            <li key={k.id} className="grid gap-3 rounded-ui-row bg-ui-surface-2 p-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:px-5">
+            <li
+              key={k.id}
+              className="grid gap-3 rounded-ui-row bg-ui-surface-2 p-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:px-5"
+            >
               <div className="min-w-0">
                 <p className="flex items-center gap-2 truncate text-[15px] font-medium">
                   {k.name}
@@ -206,7 +287,8 @@ function CreateKeyDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
         <>
           <Dialog.Body>
             <RevealOnce title={`The secret key for “${secret.name}”`} secret={secret.value}>
-              This is the only time it&rsquo;s shown. We store a hash of it, so if you lose it, revoke it and create another.
+              This is the only time it&rsquo;s shown. Set it as POLARIS_SECRET_KEY on your server. We store a hash of it, so if
+              you lose it, revoke it and create another.
             </RevealOnce>
           </Dialog.Body>
           <Dialog.Footer>
@@ -218,7 +300,15 @@ function CreateKeyDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
       ) : (
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
           <Dialog.Body>
-            <Input label="Name" placeholder="Production server" maxLength={60} value={name} onChange={(e) => setName(e.target.value)} error={error ?? undefined} autoFocus />
+            <Input
+              label="Name"
+              placeholder="Production server"
+              maxLength={60}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              error={error ?? undefined}
+              autoFocus
+            />
           </Dialog.Body>
           <Dialog.Footer>
             <Button variant="ghost" onClick={() => close(false)}>
@@ -260,7 +350,7 @@ function RevokeDialog({ apiKey, onClose, onDone }: { apiKey: ApiKey | null; onCl
     <Dialog open={apiKey !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Revoke this key?" description={k?.name}>
       <Dialog.Body className="grid gap-4">
         <p className="text-[15px] leading-relaxed text-ui-muted">
-          Anything still using {k?.secretHint} stops working at once. This can&rsquo;t be undone.
+          Anything still using {k?.secretHint} or its publishable key stops working at once. This can&rsquo;t be undone.
         </p>
         {error ? (
           <Notice tone="down" size="sm" role="alert">
@@ -282,22 +372,42 @@ function RevokeDialog({ apiKey, onClose, onDone }: { apiKey: ApiKey | null; onCl
 
 /* ── Webhooks ───────────────────────────────────────────────────────────── */
 
+/** A delivery's result, in a word or two, with its tone. */
+function deliveryResult(d: WebhookDelivery, now: number): { tone: BadgeTone; text: string } {
+  if (d.simulated) return { tone: "info", text: "Signed, not sent" };
+  if (d.state === "delivering") return { tone: "info", text: "Sending" };
+  if (d.state === "pending") {
+    return { tone: "warn", text: d.nextAttemptAt ? `Retrying ${formatIn(d.nextAttemptAt, now)}` : "Queued" };
+  }
+  if (d.status && d.status < 300) return { tone: "up", text: `HTTP ${d.status}` };
+  if (d.state === "failed") return { tone: "down", text: d.status ? `Failed · HTTP ${d.status}` : "Failed" };
+  return { tone: "down", text: d.status ? `HTTP ${d.status}` : "No response" };
+}
+
 function WebhooksPanel({ sample }: { sample: boolean }) {
   const data = useDashboardData();
-  const hooks = useQuery((d) => d.listWebhooks());
-  const [editing, setEditing] = useState<WebhookEndpoint | "new" | null>(null);
+  const hooks = useQuery((d) => d.listWebhooks(), { refreshMs: 30_000 });
+  const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<WebhookEndpoint | null>(null);
   const [delivery, setDelivery] = useState<WebhookDelivery | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
   const now = useNow(30_000);
   const state = hooks.data;
 
+  const upsertDelivery = (d: WebhookDelivery) =>
+    hooks.mutate((s) => (s ? { ...s, deliveries: [d, ...s.deliveries.filter((x) => x.id !== d.id)] } : s));
+
   const sendTest = async (endpoint: WebhookEndpoint) => {
     setTesting(endpoint.id);
     try {
       const d = await data.sendTestEvent(endpoint.id);
-      hooks.mutate((s) => (s ? { ...s, deliveries: [d, ...s.deliveries] } : s));
-      toast({ title: "Test event signed and logged", description: "Open it in the delivery log to see the exact request.", tone: "success" });
+      upsertDelivery(d);
+      const ok = d.status !== null && d.status < 300;
+      toast({
+        title: ok ? `Test event delivered: HTTP ${d.status}` : "Test event sent, your endpoint didn't accept it",
+        description: ok ? "It's in the delivery log with the exact request." : "Open it in the delivery log to see the request and the response.",
+        tone: ok ? "success" : "info",
+      });
     } catch (err) {
       toast({ title: "The test event didn't go through", description: errorMessage(err), tone: "error" });
     } finally {
@@ -305,32 +415,18 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
     }
   };
 
-  const setEnabled = async (endpoint: WebhookEndpoint, enabled: boolean) => {
-    try {
-      const updated = await data.updateWebhook(endpoint.id, { enabled });
-      hooks.mutate((s) => (s ? { ...s, endpoints: s.endpoints.map((e) => (e.id === updated.id ? updated : e)) } : s));
-    } catch (err) {
-      toast({ title: "We couldn't change that endpoint", description: errorMessage(err), tone: "error" });
-    }
-  };
-
   return (
     <Panel
       title="Webhooks"
       sample={sample}
-      subtitle="Signed with HMAC (polaris-signature), one secret per endpoint"
+      subtitle="Every delivery is signed (Polaris-Signature: t=…, v1=…) with the endpoint's own secret"
       action={
-        <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setEditing("new")}>
+        <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setAdding(true)}>
           Add endpoint
         </Button>
       }
     >
       <StaleNotice queries={[hooks as QueryState<unknown>]} />
-      <Notice tone="info" size="sm" className="mt-4">
-        Test events are signed exactly as live ones will be and logged below. They aren&rsquo;t sent over the network yet: live
-        delivery arrives with the indexer, behind a guard that refuses private and internal addresses. Endpoints are kept in
-        this server&rsquo;s memory for now, so a restart clears them.
-      </Notice>
       {hooks.error && !state ? (
         <LoadError query={hooks as QueryState<unknown>} title="We couldn't load your webhooks" />
       ) : !state ? (
@@ -342,7 +438,7 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
           title="No endpoints yet"
           description="Add your server's HTTPS URL to hear about payments, plans and payouts."
           action={
-            <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setEditing("new")}>
+            <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setAdding(true)}>
               Add endpoint
             </Button>
           }
@@ -361,8 +457,7 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Toggle aria-label={`Deliveries to ${e.url}`} size="sm" checked={e.enabled !== false} onCheckedChange={(on) => void setEnabled(e, on)} />
-                <Button variant="outline" size="sm" icon={<Send />} loading={testing === e.id} disabled={e.enabled === false} onClick={() => void sendTest(e)}>
+                <Button variant="outline" size="sm" icon={<Send />} loading={testing === e.id} onClick={() => void sendTest(e)}>
                   Send test event
                 </Button>
                 <Menu
@@ -375,11 +470,8 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
                     </span>
                   }
                 >
-                  <Menu.Item icon={<Pencil />} onSelect={() => setEditing(e)}>
-                    Edit
-                  </Menu.Item>
                   <Menu.Item icon={<Trash2 />} tone="danger" onSelect={() => setDeleting(e)}>
-                    Delete
+                    Remove endpoint
                   </Menu.Item>
                 </Menu>
               </div>
@@ -390,98 +482,100 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
 
       {state && state.deliveries.length ? (
         <div className="mt-6">
-          <h3 className="text-[16px] font-medium">Delivery log</h3>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-[16px] font-medium">Delivery log</h3>
+            <p className="text-[13px] text-ui-muted">Failed deliveries retry up to 8 times over about 34 hours.</p>
+          </div>
           <ul className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-1.5">
-            {state.deliveries.slice(0, 10).map((d) => (
-              <li key={d.id}>
-                <button
-                  type="button"
-                  onClick={() => setDelivery(d)}
-                  className="flex w-full items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3 text-left transition-colors hover:bg-ui-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus"
-                >
-                  <Badge tone={d.simulated ? "info" : d.status && d.status < 300 ? "up" : "down"}>
-                    {d.simulated ? "Signed, not sent" : d.status ? `HTTP ${d.status}` : "No response"}
-                  </Badge>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-mono text-[13px]">{d.event}</span>
-                    <span className="block truncate text-[12px] text-ui-muted">{d.url}</span>
-                  </span>
-                  <span className="shrink-0 text-[12px] text-ui-muted">{formatAgo(d.createdAt, now)}</span>
-                </button>
-              </li>
-            ))}
+            {state.deliveries.slice(0, 12).map((d) => {
+              const r = deliveryResult(d, now);
+              return (
+                <li key={d.id}>
+                  <button
+                    type="button"
+                    onClick={() => setDelivery(d)}
+                    className="flex w-full items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3 text-left transition-colors hover:bg-ui-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus"
+                  >
+                    <Badge tone={r.tone} className="shrink-0">
+                      {r.text}
+                    </Badge>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-mono text-[13px]">{d.event}</span>
+                        {d.test ? (
+                          <Badge tone="neutral" size="sm">
+                            Test
+                          </Badge>
+                        ) : null}
+                        {sample ? <SampleBadge /> : null}
+                      </span>
+                      <span className="block truncate text-[12px] text-ui-muted">{d.url}</span>
+                    </span>
+                    <span className="hidden shrink-0 text-[12px] text-ui-muted sm:block">
+                      {(d.attempts?.length ?? d.attempt) > 1 ? `${d.attempts?.length ?? d.attempt} attempts · ` : ""}
+                      {formatAgo(d.createdAt, now)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
 
-      <EndpointDialog
-        target={editing}
-        onClose={() => setEditing(null)}
-        onSaved={(endpoint, isNew) =>
-          hooks.mutate((s) =>
-            s ? { ...s, endpoints: isNew ? [...s.endpoints, endpoint] : s.endpoints.map((x) => (x.id === endpoint.id ? endpoint : x)) } : s,
-          )
-        }
+      <AddEndpointDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        onSaved={(endpoint) => hooks.mutate((s) => (s ? { ...s, endpoints: [...s.endpoints, endpoint] } : s))}
       />
       <DeleteEndpointDialog
         endpoint={deleting}
         onClose={() => setDeleting(null)}
         onDone={(id) => hooks.mutate((s) => (s ? { ...s, endpoints: s.endpoints.filter((x) => x.id !== id) } : s))}
       />
-      <DeliveryDrawer delivery={delivery} onClose={() => setDelivery(null)} />
+      <DeliveryDrawer
+        delivery={delivery}
+        sample={sample}
+        onClose={() => setDelivery(null)}
+        onRetried={(d) => {
+          upsertDelivery(d);
+          setDelivery(d);
+        }}
+      />
     </Panel>
   );
 }
 
-function EndpointDialog({
-  target,
-  onClose,
-  onSaved,
-}: {
-  target: WebhookEndpoint | "new" | null;
-  onClose: () => void;
-  onSaved: (e: WebhookEndpoint, isNew: boolean) => void;
-}) {
+function AddEndpointDialog({ open, onClose, onSaved }: { open: boolean; onClose: () => void; onSaved: (e: WebhookEndpoint) => void }) {
   const data = useDashboardData();
-  const [seen, setSeen] = useState<typeof target>(null);
   const [url, setUrl] = useState("");
   const [events, setEvents] = useState<WebhookEventType[]>(["payment.succeeded", "plan.opened"]);
   const [errors, setErrors] = useState<{ url?: string; events?: string; form?: string }>({});
   const [busy, setBusy] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
 
-  // Load the endpoint being edited (or blank for a new one) when the dialog opens.
-  if (target !== seen) {
-    setSeen(target);
-    if (target) {
-      setUrl(target === "new" ? "" : target.url);
-      setEvents(target === "new" ? ["payment.succeeded", "plan.opened"] : target.events);
+  const close = () => {
+    onClose();
+    setTimeout(() => {
+      setUrl("");
+      setEvents(["payment.succeeded", "plan.opened"]);
       setErrors({});
       setSecret(null);
-    }
-  }
-  const isNew = target === "new";
-
+    }, 250);
+  };
   const toggle = (ev: WebhookEventType) => setEvents((cur) => (cur.includes(ev) ? cur.filter((x) => x !== ev) : [...cur, ev]));
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const next: typeof errors = {};
-    if (!/^https:\/\/\S+$/i.test(url.trim())) next.url = "Enter your endpoint's full URL, starting with https://.";
+    if (!/^https?:\/\/\S+$/i.test(url.trim())) next.url = "Enter your endpoint's full URL, starting with https://.";
     if (!events.length) next.events = "Choose at least one event.";
     setErrors(next);
-    if (Object.keys(next).length || !target) return;
+    if (Object.keys(next).length) return;
     setBusy(true);
     try {
-      if (target === "new") {
-        const created = await data.createWebhook({ url: url.trim(), events });
-        onSaved(created.endpoint, true);
-        setSecret(created.secret);
-      } else {
-        const updated = await data.updateWebhook(target.id, { url: url.trim(), events });
-        onSaved(updated, false);
-        toast({ title: "Endpoint saved", tone: "success" });
-        onClose();
-      }
+      const created = await data.createWebhook({ url: url.trim(), events });
+      onSaved(created.endpoint);
+      setSecret(created.secret);
     } catch (err) {
       const field = err instanceof DataError ? err.field : undefined;
       setErrors(field === "url" ? { url: errorMessage(err) } : field === "events" ? { events: errorMessage(err) } : { form: errorMessage(err) });
@@ -492,9 +586,9 @@ function EndpointDialog({
 
   return (
     <Dialog
-      open={target !== null}
-      onOpenChange={(o) => !o && onClose()}
-      title={secret ? "Copy the signing secret" : isNew ? "Add a webhook endpoint" : "Edit endpoint"}
+      open={open}
+      onOpenChange={(o) => !o && close()}
+      title={secret ? "Copy the signing secret" : "Add a webhook endpoint"}
       description={secret ? undefined : "We sign every delivery; verify it with polarispay-sdk's webhooks.verify."}
       dismissible={!busy}
     >
@@ -506,7 +600,7 @@ function EndpointDialog({
             </RevealOnce>
           </Dialog.Body>
           <Dialog.Footer>
-            <Button variant="lime" onClick={onClose}>
+            <Button variant="lime" onClick={close}>
               I&rsquo;ve saved it
             </Button>
           </Dialog.Footer>
@@ -522,7 +616,7 @@ function EndpointDialog({
               error={errors.url}
               className="font-mono text-[14px]"
               spellCheck={false}
-              hint="Public HTTPS on port 443. Private and internal addresses are refused."
+              hint="Public HTTPS. Private and internal addresses are refused, when you add it and again at every delivery."
             />
             <fieldset className="grid gap-2">
               <legend className="mb-2 text-[14px] font-medium">Events</legend>
@@ -546,11 +640,11 @@ function EndpointDialog({
             ) : null}
           </Dialog.Body>
           <Dialog.Footer>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={close}>
               Cancel
             </Button>
             <Button type="submit" variant="lime" loading={busy}>
-              {isNew ? "Add endpoint" : "Save"}
+              Add endpoint
             </Button>
           </Dialog.Footer>
         </form>
@@ -573,7 +667,7 @@ function DeleteEndpointDialog({ endpoint, onClose, onDone }: { endpoint: Webhook
     try {
       await data.deleteWebhook(e.id);
       onDone(e.id);
-      toast({ title: "Endpoint deleted", tone: "success" });
+      toast({ title: "Endpoint removed", tone: "success" });
       onClose();
     } catch (err) {
       setError(errorMessage(err));
@@ -582,10 +676,10 @@ function DeleteEndpointDialog({ endpoint, onClose, onDone }: { endpoint: Webhook
     }
   };
   return (
-    <Dialog open={endpoint !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Delete this endpoint?" description={e?.url}>
+    <Dialog open={endpoint !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Remove this endpoint?" description={e?.url}>
       <Dialog.Body className="grid gap-4">
         <p className="text-[15px] leading-relaxed text-ui-muted">
-          Nothing more is signed or sent for it. Its delivery log stays. To pause it instead, switch it off.
+          Nothing more is sent to it, and deliveries still waiting for a retry are dropped. Its past deliveries stay in the log.
         </p>
         {error ? (
           <Notice tone="down" size="sm" role="alert">
@@ -598,14 +692,27 @@ function DeleteEndpointDialog({ endpoint, onClose, onDone }: { endpoint: Webhook
           Keep it
         </Button>
         <Button variant="white" className="bg-ui-down text-white hover:bg-ui-down/90" loading={busy} icon={<Trash2 />} onClick={confirm}>
-          Delete endpoint
+          Remove endpoint
         </Button>
       </Dialog.Footer>
     </Dialog>
   );
 }
 
-function DeliveryDrawer({ delivery, onClose }: { delivery: WebhookDelivery | null; onClose: () => void }) {
+function DeliveryDrawer({
+  delivery,
+  sample,
+  onClose,
+  onRetried,
+}: {
+  delivery: WebhookDelivery | null;
+  sample: boolean;
+  onClose: () => void;
+  onRetried: (d: WebhookDelivery) => void;
+}) {
+  const data = useDashboardData();
+  const now = useNow(30_000);
+  const [retrying, setRetrying] = useState(false);
   const [last, setLast] = useState(delivery);
   if (delivery && delivery !== last) setLast(delivery);
   const d = delivery ?? last;
@@ -613,34 +720,84 @@ function DeliveryDrawer({ delivery, onClose }: { delivery: WebhookDelivery | nul
   try {
     body = JSON.stringify(JSON.parse(body), null, 2);
   } catch {}
+  const result = d ? deliveryResult(d, now) : null;
+  const canRetry = d !== null && !d.simulated && d.state !== "delivering" && !(d.status !== null && d.status < 300 && d.state === "succeeded");
+
+  const retry = async () => {
+    if (!d) return;
+    setRetrying(true);
+    try {
+      const next = await data.retryDelivery(d.id);
+      onRetried(next);
+      const ok = next.status !== null && next.status < 300;
+      toast({ title: ok ? `Delivered: HTTP ${next.status}` : "Sent again; your endpoint still didn't accept it", tone: ok ? "success" : "info" });
+    } catch (err) {
+      toast({ title: "We couldn't retry it", description: errorMessage(err), tone: "error" });
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   return (
     <Drawer open={delivery !== null} onOpenChange={(o) => !o && onClose()} size="lg" title="Delivery" description={d?.id}>
-      {d ? (
-        <Drawer.Body className="grid content-start gap-4">
-          <DetailsList
-            size="sm"
-            items={[
-              { label: "Event", value: <code className="font-mono text-[13px]">{d.event}</code> },
-              { label: "Endpoint", value: <span className="font-mono text-[13px] break-all">{d.url}</span> },
-              { label: "Result", value: d.simulated ? "Signed and logged, not sent" : d.status ? `HTTP ${d.status}` : "No response" },
-              { label: "When", value: formatDateTime(d.createdAt) },
-            ]}
-          />
-          <CodeBlock
-            copyable
-            showLineNumbers={false}
-            samples={[
-              {
-                key: "headers",
-                label: "Headers",
-                code: Object.entries(d.request.headers)
-                  .map(([k, v]) => `${k}: ${v}`)
-                  .join("\n"),
-              },
-              { key: "body", label: "Body", code: body, language: "json" },
-            ]}
-          />
-        </Drawer.Body>
+      {d && result ? (
+        <>
+          <Drawer.Body className="grid content-start gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={result.tone}>{result.text}</Badge>
+              {d.test ? <Badge tone="neutral">Test event</Badge> : null}
+              {sample ? <SampleBadge /> : null}
+            </div>
+            <DetailsList
+              size="sm"
+              items={[
+                { label: "Event", value: <code className="font-mono text-[13px]">{d.event}</code> },
+                { label: "Event ID", value: <code className="font-mono text-[13px]">{d.eventId}</code> },
+                { label: "Endpoint", value: <span className="font-mono text-[13px] break-all">{d.url}</span> },
+                { label: "Created", value: formatDateTime(d.createdAt) },
+                ...(d.state === "pending" && d.nextAttemptAt ? [{ label: "Next attempt", value: formatDateTime(d.nextAttemptAt) }] : []),
+              ]}
+            />
+            {d.attempts && d.attempts.length ? (
+              <div>
+                <h3 className="mb-2 text-[15px] font-medium">Attempts</h3>
+                <ol className="grid gap-1.5">
+                  {d.attempts.map((a, i) => (
+                    <li key={`${a.at}-${i}`} className="flex items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-2.5 text-[13px]">
+                      <span className="w-6 text-ui-muted">{i + 1}</span>
+                      <Badge tone={a.status && a.status < 300 ? "up" : "down"} size="sm">
+                        {a.status ? `HTTP ${a.status}` : "No response"}
+                      </Badge>
+                      <span className="min-w-0 flex-1 truncate text-ui-muted">{a.error ?? `${a.durationMs} ms`}</span>
+                      <span className="shrink-0 text-ui-muted">{formatAgo(a.at, now)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            <CodeBlock
+              copyable
+              showLineNumbers={false}
+              samples={[
+                {
+                  key: "headers",
+                  label: "Headers",
+                  code: Object.entries(d.request.headers)
+                    .map(([k, v]) => `${k}: ${v}`)
+                    .join("\n"),
+                },
+                { key: "body", label: "Body", code: body, language: "json" },
+              ]}
+            />
+          </Drawer.Body>
+          {canRetry ? (
+            <Drawer.Footer>
+              <Button variant="lime" icon={<RotateCcw />} loading={retrying} onClick={() => void retry()}>
+                Retry now
+              </Button>
+            </Drawer.Footer>
+          ) : null}
+        </>
       ) : null}
     </Drawer>
   );

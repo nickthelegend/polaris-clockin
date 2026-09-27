@@ -49,6 +49,9 @@ function SignedIn({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/dashboard";
   const { logout, wallet } = useAuth();
   const { data: merchant, error, reload } = useQuery((d) => d.getMerchant());
+  // What the server is connected to (chain, relayer, payout signer). Public and
+  // secret-free; the money controls read it to say why they're off.
+  const { data: capabilities } = useQuery((d) => d.getCapabilities());
 
   const needsName = merchant !== undefined && !merchant.businessName;
   useEffect(() => {
@@ -68,7 +71,10 @@ function SignedIn({ children }: { children: React.ReactNode }) {
     if (walletPending && wallet.address) reload();
   }, [walletPending, wallet.address, reload]);
 
-  const value = useMemo(() => (merchant ? { merchant, refresh: reload } : null), [merchant, reload]);
+  const value = useMemo(
+    () => (merchant ? { merchant, refresh: reload, capabilities: capabilities ?? null } : null),
+    [merchant, reload, capabilities],
+  );
 
   if (error && !merchant) {
     return (

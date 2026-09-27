@@ -19,7 +19,7 @@ import {
   TxRow,
   toast,
 } from "@polaris/ui";
-import { ArrowUpFromLine, CalendarClock, Check, Copy, Landmark, ShieldCheck } from "lucide-react";
+import { ArrowUpFromLine, CalendarClock, Check, Copy, Landmark, ShieldCheck, Zap } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { getAddress, isAddress, zeroAddress } from "viem";
 
@@ -29,10 +29,9 @@ import { DashboardHeader } from "@/components/shell/dashboard-shell";
 import { errorMessage, DataError } from "@/lib/data";
 import { formatDateTime, money, parseAmount, shortAddress } from "@/lib/data/format";
 import type { Address as Hex, AutoPayouts, Payout, PayoutsState } from "@/lib/data/types";
-import { AUTO_PAYOUTS_BLOCKER, AUTO_PAYOUTS_READY, WITHDRAW_BLOCKER, WITHDRAW_READY } from "@/lib/features";
 import { useMerchant } from "@/lib/merchant-context";
 import { useAutoPayouts, useWithdraw } from "@/lib/payouts";
-import { useQuery, useSample, type QueryState } from "@/lib/session";
+import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
 /**
  * Check a destination the way the server does: 0x and 40 hex characters; a
@@ -54,6 +53,7 @@ function checkAddress(raw: string, own: string | null): { address: Hex } | { err
 export function PayoutsView() {
   const { merchant } = useMerchant();
   const sample = useSample();
+  const ready = useReadiness();
   const payouts = useQuery((d) => d.getPayouts(), { refreshMs: 30_000 });
   const [open, setOpen] = useState<Payout | null>(null);
   const withdrawRef = useRef<HTMLDivElement>(null);
@@ -105,7 +105,7 @@ export function PayoutsView() {
                     icon: <ArrowUpFromLine />,
                     tone: "mint",
                     onClick: () => focus(withdrawRef.current),
-                    title: WITHDRAW_READY ? "Withdraw" : "Withdraw (not available yet: see why beside it)",
+                    title: ready.withdraw ? "Withdraw (not available yet: see why beside it)" : "Withdraw",
                   },
                   { label: "Copy payout address", icon: <Copy />, tone: "outline", onClick: copy, disabled: !wallet },
                   { label: "Automatic payouts", icon: <CalendarClock />, tone: "honey", onClick: () => focus(autoRef.current) },
@@ -133,7 +133,12 @@ export function PayoutsView() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
         <div ref={autoRef} className="xl:col-span-5">
-          <AutoPayoutsPanel auto={state?.auto} wallet={wallet} onChange={(auto) => payouts.mutate((s) => (s ? { ...s, auto } : s))} />
+          <AutoPayoutsPanel
+            auto={state?.auto}
+            wallet={wallet}
+            onChange={(auto) => payouts.mutate((s) => (s ? { ...s, auto } : s))}
+            onPaidOut={payouts.reload}
+          />
         </div>
         <Panel title="History" sample={sample.on} className="xl:col-span-7" subtitle="Every withdrawal and automatic payout">
           {!state ? (
@@ -178,7 +183,6 @@ export function PayoutsView() {
 /* ── Withdraw: review, confirm, then a receipt with the real status ─────── */
 
 function WithdrawPanel({ state, wallet, onDone }: { state?: PayoutsState; wallet: string | null; onDone: () => void }) {
-  const sample = useSample();
   const withdraw = useWithdraw();
   const [amount, setAmount] = useState("");
   const [destination, setDestination] = useState("");
@@ -188,7 +192,7 @@ function WithdrawPanel({ state, wallet, onDone }: { state?: PayoutsState; wallet
   const [receipt, setReceipt] = useState<Payout | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
-  const blocker = sample.on ? "Sample data can't be withdrawn. Show your own data to withdraw." : WITHDRAW_BLOCKER;
+  const blocker = useReadiness().withdraw;
   const ready = !blocker && Boolean(wallet) && state !== undefined;
   const balance = state?.balanceCents ?? 0;
 
@@ -284,7 +288,7 @@ function WithdrawPanel({ state, wallet, onDone }: { state?: PayoutsState; wallet
         }}
         size="sm"
         dismissible={!busy}
-        title={receipt ? "Withdrawal queued" : "Confirm withdrawal"}
+        title={receipt ? (receipt.status === "paid" ? "Withdrawal sent" : receipt.status === "failed" ? "Withdrawal failed" : "Withdrawal queued") : "Confirm withdrawal"}
         description={receipt ? receipt.id : "Check the amount and the address. Payouts can't be reversed."}
       >
         <Dialog.Body className="grid gap-4">
@@ -352,16 +356,43 @@ function WithdrawPanel({ state, wallet, onDone }: { state?: PayoutsState; wallet
 
 /* ── Automatic payouts: the Privy session signer ────────────────────────── */
 
-function AutoPayoutsPanel({ auto, wallet, onChange }: { auto?: AutoPayouts; wallet: string | null; onChange: (a: AutoPayouts) => void }) {
+function AutoPayoutsPanel({
+  auto,
+  wallet,
+  onChange,
+  onPaidOut,
+}: {
+  auto?: AutoPayouts;
+  wallet: string | null;
+  onChange: (a: AutoPayouts) => void;
+  onPaidOut: () => void;
+}) {
   const sample = useSample();
+  const data = useDashboardData();
   const { enable, disable } = useAutoPayouts();
   const [address, setAddress] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(false);
 
-  const blocker = sample.on ? "Sample data can't change payout settings." : AUTO_PAYOUTS_BLOCKER;
-  const canEnable = !blocker && AUTO_PAYOUTS_READY && Boolean(wallet);
+  const blocker = useReadiness().autoPayouts;
+  const canEnable = !blocker && Boolean(wallet);
   const enabled = auto?.enabled ?? false;
+
+  const payNow = async () => {
+    setError(null);
+    setRunning(true);
+    try {
+      const run = await data.payoutNow();
+      if (run.result === "failed") setError(run.detail ?? "The payout didn't go through. Nothing was sent.");
+      else toast({ title: run.result === "paid" ? "Paying out your balance" : "Nothing to pay out", description: run.detail, tone: run.result === "paid" ? "success" : "info" });
+      onPaidOut();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setRunning(false);
+    }
+  };
 
   const toggle = async (on: boolean) => {
     setError(null);
@@ -426,9 +457,9 @@ function AutoPayoutsPanel({ auto, wallet, onChange }: { auto?: AutoPayouts; wall
               {error}
             </Notice>
           ) : null}
-          {enabled && !AUTO_PAYOUTS_READY ? (
+          {enabled && blocker ? (
             <Notice tone="warn" size="sm" className="mt-4" title="Recorded as on, but not running">
-              The daily sweep isn&rsquo;t live yet, so nothing is sent automatically. Turn it off, or leave it for when it starts.
+              {blocker} Nothing is sent automatically until then.
             </Notice>
           ) : blocker ? (
             <Notice tone="info" size="sm" className="mt-4">
@@ -439,11 +470,19 @@ function AutoPayoutsPanel({ auto, wallet, onChange }: { auto?: AutoPayouts; wall
             className="mt-4"
             size="sm"
             items={[
-              { label: "Status", value: enabled ? (AUTO_PAYOUTS_READY ? "On" : "On, not running") : "Off" },
+              { label: "Status", value: enabled ? (blocker ? "On, not running" : "On") : "Off" },
               { label: "Pays out to", value: auto.payoutAddress ? shortAddress(auto.payoutAddress) : "Not set" },
-              { label: "Next payout", value: enabled && AUTO_PAYOUTS_READY && auto.nextRunAt ? formatDateTime(auto.nextRunAt) : "—" },
+              { label: "Next payout", value: enabled && !blocker && auto.nextRunAt ? formatDateTime(auto.nextRunAt) : "—" },
             ]}
           />
+          {enabled && !blocker ? (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-[13px] text-ui-muted">Don&rsquo;t want to wait for {hour}:00 UTC?</p>
+              <Button variant="outline" size="sm" icon={<Zap />} loading={running} onClick={() => void payNow()}>
+                Pay out now
+              </Button>
+            </div>
+          ) : null}
           <p className="mt-4 text-[13px] leading-relaxed text-ui-muted">
             A Privy session signer does the daily sweep. Its policy lets it send AUSD to your chosen address and nowhere else,
             and you can remove it at any time by turning this off.

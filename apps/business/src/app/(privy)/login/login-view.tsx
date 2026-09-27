@@ -11,11 +11,12 @@ import {
   Skeleton,
   StatCard,
   TxRow,
+  toast,
 } from "@polaris/ui";
-import { ArrowLeft, ArrowRight, LockKeyhole, Percent, Store } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, LockKeyhole, Percent, Store } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { BusinessLogo } from "@/components/app/brand";
 import { Glass } from "@/components/app/glass";
@@ -24,6 +25,7 @@ import { BlurWords, Rise } from "@/components/motion";
 import { useAuth } from "@/lib/auth-context";
 import { DataError, errorMessage } from "@/lib/data";
 import { safeNext } from "@/lib/next-path";
+import { useRegisterMerchant } from "@/lib/payouts";
 import { useDashboardData, useQuery } from "@/lib/session";
 
 export function LoginView() {
@@ -126,19 +128,50 @@ function SignIn({ loading, onContinue }: { loading: boolean; onContinue: () => v
 
 /* ── Signed in: name the business once, then in ─────────────────────────── */
 
+/** How long to wait for Privy to finish creating the payout wallet before registering later instead. */
+const WALLET_WAIT_MS = 8000;
+
 function Onboarding({ next }: { next: string }) {
   const router = useRouter();
   const data = useDashboardData();
-  const { logout } = useAuth();
+  const { logout, wallet } = useAuth();
+  const register = useRegisterMerchant();
   const { data: merchant, error, loading, reload } = useQuery((d) => d.getMerchant());
+  const { data: capabilities } = useQuery((d) => d.getCapabilities());
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // After the name is saved: register the business on Monad (MerchantRegistry),
+  // signed by the payout wallet and sent by the relayer, then open the dashboard.
+  const [registering, setRegistering] = useState<{ business: string; step: "wallet" | "sign" | "done" } | null>(null);
+  const started = useRef(false);
 
   const named = Boolean(merchant?.businessName);
   useEffect(() => {
-    if (named) router.replace(next);
-  }, [named, next, router]);
+    if (named && !registering) router.replace(next);
+  }, [named, registering, next, router]);
+
+  useEffect(() => {
+    if (!registering || started.current) return;
+    const finish = (message?: string) => {
+      if (message) {
+        toast({ title: "Your business isn't registered on Monad yet", description: `${message} You can finish it from the dashboard.`, tone: "info", duration: 8000 });
+      }
+      router.replace(next);
+    };
+    if (!wallet.address) {
+      const t = setTimeout(() => finish("Your payout account is still being set up."), WALLET_WAIT_MS);
+      return () => clearTimeout(t);
+    }
+    started.current = true;
+    setRegistering((r) => (r ? { ...r, step: "sign" } : r));
+    register()
+      .then(() => {
+        setRegistering((r) => (r ? { ...r, step: "done" } : r));
+        setTimeout(() => finish(), 700);
+      })
+      .catch((err: unknown) => finish(errorMessage(err, "Registration didn't go through.")));
+  }, [registering, wallet.address, register, router, next]);
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -151,7 +184,9 @@ function Onboarding({ next }: { next: string }) {
     setBusy(true);
     try {
       await data.updateMerchant({ businessName: value });
-      router.replace(next);
+      // Register on chain only where it can work: a chain and a relayer.
+      if (capabilities?.chain && capabilities.relayer) setRegistering({ business: value, step: "wallet" });
+      else router.replace(next);
     } catch (err) {
       setFormError(err instanceof DataError ? err.message : errorMessage(err, "We couldn't save that. Try again."));
       setBusy(false);
@@ -180,6 +215,8 @@ function Onboarding({ next }: { next: string }) {
       </div>
     );
   }
+
+  if (registering) return <Registering business={registering.business} step={registering.step} />;
 
   if (loading || !merchant || named) {
     return (
@@ -226,6 +263,51 @@ function Onboarding({ next }: { next: string }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/** The registration step, right after naming the business. */
+function Registering({ business, step }: { business: string; step: "wallet" | "sign" | "done" }) {
+  const steps = [
+    { key: "named", label: `Named ${business}`, state: "done" as const },
+    {
+      key: "sign",
+      label: "Confirm with your payout account",
+      state: step === "wallet" ? ("waiting" as const) : step === "sign" ? ("active" as const) : ("done" as const),
+    },
+    { key: "send", label: "Registered on Monad, fee paid by Polaris", state: step === "done" ? ("done" as const) : ("waiting" as const) },
+  ];
+  return (
+    <div className="grid gap-7" aria-live="polite">
+      <div className="grid gap-4">
+        <h1 className="text-[clamp(34px,4.4vw,48px)] leading-[1.04] font-medium tracking-[-0.04em]">Registering your business</h1>
+        <p className="text-[17px] leading-[1.5] text-ui-muted">
+          One confirmation puts {business} and its payout address on Monad, so buyers can pay you. You never need MON: our
+          relayer sends it.
+        </p>
+      </div>
+      <ol className="grid gap-2">
+        {steps.map((s) => (
+          <li key={s.key} className="flex items-center gap-3 rounded-ui-row bg-ui-surface-1 px-4 py-3.5 text-[15px]">
+            <span
+              className={
+                s.state === "done"
+                  ? "grid size-7 place-items-center rounded-full bg-ui-lime text-ui-on-lime"
+                  : "grid size-7 place-items-center rounded-full bg-ui-surface-3 text-ui-muted"
+              }
+            >
+              {s.state === "done" ? (
+                <Check aria-hidden size={15} strokeWidth={2.5} />
+              ) : s.state === "active" ? (
+                <LoaderCircle aria-hidden size={15} strokeWidth={2} className="animate-spin" />
+              ) : null}
+            </span>
+            <span className={s.state === "waiting" ? "text-ui-muted" : undefined}>{s.label}</span>
+          </li>
+        ))}
+      </ol>
+      {step === "wallet" ? <p className="text-[14px] text-ui-muted">Finishing your payout account…</p> : null}
+    </div>
   );
 }
 

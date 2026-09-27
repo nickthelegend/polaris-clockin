@@ -1,4 +1,3 @@
-import { SERVER_DEMO_DATA } from "./demo";
 import { payInFourQuote, PLAN_INSTALLMENTS, PLAN_INTERVAL_DAYS } from "./format";
 import { linkUrl } from "./links";
 import type {
@@ -14,16 +13,18 @@ import type {
 } from "./types";
 
 /**
- * The server store's sample book for a merchant.
+ * A merchant's sample book.
  *
- * Off unless NEXT_PUBLIC_POLARIS_DEMO_DATA=1: a real merchant starts with an
- * empty book (zero balance, no payments, no links, the collector not
- * reporting) until the indexer fills it. With the flag on, the book is
- * deterministic per merchant (seeded from their ID), so a reload shows the
- * same book, and internally consistent: every Pay in 4 payment has a plan, the
- * balance is what was paid in since the last payout, and each payout is what
- * came in between it and the one before. The UI puts a "Sample" chip on every
- * card and row that shows it.
+ * The server serves it only to a merchant created while no chain is
+ * connected (`MerchantRecord.sample`); with a chain, everything shown comes
+ * from the chain and a new merchant starts empty. The browser uses it for the
+ * per-viewer "Preview with sample data" and the development mock session.
+ *
+ * It is deterministic per merchant (seeded from their ID), so a reload shows
+ * the same book, and internally consistent: every Pay in 4 payment has a plan,
+ * the balance is what was paid in since the last payout, and each payout is
+ * what came in between it and the one before. The UI puts a "Sample" chip on
+ * every card and row that shows it.
  */
 
 export { linkUrl };
@@ -99,21 +100,7 @@ export function newLinkId(r: { id: (n: number) => string }): string {
   return r.id(10);
 }
 
-/** What a new merchant starts with when there is no sample data: nothing. */
-export function emptyBook(): SampleBook {
-  return {
-    links: [],
-    payments: [],
-    plans: [],
-    payouts: [],
-    balanceCents: 0,
-    // No heartbeat has ever arrived: the dashboard shows "not reporting".
-    collector: { state: "stopped", lastPassAt: null, runner: "cre" },
-  };
-}
-
-export function seedMerchantBook(merchantId: string, now = Date.now(), { force = false } = {}): SampleBook {
-  if (!SERVER_DEMO_DATA && !force) return emptyBook();
+export function seedMerchantBook(merchantId: string, now = Date.now()): SampleBook {
   const r = rng(hashSeed(merchantId));
 
   /* Links: one per catalogue line, most reusable, a couple single-use. */

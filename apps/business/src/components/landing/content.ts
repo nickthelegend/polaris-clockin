@@ -95,28 +95,29 @@ export const credit = {
 export const developers = {
   eyebrow: "Developers",
   heading: ["Ten lines of code."],
-  sub: "Create a checkout session on your server, open it from your page, and hear back by signed webhook. Or skip the code and share a link.",
+  sub: "Create a checkout session on your server, open it from your page, and fulfil from a signed webhook. Or skip the code and share a link.",
   bullets: [
     "Checkout sessions with idempotency keys",
     "Webhooks signed with HMAC, replay-protected",
     "React button with Pay in 4 messaging built in",
   ],
-  note: "Preview · polarispay-sdk 0.3",
+  note: "polarispay-sdk 0.3.0",
   samples: [
     {
       key: "react",
       label: "React",
-      filename: "components/checkout-button.tsx",
+      filename: "components/checkout.tsx",
       language: "tsx",
-      code: `import { PolarisCheckoutButton } from "polarispay-sdk/react";
+      code: `"use client";
+import { PolarisCheckoutButton } from "polarispay-sdk/react";
 
-export function Checkout({ order }) {
+export function Checkout({ cart }: { cart: { id: string; title: string; total: string } }) {
   return (
     <PolarisCheckoutButton
-      publishableKey="pk_test_…"
-      amount={order.total}
-      session="/api/checkout"
-      onSuccess={() => router.push("/thanks")}
+      publishableKey={process.env.NEXT_PUBLIC_POLARIS_KEY!}
+      amount={cart.total}
+      createSession={() => fetch("/api/checkout", { method: "POST", body: JSON.stringify(cart) }).then((r) => r.json())}
+      onSuccess={() => location.assign("/thanks")}
     />
   );
 }`,
@@ -124,36 +125,43 @@ export function Checkout({ order }) {
     {
       key: "node",
       label: "Node",
-      filename: "app/api/checkout/route.ts",
+      filename: "server.ts",
       language: "ts",
-      code: `// Server: create a checkout session, redirect the buyer
-const session = await polaris.checkout.sessions.create(
-  {
-    amount: "200.00",
-    description: "Brand identity package",
-    modes: ["now", "later"],
-    successUrl: "https://studio.example/thanks",
-  },
-  { idempotencyKey: order.id },
-);
-redirect(session.url);
+      code: `import express from "express";
+import { createPolarisServer } from "polarispay-sdk/server";
 
-// Webhook receiver
-const event = polaris.webhooks.verify(rawBody, signature, secret);
-if (event.type === "payment.succeeded") fulfil(event.data.orderId);`,
+const polaris = createPolarisServer({ secretKey: process.env.POLARIS_SECRET_KEY!, baseUrl: process.env.POLARIS_BASE_URL! });
+const app = express();
+
+app.post("/checkout", express.urlencoded({ extended: false }), async (req, res) => {
+  const session = await polaris.checkout.sessions.create(
+    { amount: req.body.total, description: req.body.title, modes: ["now", "later"], successUrl: "https://your.shop/thanks", orderId: req.body.id },
+    { idempotencyKey: req.body.id },
+  );
+  res.redirect(303, session.url);
+});
+
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const event = polaris.webhooks.verify(req.body, req.headers["polaris-signature"], process.env.POLARIS_WEBHOOK_SECRET!);
+  if (event.type === "payment.succeeded" || event.type === "plan.opened") fulfil(event.data.orderId);
+  res.sendStatus(204);
+});`,
     },
     {
       key: "html",
       label: "HTML",
-      filename: "index.html",
+      filename: "checkout.html",
       language: "html",
-      code: `<!-- No code at all: paste a link from your dashboard -->
-<a href="YOUR_PAYMENT_LINK" class="pay-button">
-  Pay with Polaris
-</a>
+      code: `<!-- Posts to the /checkout route in the Node tab, which redirects to Polaris -->
+<form action="/checkout" method="post">
+  <input type="hidden" name="id" value="INV-2041" />
+  <input type="hidden" name="title" value="Brand identity package" />
+  <input type="hidden" name="total" value="200.00" />
+  <button type="submit">Pay with Polaris</button>
+</form>
 
-<!-- Or print its QR on the counter, an invoice or a DM -->
-<img src="/polaris-qr.svg" alt="Scan to pay Oat & Ember" />`,
+<!-- No server at all: paste a payment link from your dashboard -->
+<a href="https://pay.polarispay.app/pay/pl_…">Pay $200, or 4 × $50.38</a>`,
     },
   ],
 } as const;

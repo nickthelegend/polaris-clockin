@@ -1,4 +1,4 @@
-import type { Cents, IsoDate, Payment, Plan, WebhookEventType } from "./types";
+import type { Cents, CollectorStatus, IsoDate, Payment, Plan, WebhookEventType } from "./types";
 
 /**
  * The sponsor-backed panels on the Overview, behind one typed function each:
@@ -9,12 +9,15 @@ import type { Cents, IsoDate, Payment, Plan, WebhookEventType } from "./types";
  * | Indexed events | Envio HyperIndex on Monad | `getIndexedEvents` |
  * | Credit exposure reasons | Nansen wallet history (underwriting) | `getUnderwritingReasons` |
  *
- * None of those services reports to the dashboard yet. Each function returns
- * `{ source: "not_connected" }` for a live merchant, so the panel says so,
- * and `{ source: "placeholder" }` with realistic data only when sample data
- * is on, so the panel carries a "Sample" chip. The `placeholder*` builders
- * are named for what they are; wiring a service means replacing one of them
- * with a fetch and returning `{ source: "live" }`.
+ * The collections workflow reports each run to this server (its heartbeat is
+ * `Overview.collector`), so that panel is live once the workflow runs; the
+ * indexer feed and the underwriting reasons don't report to the dashboard
+ * yet. Each function returns `{ source: "not_connected" }` for a live
+ * merchant when its service is silent, so the panel says so, and
+ * `{ source: "placeholder" }` with realistic data only when sample data is on,
+ * so the panel carries a "Sample" chip. The `placeholder*` builders are named
+ * for what they are; wiring a service means replacing one with a fetch and
+ * returning `{ source: "live" }`.
  */
 
 export type Sourced<T> =
@@ -34,13 +37,15 @@ export type CollectionsRun = {
   workflow: string;
   /** When it runs, in words. */
   schedule: string;
+  /** running: reported in the last 5 minutes; degraded: in the last hour; stopped: older. */
+  state: CollectorStatus["state"];
   lastRun: {
     at: IsoDate;
     /** Plans the workflow looked at. */
     checked: number;
-    /** Instalments it collected. */
-    collected: number;
-    collectedCents: Cents;
+    /** Instalments it collected, when the run reported them. */
+    collected: number | null;
+    collectedCents: Cents | null;
     /** Collections that failed and entered the retry ladder. */
     retrying: number;
     /** Why items were skipped, in the words the merchant sees. */
@@ -64,6 +69,7 @@ export function placeholderCollectionsRun(plans: Plan[], now = Date.now()): Coll
   return {
     workflow: "polaris-collections",
     schedule: "Every minute",
+    state: "running",
     lastRun: {
       at: new Date(lastAt).toISOString(),
       checked: open.length,
@@ -77,8 +83,32 @@ export function placeholderCollectionsRun(plans: Plan[], now = Date.now()): Coll
   };
 }
 
-export function getCollectionsRun({ sample, plans }: { sample: boolean; plans: Plan[] }): Sourced<CollectionsRun> {
+export function getCollectionsRun({
+  sample,
+  plans,
+  collector,
+}: {
+  sample: boolean;
+  plans: Plan[];
+  collector?: CollectorStatus;
+}): Sourced<CollectionsRun> {
   if (sample) return { source: "placeholder", data: placeholderCollectionsRun(plans) };
+  if (collector?.lastPassAt) {
+    // The workflow's last report to this server. It runs every minute.
+    const open = plans.filter((p) => p.state === "collecting" || p.state === "dunning");
+    const retrying = plans.filter((p) => p.state === "dunning").length;
+    return {
+      source: "live",
+      data: {
+        workflow: "polaris-collections",
+        schedule: "Every minute",
+        state: collector.state,
+        lastRun: { at: collector.lastPassAt, checked: open.length, collected: null, collectedCents: null, retrying, skipped: [] },
+        nextRunAt: new Date(Date.parse(collector.lastPassAt) + MINUTE).toISOString(),
+        history: [],
+      },
+    };
+  }
   return {
     source: "not_connected",
     reason: "The collections workflow runs on Chainlink CRE every minute once it's deployed. Its runs appear here when it starts reporting.",

@@ -19,9 +19,10 @@ import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { BusinessLogo, BusinessMark } from "@/components/app/brand";
+import { registrationOf } from "@/components/dashboard/registration";
 import { useAuth } from "@/lib/auth-context";
 import { shortAddress } from "@/lib/data/format";
-import type { Merchant } from "@/lib/data/types";
+import type { Capabilities, Merchant } from "@/lib/data/types";
 import { useMerchant } from "@/lib/merchant-context";
 import { useSample } from "@/lib/session";
 import { markExplicitSignOut } from "@/lib/sign-out";
@@ -48,6 +49,8 @@ export function DashboardShell({ merchant, children }: { merchant: Merchant; chi
   const pathname = usePathname() ?? "/dashboard";
   const value = activeKey(pathname);
   const sample = useSample();
+  const { capabilities } = useMerchant();
+  const registered = ["registered", "active"].includes(registrationOf(merchant));
 
   return (
     <div className="md:flex">
@@ -66,7 +69,7 @@ export function DashboardShell({ merchant, children }: { merchant: Merchant; chi
         brandCompact={<BusinessMark size={30} />}
         brandHref="/dashboard"
         brandLabel="Polaris for Business, overview"
-        footer={<ModeCard sample={sample.on} />}
+        footer={<ModeCard sample={sample.on} capabilities={capabilities} registered={registered} />}
         footerCompact={
           <span
             title={sample.on ? "Test mode on Monad testnet · sample data on" : "Test mode on Monad testnet"}
@@ -95,19 +98,29 @@ export function DashboardShell({ merchant, children }: { merchant: Merchant; chi
   );
 }
 
-function ModeCard({ sample }: { sample: boolean }) {
+function ModeCard({ sample, capabilities, registered }: { sample: boolean; capabilities: Capabilities | null; registered: boolean }) {
+  const connected = Boolean(capabilities?.chain);
   return (
     <Card variant="raised" radius="tile" padding="sm" className="text-[13px]">
       <span className="flex items-center gap-2 font-medium text-ui-text">
-        <span aria-hidden className="size-2 rounded-full bg-ui-lime" />
+        <span aria-hidden className={cn("size-2 rounded-full", connected || sample ? "bg-ui-lime" : "bg-ui-muted")} />
         Test mode
       </span>
-      <span className="mt-1 block text-ui-muted">Monad testnet · AUSD</span>
-      {sample ? (
-        <Badge tone="warn" size="sm" className="mt-2">
-          Sample data on
-        </Badge>
-      ) : null}
+      <span className="mt-1 block text-ui-muted">
+        {capabilities?.chain ? capabilities.chain.name : sample ? "Monad testnet" : "Not connected to Monad"} · AUSD
+      </span>
+      <span className="mt-2 flex flex-wrap gap-1.5">
+        {sample ? (
+          <Badge tone="warn" size="sm">
+            Sample data on
+          </Badge>
+        ) : null}
+        {registered ? (
+          <Badge tone="lime" size="sm">
+            Registered
+          </Badge>
+        ) : null}
+      </span>
     </Card>
   );
 }
