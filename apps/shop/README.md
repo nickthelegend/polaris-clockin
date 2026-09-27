@@ -212,7 +212,12 @@ that it is compiled only for `next dev`).
 
 ## What the shop needs from the SDK
 
-Found while building against `polarispay-sdk` 0.3.0:
+Found while building against `polarispay-sdk` 0.3.0. The shop now carries
+the `metropolis/sdk` fixes for the old items 3 and 5 (merged): `pay()`
+returns a `wrong_chain` error when the buyer declines the network switch,
+which the shop turns into a *Switch to Monad Testnet* step, and
+`quotePayIn4`'s rows add up to its total and are dated from one interval
+after checkout, as `PolarisLoanEngine` dates them. What's still open:
 
 1. **`pay()` can't run until PolarisPayments is deployed**, and there's no
    test path: it reads decimals, the EIP-712 domain, the balance,
@@ -224,31 +229,28 @@ Found while building against `polarispay-sdk` 0.3.0:
    (the id the buyer signs for must exist and be unguessable) at click time.
    The shop calls `polaris.pay()` from its own button instead; a
    `createOrder: () => Promise<{ orderId, merchant, amount }>` prop would fix it.
-3. **Wrong network vs. declined.** When the buyer refuses the network switch,
-   `pay()` says "You cancelled the request." rather than asking them to
-   switch to Monad Testnet; a distinct `code` on the result (not only
-   `cause`) would let a store show the right step.
+3. **A result code, not only a cause.** `wrong_chain` and `no_wallet` are on
+   `result.cause.code`; a `code` on the result itself would be easier to
+   branch on. The SDK's buyer text also spells it "cancelled" where the
+   store says "canceled", so the shop rewrites that one message.
 4. **Messaging figures.** `.plrs-msg strong` and `.plrs-caption strong` force
    `tabular-nums`, which in some fonts (Schibsted Grotesk here) spaces out
    the point: "$87 . 25". The store overrides it; the SDK could leave figures
    to the host font or expose `--polaris-numeric`.
-5. **`quotePayIn4` display amounts don't always add up.** Each instalment is
-   rounded to the cent on its own, so $159.01 shows as 4 × $39.75 ($159.00).
-   Splitting the rounded total in whole cents, with the remainder on the last
-   payment, keeps what the buyer reads consistent. (The store's prices all
-   divide evenly, so it doesn't show here.)
+5. **The Learn more link's spacing.** `.plrs-link` has a left margin, so a
+   wrapped link starts indented; the store moves the gap onto `.plrs-brand`.
+   A mobile scrim for the popover would save stores the same override.
 6. **Line items can't carry a variant or a photo.** `LineItem` is name,
    quantity and price, so the shop folds the option into the name ("Halcyon
    One, Graphite"). `description` and `imageUrl` would let the hosted checkout
    show what the buyer is paying for.
 7. **A Polaris lockup component.** The SDK exports the mark; stores that list
    Polaris among payment methods need mark + wordmark (the shop sets its own).
-8. **Pay in 4 terms from the API.** `PolarisMessaging` and the checkout button
-   default to 10% APR; a store that funds interest-free plans has to pass
-   `aprBps={0}` everywhere. The merchant's terms from the API (or the session)
-   would keep the badge, the button and the hosted checkout in agreement. The
-   plan prices Pay in 4 at 10% APR while this store advertises interest-free;
-   the team should pick one.
+8. **Pay in 4 terms from the API.** The store quotes the loan engine's 10%
+   APR (`POLARIS_PAY_IN_4_APR_BPS`, default 1000), which matches the
+   contracts and the hosted checkout. The merchant's terms from the API (or
+   the session) would keep the badge, the button and the hosted checkout in
+   agreement without a store setting.
 9. **A subscription messaging variant** would let the Coffee Club page say
    *Subscribe with Polaris* in the provider's own words.
 10. **Workspace consumers need a build step.** The package exports only
