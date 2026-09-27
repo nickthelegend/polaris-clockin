@@ -86,9 +86,11 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
 
   /**
    * An attestation of the pool now at the feed's latest round, with the
-   * verdict the chain computes, unless `fields` overrides it.
+   * verdict computed as the workflow does, against the thresholds the
+   * guardian holds now, unless `fields` overrides it.
    */
-  async function attestation(fields = {}, thresholds = DEFAULTS) {
+  async function attestation(fields = {}) {
+    const thresholds = await s.guardian.thresholds();
     const [roundId, answer, , updatedAt] = await s.feed.latestRoundData();
     const pool = await s.engine.poolState();
     const a = cre.buildAttestation(
