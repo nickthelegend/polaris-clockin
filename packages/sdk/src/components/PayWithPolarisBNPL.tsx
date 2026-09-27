@@ -93,9 +93,11 @@ export function PayWithPolarisBNPL({
   const schedule = useMemo(() => {
     if (!Number.isFinite(total)) return [];
     const fmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+    // The loan engine collects nothing at checkout: instalment i falls due at
+    // startedAt + (i + 1) * interval (PolarisLoanEngine.installmentDueAt).
     return Array.from({ length: installments }, (_, i) => ({
       key: i,
-      when: i === 0 ? 'Today' : fmt.format(new Date(Date.now() + i * intervalSeconds * 1000)),
+      when: fmt.format(new Date(Date.now() + (i + 1) * intervalSeconds * 1000)),
       amount: (total / installments).toFixed(2),
     }));
   }, [total, installments, intervalSeconds]);

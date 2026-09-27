@@ -35,6 +35,28 @@ describe("amounts", () => {
   });
 });
 
+/**
+ * PolarisLoanEngine, transcribed. `thresholdFor(k)` is the cumulative amount
+ * that must be repaid for `k` instalments to count, rounded up; instalment `i`
+ * (0-based) is the step between two rungs and falls due at
+ * `startedAt + (i + 1) * interval`. Nothing is collected at origination.
+ */
+function engineThreshold(totalOwed: bigint, k: bigint, count: bigint): bigint {
+  if (k === 0n) return 0n;
+  if (k >= count) return totalOwed;
+  return (totalOwed * k + count - 1n) / count;
+}
+
+function engineSchedule(principal: bigint, count: number, interval: number, aprBps: number) {
+  const n = BigInt(count);
+  const interest = (principal * BigInt(aprBps) * n * BigInt(interval)) / (10_000n * 31_536_000n);
+  const totalOwed = principal + interest;
+  return Array.from({ length: count }, (_, i) => ({
+    amount: engineThreshold(totalOwed, BigInt(i + 1), n) - engineThreshold(totalOwed, BigInt(i), n),
+    dueAfterStart: (i + 1) * interval,
+  }));
+}
+
 describe("Pay in 4 quote", () => {
   it("matches the loan engine: $200 at 10% over four weekly instalments is 4 × $50.38", () => {
     const q = quotePayIn4("200.00");
@@ -44,7 +66,22 @@ describe("Pay in 4 quote", () => {
     expect(q.aprBps).toBe(PAY_IN_4.aprBps);
     expect(q.intervalSeconds).toBe(7 * 86_400);
     expect(q.interestFree).toBe(false);
-    expect(q.installments.map((i) => i.dueInSeconds)).toEqual([0, 604_800, 1_209_600, 1_814_400]);
+  });
+
+  it("collects nothing at checkout: instalment i is due (i + 1) intervals after it, as installmentDueAt says", () => {
+    const q = quotePayIn4("200.00");
+    expect(q.installments.map((i) => i.dueInSeconds)).toEqual([604_800, 1_209_600, 1_814_400, 2_419_200]);
+    expect(q.installments.every((i) => i.dueInSeconds > 0)).toBe(true);
+
+    const fast = quotePayIn4("200.00", { intervalSeconds: 60 });
+    expect(fast.installments.map((i) => i.dueInSeconds)).toEqual([60, 120, 180, 240]);
+  });
+
+  it("splits the total on the engine's rounded-up ladder, not floor plus a remainder", () => {
+    // totalOwed = 201_534_246. thresholdFor(k) = ceil(totalOwed * k / 4):
+    // 50_383_562, 100_767_123, 151_150_685, 201_534_246.
+    const q = quotePayIn4("200.00");
+    expect(q.installments.map((i) => i.amountBaseUnits)).toEqual([50_383_562n, 50_383_561n, 50_383_562n, 50_383_561n]);
   });
 
   it("computes interest in base units exactly as PolarisLoanEngine.createLoan does", () => {
@@ -54,9 +91,27 @@ describe("Pay in 4 quote", () => {
     const q = quotePayIn4("200.00");
     const total = q.installments.reduce((sum, i) => sum + i.amountBaseUnits, 0n);
     expect(total).toBe(principal + expected);
-    // The last instalment absorbs the remainder, as in the app's quote.
-    expect(q.installments[3]!.amountBaseUnits - q.installments[0]!.amountBaseUnits).toBeGreaterThanOrEqual(0n);
-    expect(q.installments[3]!.amountBaseUnits - q.installments[0]!.amountBaseUnits).toBeLessThan(4n);
+  });
+
+  it("agrees with the engine instalment for instalment across amounts, counts, intervals and rates", () => {
+    const amounts = ["1.00", "19.99", "200.00", "201.50", "333.33", "999.99", "4999.97"];
+    const counts = [1, 2, 3, 4, 6, 7, 12, 24];
+    const intervals = [60, 3_600, 86_400, 604_800, 1_209_600];
+    const rates = [0, 1_000, 2_999];
+    for (const amount of amounts) {
+      const principal = toBaseUnits(amount, 6);
+      for (const installments of counts) {
+        for (const intervalSeconds of intervals) {
+          for (const aprBps of rates) {
+            const label = `${amount} × ${installments} every ${intervalSeconds}s at ${aprBps}bps`;
+            const q = quotePayIn4(amount, { installments, intervalSeconds, aprBps });
+            const engine = engineSchedule(principal, installments, intervalSeconds, aprBps);
+            expect(q.installments.map((i) => i.amountBaseUnits), label).toEqual(engine.map((e) => e.amount));
+            expect(q.installments.map((i) => i.dueInSeconds), label).toEqual(engine.map((e) => e.dueAfterStart));
+          }
+        }
+      }
+    }
   });
 
   it("reads interest-free at 0% APR", () => {

@@ -272,11 +272,15 @@ on-chain record so you can match `payer` and `amount` before fulfilling.
 
 ```ts
 polaris.quote("200.00"); // or quotePayIn4("200.00")
-// { each: "50.38", interest: "1.53", total: "201.53", aprBps: 1000, installments: [ … ] }
+// { each: "50.38", interest: "1.53", total: "201.53", aprBps: 1000,
+//   installments: [{ index: 1, amount: "50.38", amountBaseUnits: 50383562n, dueInSeconds: 604800 }, …] }
 ```
 
 The loan engine's arithmetic, in base units: 10% APR, pro-rated over four weekly
-instalments, charged to the buyer, never to you. `aprBps: 0` models a
+instalments, charged to the buyer, never to you. The buyer pays nothing at
+checkout: instalment *i* falls due `i × intervalSeconds` later (the first a
+week out), and its `amountBaseUnits` is the step on `PolarisLoanEngine.thresholdFor`'s
+rounded-up ladder, so the quote is what the keeper collects, unit for unit. `aprBps: 0` models a
 merchant-subsidised plan and reads *interest-free*; the components never claim
 it otherwise.
 
@@ -306,8 +310,9 @@ import { PolarisProvider, PolarisMessaging, PolarisCheckoutButton, PolarisPayBut
   `onSuccess / onCancel / onResult / onError`. States: *Opening Polaris…*,
   *Finish in the Polaris window*, *Paid with Polaris*.
 - **`<PolarisMessaging amount>`**: *"or 4 payments of $50.38 with ✦ Polaris
-  Learn more"*. The popover shows the four payments, the total and the interest,
-  how it works, and the credit line's terms. It renders nothing outside
+  Learn more"*. The popover shows the four payments and when each is due (the
+  first in a week; nothing today), the total and the interest, how it works,
+  and the credit line's terms. It renders nothing outside
   `minAmount`–`maxAmount` (default $1–$5,000). `theme="dark"` for a dark popover.
 - **`<PolarisPayButton>`**: direct wallet pay with stage labels (*Confirm in
   your wallet*, *Paying…*) and a *View receipt* link.

@@ -164,13 +164,25 @@ describe("PolarisMessaging", () => {
     expect(document.getElementById(dialog.getAttribute("aria-labelledby")!)!.textContent).toBe("Pay in 4 with Polaris");
     expect(document.activeElement).toBe(dialog);
     expect(dialog.textContent).toContain("$201.53 in total, including $1.53 interest (10% APR).");
-    expect(Array.from(dialog.querySelectorAll(".plrs-when")).map((n) => n.textContent)).toEqual(["Today", "In 1 week", "In 2 weeks", "In 3 weeks"]);
+    // Nothing is collected at checkout: the loan engine's first instalment falls due one interval later.
+    expect(Array.from(dialog.querySelectorAll(".plrs-when")).map((n) => n.textContent)).toEqual(["In 1 week", "In 2 weeks", "In 3 weeks", "In 4 weeks"]);
+    expect(dialog.textContent).toContain("Nothing to pay today. Your first payment of $50.38 is in 1 week, and the rest follow every week, automatically.");
+    expect(dialog.textContent).not.toMatch(/Pay \$[\d.,]+ today/);
 
     act(() => {
       document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
     expect(container.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it("dates a short plan from checkout too: the first payment is one interval out", () => {
+    render(<PolarisMessaging amount="200.00" intervalSeconds={86_400} />);
+    act(() => container.querySelector<HTMLButtonElement>("button.plrs-link")!.click());
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(Array.from(dialog.querySelectorAll(".plrs-when")).map((n) => n.textContent)).toEqual(["Tomorrow", "In 2 days", "In 3 days", "In 4 days"]);
+    // $200 over four days at 10%: 200_219_178 owed, first rung ceil(/4) = 50_054_795.
+    expect(dialog.textContent).toContain("Your first payment of $50.05 is tomorrow, and the rest follow every day, automatically.");
   });
 
   it("closes on an outside click and on the close button", () => {

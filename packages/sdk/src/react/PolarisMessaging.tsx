@@ -24,21 +24,28 @@ export type PolarisMessagingProps = {
   style?: CSSProperties;
 };
 
-function describeWait(seconds: number, index: number): string {
-  if (index === 0) return "Today";
-  const total = seconds * index;
+/**
+ * When an instalment falls due, from checkout: "in 1 week", "tomorrow",
+ * "in 3 days", "in 5 min". Never "today": PolarisLoanEngine collects nothing
+ * at checkout, and the first instalment is one interval out.
+ */
+function describeDue(dueInSeconds: number): string {
   const week = 7 * 86_400;
   const day = 86_400;
-  if (total % week === 0) {
-    const n = total / week;
-    return n === 1 ? "In 1 week" : `In ${n} weeks`;
+  if (dueInSeconds % week === 0) {
+    const n = dueInSeconds / week;
+    return n === 1 ? "in 1 week" : `in ${n} weeks`;
   }
-  if (total % day === 0) {
-    const n = total / day;
-    return n === 1 ? "Tomorrow" : `In ${n} days`;
+  if (dueInSeconds % day === 0) {
+    const n = dueInSeconds / day;
+    return n === 1 ? "tomorrow" : `in ${n} days`;
   }
-  const minutes = Math.max(1, Math.round(total / 60));
-  return minutes === 1 ? "In 1 min" : `In ${minutes} min`;
+  const minutes = Math.max(1, Math.round(dueInSeconds / 60));
+  return minutes === 1 ? "in 1 min" : `in ${minutes} min`;
+}
+
+function capitalise(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function cadence(seconds: number): string {
@@ -130,6 +137,7 @@ export function PolarisMessaging({
 
   const count = quote.installments.length;
   const each = formatUsd(toCents(quote.each));
+  const first = quote.installments[0]!;
 
   return (
     <div ref={rootRef} className={className ? `plrs-root plrs-msg ${className}` : "plrs-root plrs-msg"} data-theme={theme} style={style}>
@@ -189,7 +197,7 @@ export function PolarisMessaging({
             {quote.installments.slice(0, 6).map((row) => (
               <li key={row.index}>
                 <span className="plrs-tick" aria-hidden="true" />
-                <span className="plrs-when">{describeWait(quote.intervalSeconds, row.index - 1)}</span>
+                <span className="plrs-when">{capitalise(describeDue(row.dueInSeconds))}</span>
                 <span className="plrs-amt">{formatUsd(toCents(row.amount))}</span>
               </li>
             ))}
@@ -199,7 +207,9 @@ export function PolarisMessaging({
             <li>Choose Polaris at checkout, then Pay in {count}.</li>
             <li>Continue with Face ID. No app to install, no password, no seed phrase.</li>
             <li>
-              Pay {formatUsd(toCents(quote.installments[0]!.amount))} today. The rest is collected {cadence(quote.intervalSeconds)}, automatically.
+              {count === 1
+                ? `Nothing to pay today. Your payment of ${formatUsd(toCents(first.amount))} is ${describeDue(first.dueInSeconds)}, collected automatically.`
+                : `Nothing to pay today. Your first payment of ${formatUsd(toCents(first.amount))} is ${describeDue(first.dueInSeconds)}, and the rest follow ${cadence(quote.intervalSeconds)}, automatically.`}
             </li>
           </ol>
 
