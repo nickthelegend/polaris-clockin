@@ -261,15 +261,27 @@ reference, Satoshi, and the `src/trade` components of `packages/ui`. It is the
 same product as the app (lime on near-black, Satoshi, the Polaris coin), in
 ref E's layout and components.
 
-- **Frame:** from 1280px the whole page is a dark panel (#121418, 32px
-  corners, a big soft shadow) floating on the #E9FF9B canvas with 32px of
-  lime around it (`AppFrame`); below 1280px the panel is full bleed.
+- **Frame:** from 1024px the whole page is a dark panel (#121418, a big soft
+  shadow) floating on the #E9FF9B canvas (`AppFrame`): 16px of lime and 24px
+  corners to 1279px, 32px of lime and 32px corners from 1280px; below 1024px
+  the panel is full bleed. The landing, /login and the 404 hold their top nav
+  to the sections' 1280px column (`TopNav contained`), so the wordmark lines
+  up with the content.
 - **Tokens:** panel #121418; raised cards and inputs #1D2129; hairlines
   #37393D; the primary button #B0C956 with a near-black label; lime text and
-  gains #AABC6D on a #20231E / #2B2F24 chip; white text; muted labels #7E8189;
-  axis labels #7C7F87; status pills lime #2B2E26 / #DEEABA, purple #291F32 /
-  #AC70C6, teal #1B2D30 / #71C8C2, and amber (retrying, at risk) and red in
-  the same style. The chart line runs lime yellow at the top to orange lower
+  gains #AABC6D on a #20231E / #2B2F24 chip; white text; muted labels #8E9199
+  (lifted from the reference's #7E8189 so every label passes AA: 5.1:1 on
+  #1D2129, 4.6:1 on #252A33); axis labels #7C7F87; status pills lime #2B2E26
+  / #DEEABA, purple #291F32 / #B77FD2 (5.2:1), teal #1B2D30 / #71C8C2, and
+  amber (retrying, at risk) and red in the same style. On a #1D2129 surface
+  (a drawer, a dialog, a sheet) tiles and dark buttons step up to #252A33,
+  never the surface's own colour.
+- **Lime, decided:** buttons and fills keep ref E's olive #B0C956; accent
+  *text* (the hero's second line, the landing's figures, the active nav link
+  and tab, the 404) takes ref E's brighter #C9D77E (`--ui-lime-active`),
+  which sits closer to the wordmark's light end. Money figures use the dim
+  dollar (`Money`: "$" and cents at 45%) everywhere, as in the mobile app:
+  page figures, balance cards and drawers. The chart line runs lime yellow at the top to orange lower
   down over a warm dark fill; the tooltip is a white bubble over a glowing dot
   and a dashed line. Radii: panel 32, stacked cards 30, outlined cards 26,
   pills round.
@@ -283,8 +295,11 @@ ref E's layout and components.
   page's name (`PairHeader`), then the big figure with its `DeltaChip` and the
   page's chips (`TimeframeChips`: timeframes or filters), then a borderless
   `DataTable` with `StatusPill`s. A right-hand column holds the page's widget
-  or summary (`BalanceSummaryCard`, `PanelCard`); list pages keep one column
-  below 1280px so no table scrolls sideways at 1024.
+  or summary (`BalanceSummaryCard`, `PanelCard`). On phones the page's main
+  action or summary comes first (the WITHDRAW widget on Payouts, REQUEST on
+  Links, the summary on Payments and Pay in 4) and a column a phone hides is
+  folded into the first cell's sub line ("Pay in 4 · Website audit"). From
+  1280px the right column stays in view beside long tables.
 - **Overview** is the reference's main screen: Sales / USD (a dropdown for Pay
   in 4 and Subscriptions), the period's gross with its change, line or
   candles, 1h 24h 1w 1m, the `GradientLineChart`, and recent payments; on the
@@ -293,12 +308,18 @@ ref E's layout and components.
   payout address and the available balance card; REQUEST makes a payment
   link that buyers can pay now, in 4 or monthly). Below it, outlined cards:
   customers this week, sales by mode, credit exposure with the Nansen
-  reasons, Chainlink CRE collections and the Envio feed.
+  reasons, Chainlink CRE collections and the Envio feed; the cards in a row
+  end together (the charts fill them). The chart's y axis is four round
+  labels spanning the line, its x labels fall on round times and the last
+  reads "Now". A merchant with no sales yet sees a dashed baseline with New
+  payment link and Preview inside the chart, and a three-step Getting
+  started checklist instead of the cards.
 - **Payments, Links** (with the REQUEST widget), **Pay in 4** (the ledger,
   instalment ticks in lime), **Payouts** (the WITHDRAW widget large,
   automatic payouts, history), **Developers** (keys, webhooks, the SDK
   snippet) and **Settings**, all from the same components. Detail views open
-  in a `Drawer` and create and edit flows in a `Dialog`; both become
+  in a `Drawer` (raised tiles, and ref E's full-width lime and dark buttons at
+  the bottom) and create and edit flows in a `Dialog`; both become
   `BottomSheet`s below 768px.
 - **Landing (`/`) and sign-in (`/login`)** sit in the same frame under the
   same top nav. The landing's hero visual is the product itself, built from
@@ -307,9 +328,12 @@ ref E's layout and components.
   (Privy's modal) beside the chart panel.
 - **Honest data:** anything not yet backed by a live service (the indexer,
   the CRE workflow, Nansen, the relayer) shows an empty or "not connected"
-  state. When sample data is on, every card and row that shows it carries a
-  `Sample` pill (amber). A control that can't work yet is disabled with the
-  reason beside it; it is never left to fail.
+  state. When sample data is on, every card that shows it carries a
+  `Sample` pill (amber), and so does every row from a server's sample book
+  where it sits beside the merchant's own. A control that can't work yet is
+  disabled with the reason beside it; it is never left to fail (Withdraw on a
+  $0.00 balance, links before the checkout origin is set, the demo shop
+  before it is deployed).
 - **Pay in 4 copy** follows the contracts: 10% APR pro-rated over the four
   weekly payments, so $200 is 4 × $50.38 ($1.53 interest, $201.53 in total).
   Never "interest-free".

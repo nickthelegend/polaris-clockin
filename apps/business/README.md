@@ -59,7 +59,9 @@ The dashboard used to live at the top level: `/payments`, `/links`, `/plans`,
 create flows in a dialog; below 768px both are bottom sheets.
 
 "See the demo shop" opens Halcyon (`apps/shop`, a store on polarispay-sdk) at
-`NEXT_PUBLIC_DEMO_SHOP_URL`, `http://localhost:3600` by default.
+`NEXT_PUBLIC_DEMO_SHOP_URL`, or `http://localhost:3600` in development. A
+production build without it shows the demo shop's buttons disabled ("Demo
+shop coming soon"), never a link to the visitor's own localhost.
 
 ## Privy: sign-in and the payout wallet
 
@@ -95,16 +97,25 @@ Pages read `DashboardData` (`src/lib/data/source.ts`) and nothing else; in a
 real session it is implemented over this server's routes (`http.ts`).
 
 - **What works is decided by the server.** `GET /api/health` says whether a
-  chain, the relayer and the payout signer are connected; `useReadiness()`
+  chain, the relayer, the payout signer, the checkout origin and the public
+  URL are set (and `ready` for production, never the list of what's
+  missing: that is logged at startup); `useReadiness()`
   (`src/lib/features.ts`) turns that into a reason per control. Withdraw,
   automatic payouts, link sharing and registration are disabled with that
   reason beside them until they can work; nothing is left to fail, and nothing
-  claims money moved when it didn't.
+  claims money moved when it didn't. If the health read fails, the controls
+  say so and it is retried every 10 seconds (it has its own rate-limit
+  bucket). Withdraw is also disabled on a $0.00 balance, and without a
+  payout address its lime button chooses one.
 - **Sample data is always labelled.** A server with no chain gives new
   merchants a sample book (`MerchantRecord.sample`, surfaced as
   `Merchant.sample`); a merchant can also choose **Preview with sample data**
   (account menu, this browser only, nothing can be paid out). Either way every
-  card and row that shows it carries a **Sample** chip.
+  card that shows it carries a **Sample** chip, and each record of a server's
+  sample book carries `sample: true`, so its row does too where it sits
+  beside the merchant's own (a sample link can't be shared or turned off:
+  409 `sample_data`). Sample is a live condition: once the server has a
+  chain, the next request clears the flag and the sample withdrawals.
 - **The sponsor panels** read typed functions in `src/lib/data/insights.ts`:
   `getCollectionsRun` shows the Chainlink CRE workflow's real heartbeat
   (`Overview.collector`) once it reports; `getIndexedEvents` (Envio) and
@@ -157,7 +168,7 @@ Other commands (`pnpm --filter @polaris/business <cmd>`):
 | Command | What it does |
 |---|---|
 | `dev` | The landing, dashboard and API on http://localhost:3100 |
-| `test` | 112 unit and route tests (vitest, on SQLite in memory): validation, auth, idempotency, the relayer's policy and signature checks, chain ingestion, webhook signing and retries, payouts, onboarding, and the web audit's fixes (link turn-off, JSON 404/405, field errors, checksums, the write limit) |
+| `test` | 123 unit and route tests (vitest, on SQLite in memory): validation, auth, idempotency, the relayer's policy and signature checks, chain ingestion, webhook signing and retries, payouts, onboarding, the web audit's fixes (link turn-off, JSON 404/405, field errors, checksums, the write limit) and the web review's (sample ending with the chain, subscribe links, the active-link cap, registration catching up, health, malformed cookies, `next`) |
 | `lint` | ESLint, then `scripts/check-api-auth.mjs`: every route must be exported through the authentication its path requires |
 | `typecheck`, `build` | `tsc --noEmit`; `next build` |
 | `dev:merchant` | Create a local merchant with `sk_test_`/`pk_test_` keys (and a webhook endpoint) without Privy |
@@ -285,12 +296,21 @@ Dashboard routes: `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`,
   server-side (`@privy-io/node`) and reads the merchant's embedded wallet from
   Privy; nothing a client sends can name the merchant or their wallet. A user
   Privy no longer has is a 401 `invalid_token`; a refused app secret is a 503
-  `auth_not_configured`. Dashboard writes are rate limited per merchant, and
-  unknown `/api` paths and unsupported methods answer JSON 404 and 405.
-- **Links**: `GET/POST /api/links` (at most 500 active per merchant) and
-  `PATCH /api/links/{id}` with `{ "active": false }` to turn one off; an
-  inactive link opens no checkout (410 `link_inactive`).
-- **Onboarding**: `GET /api/merchant/registration` returns the
+  `auth_not_configured`; a malformed `privy-token` cookie is a 401, never a
+  500. Dashboard writes are rate limited per merchant, and unknown `/api`
+  paths answer a JSON 404. Every route declares GET, POST, PUT, PATCH and
+  DELETE, the ones it doesn't support through its wrapper and
+  `methodNotAllowed`, so they answer a JSON 405 (`pnpm lint` checks it).
+- **Links**: `GET/POST /api/links` (at most 500 active per merchant;
+  turned-off links don't count) and `PATCH /api/links/{id}` with
+  `{ "active": false }` to turn one off; an inactive link opens no checkout
+  (410 `link_inactive`). A single-use link can't offer Subscribe (400,
+  `param: "usage"`). A link's URL follows the current
+  `POLARIS_CHECKOUT_ORIGIN`.
+- **Onboarding** (a registration left at `submitted` is checked against the
+  registry on each `GET /api/me`, and the dashboard polls while it's in
+  flight; after an activation error it offers **Retry activation**):
+  `GET /api/merchant/registration` returns the
   `Registration` typed data for the embedded wallet to sign;
   `POST` verifies it and relays `registerFor`, then (with `REGISTRY_ACTIVATOR`)
   activates the merchant for Pay in 4 at the cap. The client hook is
@@ -314,12 +334,14 @@ See [`.env.example`](.env.example) for every variable. The essentials:
 |---|---|
 | `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Sign-in; the dashboard routes answer 503 without them |
 | `NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID` | The payout signer the browser adds for automatic payouts |
-| `NEXT_PUBLIC_DEMO_SHOP_URL` | "See the demo shop" (default `http://localhost:3600`) |
+| `NEXT_PUBLIC_DEMO_SHOP_URL` | "See the demo shop" (`http://localhost:3600` in development; disabled in production without it) |
 | `POLARIS_DEV_MOCK_SESSION` | `next dev` only: the mock merchant for screenshots |
 | `POLARIS_DEPLOYMENT` / `POLARIS_DEPLOYMENT_FILE`, `POLARIS_RPC_URL` | Which contracts, which RPC |
 | `RELAYER_MODE` (+ `PRIVY_RELAYER_*`) | `privy` in production, `local` on a Hardhat node, `off` |
 | `POLARIS_KEY_PEPPER` | Required in production |
-| `POLARIS_CHECKOUT_ORIGIN` | Where session URLs point (`https://pay.polarispay.app`) |
+| `POLARIS_CHECKOUT_ORIGIN` | Where link and session URLs point (the Polaris app). Required in production: without it links don't go live and sessions answer 503 |
+| `POLARIS_PUBLIC_URL` | This server's URL, signed into each merchant's registry metadata. Required in production: registration waits for it |
+| `POLARIS_TRUST_PROXY` | Behind a proxy: key public rate limits by `X-Forwarded-For` rather than one shared bucket |
 | `CRON_SECRET` | For `/api/cron/tick` on serverless hosts |
 
 ## Code map

@@ -61,7 +61,7 @@ theme): `frame` (the #E9FF9B canvas), `lime-button` (#B0C956), `lime-text`,
 pills `pill-lime`, `pill-purple`, `pill-teal`, `pill-amber`, `pill-red`,
 `pill-neutral` (each with `-text`), the chart's `chart-top` to `chart-bottom`,
 and `shadow-ui-frame`. The `ref-e` theme itself sets the #121418 panel,
-#1D2129 cards and inputs, #37393D hairlines, white text, #7E8189 muted labels,
+#1D2129 cards and inputs, #37393D hairlines, white text, #8E9199 muted labels (AA on every surface),
 lime deltas, and recolours candles (lime up, orange down) and bars (olive,
 lime selected). Radii `rounded-ui-frame` 32 (the panel), `rounded-ui-swap` 30
 (the stacked cards), `rounded-ui-panel` 26 (outlined cards).
@@ -87,7 +87,7 @@ wins) and forwards refs where it renders one element.
 | `Button` | `<Button variant="lime" size="xl" block>Send</Button>` · variants `lime`, `lime-bright`, `white`, `dark`, `purple`, `violet`, `outline`, `ghost`; sizes `sm`–`xl`; `shape="rounded"` (ref B); `icon`, `iconRight`, `loading`, `asChild` |
 | `IconButton` | `<IconButton label="Notifications" icon={<Bell />} tone="surface" dot />` · tones `surface`, `ink`, `outline`, `white`, `lime`, `purple`, `glass`, `ghost`, `black`; `shape="square"` |
 | `Pill` | `<Pill tone="black" chevron onClick={open}>Main account</Pill>` · tones `ink`, `black`, `surface`, `white`, `glass`, `outline`, `lime` |
-| `Chip` | `<Chip selected={tf === "5h"} onClick={…}>5h</Chip>` · `variant="plain" \| "outline" \| "solid" \| "pill"` (ref E's option chip), `count` |
+| `Chip` | `<Chip selected={tf === "5h"} onClick={…}>5h</Chip>` · `variant="plain" \| "outline" \| "solid" \| "pill"` (ref E's option chip: selected is the lime button's fill with a check; hovering an unselected one only brightens its hairline), `count` |
 | `DeltaBadge` | `<DeltaBadge value={3.25} />` · `variant="chip"` with `amount` on colour, `soft`, `note="From last week"`, `tone="current"` (white on ref A's purple) |
 | `Badge` | `<Badge tone="up" dot>Paid</Badge>` · `neutral`, `lime`, `purple`, `up`, `down`, `warn`, `info`, `ink` |
 | `Avatar` | `<Avatar name="Ana Ruiz" size="lg" badge={<FlagBadge code="MX" />} />` · photo, initials on a pastel, or a brand circle (`color`, `icon`) |
@@ -139,7 +139,7 @@ wins) and forwards refs where it renders one element.
 | `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) · an action can be `disabled` with a `title` saying why |
 | `SideNav` | `<SideNav items={nav} value="payments" linkAs={Link} brand={<Logo height={30} />} brandCompact={<LogoMark size={30} />} />` · the web sidebar: hidden below 768px, an icon rail with tooltips to 1279px, full from 1280px; the lime active pill slides |
 | `PageHeader` | `<PageHeader eyebrow="Good morning, Oat & Ember" title="Overview" actions={…} trailing={<Menu … />} />` |
-| `CodeBlock` | `<CodeBlock samples={[{ key: "node", label: "Node", filename: "route.ts", code }]} copyable />` · tabs, line numbers, brand-accent syntax colour; leave `copyable` off for code that doesn't run yet |
+| `CodeBlock` | `<CodeBlock samples={[{ key: "node", label: "Node", filename: "route.ts", code }]} copyable />` · tabs, line numbers, brand-accent syntax colour; the right edge fades while a line runs past it; the note hides in a narrow panel so Copy stays on the tab row; leave `copyable` off for code that doesn't run yet |
 | `PhoneFrame` | `<PhoneFrame width={300}>…live components…</PhoneFrame>` · an iPhone around real components, for marketing pages |
 | `StatCard` | `<StatCard tone="sage" icon={<Percent />} label="Sales" delta={23} value={<Money … />} spark={sales} />` · `sage`, `pink`, `honey`, `sky`, `lilac`, `lime`, `surface` |
 
@@ -150,8 +150,8 @@ with them composed into the reference itself.
 
 | Component | Usage |
 |---|---|
-| `AppFrame` | `<AppFrame><TopNav … /><main>…</main></AppFrame>` · from 1280px a dark panel (32px corners, a big soft shadow) floating on the lime canvas with 32px of lime around it; full bleed below. `floatFrom="always"` for a preview |
-| `TopNav`, `NavLink`, `NavDropdown` | `<TopNav brand={<Logo />} items={nav} more={{ label: "More", items: [developers, settings] }} value="overview" linkAs={Link} actions={…} compactActions={…} sheetFooter={…} />` · the text links with the reference's "Market ⌄" dropdown; below 1024px a compact bar whose menu is a `BottomSheet` |
+| `AppFrame` | `<AppFrame><TopNav … /><main>…</main></AppFrame>` · a dark panel (a big soft shadow) floating on the lime canvas: from 1024px in 16px of lime with 24px corners, from 1280px in 32px with 32px corners; full bleed below. `floatFrom="xl"` to float only from 1280px, `"always"` for a preview |
+| `TopNav`, `NavLink`, `NavDropdown` | `<TopNav brand={<Logo />} items={nav} more={{ label: "More", items: [developers, settings] }} value="overview" linkAs={Link} actions={…} compactActions={…} sheetFooter={…} />` · the text links with the reference's "Market ⌄" dropdown; below 1024px a compact bar whose menu is a `BottomSheet` that opens tall enough for every link and the footer; `contained` holds the bar to a 1280px content column |
 | `WalletPill` | `<WalletPill address={wallet} label="payout wallet address" />` · the dark pill with an icon and the truncated 0x address; pressing it copies |
 | `PrimaryButton`, `SecondaryButton` | `<PrimaryButton size="lg" block icon={<ArrowUpFromLine />}>Withdraw $1,250.00</PrimaryButton>` · #B0C956 with a near-black label; the dark #1D2129 one with its icon after; `sm` is the nav's pill, `lg` the widget's 50px buttons |
 | `IconSquareButton` | `<IconSquareButton label="Refresh" icon={<RefreshCw />} />` · the 40px outline squares (refresh, QR, settings); `tone="solid" active` for the chart toggle's raised lime one |
@@ -160,8 +160,8 @@ with them composed into the reference itself.
 | `TimeframeChips` | `<TimeframeChips options={["1h", "24h", "1w", "1m"]} value={tf} onValueChange={setTf} />` · a radio group; the active chip on #1D2129; options can carry labels (`All 638`) |
 | `ChartTypeToggle` | `<ChartTypeToggle value={type} onValueChange={setType} />` · line and candles |
 | `TextTabs` | `<TextTabs aria-label="Move money" options={[{ value: "withdraw", label: "Withdraw" }, …]} value={tab} onValueChange={setTab} />` · BUY / SELL: uppercase, the active one lime; a real tablist; `size="auto"` fits phones |
-| `PairHeader`, `Coin`, `CoinPair`, `PolarisCoin`, `DollarCoin` | `<PairHeader coins={[<PolarisCoin key="p" />, <DollarCoin key="d" />]} title="Sales / USD" options={metrics} value={metric} onValueChange={setMetric} trailing={<ChartTypeToggle … />} />` · overlapping round coins; the title opens a menu when it has options; `as="h1"` for a page head |
-| `GradientLineChart` | `<GradientLineChart label="Sales, last 24 hours" data={points} height={380} formatValue={usd} formatBubbleNote={null} />` · the line runs lime yellow to orange with a warm fill; a white bubble, a glowing dot and a dashed crosshair on hover, drag and arrow keys; as many time labels as fit |
+| `PairHeader`, `Coin`, `CoinPair`, `PolarisCoin`, `DollarCoin` | `<PairHeader coins={[<PolarisCoin key="p" />, <DollarCoin key="d" />]} title="Sales / USD" options={metrics} value={metric} onValueChange={setMetric} trailing={<ChartTypeToggle … />} />` · overlapping round coins, the first in front; the title opens a menu when it has options; `as="h1"` for a page head; `titleClassName` (e.g. `max-sm:text-[20px]`) |
+| `GradientLineChart` | `<GradientLineChart label="Sales, last 24 hours" data={points} height={380} formatValue={usd} formatBubbleNote={null} lastLabel="Now" />` · the line runs lime yellow to orange with a warm fill; a white bubble, a glowing dot and a dashed crosshair on hover, drag and arrow keys; four round y labels from under the lowest point to over the highest (`spanTicks`); x labels on round times (`tickZone` local or UTC) as many as fit; below `compactBelow` (480px) a 48px axis with short labels (`compactNumber`: "2.5k"); all zero: a dashed baseline and `empty` (which can hold buttons) |
 | `DataTable`, `TableName` | `<DataTable caption="Recent payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · borderless on the panel, muted headers, 54px rows; `TableName` is the small round icon and the name |
 | `SwapCard`, `SwapToggle`, `SwapStack` | `<SwapStack top={<SwapCard coin={<PolarisCoin size={42} />} symbol="AUSD" caption="You send" value={amount} onValueChange={setAmount} metaLabel="Balance" meta="3,196.97" />} bottom={…} toggle={<SwapToggle label="Switch" onClick={swap} />} />` · the stacked #1D2129 cards with the round button over the seam; the figure can be an input |
 | `BalanceSummaryCard` | `<BalanceSummaryCard label="Available balance" value="$3,196.97" delta={7.45} stats={[{ label: "Network fee", value: "$0.00" }, …]} />` · the outlined card with its chip and the stats row |
