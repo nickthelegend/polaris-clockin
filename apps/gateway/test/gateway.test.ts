@@ -58,4 +58,39 @@ describe("the gateway", () => {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
+
+  it("refuses to start on a host that is not loopback without a token, instead of serving an open API", async () => {
+    for (const HOST of ["0.0.0.0", "::", "192.168.1.20", "8.8.8.8"]) {
+      await assert.rejects(startGateway({ PORT: "0", HOST, UNDERWRITING_MODE: "fixture" }), /refusing to serve .* without a token/, HOST);
+      await assert.rejects(startGateway({ PORT: "0", HOST, UNDERWRITING_MODE: "fixture", UNDERWRITING_API_TOKEN: "   " }), /without a token/, `${HOST} with a blank token`);
+    }
+  });
+
+  it("an empty HOST means loopback, not every interface", async () => {
+    const { server, url } = await startGateway({ PORT: "0", HOST: "", UNDERWRITING_MODE: "fixture" });
+    try {
+      assert.match(url, /^http:\/\/127\.0\.0\.1:\d+$/);
+      const addr = server.address();
+      assert.equal(typeof addr === "object" && addr ? addr.address : null, "127.0.0.1");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("with a token, /v1/* answers only to it", async () => {
+    const { server, url } = await startGateway({ PORT: "0", UNDERWRITING_MODE: "fixture", UNDERWRITING_API_TOKEN: "s3cret-token-for-tests" });
+    try {
+      const call = (auth?: string) =>
+        fetch(`${url}/v1/explain`, {
+          method: "POST",
+          headers: { "content-type": "application/json", ...(auth ? { authorization: auth } : {}) },
+          body: JSON.stringify({ facts: { ...facts, stableBalance: "1240000000", observedAt: "1790424000" } }),
+        });
+      assert.equal((await call()).status, 401);
+      assert.equal((await call("Bearer wrong")).status, 401);
+      assert.equal((await call("Bearer s3cret-token-for-tests")).status, 200);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
 });

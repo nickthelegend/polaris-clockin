@@ -27,7 +27,11 @@ import { explainOnChainFacts } from "../core/underwrite.ts";
 import { SERVICE_VERSION, type Underwriter } from "./service.ts";
 
 export interface HandlerOptions {
-  /** Required bearer token for /v1/*. Unset: no auth (local development only). */
+  /**
+   * Required bearer token for /v1/*. Unset: no auth, for loopback only;
+   * `startUnderwritingServer` refuses any other host without one. A Fetch
+   * handler mounted in a deployed app has no such check: give it a token.
+   */
   token?: string;
   /** Origins allowed to call from a browser. */
   corsOrigins?: string[];

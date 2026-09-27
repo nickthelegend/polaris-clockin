@@ -15,8 +15,12 @@ It listens on `http://127.0.0.1:3510`. With no keys every provider reads the
 synthesized fixtures in `packages/underwriting/fixtures`; the startup log and
 every response (`dataMode: "fixture"`) say so. To go live, copy
 [`.env.example`](.env.example) to `.env` and add `NANSEN_API_KEY`,
-`ZERION_API_KEY` and `ETHERSCAN_API_KEY`. Set `UNDERWRITING_API_TOKEN` before
-it listens anywhere but localhost.
+`ZERION_API_KEY` and `ETHERSCAN_API_KEY`.
+
+Without `UNDERWRITING_API_TOKEN` the gateway serves loopback only: set `HOST`
+to anything else (`0.0.0.0`, a LAN address, a public name) and it refuses to
+start rather than serve `/v1/*` to anyone who can reach it. With a token, the
+app's server sends `Authorization: Bearer <token>`.
 
 ```bash
 curl -s localhost:3510/health

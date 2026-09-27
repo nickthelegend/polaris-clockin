@@ -41,4 +41,4 @@ export {
   type UnderwriterOptions,
 } from "./service.ts";
 export { createRouter, createNodeHandler, createFetchHandler, type HandlerOptions, type RouteRequest, type RouteResponse } from "./handler.ts";
-export { startUnderwritingServer, type ServerOptions } from "./server.ts";
+export { startUnderwritingServer, isLoopbackHost, isLoopbackAddress, assertSafeBind, type ServerOptions } from "./server.ts";

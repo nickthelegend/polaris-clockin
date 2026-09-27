@@ -247,7 +247,8 @@ Underwriter.fromEnv(env?) · new Underwriter({ providers, now?, allowPartial? })
   .assess({ account, linked?: { wallet, proof? }, purchase?, activeDebt?, allowPartial? }): Promise<Assessment>
   .modes()
 createRouter(underwriter, opts) · createNodeHandler(underwriter, opts) · createFetchHandler(underwriter, opts)
-startUnderwritingServer({ port?, host?, token?, corsOrigins?, underwriter? })
+startUnderwritingServer({ port?, host?, token?, corsOrigins?, underwriter? })   // refuses a non-loopback host without a token
+isLoopbackHost(host): Promise<boolean> · isLoopbackAddress(ip) · assertSafeBind(host, token)
 ```
 
 Clients retry network errors, timeouts, 408/425/429 and 5xx with jittered
@@ -266,7 +267,10 @@ the secret, so a retry does not spend a second Nansen credit.
 | `GET /v1/link-message` | `?account&wallet&issuedAt&nonce` | `{ message }`: the exact text the linked wallet signs |
 
 Bigints travel as decimal strings in base units. `/v1/*` requires
-`Authorization: Bearer $UNDERWRITING_API_TOKEN` when it is set, CORS is an
+`Authorization: Bearer $UNDERWRITING_API_TOKEN` when it is set; without one,
+`startUnderwritingServer` binds loopback only and refuses any other host
+(`isLoopbackHost`, `assertSafeBind`). A Fetch handler mounted in a deployed
+app cannot tell, so give it the token. CORS is an
 allowlist (`UNDERWRITING_CORS_ORIGINS`, never `*`), bodies are capped at
 16 KB, and underwriting is rate-limited per client because it spends credits.
 A Next.js route can mount the same API: `export const POST = (r: Request) => createFetchHandler(Underwriter.fromEnv())(r)`.

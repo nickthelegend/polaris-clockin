@@ -3,7 +3,7 @@ import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
 import { encodeUnderwritingReport } from "../src/core/abi.ts";
 import { createFetchHandler, createRouter, type RouteRequest } from "../src/node/handler.ts";
-import { startUnderwritingServer } from "../src/node/server.ts";
+import { assertSafeBind, isLoopbackAddress, isLoopbackHost, startUnderwritingServer } from "../src/node/server.ts";
 import { Underwriter } from "../src/node/service.ts";
 import { ACCOUNT, fixtureProviders, LINKED, NOW } from "./helpers.ts";
 
@@ -171,5 +171,39 @@ describe("the node:http server", () => {
     assert.equal(body.facts.walletAgeDays, 90);
     const big = await fetch(`${url}/v1/underwrite`, { method: "POST", headers: { "content-type": "application/json" }, body: "x".repeat(40_000) });
     assert.equal(big.status, 413);
+  });
+});
+
+describe("binding without a token", () => {
+  it("knows loopback from everything else", () => {
+    for (const a of ["127.0.0.1", "127.1.2.3", "::1", "[::1]", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1", "0:0:0:0:0:ffff:127.0.0.9"]) {
+      assert.equal(isLoopbackAddress(a), true, a);
+    }
+    for (const a of ["0.0.0.0", "::", "", "10.0.0.1", "192.168.1.20", "::ffff:10.0.0.1", "fe80::1", "128.0.0.1", "localhost"]) {
+      assert.equal(isLoopbackAddress(a), false, a);
+    }
+  });
+
+  it("resolves names: localhost is loopback; wildcards, empty and unresolvable hosts are not", async () => {
+    assert.equal(await isLoopbackHost("localhost"), true);
+    assert.equal(await isLoopbackHost("127.0.0.1"), true);
+    assert.equal(await isLoopbackHost("0.0.0.0"), false);
+    assert.equal(await isLoopbackHost("::"), false);
+    assert.equal(await isLoopbackHost(""), false);
+    assert.equal(await isLoopbackHost("no-such-host.invalid"), false);
+  });
+
+  it("refuses to start on a host that is not loopback, and starts there with a token", async () => {
+    for (const host of ["0.0.0.0", "::", "", "192.168.1.20"]) {
+      await assert.rejects(startUnderwritingServer({ port: 0, host, underwriter: uw() }), /refusing to serve .* without a token/, host);
+      await assert.rejects(startUnderwritingServer({ port: 0, host, token: "  ", underwriter: uw() }), /without a token/, `${host} with a blank token`);
+      await assert.doesNotReject(assertSafeBind(host, "a-real-token"));
+    }
+    const { server, url } = await startUnderwritingServer({ port: 0, host: "localhost", underwriter: uw() });
+    try {
+      assert.equal((await fetch(`${url}/health`)).status, 200);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
