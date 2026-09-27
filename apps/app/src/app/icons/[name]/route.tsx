@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
-import { brandMark } from "@/lib/brand-mark";
+import { brandPng } from "@/lib/brand-assets";
 
-/** PWA icons for the manifest, rendered once at build time. */
+/** PWA icons for the manifest, from @polaris/brand. */
 const ICONS = {
-  "icon-192.png": () => brandMark(192),
-  "icon-512.png": () => brandMark(512),
-  // Maskable: full bleed, the star inside the 80% safe zone.
-  "maskable-512.png": () => brandMark(512, { bleed: true, starScale: 0.44 }),
+  "icon-192.png": "app-icon-192.png",
+  "icon-512.png": "app-icon-512.png",
+  "maskable-512.png": "app-icon-maskable-512.png",
 } as const;
 
 export const dynamic = "force-static";
@@ -18,7 +17,7 @@ export function generateStaticParams() {
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
-  const render = ICONS[name as keyof typeof ICONS];
-  if (!render) notFound();
-  return render();
+  const file = ICONS[name as keyof typeof ICONS];
+  if (!file) notFound();
+  return brandPng(file);
 }

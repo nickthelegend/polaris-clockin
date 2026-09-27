@@ -1,135 +1,39 @@
 @import "tailwindcss";
-/* The shared library's tokens, themes and Satoshi, all namespaced (--ui-*, ui-*). */
+/* The shared library: tokens, the dark and light themes, Satoshi. */
 @import "@polaris/ui/styles.css";
 
 /*
-  Polaris, the app.
-  Tokens measured from docs/design/mobile-reference.webp (see
-  docs/design/mobile.md): a pale cool-grey ground that darkens towards the
-  bottom of the screen, flat near-white surfaces, ink for weight and one lime
-  for everything that matters. Light only, like the reference.
+  Polaris, the app. Dark (docs/design/system.md, refs A and B): every screen
+  is composed from @polaris/ui, so this file only sets the ground, the
+  frame and a few app-level details.
 */
 
 :root {
-  color-scheme: light;
-
-  /* The ground: flat for the top third, then a soft fall to the bottom edge. */
-  --bg-top: #eff1f3;
-  --bg-bottom: #cfd1d5;
-  --backdrop: #d8dbde;
-  --surface: #f9f9f9;
-  --surface-2: #ffffff;
-  --key: #eff1f3;
-  --chip: #111111;
-  --on-chip: #ffffff;
-  --ink-card: #1b1b1b;
-  --promo: #111111;
-  --lime: #b3de00;
-  --lime-deep: #8ba907;
-  --on-lime: #0b0b0b;
-  --sparkle: #f3e33a;
-  --fg: #0b0b0b;
-  /* Labels ("Your dollar balance"), "see more". */
-  --muted: #62666b;
-  /* Row meta ("Sep 24 · 10:42"): a step darker than labels, as in the reference. */
-  --meta: #3f4145;
-  /* Grey pills on the ground ("Credit available") and on surfaces ("Change", "+ Add"). */
-  --pill: #e3e5e6;
-  --pill-soft: #ebedec;
-  --pill-faint: #f1f1f1;
-  /* Icon circles and avatar grounds. */
-  --well: #e7e9e9;
-  --hairline: #d9dbde;
-  --divider: #e9e9e9;
-  --negative: #a11f1f;
-  --positive: #7f9a14;
-  --nav: #111111;
-  --cta: #111111;
-  --on-cta: #ffffff;
-  --focus: #111111;
-  --grid-line: rgb(0 0 0 / 0.04);
-  /* Surfaces sit on the ground with a white hairline and the softest lift. */
-  --shadow-surface: 0 0 0 1px rgb(255 255 255 / 0.7), 0 6px 14px -8px rgb(0 0 0 / 0.1);
-  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.55), 0 10px 30px rgb(0 0 0 / 0.18);
-  --scrim: rgb(12 14 18 / 0.36);
+  color-scheme: dark;
 }
-
-@theme inline {
-  --color-bg: var(--bg-top);
-  --color-backdrop: var(--backdrop);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-key: var(--key);
-  --color-chip: var(--chip);
-  --color-on-chip: var(--on-chip);
-  --color-ink-card: var(--ink-card);
-  --color-promo: var(--promo);
-  --color-lime: var(--lime);
-  --color-lime-deep: var(--lime-deep);
-  --color-on-lime: var(--on-lime);
-  --color-sparkle: var(--sparkle);
-  --color-fg: var(--fg);
-  --color-muted: var(--muted);
-  --color-meta: var(--meta);
-  --color-pill: var(--pill);
-  --color-pill-soft: var(--pill-soft);
-  --color-pill-faint: var(--pill-faint);
-  --color-well: var(--well);
-  --color-hairline: var(--hairline);
-  --color-divider: var(--divider);
-  --color-negative: var(--negative);
-  --color-positive: var(--positive);
-  --color-nav: var(--nav);
-  --color-cta: var(--cta);
-  --color-on-cta: var(--on-cta);
-
-  /* One family, as in the reference: Inter Tight for text and figures. */
-  --font-sans: "Inter Tight Variable", "Inter Tight", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Inter Tight Variable", "Inter Tight", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-
-  --radius-card: 18px;
-  --radius-group: 18px;
-  --radius-btn: 999px;
-  --radius-key: 999px;
-
-  --shadow-surface: var(--shadow-surface);
-  --shadow-float: var(--shadow-float);
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-/* ── Base ─────────────────────────────────────────────────────────────── */
 
 html {
-  --ground: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-top) 34%, var(--bg-bottom) 100%);
-  background: var(--bg-bottom);
+  background: var(--ui-canvas);
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
 }
 
 body {
   min-height: 100dvh;
-  background: var(--ground) fixed;
-  color: var(--fg);
-  font-family: var(--font-sans);
+  background: var(--ui-canvas);
+  color: var(--ui-text);
+  font-family: var(--font-satoshi);
   font-size: 16px;
   line-height: 1.35;
-  letter-spacing: -0.015em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  caret-color: var(--lime);
+  caret-color: var(--ui-lime);
 }
 
 ::selection {
-  background: var(--lime);
-  color: var(--on-lime);
-}
-
-:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 3px;
-  border-radius: inherit;
+  background: var(--ui-lime);
+  color: var(--ui-on-lime);
 }
 
 button,
@@ -138,278 +42,12 @@ a {
   touch-action: manipulation;
 }
 
-button:disabled {
-  cursor: not-allowed;
-}
-
-* {
+#scroller {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklab, var(--fg) 22%, transparent) transparent;
+  scrollbar-color: rgb(255 255 255 / 0.14) transparent;
 }
 
-/* The phone column. On a phone it is the screen; on a desktop it sits on a
-   darker backdrop like the reference's device frames. */
-.app-column {
-  position: relative;
-  width: 100%;
-  max-width: 430px;
-  min-height: 100dvh;
-  margin-inline: auto;
-  isolation: isolate;
-}
-
-@media (min-width: 600px) {
-  html,
-  body {
-    background: var(--backdrop);
-  }
-  body {
-    /* Keeps the column's margin inside the body instead of collapsing through it. */
-    display: flow-root;
-  }
-  .app-column {
-    margin-block: 24px;
-    min-height: calc(100dvh - 48px);
-    border-radius: 44px;
-    background: var(--ground);
-    box-shadow:
-      0 0 0 1px color-mix(in oklab, var(--fg) 7%, transparent),
-      0 30px 80px rgb(0 0 0 / 0.14);
-    overflow: clip;
-  }
-}
-
-/* Fixed chrome (bottom nav, sticky CTA) lines up with the column. */
-.column-fixed {
-  position: fixed;
-  left: 50%;
-  width: min(100%, 430px);
-  transform: translateX(-50%);
-}
-
-.tabular {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
-}
-
-/* ── Signature details ─────────────────────────────────────────────────── */
-
-/* The faint square grid behind the header and balance (37.8px cells from the
-   gutter, as measured), fading out around the balance. */
-.balance-grid {
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 37.8px 37.8px;
-  background-position: 15.2px 35.1px;
-  -webkit-mask-image: radial-gradient(ellipse 60% 56% at 50% 46%, #000 20%, transparent 88%);
-  mask-image: radial-gradient(ellipse 60% 56% at 50% 46%, #000 20%, transparent 88%);
-}
-
-/* The giant embossed wordmark on cards: card-coloured, raised, lit from the
-   top left, with a soft shade on its bottom-right edges. */
-.emboss {
-  font-family: var(--font-display);
-  font-weight: 450;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  user-select: none;
-  pointer-events: none;
-  white-space: nowrap;
-}
-.emboss-lime {
-  color: var(--lime);
-  text-shadow:
-    -1.5px -1.5px 1.5px rgb(255 255 255 / 0.55),
-    2px 2px 3px rgb(96 120 0 / 0.42);
-}
-.emboss-ink {
-  color: var(--ink-card);
-  text-shadow:
-    -1.5px -1.5px 1.5px rgb(255 255 255 / 0.1),
-    2px 2px 3px rgb(0 0 0 / 0.85);
-}
-.emboss-white {
-  color: var(--surface);
-  text-shadow:
-    -1.5px -1.5px 1.5px #ffffff,
-    2px 2px 3px rgb(0 0 0 / 0.08);
-}
-
-/* Press: everything tappable gives a little. */
-.press {
-  transition:
-    transform 180ms var(--ease-out-quart),
-    background-color 180ms ease,
-    color 180ms ease,
-    box-shadow 180ms ease,
-    opacity 180ms ease;
-}
-.press:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-/* The amount cursor. */
-@keyframes blink {
-  0%,
-  45% {
-    opacity: 1;
-  }
-  50%,
-  95% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-.amount-cursor {
-  animation: blink 1.05s steps(1, end) infinite;
-}
-
-/* Keypad: a lime flash on the key you pressed. */
-@keyframes key-flash {
-  0% {
-    background-color: var(--lime);
-    color: var(--on-lime);
-  }
-  100% {
-    background-color: var(--key);
-  }
-}
-.key-flash {
-  animation: key-flash 180ms ease-out;
-}
-
-/* Stacks slide up with a stagger (Select card, lists). */
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(18px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-.rise {
-  animation: rise 520ms var(--ease-out-expo) both;
-  animation-delay: calc(var(--i, 0) * 60ms);
-}
-
-/* Waiting to be claimed. */
-@keyframes pulse-ring {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.7;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
-.pulse-dot {
-  position: relative;
-}
-.pulse-dot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 999px;
-  background: currentColor;
-  animation: pulse-ring 1.6s var(--ease-out-quart) infinite;
-}
-
-/* The paid check draws itself. */
-@keyframes draw {
-  from {
-    stroke-dashoffset: 48;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-.draw-check {
-  stroke-dasharray: 48;
-  animation: draw 520ms 120ms var(--ease-out-expo) both;
-}
-
-@keyframes pop {
-  0% {
-    transform: scale(0.6);
-    opacity: 0;
-  }
-  60% {
-    transform: scale(1.06);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-.pop {
-  animation: pop 480ms var(--ease-out-expo) both;
-}
-
-/* Bottom sheets (native <dialog>, so focus is trapped and Esc closes). */
-dialog.sheet {
-  margin: auto auto 0;
-  width: min(100%, 430px);
-  max-width: 100%;
-  max-height: min(92dvh, 760px);
-  padding: 0;
-  border: 0;
-  border-radius: 28px 28px 0 0;
-  background: var(--surface);
-  color: var(--fg);
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-dialog.sheet::backdrop {
-  background: var(--scrim);
-  backdrop-filter: blur(2px);
-}
-dialog.sheet[open] {
-  animation: sheet-up 420ms var(--ease-out-expo) both;
-}
-@keyframes sheet-up {
-  from {
-    transform: translateY(40px);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-@media (min-width: 600px) {
-  dialog.sheet {
-    margin: auto;
-    border-radius: 28px;
-  }
-}
-
-/* Skeletons: a soft shimmer, never a spinner wall. */
-@keyframes shimmer {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: -100% 0;
-  }
-}
-.skeleton {
-  border-radius: 10px;
-  background: linear-gradient(
-      90deg,
-      color-mix(in oklab, var(--fg) 6%, transparent) 25%,
-      color-mix(in oklab, var(--fg) 11%, transparent) 50%,
-      color-mix(in oklab, var(--fg) 6%, transparent) 75%
-    )
-    0 0 / 200% 100%;
-  animation: shimmer 1.4s linear infinite;
-}
-
+/* Visible only when focused (the skip link). */
 .sr-only-focusable:not(:focus):not(:focus-within) {
   position: absolute;
   width: 1px;
@@ -419,19 +57,43 @@ dialog.sheet[open] {
   white-space: nowrap;
 }
 
+/* ── Onboarding art: the glass renders drift while their Lottie loads ──── */
+
+@keyframes glass-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(var(--r, 0deg));
+  }
+  50% {
+    transform: translate3d(0, var(--lift, -14px), 0) rotate(calc(var(--r, 0deg) + var(--turn, 6deg)));
+  }
+}
+
+.glass-float {
+  animation: glass-float var(--dur, 6s) cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation-delay: var(--delay, 0s);
+  will-change: transform;
+}
+
+@keyframes glass-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.glass-in {
+  animation: glass-in 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--in, 0s);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    animation-delay: 0ms !important;
-    transition-duration: 1ms !important;
-  }
-  .amount-cursor {
+  .glass-float,
+  .glass-in {
     animation: none;
-  }
-  .pulse-dot::after {
-    display: none;
   }
 }

@@ -1,8 +1,9 @@
-import { brandMark } from "@/lib/brand-mark";
+import { brandPng } from "@/lib/brand-assets";
 
-export const size = { width: 64, height: 64 };
+export const size = { width: 48, height: 48 };
 export const contentType = "image/png";
 
+/** The favicon: the Polaris mark. */
 export default function Icon() {
-  return brandMark(64, { starScale: 0.66 });
+  return brandPng("mark-48.png");
 }
