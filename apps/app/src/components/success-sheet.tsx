@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, DetailsList, type KeyValue, Sheet, type SnapPoint, SuccessCheck } from "@polaris/ui";
+import { AdaptiveSheet, Button, DetailsList, type KeyValue, Sheet, type SnapPoint, SuccessCheck } from "@polaris/ui";
 import { ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -34,8 +34,8 @@ export function SuccessSheet({
   snapPoints = ["half"],
 }: SuccessSheetProps) {
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange} snapPoints={snapPoints} aria-label={title} maxWidth={440}>
-      <Sheet.Body className="flex flex-col [&>*]:shrink-0 items-center gap-2 pt-3 text-center">
+    <AdaptiveSheet open={open} onOpenChange={onOpenChange} snapPoints={snapPoints} aria-label={title} maxWidth={440}>
+      <Sheet.Body className="flex flex-col [&>*]:shrink-0 items-center gap-2 pt-3 text-center lg:pt-8">
         {open ? <SuccessCheck label={title.replace(/\.$/, "")} size={80} /> : <span className="size-20" />}
         <h2 className="mt-3 text-[34px] leading-none font-semibold tracking-[-0.035em]">{title}</h2>
         {subtitle ? (
@@ -58,6 +58,6 @@ export function SuccessSheet({
           {primary?.label ?? "Done"}
         </Button>
       </Sheet.Footer>
-    </BottomSheet>
+    </AdaptiveSheet>
   );
 }

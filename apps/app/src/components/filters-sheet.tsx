@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, Chip, Sheet } from "@polaris/ui";
+import { AdaptiveSheet, Button, Chip, Sheet } from "@polaris/ui";
 import { useId } from "react";
 
 export type FilterSection = {
@@ -26,7 +26,7 @@ export function FiltersSheet({
 }) {
   const id = useId();
   return (
-    <BottomSheet open={open} onOpenChange={onOpenChange} snapPoints={["fit"]} title={title} maxWidth={440}>
+    <AdaptiveSheet open={open} onOpenChange={onOpenChange} snapPoints={["fit"]} title={title} maxWidth={440}>
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-6 pt-1">
         {sections.map((s, i) => (
           <fieldset key={s.label} className="flex flex-col gap-3">
@@ -60,6 +60,6 @@ export function FiltersSheet({
           Done
         </Button>
       </Sheet.Footer>
-    </BottomSheet>
+    </AdaptiveSheet>
   );
 }

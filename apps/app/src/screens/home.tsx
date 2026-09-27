@@ -12,6 +12,7 @@ import {
   Sheet,
   Skeleton,
   TxRow,
+  useIsDesktop,
 } from "@polaris/ui";
 import { ArrowDown, BadgeDollarSign, CalendarClock, Gauge, Layers, Pencil, Plus, ScanLine, Zap } from "lucide-react";
 import Link from "next/link";
@@ -22,13 +23,19 @@ import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar, photoFor } from "@/components/avatars";
 import { TabScreen } from "@/components/screen";
 import { useNotices } from "@/components/use-notices";
+import { HomeDesktop } from "@/desktop/home";
 import { useOwner } from "@/lib/account/hooks";
 import { getActivity, getContacts, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { subAmount, balanceChange, when } from "@/lib/view";
 
-/** Home, on ref A's first screen. */
+/** Home: ref A's first screen on a phone, ref E's main screen from 1024px. */
 export function Home() {
+  return useIsDesktop() ? <HomeDesktop /> : <HomePhone />;
+}
+
+/** Home, on ref A's first screen. */
+function HomePhone() {
   const router = useRouter();
   const owner = useOwner();
   const profile = useData(() => getProfile(owner), [owner]);

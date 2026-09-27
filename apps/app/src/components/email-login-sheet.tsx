@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, IconDisc, Input, Sheet } from "@polaris/ui";
+import { AdaptiveSheet, Button, IconDisc, Input, Sheet } from "@polaris/ui";
 import { KeyRound, Loader2, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { cancelEmailLogin, finishEmailLogin } from "@/lib/account/email-login";
@@ -94,7 +94,7 @@ export function EmailLoginSheet() {
   }
 
   return (
-    <BottomSheet
+    <AdaptiveSheet
       open={open}
       onOpenChange={(next) => {
         if (!next) cancelEmailLogin();
@@ -170,6 +170,6 @@ export function EmailLoginSheet() {
           Your email opens the same account on any device. Face ID stays the fastest way in.
         </p>
       </Sheet.Body>
-    </BottomSheet>
+    </AdaptiveSheet>
   );
 }

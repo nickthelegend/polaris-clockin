@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, IconDisc, Sheet } from "@polaris/ui";
+import { AdaptiveSheet, Button, IconDisc, Sheet } from "@polaris/ui";
 import { AlertCircle, Check, Mail, ScanFace } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { LocalAccount } from "viem";
@@ -128,7 +128,7 @@ export function ConfirmSheet({
     stage === "auth" ? (email ? "Opening…" : "Waiting for Face ID…") : stage === "working" ? busyLabel : email ? title : isNew ? newLabel : confirmLabel;
 
   return (
-    <BottomSheet
+    <AdaptiveSheet
       open={open}
       onOpenChange={(next) => {
         if (!busy) onOpenChange(next);
@@ -138,7 +138,7 @@ export function ConfirmSheet({
       aria-label={title}
       maxWidth={440}
     >
-      <Sheet.Body className="flex flex-col [&>*]:shrink-0 items-center gap-4 pt-3 text-center">
+      <Sheet.Body className="flex flex-col [&>*]:shrink-0 items-center gap-4 pt-3 text-center lg:pt-8">
         {faceBlocked && !email ? (
           <OpenOnPhone reason={faceBlocked} compact />
         ) : (
@@ -199,6 +199,6 @@ export function ConfirmSheet({
           </p>
         ) : null}
       </Sheet.Body>
-    </BottomSheet>
+    </AdaptiveSheet>
   );
 }

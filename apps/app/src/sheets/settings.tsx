@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, Input, ListGroup, ListRow, Select, Sheet } from "@polaris/ui";
+import { AdaptiveSheet, Button, Input, ListGroup, ListRow, Select, Sheet } from "@polaris/ui";
 import { LogOut, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
@@ -73,7 +73,7 @@ export function SettingsSheet() {
         ) : null}
       </Sheet.Body>
 
-      <BottomSheet open={forgetting} onOpenChange={setForgetting} snapPoints={["fit"]} title="Remove from this device?" maxWidth={440}>
+      <AdaptiveSheet open={forgetting} onOpenChange={setForgetting} snapPoints={["fit"]} title="Remove from this device?" maxWidth={440}>
         <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-3 pt-1 text-center">
           <p className="text-[15px] leading-[1.45] text-ui-muted">
             Your account and your money stay safe.{" "}
@@ -96,7 +96,7 @@ export function SettingsSheet() {
             Keep it
           </Button>
         </Sheet.Body>
-      </BottomSheet>
+      </AdaptiveSheet>
     </>
   );
 }

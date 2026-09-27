@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  BottomSheet,
+  AdaptiveSheet,
   Button,
   CandlestickChart,
   DeltaBadge,
@@ -177,7 +177,7 @@ export function ScoreSheet() {
         </div>
       </Sheet.Body>
 
-      <BottomSheet open={why} onOpenChange={setWhy} snapPoints={["half"]} title="What moves your score" maxWidth={440}>
+      <AdaptiveSheet open={why} onOpenChange={setWhy} snapPoints={["half"]} title="What moves your score" maxWidth={440}>
         <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-3 pt-1">
           <p className="text-[14px] leading-[1.45] text-ui-muted">
             Your score is worked out from facts anyone can check, and it sets your Pay later line. Paying on time moves it most.
@@ -192,7 +192,7 @@ export function ScoreSheet() {
             />
           ) : null}
         </Sheet.Body>
-      </BottomSheet>
+      </AdaptiveSheet>
 
       <BringHistorySheet open={raising} onOpenChange={setRaising} credit={credit.value} />
 

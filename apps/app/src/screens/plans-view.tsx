@@ -1,6 +1,17 @@
 "use client";
 
-import { AssetRow, BottomSheet, Button, DetailsList, EmptyState, FeaturedTile, SectionHeader, Sheet, Skeleton, toast } from "@polaris/ui";
+import {
+  AdaptiveSheet,
+  AssetRow,
+  Button,
+  DetailsList,
+  EmptyState,
+  FeaturedTile,
+  SectionHeader,
+  Sheet,
+  Skeleton,
+  toast,
+} from "@polaris/ui";
 import { CalendarClock, Repeat } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -142,7 +153,7 @@ function SubscriptionSheet({ sub, onClose }: { sub: Subscription | null; onClose
   const s = sub ?? shown;
 
   return (
-    <BottomSheet
+    <AdaptiveSheet
       open={sub !== null}
       onOpenChange={(open) => {
         if (!open) {
@@ -197,6 +208,6 @@ function SubscriptionSheet({ sub, onClose }: { sub: Subscription | null; onClose
           />
         </>
       ) : null}
-    </BottomSheet>
+    </AdaptiveSheet>
   );
 }

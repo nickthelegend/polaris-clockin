@@ -38,7 +38,7 @@ import type { HomeAccount } from "@/lib/prefs";
 import { usePrefs } from "@/lib/prefs";
 import type { RelayReceipt } from "@/lib/relayer";
 
-type Recipient =
+export type Recipient =
   | { kind: "link" }
   | { kind: "contact"; person: Person }
   | { kind: "account"; person: Person & { address: `0x${string}` } };
@@ -47,7 +47,7 @@ type Result =
   | { kind: "link"; link: CreatedSendLink; recipient: Recipient }
   | { kind: "sent"; receipt: RelayReceipt; amount: Micros; to: Person };
 
-function firstName(name: string): string {
+export function firstName(name: string): string {
   return name.split(" ")[0] ?? name;
 }
 
@@ -248,7 +248,7 @@ export function SendSheet() {
 }
 
 /** The link is made: share it, watch it get claimed, or take it back. */
-function LinkReady({
+export function LinkReady({
   link,
   recipient,
   senderName,

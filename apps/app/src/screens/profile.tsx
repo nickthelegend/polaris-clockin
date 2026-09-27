@@ -1,6 +1,18 @@
 "use client";
 
-import { Avatar, Badge, BottomSheet, Button, Card, IconButton, ListGroup, ListRow, ScreenHeader, Sheet, Skeleton } from "@polaris/ui";
+import {
+  AdaptiveSheet,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  IconButton,
+  ListGroup,
+  ListRow,
+  ScreenHeader,
+  Sheet,
+  Skeleton,
+} from "@polaris/ui";
 import { Bell, CircleHelp, Link2, LogOut, ScanFace, Settings, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -122,7 +134,7 @@ export function Profile() {
 
       <p className="mt-6 text-center text-[13px] text-ui-muted">Polaris 0.2</p>
 
-      <BottomSheet open={how} onOpenChange={setHow} snapPoints={["half", "full"]} title="How Polaris works" maxWidth={440}>
+      <AdaptiveSheet open={how} onOpenChange={setHow} snapPoints={["half", "full"]} title="How Polaris works" maxWidth={440}>
         <Sheet.Body className="pt-1">
           <ListGroup>
             {HOW.map((h) => (
@@ -130,7 +142,7 @@ export function Profile() {
             ))}
           </ListGroup>
         </Sheet.Body>
-      </BottomSheet>
+      </AdaptiveSheet>
     </TabScreen>
   );
 }

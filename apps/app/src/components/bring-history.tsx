@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, DetailsList, ListGroup, ListRow, Sheet } from "@polaris/ui";
+import { AdaptiveSheet, Button, DetailsList, ListGroup, ListRow, Sheet } from "@polaris/ui";
 import { Clock, Globe, ShieldCheck, Wallet } from "lucide-react";
 import { useState } from "react";
 import type { CreditLine } from "@/lib/data";
@@ -30,7 +30,7 @@ export function BringHistorySheet({
 
   const done = state === "done" && credit;
   return (
-    <BottomSheet
+    <AdaptiveSheet
       open={open}
       onOpenChange={(next) => state !== "working" && onOpenChange(next)}
       dismissible={state !== "working"}
@@ -90,6 +90,6 @@ export function BringHistorySheet({
           </Button>
         )}
       </Sheet.Footer>
-    </BottomSheet>
+    </AdaptiveSheet>
   );
 }

@@ -35,10 +35,13 @@ export const viewport: Viewport = {
  * `sheet` is the parallel route every sheet renders into (app/@sheet): an
  * intercepting route when opened from inside the app, so it slides up over
  * the current tab and its URL still deep-links.
+ *
+ * Below 1024px the app is dark (refs A to D); from 1024px it is ref E's dark
+ * panel on the lime canvas (`data-theme-lg`, see packages/ui/styles.css).
  */
 export default function RootLayout({ children, sheet }: { children: ReactNode; sheet: ReactNode }) {
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en" data-theme="dark" data-theme-lg="ref-e">
       <body className="ui-root">
         <a
           href="#main"

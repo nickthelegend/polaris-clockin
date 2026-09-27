@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, type SnapPoint } from "@polaris/ui";
+import { BottomSheet, Dialog, Drawer, type SnapPoint, useAdaptive, useIsDesktop } from "@polaris/ui";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
@@ -24,7 +24,25 @@ import { markIntroSeen } from "./first-run";
  * <RouteSheet>; the sheet itself lives here, in a host that outlives the
  * route, so it can spring in, and spring out again when the route goes away
  * (a swipe down, the close button, or the browser's Back).
+ *
+ * From 1024px the same routes present the desktop way (`desktop` on
+ * <RouteSheet>): a right-hand Drawer, a centred Dialog, or a page inside the
+ * frame (Credit, Settings, a checkout), which the desktop shell shows in
+ * place of the page underneath.
  */
+
+/** How a route sheet presents from 1024px. */
+export type DesktopPresentation = {
+  as: "drawer" | "dialog" | "page";
+  size?: "sm" | "md" | "lg";
+  /** The Drawer's or Dialog's title (it names the layer and gives it a close button). */
+  title?: ReactNode;
+  description?: ReactNode;
+  /** The desktop content, when it isn't the phone sheet's. */
+  content?: ReactNode;
+  /** A page that stands alone (a checkout): the frame drops the app's nav for the wordmark. */
+  focus?: boolean;
+};
 
 type SheetSpec = {
   snapPoints: SnapPoint[];
@@ -33,6 +51,8 @@ type SheetSpec = {
   description?: ReactNode;
   label: string;
   content: ReactNode;
+  desktop: DesktopPresentation;
+  desktopContent: ReactNode;
   onClose: () => void;
 };
 
@@ -45,11 +65,22 @@ type HostApi = {
 
 const HostContext = createContext<HostApi | null>(null);
 
+/** The route page showing in the desktop frame right now, if any. */
+export type DesktopPage = { key: string; label: string; content: ReactNode; focus: boolean };
+
+const PagesContext = createContext<{ page: DesktopPage | null; overlays: number }>({ page: null, overlays: 0 });
+
+/** The desktop shell's view of the host: the page to show in the frame, and how many layers are open. */
+export function useDesktopPages() {
+  return useContext(PagesContext);
+}
+
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 export function SheetHost({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<Entry[]>([]);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const desktop = useIsDesktop();
 
   const remove = useCallback((key: string) => {
     const timer = timers.current.get(key);
@@ -83,30 +114,63 @@ export function SheetHost({ children }: { children: ReactNode }) {
     [remove],
   );
 
+  // From 1024px a "page" entry is shown by the desktop shell, not as a layer.
+  const pages = useMemo(() => {
+    if (!desktop) return { page: null, overlays: 0 };
+    const top = [...entries].reverse().find((e) => e.open && e.desktop.as === "page");
+    return {
+      page: top ? { key: top.key, label: top.label, content: top.desktopContent, focus: Boolean(top.desktop.focus) } : null,
+      overlays: entries.filter((e) => e.open && e.desktop.as !== "page").length,
+    };
+  }, [desktop, entries]);
+
   return (
     <HostContext.Provider value={api}>
-      {children}
-      {entries.map((e) => (
-        <BottomSheet
-          key={e.key}
-          open={e.open}
-          onOpenChange={(next) => {
+      <PagesContext.Provider value={pages}>
+        {children}
+        {entries.map((e) => {
+          const onOpenChange = (next: boolean) => {
             if (next) return;
             // Start the exit now; the route follows (Back, or the cold fallback).
             api.release(e.key);
             e.onClose();
-          }}
-          onClosed={() => remove(e.key)}
-          snapPoints={e.snapPoints}
-          defaultSnap={e.defaultSnap}
-          title={e.title}
-          description={e.description}
-          aria-label={e.label}
-          maxWidth={440}
-        >
-          {e.content}
-        </BottomSheet>
-      ))}
+          };
+          if (!desktop) {
+            return (
+              <BottomSheet
+                key={e.key}
+                open={e.open}
+                onOpenChange={onOpenChange}
+                onClosed={() => remove(e.key)}
+                snapPoints={e.snapPoints}
+                defaultSnap={e.defaultSnap}
+                title={e.title}
+                description={e.description}
+                aria-label={e.label}
+                maxWidth={440}
+              >
+                {e.content}
+              </BottomSheet>
+            );
+          }
+          if (e.desktop.as === "page") return null;
+          const Panel = e.desktop.as === "drawer" ? Drawer : Dialog;
+          return (
+            <Panel
+              key={e.key}
+              open={e.open}
+              onOpenChange={onOpenChange}
+              onClosed={() => remove(e.key)}
+              size={e.desktop.size ?? (e.desktop.as === "drawer" ? "md" : "sm")}
+              title={e.desktop.title}
+              description={e.desktop.description}
+              aria-label={e.label}
+            >
+              {e.desktopContent}
+            </Panel>
+          );
+        })}
+      </PagesContext.Provider>
     </HostContext.Provider>
   );
 }
@@ -130,6 +194,8 @@ export type RouteSheetProps = {
    * from outside (the merchant's window or page that sent them).
    */
   onColdClose?: () => void;
+  /** From 1024px: a Drawer, a Dialog (the default, titled like the sheet) or a page in the frame. */
+  desktop?: DesktopPresentation;
   children: ReactNode;
 };
 
@@ -155,17 +221,21 @@ export function RouteSheet({
   cold = false,
   fallback = "/",
   onColdClose,
+  desktop,
   children,
 }: RouteSheetProps) {
   const host = useContext(HostContext);
   const router = useRouter();
   const key = useId();
   const closing = useRef(false);
+  // A cold sheet is part of its page, which is in the page twice while the
+  // phone and desktop layouts hydrate: only the one that stays registers.
+  const { settled } = useAdaptive();
   // A cold sheet stays mounted in the page behind it, so it steps aside while
   // another sheet has the URL, and comes back if Back returns to it.
   const pathname = usePathname();
   const [home] = useState(pathname);
-  const active = pathname === home;
+  const active = pathname === home && settled;
 
   const close = useCallback(() => {
     if (closing.current) return;
@@ -183,11 +253,15 @@ export function RouteSheet({
   }, [cold, fallback, onColdClose, router, host, key]);
 
   const content = <CloseContext.Provider value={close}>{children}</CloseContext.Provider>;
+  const wide: DesktopPresentation = desktop ?? { as: "dialog", title: title ?? label, description };
+  const desktopContent = wide.content ? <CloseContext.Provider value={close}>{wide.content}</CloseContext.Provider> : content;
 
   useIsoLayoutEffect(() => {
     // Once closing, stay closed until the route goes away.
     if (!active) host?.release(key);
-    else if (!closing.current) host?.upsert(key, { snapPoints, defaultSnap, title, description, label, content, onClose: close });
+    else if (!closing.current) {
+      host?.upsert(key, { snapPoints, defaultSnap, title, description, label, content, desktop: wide, desktopContent, onClose: close });
+    }
   });
 
   useEffect(() => {
