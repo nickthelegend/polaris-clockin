@@ -68,7 +68,7 @@ describe("personas", () => {
     assert.equal(reason(o, "exchange")?.text, "First topped up from Coinbase, a major exchange · +10");
     assert.equal(reason(o, "liquidations")?.provider, "etherscan");
     assert.equal(o.derivation.attribution.stableBalance.source, "zerion.positions");
-    assert.match(o.report ?? "", /^0x[0-9a-f]{640}$/);
+    assert.match(o.report ?? "", /^0x[0-9a-f]{832}$/, "one item in the receiver's batch: 96 + 320 bytes");
   });
 
   it("modest file: a small circle of accounts from one funder costs points, not the line", async () => {

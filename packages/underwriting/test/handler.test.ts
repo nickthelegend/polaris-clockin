@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
-import { encodeUnderwriteReport } from "../src/core/abi.ts";
+import { encodeUnderwritingReport } from "../src/core/abi.ts";
 import { createFetchHandler, createRouter, type RouteRequest } from "../src/node/handler.ts";
 import { startUnderwritingServer } from "../src/node/server.ts";
 import { Underwriter } from "../src/node/service.ts";
@@ -37,7 +37,7 @@ describe("the underwriting API", () => {
     assert.equal(body.decision.payIn4.allowed, true);
     assert.equal(body.decision.payIn4.quote.total, "151150684");
     assert.equal(body.facts.stableBalance, "37600000");
-    assert.match(body.report, /^0x[0-9a-f]{640}$/);
+    assert.match(body.report, /^0x[0-9a-f]{832}$/);
     assert.equal(body.evidence.account.stableBalance.source, "rpc.balance");
     assert.equal(body.derivation, undefined, "the bulky derivation is not sent");
     assert.ok(body.attribution.walletAgeDays);
@@ -100,17 +100,40 @@ describe("the underwriting API", () => {
     assert.equal((await route(r)).status, 200);
   });
 
-  it("POST /v1/explain: facts already on chain, or the report itself", async () => {
+  it("POST /v1/explain: facts already on chain, or the report UnderwritingReceiver decoded", async () => {
     const facts = { walletAgeDays: 730, txCount: 300, stableBalance: "1240000000", defiTenureDays: 0, priorLiquidations: 0, relatedWallets: 0, exchangeFunded: false, observedAt: String(NOW) };
     const route = createRouter(uw());
     const a = JSON.parse((await route(req({ url: "/v1/explain", json: { facts } }))).body);
     assert.equal(a.breakdown.score, 520 + 48 + 12 + 12);
     assert.ok(a.decision.reasons.some((r: { text: string }) => r.text === "You've used this account for 2 years · +48"));
 
-    const report = encodeUnderwriteReport(ACCOUNT.fresh, { ...facts, stableBalance: 1_240_000_000n, observedAt: BigInt(NOW) });
+    const onChain = { ...facts, stableBalance: 1_240_000_000n, observedAt: BigInt(NOW) };
+    const report = encodeUnderwritingReport([{ user: ACCOUNT.fresh, linkedWallet: LINKED.strong, facts: onChain }]);
     const b = JSON.parse((await route(req({ url: "/v1/explain", json: { report } }))).body);
-    assert.equal(b.user, ACCOUNT.fresh);
+    assert.equal(b.kind, 2);
+    assert.equal(b.user, ACCOUNT.fresh.toLowerCase());
+    assert.equal(b.linkedWallet, LINKED.strong.toLowerCase());
     assert.equal(b.breakdown.score, a.breakdown.score);
+    assert.equal(b.items.length, 1);
+    assert.equal(b.items[0].decision.limit, b.decision.limit);
+
+    // A batch explains every item; an account scored alone has no linked wallet.
+    const batch = encodeUnderwritingReport([
+      { user: ACCOUNT.fresh, linkedWallet: null, facts: onChain },
+      { user: ACCOUNT.regular, linkedWallet: LINKED.modest, facts: { ...onChain, priorLiquidations: 2 } },
+    ]);
+    const m = JSON.parse((await route(req({ url: "/v1/explain", json: { report: batch } }))).body);
+    assert.equal(m.items.length, 2);
+    assert.equal(m.items[0].linkedWallet, null);
+    assert.equal(m.items[1].breakdown.declined, true);
+    assert.equal(m.decision, undefined, "no single decision for a batch");
+
+    // The research sketch's single-item layout is not a report the receiver decodes.
+    const legacy = `0x${(2).toString(16).padStart(64, "0")}${ACCOUNT.fresh.slice(2).padStart(64, "0")}${"00".repeat(256)}`;
+    const refused = await route(req({ url: "/v1/explain", json: { report: legacy } }));
+    assert.equal(refused.status, 400);
+    assert.match(JSON.parse(refused.body).error.message, /^report: /);
+    assert.equal((await route(req({ url: "/v1/explain", json: { report: 42 } }))).status, 400);
 
     const bad = await route(req({ url: "/v1/explain", json: { facts: { ...facts, relatedWallets: 70_000 } } }));
     assert.equal(bad.status, 400);

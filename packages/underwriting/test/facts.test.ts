@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { encodeUnderwriteReport } from "../src/core/abi.ts";
+import { decodeUnderwritingReport, encodeUnderwritingReport } from "../src/core/abi.ts";
 import { DAY_SECONDS, FACTS_VERSION, U16_MAX, U32_MAX, U64_MAX } from "../src/core/constants.ts";
 import { accountRules, evidence } from "../src/core/evidence.ts";
 import { deriveFacts } from "../src/core/facts.ts";
@@ -185,7 +185,7 @@ describe("deriveFacts v1", () => {
     const a = underwrite(input);
     const b = underwrite(again);
     assert.equal(a.report, b.report);
-    assert.equal(a.report, encodeUnderwriteReport(ACCOUNT, a.facts));
+    assert.equal(a.report, encodeUnderwritingReport([{ user: ACCOUNT, linkedWallet: input.linked.address, facts: a.facts }]));
   });
 });
 
@@ -205,10 +205,32 @@ describe("underwrite: what may be reported", () => {
     assert.ok(!out.decision.nextSteps.some((s) => s.id === "retry"));
   });
 
-  it("reports a proven linked wallet", () => {
-    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: linked(), linkVerified: true });
+  it("reports a proven linked wallet, in the receiver's format, naming the wallet", () => {
+    const l = linked();
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: l, linkVerified: true });
     assert.equal(out.final, true);
-    assert.match(out.report ?? "", /^0x[0-9a-f]{640}$/);
+    assert.match(out.report ?? "", /^0x[0-9a-f]{832}$/);
+    assert.equal(out.linkedWallet, l.address);
+    const r = decodeUnderwritingReport(out.report!);
+    assert.deepEqual(r.items, [{ user: ACCOUNT.toLowerCase(), linkedWallet: l.address.toLowerCase(), facts: out.facts }]);
+  });
+
+  it("an account scored alone reports a zero linked wallet, and so does a 'linked' wallet that is the account", () => {
+    const alone = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linkVerified: true });
+    assert.equal(alone.linkedWallet, null);
+    assert.equal(decodeUnderwritingReport(alone.report!).items[0]!.linkedWallet, null);
+
+    const self = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: { ...linked(), address: ACCOUNT } });
+    assert.equal(self.final, true, "linking the account to itself needs no proof");
+    assert.equal(self.linkedWallet, null);
+    assert.equal(decodeUnderwritingReport(self.report!).items[0]!.linkedWallet, null);
+  });
+
+  it("names a linked wallet it left out for a risk label too, so the receiver still holds it to this account", () => {
+    const l = linked({ riskLabel: evidence.ok<string | null>("Sanctioned: OFAC", "nansen.first-funder") });
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: l, linkVerified: true });
+    assert.equal(out.derivation.linked?.used, false);
+    assert.equal(decodeUnderwritingReport(out.report!).items[0]!.linkedWallet, l.address.toLowerCase());
   });
 
   it("stamps the facts with the caller's clock, never its own", () => {

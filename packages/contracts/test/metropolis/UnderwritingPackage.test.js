@@ -4,9 +4,10 @@
  * The package computes a buyer's score, limit and Pay in 4 ceiling off chain,
  * so the app can explain a line before it opens, and it encodes the report
  * the DON signs. These tests hold all of that to the deployed bytecode: the
- * package's score is ScoreManager's, its report bytes are the struct
- * ScoreManager takes, and its "you can pay in 4 for up to $X" is exactly what
- * PolarisLoanEngine.createLoan accepts, to the base unit.
+ * package's score is ScoreManager's, its report bytes decode as the batch
+ * UnderwritingReceiver takes (on metropolis/cre) with each item's Facts the
+ * struct ScoreManager takes, and its "you can pay in 4 for up to $X" is
+ * exactly what PolarisLoanEngine.createLoan accepts, to the base unit.
  *
  * The package is TypeScript and is imported as source, which needs Node's
  * type stripping (on by default from Node 22.18). On older Node the suite
@@ -24,6 +25,8 @@ const load = (rel) => import(pathToFileURL(path.join(PKG, rel)).href);
 const AUSD = (n) => BigInt(Math.round(n * 1e6));
 const DAY = 24 * 60 * 60;
 const FACTS_TUPLE = "tuple(uint32 walletAgeDays, uint32 txCount, uint64 stableBalance, uint32 defiTenureDays, uint16 priorLiquidations, uint16 relatedWallets, bool exchangeFunded, uint64 observedAt)";
+/** UnderwritingReceiver._processReport: abi.decode(report, (uint8, Underwriting[])). */
+const REPORT_TYPES = ["uint8", `tuple(address user, address linkedWallet, ${FACTS_TUPLE} facts)[]`];
 
 function mulberry32(seed) {
   return () => {
@@ -125,10 +128,14 @@ describe("@polarispay/underwriting against ScoreManager and PolarisLoanEngine", 
       });
       expect(out.final, out.missing.join(", ")).to.equal(true);
 
-      // The report's bytes decode as the struct the receiver hands to ScoreManager.
-      const [kind, user, facts] = ethers.AbiCoder.defaultAbiCoder().decode(["uint8", "address", FACTS_TUPLE], out.report);
+      // The report's bytes decode as UnderwritingReceiver decodes them, and the
+      // one item's Facts are the struct the receiver hands to ScoreManager.
+      const [kind, items] = ethers.AbiCoder.defaultAbiCoder().decode(REPORT_TYPES, out.report);
       expect(kind).to.equal(2n);
+      expect(items.length).to.equal(1);
+      const { user, linkedWallet, facts } = items[0];
       expect(user).to.equal(buyer.address);
+      expect(linkedWallet.toLowerCase()).to.equal(persona.linked ?? ethers.ZeroAddress);
 
       await scores.connect(underwriter).underwrite(user, facts.toObject());
       expect(await scores.scoreOf(user)).to.equal(BigInt(out.breakdown.score));

@@ -3,7 +3,7 @@
  *
  *   GET  /health                  modes (live or fixture per provider) and versions
  *   POST /v1/underwrite           evidence → Facts, report, score, decision, reasons
- *   POST /v1/explain              Facts (or a report) already on chain → score, decision, reasons
+ *   POST /v1/explain              Facts, or an UnderwritingReceiver report → score, decision, reasons
  *   GET  /v1/link-message         the exact text a linked wallet signs
  *
  * Two adapters over one router: `createNodeHandler` for `node:http` (the
@@ -18,7 +18,7 @@
 
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { decodeUnderwriteReport, validateFacts } from "../core/abi.ts";
+import { decodeUnderwritingReport, validateFacts } from "../core/abi.ts";
 import { toJsonSafe } from "../core/evidence.ts";
 import { parseDollars } from "../core/format.ts";
 import { linkMessage } from "../core/link.ts";
@@ -234,23 +234,30 @@ export function createRouter(underwriter: Underwriter, opts: HandlerOptions = {}
       if (url.pathname === "/v1/explain") {
         if (req.method !== "POST") throw new HttpProblem(405, "method_not_allowed", "use POST");
         const body = parseBody(req);
-        let facts: Facts;
-        let user: Address | null = null;
-        if (typeof body.report === "string") {
+        const activeDebt = bigintField(body.activeDebt, "activeDebt");
+        const purchase = dollarsField(body.purchase, "purchase") ?? null;
+        if (body.report !== undefined) {
+          // The report body UnderwritingReceiver.onReport received (after the
+          // forwarder's metadata): abi.encode(uint8 2, (user, linkedWallet, Facts)[]).
+          if (typeof body.report !== "string") throw new HttpProblem(400, "invalid_field", "report must be a 0x hex string");
+          let decoded: ReturnType<typeof decodeUnderwritingReport>;
           try {
-            const decoded = decodeUnderwriteReport(body.report as Hex);
-            facts = decoded.facts;
-            user = decoded.user;
+            decoded = decodeUnderwritingReport(body.report as Hex);
           } catch (err) {
             throw new HttpProblem(400, "invalid_field", `report: ${(err as Error).message}`);
           }
-        } else facts = factsFrom(body.facts);
-        const out = explainOnChainFacts(facts, {
-          activeDebt: bigintField(body.activeDebt, "activeDebt"),
-          purchase: dollarsField(body.purchase, "purchase") ?? null,
-          hasLinked: body.hasLinked === true,
-        });
-        return json(200, { user, facts, ...out }, c);
+          const items = decoded.items.map((item) => ({
+            user: item.user,
+            linkedWallet: item.linkedWallet,
+            facts: item.facts,
+            ...explainOnChainFacts(item.facts, { activeDebt, purchase, hasLinked: item.linkedWallet !== null || body.hasLinked === true }),
+          }));
+          // The workflow sends one underwriting per report; spread it for the common case.
+          return json(200, { kind: decoded.kind, items, ...(items.length === 1 ? items[0] : {}) }, c);
+        }
+        const facts: Facts = factsFrom(body.facts);
+        const out = explainOnChainFacts(facts, { activeDebt, purchase, hasLinked: body.hasLinked === true });
+        return json(200, { user: null, linkedWallet: null, facts, ...out }, c);
       }
 
       throw new HttpProblem(404, "not_found", "no such route");

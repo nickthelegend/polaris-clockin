@@ -89,15 +89,31 @@ fields are `bigint` in TypeScript; the others are `number`.
 | 7 | `observedAt` | `uint64` | Unix seconds the facts were read: DON time, never the node's clock |
 
 `encodeFacts(f)` is `abi.encode(f)`: eight 32-byte words, each left-padded
-big-endian, 256 bytes. **The report the DON signs** is
-`encodeUnderwriteReport(user, f)` = `abi.encode(uint8 kind, address user, Facts facts)`
-with `kind = 2` (`REPORT_KIND_UNDERWRITE`): a static tuple of ten words, 320
-bytes, which `PolarisUnderwriter` decodes as
-`abi.decode(report, (uint8, address, Facts))` (docs/research/cre.md §7.7).
-`FACTS_ABI_TUPLE` and `UNDERWRITE_REPORT_ABI` are the same types as strings for
-viem's `parseAbiParameters`. Values that do not fit their width throw instead
-of truncating; the tests check the bytes against viem and against the deployed
-`ScoreManager`.
+big-endian, 256 bytes. **The report the DON signs** is the one the deployed
+`UnderwritingReceiver` decodes (`packages/contracts/contracts/cre/UnderwritingReceiver.sol`
+on `metropolis/cre`):
+
+```
+encodeUnderwritingReport(items) = abi.encode(uint8 kind, Underwriting[] items)     kind = 2
+Underwriting = (address user, address linkedWallet, Facts facts)
+```
+
+`linkedWallet` is the history wallet the buyer proved they own, or zero for an
+account scored alone; the receiver records it so one wallet backs one account,
+ever. The array is dynamic: two head words (kind, offset `0x40`), the length,
+then each item's ten words inline, so one underwriting is 96 + 320 = 416
+bytes. `decodeUnderwritingReport(hex)` accepts what the receiver's
+`abi.decode` accepts and refuses the rest, including any kind but 2.
+`FACTS_ABI_TUPLE`, `UNDERWRITING_ITEM_ABI_TUPLE` and `UNDERWRITING_REPORT_ABI`
+are the same types as strings for viem's `parseAbiParameters`. Values that do
+not fit their width throw instead of truncating; the tests check the bytes
+against viem with the receiver's types written out by hand, and against the
+deployed `ScoreManager`.
+
+The package used to export `encodeUnderwriteReport(user, f)`, the single-item
+`(uint8, address, Facts)` of the research sketch (docs/research/cre.md §7.7).
+No deployed receiver decodes it and it carried no linked wallet, so it was
+removed rather than deprecated: a report in that shape reverts on chain.
 
 ## Deriving the facts (v1)
 
@@ -184,7 +200,8 @@ underwrite(input: {
   user: Address; observedAt: number | bigint;
   account: SubjectEvidence; linked?: SubjectEvidence | null; linkVerified?: boolean;
   activeDebt?: bigint; purchase?: bigint | null; options?: { allowPartial?: boolean; version?: number };
-}): { version; user; final; missing: string[]; facts: Facts; report: Hex | null;
+}): { version; user; final; missing: string[]; facts: Facts; linkedWallet: Address | null;
+      report: Hex | null;   // UnderwritingReceiver's batch with this one underwriting
       breakdown: ScoreBreakdown; decision: CreditDecision; derivation: Derivation }
 
 deriveFacts({ account, linked?, observedAt, options? }): Derivation
@@ -194,8 +211,8 @@ explainFacts(facts, breakdown, context?): CreditReason[]
 explainOnChainFacts(facts, { activeDebt?, purchase?, hasLinked? }): { breakdown, decision }
 quotePlan(principal, installments = 4, intervalSeconds = 604800, aprBps = 1000): PlanQuote
 maxPrincipal(available, ...): bigint             tierFor(score) · limitFor(score, declined) · nextTierFor(score)
-encodeFacts(f): Hex        encodeUnderwriteReport(user, f): Hex
-decodeFacts(hex): Facts    decodeUnderwriteReport(hex): { kind, user, facts }    validateFacts(f)
+encodeFacts(f): Hex        encodeUnderwritingReport([{ user, linkedWallet: Address | null, facts }]): Hex
+decodeFacts(hex): Facts    decodeUnderwritingReport(hex): { kind: 2, items: UnderwritingItem[] }    validateFacts(f)
 linkMessage({ account, wallet, issuedAt, nonce }): string    linkProofStaleness(issuedAt, now)
 evidence.{ok,fallback,empty,missing}(value, source, detail?)   accountRules()   toJsonSafe(value)
 nansen.{nansenRequests, parseFirstFunder, parseRelatedWallets, parseCurrentBalanceStables, parseOldestTransaction, parseLabels, parseCounterparties, parsePnlSummary, parseNansenError}
@@ -245,7 +262,7 @@ the secret, so a retry does not spend a second Nansen credit.
 |---|---|---|
 | `GET /health` | | `{ ok, version: { facts, model }, modes }` |
 | `POST /v1/underwrite` | `{ account, linked?: { wallet, proof?: { issuedAt, nonce, signature } }, purchase?: "200.00", activeDebt?: "<base units>", allowPartial? }` | The assessment: `final`, `missing`, `facts`, `report`, `breakdown`, `decision`, `evidence`, `attribution`, `issues`, `retryAfterSeconds`, `dataMode`, `credits` |
-| `POST /v1/explain` | `{ facts }` or `{ report }`, optional `purchase`, `activeDebt` | `{ user, facts, breakdown, decision }` for facts already on chain |
+| `POST /v1/explain` | `{ facts }` or `{ report }` (the body `UnderwritingReceiver.onReport` received), optional `purchase`, `activeDebt` | For facts: `{ user: null, linkedWallet: null, facts, breakdown, decision }`. For a report: `{ kind, items: [{ user, linkedWallet, facts, breakdown, decision }] }`, with the one item's fields also at the top level when there is exactly one |
 | `GET /v1/link-message` | `?account&wallet&issuedAt&nonce` | `{ message }`: the exact text the linked wallet signs |
 
 Bigints travel as decimal strings in base units. `/v1/*` requires
@@ -271,7 +288,7 @@ const linked = wallet ? runSync(linkedRecipe(wallet, { now }), send) : null;
 // ...consensus on the evidence (identical aggregation: the cache makes every node's replies the same)...
 const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked?.evidence, linkVerified });
 if (!out.final) throw new Error(`not final: ${out.missing.join(", ")}`); // no report; the app retries
-runtime.report(prepareReportRequest(out.report));                       // abi.encode(uint8 2, user, Facts)
+runtime.report(prepareReportRequest(out.report));                       // abi.encode(uint8 2, [(user, linkedWallet, Facts)])
 ```
 
 `linkVerified` is the workflow's own check of the wallet's signature over

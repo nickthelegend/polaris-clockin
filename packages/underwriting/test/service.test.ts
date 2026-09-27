@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { privateKeyToAccount } from "viem/accounts";
-import { decodeUnderwriteReport } from "../src/core/abi.ts";
+import { decodeUnderwritingReport } from "../src/core/abi.ts";
 import { linkMessage } from "../src/core/link.ts";
 import type { Address } from "../src/core/types.ts";
 import { fixtureTransport } from "../src/node/fixtures.ts";
@@ -39,10 +39,13 @@ describe("Underwriter.assess", () => {
     assert.equal(a.dataMode, "fixture");
     assert.equal(a.retryAfterSeconds, null);
     assert.equal(a.credits.nansen, 1, "first-funder only: an exchange-funded wallet skips related-wallets");
-    const r = decodeUnderwriteReport(a.report!);
+    const r = decodeUnderwritingReport(a.report!);
     assert.equal(r.kind, 2);
-    assert.equal(r.user, ACCOUNT.fresh);
-    assert.deepEqual(r.facts, a.facts);
+    assert.equal(r.items.length, 1);
+    assert.equal(r.items[0]!.user, ACCOUNT.fresh.toLowerCase());
+    assert.equal(r.items[0]!.linkedWallet, OWNER.address.toLowerCase(), "the receiver needs the wallet to hold it to one account");
+    assert.equal(a.linkedWallet?.toLowerCase(), OWNER.address.toLowerCase());
+    assert.deepEqual(r.items[0]!.facts, a.facts);
     assert.equal(a.facts.observedAt, BigInt(NOW));
   });
 

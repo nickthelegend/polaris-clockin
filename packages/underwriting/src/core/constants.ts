@@ -74,7 +74,7 @@ export const U16_MAX = 0xffff;
 export const U32_MAX = 0xffff_ffff;
 export const U64_MAX = 0xffff_ffff_ffff_ffffn;
 
-/** Report kind PolarisUnderwriter decodes (docs/research/cre.md §7.7). */
+/** The report kind UnderwritingReceiver accepts (`REPORT_KIND`); see abi.ts. */
 export const REPORT_KIND_UNDERWRITE = 2;
 
 /** Monad networks and the dollars on them (plan Appendix A; 6 decimals, verified). */

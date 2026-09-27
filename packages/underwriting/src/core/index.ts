@@ -12,12 +12,14 @@ export * from "./constants.ts";
 export { scoreBreakdown, scoreFromFacts, tierFor, limitFor, nextTierFor, type ScoreBreakdown } from "./score.ts";
 export {
   FACTS_ABI_TUPLE,
-  UNDERWRITE_REPORT_ABI,
+  UNDERWRITING_ITEM_ABI_TUPLE,
+  UNDERWRITING_REPORT_ABI,
   encodeFacts,
-  encodeUnderwriteReport,
+  encodeUnderwritingReport,
   decodeFacts,
-  decodeUnderwriteReport,
+  decodeUnderwritingReport,
   validateFacts,
+  type UnderwritingItem,
 } from "./abi.ts";
 export { deriveFacts, type Attribution, type Derivation, type DeriveOptions, type FactField } from "./facts.ts";
 export { explainFacts, declineReasonFor, type ExplainContext } from "./reasons.ts";

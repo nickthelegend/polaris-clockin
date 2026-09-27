@@ -9,10 +9,10 @@
  *
  *   const out = underwrite({ user, observedAt, account, linked, linkVerified });
  *   if (!out.final) throw new Error(`not final: ${out.missing.join(", ")}`); // no report, the app retries
- *   runtime.report(prepareReportRequest(out.report));                       // abi.encode(uint8 2, user, Facts)
+ *   runtime.report(prepareReportRequest(out.report));                       // UnderwritingReceiver's batch, one item
  */
 
-import { encodeUnderwriteReport } from "./abi.ts";
+import { encodeUnderwritingReport } from "./abi.ts";
 import { FACTS_VERSION, MODEL_VERSION } from "./constants.ts";
 import { decide } from "./decision.ts";
 import { deriveFacts, type Derivation, type DeriveOptions } from "./facts.ts";
@@ -47,7 +47,16 @@ export interface UnderwriteOutcome {
   /** `<role>.<field>` for everything that kept it from being final. */
   missing: string[];
   facts: Facts;
-  /** `abi.encode(uint8 2, address user, Facts facts)`, or null when not final. */
+  /**
+   * The history wallet the report names, so the receiver can hold it to this
+   * account: the linked wallet when one was given (used or excluded), null
+   * for the account alone.
+   */
+  linkedWallet: Address | null;
+  /**
+   * The report UnderwritingReceiver decodes, with this one underwriting:
+   * `abi.encode(uint8 2, [(user, linkedWallet, facts)])`. Null when not final.
+   */
   report: Hex | null;
   breakdown: ScoreBreakdown;
   decision: CreditDecision;
@@ -66,6 +75,9 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
   if (derivation.linked && input.linkVerified !== true) missing.push("linked.ownership");
   // Ownership is never waived, not even by allowPartial: an unproven wallet is someone else's history.
   const final = derivation.final && !missing.includes("linked.ownership");
+
+  // A linked wallet that is the account itself links nothing (deriveFacts drops it too).
+  const linkedWallet = derivation.linked ? (derivation.linked.address as Address) : null;
 
   const breakdown = scoreBreakdown(derivation.facts);
   const reasons = explainFacts(derivation.facts, breakdown, derivation);
@@ -86,7 +98,8 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
     final,
     missing,
     facts: derivation.facts,
-    report: final ? encodeUnderwriteReport(input.user, derivation.facts) : null,
+    linkedWallet,
+    report: final ? encodeUnderwritingReport([{ user: input.user, linkedWallet, facts: derivation.facts }]) : null,
     breakdown,
     decision,
     derivation,
