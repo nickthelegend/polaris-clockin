@@ -110,8 +110,18 @@ describe("@polarispay/underwriting against ScoreManager and PolarisLoanEngine", 
   it("a thin file is never reported, and the chain agrees it has no line: not underwritten is secured-only", async () => {
     const buyer = ethers.Wallet.createRandom().connect(ethers.provider);
     const now = await time.latest();
-    const account = await collect.collectAccount("0xacc0000000000000000000000000000000000001", providers(), { now });
-    const out = core.underwrite({ user: buyer.address, observedAt: now, account: account.evidence, linked: null, linkVerified: true });
+    // The review's proof: a brand-new account with no history at all. Built from evidence rather than the
+    // dated fixtures, because other suites move the chain's clock and would age a fixture past the gate.
+    const e = core.evidence;
+    const account = {
+      address: buyer.address,
+      role: "account",
+      firstSeenAt: e.empty(null, "zerion.transactions"),
+      sentCount: e.ok(0, "zerion.transactions"),
+      stableBalance: e.ok(0, "rpc.balance"),
+      ...core.accountRules(),
+    };
+    const out = core.underwrite({ user: buyer.address, observedAt: now, account, linked: null, linkVerified: true });
     expect(out.final).to.equal(true);
     expect(out.attest).to.equal(false);
     expect(out.report).to.equal(null);
