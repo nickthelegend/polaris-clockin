@@ -89,7 +89,20 @@ const ROWS: Row[] = [
 ];
 
 /** The chart side: what the dashboard's Overview shows. */
-export function SalesPreview({ extra = 0, rows = true, height = 340, className }: { extra?: number; rows?: boolean; height?: number; className?: string }) {
+export function SalesPreview({
+  extra = 0,
+  rows = true,
+  rowCount = ROWS.length,
+  height = 340,
+  className,
+}: {
+  extra?: number;
+  rows?: boolean;
+  /** How many of the invented recent payments to show under the chart. */
+  rowCount?: number;
+  height?: number;
+  className?: string;
+}) {
   const [frame, setFrame] = useState<Frame>("24h");
   const [type, setType] = useState<ChartType>("line");
   const data = useMemo(() => {
@@ -181,7 +194,7 @@ export function SalesPreview({ extra = 0, rows = true, height = 340, className }
             { key: "amount", header: "Amount", render: (r) => <span className="ui-figure">{money(r.cents)}</span> },
             { key: "status", header: "Status", hideBelow: "sm", render: (r) => <StatusPill tone={r.pill[1]}>{r.pill[0]}</StatusPill> },
           ]}
-          rows={ROWS}
+          rows={ROWS.slice(0, rowCount)}
           rowKey={(r) => r.id}
         />
       ) : null}

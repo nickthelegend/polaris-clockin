@@ -69,7 +69,7 @@ export function LoginFrame({ children }: { children: ReactNode }) {
         sheetTitle="Polaris for Business"
         actions={<NetworkPill />}
       />
-      <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 px-4 pt-4 pb-10 sm:px-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:px-10 lg:pt-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:px-14 xl:pb-14">
+      <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 px-4 pt-4 pb-10 sm:px-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:px-10 lg:pt-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:px-14 xl:pb-8">
         <div className="flex flex-col">
           <div className="flex flex-1 flex-col justify-center py-6 lg:py-10">
             <div className="w-full max-w-[460px]">{children}</div>
@@ -325,7 +325,8 @@ function Showcase() {
   return (
     <aside aria-hidden className="hidden min-w-0 lg:block">
       <div className="h-full rounded-[32px] border border-ui-hairline-strong p-6 xl:p-8">
-        <SalesPreview height={300} />
+        {/* Sized so the whole frame fits a 1440x900 screen without scrolling. */}
+        <SalesPreview height={280} rowCount={2} />
       </div>
     </aside>
   );
