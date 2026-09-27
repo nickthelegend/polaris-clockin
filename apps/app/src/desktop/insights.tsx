@@ -13,6 +13,7 @@ import {
   PrimaryButton,
   SecondaryButton,
   Skeleton,
+  StatusPill,
   TableName,
   TimeframeChips,
 } from "@polaris/ui";
@@ -28,7 +29,7 @@ import { toNumber, usd } from "@/lib/money";
 import { spendingSeries } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
 import { movesBalance, type Period, spendingByCategory, spentBetween } from "@/lib/view";
-import { PageCoin, PageGrid, PageHead, SideNote } from "./bits";
+import { PageCoin, PageGrid, PageHead, SideNote, withSample } from "./bits";
 
 const RANGES = [
   { value: "week", label: "1w", days: 7, title: "this week", versus: "vs last week" },
@@ -93,6 +94,18 @@ export function InsightsDesktop() {
       m.count += 1;
       merchants.set(a.title, m);
     }
+    // The side card's own figures: the calendar month so far, and the month
+    // behind it (never the page's figure again).
+    const DAY_MS = 86_400_000;
+    const monthStart = new Date(now);
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const spent = list.filter((a) => a.direction === "out" && movesBalance(a) && a.at <= now);
+    const soFar = spent.filter((a) => a.at >= monthStart.getTime());
+    const last30 = spent.filter((a) => now - a.at <= 30 * DAY_MS);
+    const at = new Map<string, number>();
+    for (const a of last30) at.set(a.title, (at.get(a.title) ?? 0) + toNumber(a.amount));
+    const most = [...at.entries()].sort((a, b) => b[1] - a[1])[0];
     return {
       series,
       delta: before > 0 ? ((series.total - before) / before) * 100 : null,
@@ -100,6 +113,13 @@ export function InsightsDesktop() {
       kinds,
       top: [...merchants.values()].sort((a, b) => b.amount - a.amount).slice(0, 4),
       count: out.length,
+      month: {
+        label: monthStart.toLocaleDateString("en-US", { month: "long" }),
+        total: soFar.reduce((s, a) => s + toNumber(a.amount), 0),
+        count: soFar.length,
+        perWeek: last30.reduce((s, a) => s + toNumber(a.amount), 0) / (30 / 7),
+        most: most?.[0] ?? null,
+      },
     };
   }, [activity.value, plans.value, now, r.days, range]);
 
@@ -117,6 +137,9 @@ export function InsightsDesktop() {
               delta={data ? data.delta : undefined}
               deltaSuffix={r.versus}
               deltaLabel={data && data.delta === null ? "Nothing to compare yet" : undefined}
+              // Spending: less is the good news, more turns amber.
+              deltaGoodWhen="down"
+              badge={withSample()}
               right={
                 <TimeframeChips<Period>
                   aria-label="Period"
@@ -195,14 +218,12 @@ export function InsightsDesktop() {
           <>
             {data ? (
               <BalanceSummaryCard
-                label={`Spent ${r.title}`}
-                value={<Money value={data.series.total} />}
-                delta={data.delta}
-                deltaSuffix={r.versus}
+                label={`${data.month.label} so far`}
+                value={<Money value={data.month.total} />}
+                badge={withSample(<StatusPill tone="neutral" size="sm">{data.month.count} {data.month.count === 1 ? "payment" : "payments"}</StatusPill>)}
                 stats={[
-                  { label: "Payments", value: data.count },
-                  { label: "Biggest", value: data.top[0] ? money(data.top[0].amount) : "None" },
-                  { label: "Per day", value: money(data.series.total / r.days) },
+                  { label: "A week, on average", value: money(data.month.perWeek) },
+                  { label: "Most at", value: data.month.most ?? "Nowhere yet" },
                 ]}
               />
             ) : (
