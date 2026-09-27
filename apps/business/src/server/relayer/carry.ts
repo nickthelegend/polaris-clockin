@@ -116,7 +116,7 @@ export async function carry(input: {
     throw error;
   }
 
-  await db.relays.update(id, (r) => ({ ...r, state: "submitted", txHash: submitted.txHash, updatedAt: new Date().toISOString() }));
+  await db.relays.update(id, (r) => ({ ...r, state: "submitted", txHash: submitted.txHash, from: account.address, nonce: submitted.nonce, updatedAt: new Date().toISOString() }));
   const receipt = submitted.receipt;
   if (receipt) return finish(id, receipt);
   return fromRecord((await db.relays.get(id)) as RelayRecord);

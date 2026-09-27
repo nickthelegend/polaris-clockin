@@ -240,6 +240,11 @@ export type RelayRecord = {
   /** Ids the receipt yielded: paymentId, loanId, subId, … */
   result: Record<string, string> | null;
   error: { code: string; message: string } | null;
+  /** The relayer account that sent it, and the nonce it used, to tell a dropped transaction from a slow one. */
+  from?: Address | null;
+  nonce?: number | null;
+  /** When the reconciler last looked for its receipt; it pages through submitted relays by this. */
+  checkedAt?: IsoDate | null;
   createdAt: IsoDate;
   updatedAt: IsoDate;
 };
@@ -491,6 +496,7 @@ export const COLLECTIONS = {
       sessionId: (d: RelayRecord) => d.sessionId,
       state: (d: RelayRecord) => d.state,
       createdAt: (d: RelayRecord) => d.createdAt,
+      checkedAt: (d: RelayRecord) => d.checkedAt ?? d.createdAt,
     },
   } satisfies CollectionSpec<RelayRecord>,
   payments: {

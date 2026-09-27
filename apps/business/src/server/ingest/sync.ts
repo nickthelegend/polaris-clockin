@@ -4,6 +4,7 @@ import type { Address, Log } from "viem";
 
 import { publicClient, requireChain } from "../chain/client";
 import { getDb } from "../db";
+import { resetNonceLane } from "../relayer/submit";
 import { ingestLogs, ingestReceipt, watchedContracts } from "./ingest";
 
 /**
@@ -61,23 +62,67 @@ export async function syncChain(options: { maxRanges?: number } = {}): Promise<S
   return { from: first, to: from - 1, logs, events, caughtUp: from > latest };
 }
 
+/** How long a submitted relay may go without a receipt before we ask whether it was dropped. */
+export function dropAfterMs(): number {
+  const raw = process.env.RELAYER_DROP_AFTER_MS?.trim();
+  const configured = Number(raw);
+  return raw && Number.isFinite(configured) && configured >= 0 ? configured : 10 * 60_000;
+}
+
+export type ReconcileSummary = { settled: number; dropped: number; waiting: number };
+
 /**
  * Finish relays whose receipt we didn't wait long enough for: fetch each
  * receipt and ingest it (which confirms the relay, pays out the payout, and
  * sends the webhooks).
+ *
+ * A transaction can also never land: the node dropped it, or another
+ * transaction took its nonce. After `dropAfterMs` without a receipt, a relay
+ * whose transaction the node no longer knows, or whose nonce the relayer has
+ * already used on chain, is marked failed (`dropped`), which frees its
+ * checkout for a retry and its nonce lane. One the node still holds is left
+ * to land.
+ *
+ * Relays are visited least recently checked first, so a few that never
+ * resolve can't keep newer ones (and payouts) from being reconciled.
  */
-export async function reconcileRelays(options: { olderThanMs?: number; limit?: number } = {}): Promise<number> {
+export async function reconcileRelays(options: { olderThanMs?: number; limit?: number } = {}): Promise<ReconcileSummary> {
   const db = getDb();
   const client = publicClient();
-  const cutoff = new Date(Date.now() - (options.olderThanMs ?? 5_000)).toISOString();
-  const pending = await db.relays.find({ state: "submitted", createdAt: { lte: cutoff } }, { orderBy: "createdAt", limit: options.limit ?? 20 });
-  let settled = 0;
-  for (const relay of pending) {
+  const now = Date.now();
+  const cutoff = new Date(now - (options.olderThanMs ?? 5_000)).toISOString();
+  const due = await db.relays.find({ state: "submitted", checkedAt: { lte: cutoff } }, { orderBy: "checkedAt", limit: options.limit ?? 20 });
+  const summary: ReconcileSummary = { settled: 0, dropped: 0, waiting: 0 };
+  for (const relay of due) {
     if (!relay.txHash) continue;
-    const receipt = await client.getTransactionReceipt({ hash: relay.txHash }).catch(() => null);
-    if (!receipt) continue;
-    await ingestReceipt(receipt);
-    settled++;
+    const hash = relay.txHash;
+    const receipt = await client.getTransactionReceipt({ hash }).catch(() => null);
+    if (receipt) {
+      await ingestReceipt(receipt);
+      summary.settled++;
+      continue;
+    }
+    let dropped: string | null = null;
+    if (now - Date.parse(relay.createdAt) > dropAfterMs()) {
+      const tx = await client.getTransaction({ hash }).catch(() => null);
+      if (!tx) {
+        dropped = "The network dropped this transaction. Nothing was charged.";
+      } else if (relay.from && typeof relay.nonce === "number") {
+        const used = await client.getTransactionCount({ address: relay.from, blockTag: "latest" }).catch(() => null);
+        if (used !== null && used > relay.nonce) dropped = "Another transaction took this one's place. Nothing was charged.";
+      }
+    }
+    const at = new Date().toISOString();
+    if (dropped) {
+      const error = { code: "dropped", message: dropped };
+      await db.relays.update(relay.id, (r) => ({ ...r, state: "failed", error, checkedAt: at, updatedAt: at }));
+      if (relay.from) resetNonceLane(relay.from);
+      console.warn(`[relay] ${relay.id} (${hash}) never landed: marked failed`);
+      summary.dropped++;
+    } else {
+      await db.relays.update(relay.id, (r) => ({ ...r, checkedAt: at }));
+      summary.waiting++;
+    }
   }
-  return settled;
+  return summary;
 }

@@ -26,6 +26,7 @@ import { getDb } from "../db";
 import { getConfig, type ChainConfig } from "../env";
 import { HttpError } from "../http";
 import { consume, LIMITS } from "../ratelimit";
+import { dropAfterMs } from "../ingest/sync";
 import { orderKeyOf, openSessionForPayment } from "../sessions/sessions";
 import { periodSeconds } from "../sessions/params";
 import { carry, fromRecord, type RelayResult } from "./carry";
@@ -130,8 +131,11 @@ function assertMinimum(amount: bigint, param: string): void {
  */
 async function assertNothingInFlight(sessionId: string, relayId: string): Promise<void> {
   const inFlight = await getDb().relays.findOne({ sessionId, state: { in: ["pending", "submitted"] } });
-  // A "pending" relay older than two minutes died before it was sent.
-  const abandoned = inFlight?.state === "pending" && Date.now() - Date.parse(inFlight.createdAt) > 120_000;
+  const age = inFlight ? Date.now() - Date.parse(inFlight.createdAt) : 0;
+  // A "pending" relay older than two minutes died before it was sent. A "submitted" one with no receipt after
+  // RELAYER_DROP_AFTER_MS was most likely dropped (the reconciler will say so): it no longer holds the checkout.
+  // If it lands after all, the contracts settle the order once, and the chain sync records whichever did.
+  const abandoned = inFlight?.state === "pending" ? age > 120_000 : age > dropAfterMs();
   if (inFlight && inFlight.id !== relayId && !abandoned) {
     throw new HttpError(409, "payment_in_progress", "This checkout is already being paid. Give it a second.", { headers: { "Retry-After": "1" } });
   }

@@ -102,6 +102,16 @@ export function resetNoncesForTests(): void {
   lanes.clear();
 }
 
+/**
+ * Forget what we think this signer's next nonce is, so the next send asks
+ * the node. Called when one of its transactions was dropped: the nonce it
+ * held is free again, and counting past it would leave a gap nothing fills.
+ */
+export function resetNonceLane(address: Address): void {
+  const l = lanes.get(address.toLowerCase());
+  if (l) l.next = null;
+}
+
 function isNonceError(error: unknown): boolean {
   const text = String((error as { details?: string; message?: string })?.details ?? (error as Error)?.message ?? error).toLowerCase();
   return text.includes("nonce too low") || text.includes("already known") || text.includes("nonce has already been used") || text.includes("replacement transaction underpriced");

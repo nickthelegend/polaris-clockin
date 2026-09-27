@@ -55,6 +55,14 @@ export class FakeChain {
   /** Revert data for the next simulated call, by function name. */
   reverts = new Map<string, Hex>();
   reads: Record<string, (args: readonly unknown[]) => unknown> = {};
+  /** Send the next transaction but never mine it: no receipt, and the node forgets it (a dropped transaction). */
+  dropNext = false;
+  /** Mine every transaction, but let waitForTransactionReceipt time out (the relay answers "submitted"). */
+  slowReceipts = false;
+  /** Hashes the node no longer knows. */
+  dropped = new Set<Hex>();
+  /** The relayer's mined nonce count, when a test wants it apart from what was sent (a replaced transaction). */
+  minedNonce: number | null = null;
   /** What eth_feeHistory would suggest. */
   fees = { maxFeePerGas: 100_000_000_000n, maxPriorityFeePerGas: 1_000_000_000n };
   /** What a sent transaction emits. */
@@ -105,8 +113,14 @@ export class FakeChain {
       estimateFeesPerGas: async () => {
         return this.fees;
       },
-      getTransactionCount: async () => {
+      getTransactionCount: async ({ blockTag }: { blockTag?: string } = {}) => {
+        if (blockTag === "latest" && this.minedNonce !== null) return this.minedNonce;
         return this.sent.length;
+      },
+      getTransaction: async ({ hash }: { hash: Hex }) => {
+        const tx = this.sent.find((t) => t.hash === hash);
+        if (!tx || this.dropped.has(hash)) throw new Error(`Transaction with hash "${hash}" could not be found.`);
+        return tx;
       },
       sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
         const tx = parseTransaction(serializedTransaction);
@@ -124,6 +138,11 @@ export class FakeChain {
           args: fn.args,
         };
         this.sent.push(sent);
+        if (this.dropNext) {
+          this.dropNext = false;
+          this.dropped.add(hash);
+          return hash;
+        }
         this.blockNumber += 1n;
         const specs = this.onSend(sent, fn);
         const logs = specs.map((spec, i) => makeLog(spec, { txHash: hash, logIndex: i, blockNumber: this.blockNumber }));
@@ -137,6 +156,7 @@ export class FakeChain {
         return hash;
       },
       waitForTransactionReceipt: async ({ hash }: { hash: Hex }) => {
+        if (this.slowReceipts) throw new Error("timed out");
         const r = this.receipts.get(hash);
         if (!r) throw new Error("no receipt");
         return r;
