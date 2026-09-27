@@ -28,20 +28,21 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     .sort((a, b) => Number(b.category === product.category) - Number(a.category === product.category))
     .slice(0, 3);
   const subscription = Boolean(product.recurring);
+  const aprBps = payInFourApr();
 
   return (
     <>
       <div className="mx-auto max-w-[1440px] px-4 pt-6 sm:px-6 lg:px-10 lg:pt-10">
-        <nav aria-label="Breadcrumb" className="text-[0.88rem] text-muted">
+        <nav aria-label="Breadcrumb" className="-my-2 text-[0.88rem] text-muted">
           <ol className="flex items-center gap-2">
             <li>
-              <Link href="/shop" className="hover:text-ink">
+              <Link href="/shop" className="inline-block py-2 hover:text-ink">
                 Shop
               </Link>
             </li>
             <li aria-hidden="true">/</li>
             <li>
-              <Link href={subscription ? "/products/coffee-club" : `/shop?category=${product.category}`} className="hover:text-ink">
+              <Link href={subscription ? "/products/coffee-club" : `/shop?category=${product.category}`} className="inline-block py-2 hover:text-ink">
                 {categoryName(product.category)}
               </Link>
             </li>
@@ -64,15 +65,17 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {subscription ? (
               <p className="mt-2 text-[0.95rem] text-muted">Delivery included, billed monthly.</p>
             ) : (
-              <PolarisMessaging amount={(product.price / 100).toFixed(2)} aprBps={payInFourApr()} className="mt-2 text-[0.97rem] text-ink-2" />
+              <PolarisMessaging amount={(product.price / 100).toFixed(2)} aprBps={aprBps} className="mt-2 text-ink-2" />
             )}
 
-            <PurchasePanel product={product} />
+            <PurchasePanel product={product} aprBps={aprBps} />
 
             <ul className="mt-6 space-y-2 text-[0.92rem] text-muted">
               <li className="flex items-center gap-2.5">
                 <TruckIcon size={18} className="text-sage" />
-                {subscription ? "Ships the first week of every month" : product.price >= 15000 ? "Free delivery in 2 to 4 days" : "Delivery in 2 to 4 days, free over $150"}
+                {subscription
+                  ? "Ships the first week of every month"
+                  : (product.delivery ?? (product.price >= 15000 ? "Free delivery in 2 to 4 days" : "Delivery in 2 to 4 days, free over $150"))}
               </li>
               <li className="flex items-center gap-2.5">
                 <ReturnIcon size={18} className="text-sage" />

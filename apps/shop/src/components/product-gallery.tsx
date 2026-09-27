@@ -50,7 +50,8 @@ export function ProductGallery({ product }: { product: Product }) {
 
   return (
     <div className="lg:sticky lg:top-24">
-      <div className="tile relative aspect-square overflow-hidden lg:aspect-[5/5.2]">
+      {/* Capped to the screen, so the detail thumbnails show below it at 1440x900. */}
+      <div className="tile relative mx-auto aspect-square overflow-hidden lg:aspect-[5/5.2] lg:max-h-[calc(100svh-250px)]">
         <AnimatePresence initial={false} mode="popLayout">
           <motion.div
             key={active}
@@ -73,31 +74,31 @@ export function ProductGallery({ product }: { product: Product }) {
             />
           </motion.div>
         </AnimatePresence>
-        {product.shownIn ? (
+        {active > 0 ? (
+          <p className="absolute bottom-3 left-3 rounded-full bg-paper/85 px-3 py-1 text-[0.8rem] text-ink-2">Detail · {view.label}</p>
+        ) : product.shownIn ? (
           <p className="absolute bottom-3 left-3 rounded-full bg-paper/85 px-3 py-1 text-[0.8rem] text-ink-2">Shown in {product.shownIn}</p>
         ) : null}
       </div>
       <div role="tablist" aria-label="Views" className="mt-3 grid grid-cols-3 gap-3">
         {views.map((v, i) => (
-          <button
-            key={v.label}
-            type="button"
-            role="tab"
-            aria-selected={i === active}
-            aria-label={v.label}
-            onClick={() => setActive(i)}
-            className={`tile relative aspect-[4/3] overflow-hidden rounded-[2px] transition-opacity ${
-              i === active ? "outline outline-[1.5px] outline-offset-[3px] outline-ink" : "opacity-75 hover:opacity-100"
-            }`}
-          >
-            <Image
-              src={product.image}
-              alt=""
-              fill
-              sizes="(min-width: 1024px) 18vw, 30vw"
-              className="pointer-events-none object-cover"
-              style={{ transform: `scale(${v.zoom})`, transformOrigin: `${v.x}% ${v.y}%` }}
-            />
+          <button key={v.label} type="button" role="tab" aria-selected={i === active} onClick={() => setActive(i)} className="group text-left">
+            <span
+              className={`tile relative block aspect-[4/3] overflow-hidden rounded-[2px] transition-opacity ${
+                i === active ? "outline outline-[1.5px] outline-offset-[3px] outline-ink" : "opacity-75 group-hover:opacity-100"
+              }`}
+            >
+              <Image
+                src={product.image}
+                alt=""
+                fill
+                sizes="(min-width: 1024px) 18vw, 30vw"
+                className="pointer-events-none object-cover"
+                style={{ transform: `scale(${v.zoom})`, transformOrigin: `${v.x}% ${v.y}%` }}
+              />
+            </span>
+            {/* The close-ups are details of one photograph, and say so. */}
+            <span className={`mt-1.5 block truncate text-[0.8rem] ${i === active ? "text-ink" : "text-muted"}`}>{i === 0 ? "Whole view" : v.label}</span>
           </button>
         ))}
       </div>

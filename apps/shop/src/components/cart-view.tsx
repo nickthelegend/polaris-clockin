@@ -57,7 +57,7 @@ export function CartView() {
                       max={MAX_QUANTITY}
                       onChange={(q) => setQuantity(line.productId, line.optionId, q)}
                     />
-                    <button type="button" className="link text-[0.9rem] text-muted" onClick={() => remove(line.productId, line.optionId)}>
+                    <button type="button" className="link -mx-2 inline-flex min-h-11 items-center px-2 text-[0.9rem] text-muted" onClick={() => remove(line.productId, line.optionId)}>
                       Remove
                     </button>
                   </div>
@@ -86,7 +86,7 @@ export function CartView() {
                 </div>
               </dl>
               {polarisConfig.ok ? (
-                <PolarisMessaging amount={(total / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} className="mt-4 text-[0.93rem] text-ink-2" />
+                <PolarisMessaging amount={(total / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} className="mt-4 text-ink-2 [--polaris-message-size:0.93rem]" />
               ) : null}
               <Link href="/checkout" className="btn btn-ink mt-7 w-full">
                 Check out

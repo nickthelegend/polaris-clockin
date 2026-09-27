@@ -124,7 +124,7 @@ function Code({ children }: { children: string }) {
 }
 
 export function DevDrawer() {
-  const { currentOrderId, polarisConfig, drawerOpen, menuOpen } = useShop();
+  const { currentOrderId, polarisConfig, drawerOpen, menuOpen, buyBar } = useShop();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"order" | "code">("order");
@@ -201,7 +201,9 @@ export function DevDrawer() {
         aria-expanded={open}
         aria-controls="dev-drawer"
         aria-label="Built with Polaris"
-        className="fixed bottom-3 right-3 z-30 inline-flex h-10 w-10 items-center justify-center gap-2 rounded-full bg-[#151514] text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-transform hover:scale-[1.03] sm:bottom-6 sm:right-6 sm:w-auto sm:pl-3 sm:pr-4"
+        className={`fixed right-3 z-30 inline-flex h-10 w-10 items-center justify-center gap-2 rounded-full bg-[#151514] text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-[transform,bottom] hover:scale-[1.03] sm:bottom-6 sm:right-6 sm:w-auto sm:pl-3 sm:pr-4 ${
+          buyBar ? "bottom-[5.5rem]" : "bottom-3"
+        }`}
       >
         <PolarisMark className="!block !h-4 !w-4 ![filter:none]" />
         <span className="hidden sm:inline">Built with Polaris</span>

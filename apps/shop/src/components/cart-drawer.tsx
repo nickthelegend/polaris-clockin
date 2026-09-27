@@ -134,7 +134,7 @@ export function CartDrawer() {
                           />
                           <button
                             type="button"
-                            className="link text-[0.88rem] text-muted"
+                            className="link -mx-2 inline-flex min-h-11 items-center px-2 text-[0.88rem] text-muted"
                             onClick={() => remove(line.productId, line.optionId)}
                           >
                             Remove
@@ -153,7 +153,7 @@ export function CartDrawer() {
                     {toFree > 0 ? `${formatUsd(toFree)} away from free delivery.` : "Delivery is on us."}
                   </p>
                   {polarisConfig.ok ? (
-                    <PolarisMessaging amount={(subtotal / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} className="mt-3 text-[0.9rem] text-ink-2" />
+                    <PolarisMessaging amount={(subtotal / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} className="mt-3 text-ink-2 [--polaris-message-size:0.9rem]" />
                   ) : null}
                   <div className="mt-5 grid gap-2.5">
                     <Link href="/checkout" onClick={closeDrawer} className="btn btn-ink w-full">

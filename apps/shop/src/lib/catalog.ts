@@ -28,6 +28,8 @@ export interface Product {
   shownIn?: string;
   specs: { label: string; value: string }[];
   badge?: string;
+  /** The delivery line on the product page, when it isn't the store's usual one. */
+  delivery?: string;
 }
 
 /**
@@ -187,6 +189,7 @@ export const PRODUCTS: Product[] = [
       { label: "Seat height", value: "40 cm" },
       { label: "Delivery", value: "Assembled, to your room, in 5 to 8 days" },
     ],
+    delivery: "Free delivery, assembled, in 5 to 8 days",
   },
   {
     id: "pebble-speaker",

@@ -42,6 +42,8 @@
     --polaris-font: var(--font-sans);
     --polaris-text: var(--color-ink);
     --polaris-focus: var(--color-sage);
+    /* The Polaris line under a price, in the store's size (the SDK's own rule would win over a class). */
+    --polaris-message-size: 0.97rem;
     /* The Polaris button in the store's ink, so it matches the wallet button beside it. */
     --polaris-button-bg: var(--color-ink);
     --polaris-button-hover: #34322e;
@@ -298,6 +300,29 @@
 :root .plrs-hero,
 :root .plrs-amt {
   font-variant-numeric: lining-nums;
+}
+
+/*
+ * "Learn more" after "with ✦ Polaris": the gap is the brand's right margin,
+ * not the link's left one, so when the link wraps it starts its line flush
+ * instead of indented. A taller hit area on phones, with no change to layout.
+ */
+:root .plrs-brand {
+  margin-right: 0.4em;
+}
+:root .plrs-link {
+  margin-left: 0;
+  padding: 0.55em 0;
+  margin-block: -0.55em;
+}
+
+/* On phones the Learn more sheet sits on a scrim, not straight on the page. */
+@media (max-width: 480px) {
+  :root .plrs-pop {
+    box-shadow:
+      0 0 0 100vmax rgb(15 16 17 / 0.35),
+      0 28px 64px -28px rgb(15 16 17 / 0.5);
+  }
 }
 
 /* The Polaris button sits flat beside the store's own wallet button. */

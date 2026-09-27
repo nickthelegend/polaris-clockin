@@ -35,6 +35,9 @@ interface ShopState {
   /** The phone menu, shared so floating controls can step out of its way. */
   menuOpen: boolean;
   setMenuOpen: (open: boolean) => void;
+  /** A product page's sticky buy bar is showing (phones), so floating controls sit above it. */
+  buyBar: boolean;
+  setBuyBar: (shown: boolean) => void;
   polarisConfig: BrowserPolarisConfig;
   polaris: Polaris | null;
   /** The order the "Built with Polaris" drawer follows. */
@@ -68,6 +71,7 @@ export function ShopProvider({ polarisConfig, children }: { polarisConfig: Brows
   const [ready, setReady] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [buyBar, setBuyBar] = useState(false);
   const [polaris, setPolaris] = useState<Polaris | null>(null);
   const [currentOrderId, setCurrentOrder] = useState<string | null>(null);
 
@@ -151,12 +155,14 @@ export function ShopProvider({ polarisConfig, children }: { polarisConfig: Brows
       closeDrawer: () => setDrawerOpen(false),
       menuOpen,
       setMenuOpen,
+      buyBar,
+      setBuyBar,
       polarisConfig,
       polaris,
       currentOrderId,
       setCurrentOrderId,
     };
-  }, [items, ready, add, setQuantity, remove, clear, drawerOpen, menuOpen, polarisConfig, polaris, currentOrderId, setCurrentOrderId]);
+  }, [items, ready, add, setQuantity, remove, clear, drawerOpen, menuOpen, buyBar, polarisConfig, polaris, currentOrderId, setCurrentOrderId]);
 
   return (
     <MotionConfig reducedMotion="user">
