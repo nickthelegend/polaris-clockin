@@ -23,7 +23,7 @@ export {
 } from "./abi.ts";
 export { attestGaps, isAttestable } from "./attest.ts";
 export { deriveFacts, type Attribution, type Derivation, type DeriveOptions, type FactField } from "./facts.ts";
-export { explainFacts, declineReasonFor, type ExplainContext } from "./reasons.ts";
+export { explainFacts, declineReasonFor, poweredBy, PROVIDER_NAMES, type ExplainContext, type ProviderCredit } from "./reasons.ts";
 export { decide, quotePlan, planInterest, maxPrincipal, collateralFor, type DecideInput } from "./decision.ts";
 export { underwrite, explainOnChainFacts, type UnderwriteInput, type UnderwriteOutcome } from "./underwrite.ts";
 export { evidence, accountRules, unknownSubject, toJsonSafe } from "./evidence.ts";

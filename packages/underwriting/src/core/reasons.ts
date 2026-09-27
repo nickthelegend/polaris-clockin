@@ -149,6 +149,43 @@ export function explainFacts(facts: Facts, b: ScoreBreakdown, ctx: ExplainContex
     .map(({ l }) => l);
 }
 
+/** The data providers' names, for a credit next to the lines they back. */
+export const PROVIDER_NAMES: Readonly<Record<Provider, string>> = {
+  nansen: "Nansen",
+  zerion: "Zerion",
+  etherscan: "Etherscan",
+  rpc: "public RPC",
+  polaris: "Polaris",
+};
+
+export interface ProviderCredit {
+  provider: Provider;
+  /** "Nansen". A badge, never part of a reason's sentence. */
+  name: string;
+  /** The reason lines this provider's data backs, in the order shown. */
+  reasons: Array<CreditReason["id"]>;
+}
+
+/**
+ * Which data providers a decision stands on, for a "from Nansen" credit on the
+ * credit screen: each third-party provider behind at least one reason line,
+ * in the order its first line appears, with the lines it backs. Polaris's own
+ * rules and plain chain reads are not credited.
+ */
+export function poweredBy(reasons: ReadonlyArray<Pick<CreditReason, "id" | "provider">>): ProviderCredit[] {
+  const out: ProviderCredit[] = [];
+  for (const r of reasons) {
+    if (r.provider === "polaris" || r.provider === "rpc") continue;
+    let credit = out.find((c) => c.provider === r.provider);
+    if (!credit) {
+      credit = { provider: r.provider, name: PROVIDER_NAMES[r.provider], reasons: [] };
+      out.push(credit);
+    }
+    if (!credit.reasons.includes(r.id)) credit.reasons.push(r.id);
+  }
+  return out;
+}
+
 /** The decline, in plain words. */
 export function declineReasonFor(b: ScoreBreakdown): string | null {
   if (b.declinedFor.includes("liquidations")) return "Two or more past loans elsewhere were closed by the lender.";

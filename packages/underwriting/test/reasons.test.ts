@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decide } from "../src/core/decision.ts";
-import { explainFacts } from "../src/core/reasons.ts";
+import { explainFacts, poweredBy, PROVIDER_NAMES } from "../src/core/reasons.ts";
 import { scoreBreakdown } from "../src/core/score.ts";
 import type { CreditDecision, Facts } from "../src/core/types.ts";
 import { explainOnChainFacts } from "../src/core/underwrite.ts";
@@ -115,6 +115,30 @@ describe("reasons in the buyer's words", () => {
         assert.equal(linkedCopy?.label, "Raise your limit: confirm with the wallet you already use.", "the plan's one allowed exception");
       }
     }
+  });
+
+  it("credits the data providers a decision stands on, for a 'from Nansen' badge, never Polaris's own rules", () => {
+    const facts = f({ walletAgeDays: 1210, txCount: 902, exchangeFunded: true, relatedWallets: 8 });
+    const lines = explainFacts(facts, scoreBreakdown(facts), {
+      attribution: {
+        walletAgeDays: { subject: "linked", source: "nansen.first-funder", status: "ok", lowerBound: false },
+        txCount: { subject: "linked", source: "rpc.nonce", status: "ok", lowerBound: false },
+        stableBalance: { subject: "account", source: "zerion.positions", status: "ok", lowerBound: false },
+        defiTenureDays: { subject: "none", source: "polaris.rule", status: "ok", lowerBound: false },
+        priorLiquidations: { subject: "linked", source: "etherscan.logs", status: "ok", lowerBound: false },
+        relatedWallets: { subject: "linked", source: "nansen.related-wallets", status: "ok", lowerBound: false },
+        exchangeFunded: { subject: "linked", source: "nansen.first-funder", status: "ok", lowerBound: false },
+      },
+      linked: { address: "0xb0b0000000000000000000000000000000000001", used: true, excludedFor: null, riskLabel: null },
+    });
+    const credits = poweredBy(lines);
+    assert.deepEqual(
+      credits.map((c) => c.name),
+      ["Nansen", "Zerion", "Etherscan"],
+    );
+    assert.deepEqual(credits[0]?.reasons.sort(), ["age", "cluster", "exchange"]);
+    assert.equal(poweredBy([{ id: "age", provider: "polaris" }, { id: "activity", provider: "rpc" }]).length, 0);
+    assert.equal(PROVIDER_NAMES.nansen, "Nansen");
   });
 
   it("a thin file's copy keeps to the same words, for every gap and every pending state", () => {

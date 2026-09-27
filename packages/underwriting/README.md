@@ -66,9 +66,10 @@ credit it.
 |---|---|
 | `src/core/` | The pure half: types, the data recipe, Facts derivation, the score mirror, the decision, reasons, ABI encoding, and each provider's request builders and response parsers. No Node API, no clock, no randomness, no dependency. This is what the CRE workflow bundles |
 | `src/node/` | Provider clients (retries, timeouts, rate limits, cache, fixtures), the Node driver for the recipe, the service, and the HTTP handler |
+| `src/client/` | The typed client the app's server uses to call the gateway (`@polarispay/underwriting/client`) |
 | `fixtures/` | Synthesized provider responses in the documented shapes, clearly labelled ([README](fixtures/README.md)) |
 | `scripts/` | `synthesize-fixtures.ts` writes the fixtures; `record.ts` records real ones once keys exist |
-| `test/` | 225 tests: the mirror, the encoding, derivation, reasons, parsers, HTTP, clients, personas, failures, the recipe in both runtimes, the service and the API. `packages/contracts/test/metropolis/UnderwritingPackage.test.js` holds the package to the deployed contracts |
+| `test/` | 260 tests: the mirror, the encoding, derivation, reasons, parsers, HTTP, clients, personas, failures, the recipe in both runtimes, the service and the API. `packages/contracts/test/metropolis/UnderwritingPackage.test.js` holds the package to the deployed contracts |
 
 `tsconfig.core.json` typechecks `src/core` with no `node` or `dom` types, and
 `test/core-purity.test.ts` rejects `Date.now`, `Math.random`, `Intl`, timers
@@ -246,7 +247,7 @@ deriveFacts({ account, linked?, observedAt, options? }): Derivation
 scoreFromFacts(f): { score, declined }            scoreBreakdown(f): ScoreBreakdown
 decide({ score, declined, declineReason?, activeDebt?, purchase?, collateralBoost?, reasons?, hasLinked?, pending?, thinFile? }): CreditDecision
 attestGaps(facts): AttestGap[]    isAttestable(facts): boolean    ATTEST_MINIMUM = { walletAgeDays: 30, txCount: 5 }
-explainFacts(facts, breakdown, context?): CreditReason[]
+explainFacts(facts, breakdown, context?): CreditReason[]    poweredBy(reasons): ProviderCredit[]    PROVIDER_NAMES
 explainOnChainFacts(facts, { activeDebt?, purchase?, hasLinked? }): { breakdown, decision }
 quotePlan(principal, installments = 4, intervalSeconds = 604800, aprBps = 1000): PlanQuote
 maxPrincipal(available, ...): bigint             tierFor(score) · limitFor(score, declined) · nextTierFor(score)
@@ -313,6 +314,34 @@ app cannot tell, so give it the token. CORS is an
 allowlist (`UNDERWRITING_CORS_ORIGINS`, never `*`), bodies are capped at
 16 KB, and underwriting is rate-limited per client because it spends credits.
 A Next.js route can mount the same API: `export const POST = (r: Request) => createFetchHandler(Underwriter.fromEnv())(r)`.
+`/v1/explain` takes the purchase as dollars (`purchase: "200.00"`) or base
+units (`purchaseBaseUnits`), like `/v1/underwrite`.
+
+### Client (`@polarispay/underwriting/client`, for the app's server)
+
+How a buyer gets to see a Nansen-powered decision: the app's server calls
+the gateway with the bearer token and renders what comes back. Nothing but
+`fetch`, so it runs in a Next.js route handler.
+
+```ts
+import { createUnderwritingClient, poweredBy } from "@polarispay/underwriting/client";
+
+const uw = createUnderwritingClient({ baseUrl: process.env.UNDERWRITING_API_URL!, token: process.env.UNDERWRITING_API_TOKEN });
+// Bring your history: the buyer's existing wallet signs this text (WalletConnect), then:
+const message = await uw.linkMessage({ account, wallet, issuedAt, nonce });
+const a = await uw.underwrite({ account, linked: { wallet, proof: { issuedAt, nonce, signature } }, purchase: 200_000_000n });
+a.decision.headline;          // "You can pay in 4 for up to $600.00."
+a.decision.reasons;           // [{ text: "First topped up from Coinbase, a major exchange · +10", provider: "nansen", ... }]
+poweredBy(a.decision.reasons) // [{ provider: "nansen", name: "Nansen", reasons: ["age", "exchange", "cluster"] }, ...]
+a.attest ? a.report : a.decision.thinFile; // what the CRE workflow will attest, or what is left before it can
+// After the DON's report lands: explain exactly what it attested.
+const { items } = await uw.explainReport(reportBody);
+```
+
+Amounts travel as base-unit decimal strings (`Wire<T>`), errors as
+`UnderwritingApiError` with the API's code (`unauthorized`, `rate_limited`,
+`invalid_field`). The token is a server secret: never call the gateway from a
+browser.
 
 ### In the CRE workflow
 

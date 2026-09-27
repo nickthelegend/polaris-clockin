@@ -239,7 +239,7 @@ export function createRouter(underwriter: Underwriter, opts: HandlerOptions = {}
         if (req.method !== "POST") throw new HttpProblem(405, "method_not_allowed", "use POST");
         const body = parseBody(req);
         const activeDebt = bigintField(body.activeDebt, "activeDebt");
-        const purchase = dollarsField(body.purchase, "purchase") ?? null;
+        const purchase = dollarsField(body.purchase, "purchase") ?? bigintField(body.purchaseBaseUnits, "purchaseBaseUnits") ?? null;
         if (body.report !== undefined) {
           // The report body UnderwritingReceiver.onReport received (after the
           // forwarder's metadata): abi.encode(uint8 2, (user, linkedWallet, Facts)[]).
