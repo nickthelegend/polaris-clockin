@@ -10,8 +10,12 @@ export type ListRowProps = Omit<HTMLAttributes<HTMLElement>, "title"> & {
   icon?: ReactNode;
   /** Put `icon` in the round surface well (the default) or leave it bare. */
   well?: boolean;
-  /** Colour the well: `surface` (grey), `lime`, `purple`, `down` (a destructive action). */
-  tone?: "surface" | "lime" | "purple" | "down";
+  /**
+   * Colour the well: `surface` (grey), `lime`, `purple`, `down` (a
+   * destructive action), or ref E's status-pill tints (`tint-lime`,
+   * `tint-purple`, `tint-teal`: a dark tinted ground, pale icon).
+   */
+  tone?: "surface" | "lime" | "purple" | "down" | "tint-lime" | "tint-purple" | "tint-teal";
   title: ReactNode;
   /** A line under the title. */
   description?: ReactNode;
@@ -35,6 +39,9 @@ const WELL_TONES = {
   lime: "bg-ui-lime text-ui-on-lime",
   purple: "bg-ui-purple text-white",
   down: "bg-ui-down/15 text-ui-down",
+  "tint-lime": "bg-ui-pill-lime text-ui-pill-lime-text",
+  "tint-purple": "bg-ui-pill-purple text-ui-pill-purple-text",
+  "tint-teal": "bg-ui-pill-teal text-ui-pill-teal-text",
 };
 
 /**

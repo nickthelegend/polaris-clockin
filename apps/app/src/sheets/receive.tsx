@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, IconButton, IconDisc, Input, Sheet, toast } from "@polaris/ui";
+import { Button, IconButton, IconDisc, Input, PrimaryButton, Sheet, toast, useIsDesktop } from "@polaris/ui";
 import { Copy, ScanFace, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr";
@@ -20,6 +20,7 @@ export function ReceiveSheet() {
   const router = useRouter();
   const { name } = usePrefs();
   const origin = useOrigin();
+  const desktop = useIsDesktop();
 
   const address = state.status === "ready" || state.status === "locked" ? state.address : null;
   const link = address && origin ? receiveLink(origin, address, name) : null;
@@ -34,6 +35,12 @@ export function ReceiveSheet() {
       toast({ title: "Couldn't copy the link", tone: "error" });
     }
   }
+
+  const share = () => {
+    if (!url) return;
+    if (navigator.share) void navigator.share({ title: "Pay me with Polaris", url }).catch(() => undefined);
+    else void copy();
+  };
 
   if (!url) {
     return (
@@ -65,18 +72,16 @@ export function ReceiveSheet() {
         <Input hideLabel label="Your link" readOnly value={link?.shown ?? ""} wrapperClassName="min-w-0 flex-1" />
         <IconButton label="Copy link" icon={<Copy />} tone="lime" size="lg" onClick={() => void copy()} />
       </div>
-      <Button
-        variant="white"
-        size="lg"
-        block
-        icon={<Share2 />}
-        onClick={() => {
-          if (navigator.share) void navigator.share({ title: "Pay me with Polaris", url }).catch(() => undefined);
-          else void copy();
-        }}
-      >
-        Share
-      </Button>
+      {desktop ? (
+        // Ref E's lime from 1024px; the phone keeps its white.
+        <PrimaryButton size="lg" block icon={<Share2 />} onClick={share}>
+          Share
+        </PrimaryButton>
+      ) : (
+        <Button variant="white" size="lg" block icon={<Share2 />} onClick={share}>
+          Share
+        </Button>
+      )}
     </Sheet.Body>
   );
 }

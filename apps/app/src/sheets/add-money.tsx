@@ -1,6 +1,6 @@
 "use client";
 
-import { DetailsList, Sheet, TileButton, toast } from "@polaris/ui";
+import { DetailsList, ListGroup, ListRow, Sheet, TileButton, toast, useIsDesktop } from "@polaris/ui";
 import { ArrowDownLeft, ScanLine, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAccounts } from "@/components/accounts";
@@ -22,6 +22,7 @@ export function AddMoneySheet() {
   const origin = useOrigin();
   const { name } = usePrefs();
   const { balance } = useAccounts();
+  const desktop = useIsDesktop();
   const address = state.status === "ready" || state.status === "locked" ? state.address : null;
 
   async function ask() {
@@ -49,14 +50,31 @@ export function AddMoneySheet() {
 
   return (
     <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-5 pt-1">
-      <div className="grid grid-cols-3 gap-2.5">
-        <TileButton tone="ink" icon={<Send />} label="Ask" onClick={() => void ask()} />
-        <TileButton tone="purple" icon={<ArrowDownLeft />} label="My code" onClick={() => router.push("/receive", { scroll: false })} />
-        <TileButton tone="lime" icon={<ScanLine />} label="Claim" onClick={() => router.push("/pay", { scroll: false })} />
-      </div>
-      <p className="text-[14px] leading-[1.45] text-ui-muted">
-        Ask sends a link to pay you. My code is for someone next to you. Claim opens a link someone sent you.
-      </p>
+      {desktop ? (
+        // Ref E's rows in its pill tints, not the phone's coloured tiles.
+        <ListGroup>
+          <ListRow icon={<Send />} tone="tint-lime" title="Ask someone" description="Share a link that pays you" onClick={() => void ask()} />
+          <ListRow
+            icon={<ArrowDownLeft />}
+            tone="tint-purple"
+            title="Show your code"
+            description="For someone next to you"
+            onClick={() => router.push("/receive", { scroll: false })}
+          />
+          <ListRow icon={<ScanLine />} tone="tint-teal" title="Claim a link" description="Open a link someone sent you" onClick={() => router.push("/pay", { scroll: false })} />
+        </ListGroup>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-2.5">
+            <TileButton tone="ink" icon={<Send />} label="Ask" onClick={() => void ask()} />
+            <TileButton tone="purple" icon={<ArrowDownLeft />} label="My code" onClick={() => router.push("/receive", { scroll: false })} />
+            <TileButton tone="lime" icon={<ScanLine />} label="Claim" onClick={() => router.push("/pay", { scroll: false })} />
+          </div>
+          <p className="text-[14px] leading-[1.45] text-ui-muted">
+            Ask sends a link to pay you. My code is for someone next to you. Claim opens a link someone sent you.
+          </p>
+        </>
+      )}
       <DetailsList
         items={[
           { label: "Lands in", value: "Under a second" },

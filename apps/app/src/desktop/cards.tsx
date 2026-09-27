@@ -118,6 +118,7 @@ export function CardsDesktop() {
                 last4={dollar.last4}
                 meta="USD"
                 balance={dollar.balance}
+                decimals={2}
                 deltaLabel="Today"
                 delta={delta}
                 actions={[

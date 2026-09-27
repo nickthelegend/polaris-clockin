@@ -11,11 +11,13 @@ import {
   ListGroup,
   ListRow,
   MiniCardCarousel,
+  PrimaryButton,
   ScreenHeader,
   Sheet,
   Skeleton,
   toast,
   TxRow,
+  useIsDesktop,
 } from "@polaris/ui";
 import { Check, Copy, History, Link2, RefreshCw, Share2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -262,6 +264,7 @@ export function LinkReady({
 }) {
   const status = useData(() => getSendLink(link.linkKey), [link.linkKey]);
   const [cancelling, setCancelling] = useState(false);
+  const desktop = useIsDesktop();
   const who = recipient.kind === "contact" ? firstName(recipient.person.name) : null;
   const state = status.value?.status ?? "open";
 
@@ -312,9 +315,16 @@ export function LinkReady({
           <div className="flex flex-col items-center gap-3">
             <QrCode value={link.url} size={132} label="QR code of your send link" />
             <div className="grid w-full grid-cols-2 gap-2">
-              <Button variant="white" size="md" icon={<Share2 />} onClick={() => void share()}>
-                Share link
-              </Button>
+              {desktop ? (
+                // Ref E's lime from 1024px; the phone keeps its white.
+                <PrimaryButton size="md" icon={<Share2 />} onClick={() => void share()}>
+                  Share link
+                </PrimaryButton>
+              ) : (
+                <Button variant="white" size="md" icon={<Share2 />} onClick={() => void share()}>
+                  Share link
+                </Button>
+              )}
               <Button variant="dark" size="md" icon={<Copy />} className="lg:bg-ui-surface-2 lg:hover:bg-ui-surface-3" onClick={() => void copy()}>
                 Copy
               </Button>
