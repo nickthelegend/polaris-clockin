@@ -68,6 +68,9 @@ Polaris on Monad, with Stripe's ergonomics.
 - `PayWithPolarisBNPL` listed the first instalment as due "Today" while
   saying nothing is taken today. Its schedule now starts one interval after
   checkout, as the loan engine collects it.
+- `quotePayIn4`'s displayed instalments could miss the displayed total by a
+  cent or more ($189 at 10%: 4 × 47.61 against 190.45). They are now the steps
+  of the running total rounded to the cent, so they always add up to it.
 
 ## 0.2.1
 

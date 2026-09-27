@@ -127,6 +127,37 @@ describe("Pay in 4 quote", () => {
     expect(q.each).toBe("50.38");
   });
 
+  it("shows instalments that add up to the total shown", () => {
+    // $189 at 10% is 190.449863 owed: "190.45". Four instalments of about
+    // 47.6125 each rounded on their own read 4 × 47.61 = 190.44. The running
+    // total rounds to 47.61, 95.22, 142.84 and 190.45.
+    const q = quotePayIn4("189.00", { aprBps: 1_000 });
+    expect(q.total).toBe("190.45");
+    expect(q.installments.map((i) => i.amount)).toEqual(["47.61", "47.61", "47.62", "47.61"]);
+    expect(q.each).toBe("47.61");
+
+    // And $200: the running total 50.38, 100.77, 151.15, 201.53.
+    expect(quotePayIn4("200.00").installments.map((i) => i.amount)).toEqual(["50.38", "50.39", "50.38", "50.38"]);
+  });
+
+  it("keeps every displayed instalment within a cent of what the engine draws, summing to the total", () => {
+    const amounts = ["1.00", "1.03", "19.99", "189.00", "200.00", "333.33", "999.99", "4999.97"];
+    for (const amount of amounts) {
+      for (const installments of [1, 2, 3, 4, 6, 7, 12, 24]) {
+        for (const aprBps of [0, 1_000, 2_999]) {
+          const label = `${amount} × ${installments} at ${aprBps}bps`;
+          const q = quotePayIn4(amount, { installments, aprBps });
+          const shown = q.installments.map((i) => BigInt(i.amount.replace(".", "")));
+          expect(shown.reduce((a, b) => a + b, 0n), label).toBe(toCents(q.total));
+          for (const [i, row] of q.installments.entries()) {
+            const drift = shown[i]! * 10_000n - row.amountBaseUnits;
+            expect(drift < 10_000n && drift > -10_000n, `${label}, instalment ${row.index}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
   it("validates its options", () => {
     expect(() => quotePayIn4("10.00", { installments: 0 })).toThrow(/installments/);
     expect(() => quotePayIn4("10.00", { intervalSeconds: 5 })).toThrow(/intervalSeconds/);

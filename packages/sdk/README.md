@@ -280,7 +280,10 @@ The loan engine's arithmetic, in base units: 10% APR, pro-rated over four weekly
 instalments, charged to the buyer, never to you. The buyer pays nothing at
 checkout: instalment *i* falls due `i × intervalSeconds` later (the first a
 week out), and its `amountBaseUnits` is the step on `PolarisLoanEngine.thresholdFor`'s
-rounded-up ladder, so the quote is what the keeper collects, unit for unit. `aprBps: 0` models a
+rounded-up ladder, so the quote is what the keeper collects, unit for unit. Each
+`amount` is that step with the running total rounded to the cent, so the rows
+always add up to the `total` you show, and each is within a cent of what is
+drawn ($200 reads 50.38, 50.39, 50.38, 50.38 = 201.53). `aprBps: 0` models a
 merchant-subsidised plan and reads *interest-free*; the components never claim
 it otherwise.
 

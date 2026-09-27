@@ -160,7 +160,11 @@ export type PayIn4Options = {
 export type PayIn4Installment = {
   /** 1-based. */
   index: number;
-  /** "50.38", rounded half up to the cent for display. */
+  /**
+   * "50.38", for display. Each is the step between two rungs of the ladder
+   * rounded half up to the cent, so the displayed instalments always add up
+   * to the displayed `total`, and each is within a cent of `amountBaseUnits`.
+   */
   amount: string;
   /** Exact, in AUSD base units: what the loan engine will draw (`thresholdFor(index) - thresholdFor(index - 1)`). */
   amountBaseUnits: bigint;
@@ -229,11 +233,15 @@ export function quotePayIn4(amount: AmountInput, options: PayIn4Options = {}): P
 
   const installments: PayIn4Installment[] = Array.from({ length: count }, (_, i) => {
     const k = BigInt(i + 1);
-    const units = thresholdFor(total, k, n) - thresholdFor(total, k - 1n, n);
+    const upper = thresholdFor(total, k, n);
+    const lower = thresholdFor(total, k - 1n, n);
     return {
       index: i + 1,
-      amount: formatCents(microsToCents(units)),
-      amountBaseUnits: units,
+      // Rounding the running total, not each instalment on its own, keeps
+      // the rows summing to the total shown: $189 at 10% is 190.45, which
+      // four separately rounded 47.61s would miss by a cent.
+      amount: formatCents(microsToCents(upper) - microsToCents(lower)),
+      amountBaseUnits: upper - lower,
       dueInSeconds: (i + 1) * interval,
     };
   });
