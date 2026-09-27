@@ -30,11 +30,26 @@ export interface Product {
   badge?: string;
 }
 
-export const CATEGORIES: { id: Category; name: string; blurb: string; image: string }[] = [
-  { id: "audio", name: "Audio", blurb: "Headphones and speakers, tuned for long listening.", image: "/products/headphones.png" },
-  { id: "home", name: "Home", blurb: "Light and seating for the room you spend the evening in.", image: "/products/chair.png" },
-  { id: "objects", name: "Objects", blurb: "The things on the desk and by the door.", image: "/products/camera.png" },
-  { id: "coffee", name: "Coffee Club", blurb: "A fresh bag from a small roaster, every month.", image: "/products/coffee.png" },
+/**
+ * Each category's tile is a detail of a photograph, not a product cut-out
+ * already shown above it: where to look (a CSS object-position and the
+ * transform origin) and how near.
+ */
+export interface CategoryCrop {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+export const CATEGORIES: { id: Category; name: string; blurb: string; image: string; crop: CategoryCrop }[] = [
+  // The room scene: Halcyon One resting on the lounge chair.
+  { id: "audio", name: "Audio", blurb: "Headphones and speakers, tuned for long listening.", image: "/products/hero.jpg", crop: { x: 84, y: 56, zoom: 1.9 } },
+  // The corner: the chair, the side table and the Arc lamp.
+  { id: "home", name: "Home", blurb: "Light and seating for the room you spend the evening in.", image: "/products/hero.jpg", crop: { x: 70, y: 50, zoom: 1 } },
+  // The instant camera on the side table.
+  { id: "objects", name: "Objects", blurb: "The things on the desk and by the door.", image: "/products/hero.jpg", crop: { x: 62, y: 40, zoom: 2.3 } },
+  // The bag's label, close.
+  { id: "coffee", name: "Coffee Club", blurb: "A fresh bag from a small roaster, every month.", image: "/products/coffee.png", crop: { x: 44, y: 48, zoom: 1.45 } },
 ];
 
 export const PRODUCTS: Product[] = [

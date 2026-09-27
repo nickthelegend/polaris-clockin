@@ -47,14 +47,15 @@ export default async function ShopPage({ searchParams }: { searchParams: Promise
         </ul>
       </nav>
 
-      <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-3 lg:gap-y-16">
+      {/* Four across: the eight products fill two rows, with no empty cell. */}
+      <div className="mt-10 grid grid-cols-2 gap-x-4 gap-y-12 sm:gap-x-6 lg:grid-cols-4 lg:gap-y-16">
         {products.map((product, i) => (
           <ProductCard
             key={product.id}
             product={product}
-            priority={i < 3}
-            revealDelay={(i % 3) * 90}
-            sizes="(min-width: 1024px) 30vw, 50vw"
+            priority={i < 4}
+            revealDelay={(i % 4) * 80}
+            sizes="(min-width: 1024px) 23vw, 50vw"
           />
         ))}
       </div>

@@ -69,13 +69,19 @@ export default function HomePage() {
               <Link href={category.id === "coffee" ? "/products/coffee-club" : `/shop?category=${category.id}`} className="group block rounded-sm">
                 <ImageReveal delay={i * 80}>
                   <div className="tile relative aspect-[3/4] overflow-hidden">
-                    <Image
-                      src={category.image}
-                      alt=""
-                      fill
-                      sizes="(min-width: 1024px) 25vw, 50vw"
-                      className="object-cover transition-transform duration-[1200ms] ease-[var(--ease-out-expo)] group-hover:scale-[1.035] motion-reduce:transition-none"
-                    />
+                    <div
+                      className="absolute inset-0"
+                      style={{ transform: `scale(${category.crop.zoom})`, transformOrigin: `${category.crop.x}% ${category.crop.y}%` }}
+                    >
+                      <Image
+                        src={category.image}
+                        alt=""
+                        fill
+                        sizes={category.crop.zoom > 1 ? "(min-width: 1024px) 50vw, 100vw" : "(min-width: 1024px) 25vw, 50vw"}
+                        className="object-cover transition-transform duration-[1200ms] ease-[var(--ease-out-expo)] group-hover:scale-[1.035] motion-reduce:transition-none"
+                        style={{ objectPosition: `${category.crop.x}% ${category.crop.y}%` }}
+                      />
+                    </div>
                   </div>
                 </ImageReveal>
                 <h3 className="display mt-4 flex items-center gap-2 text-[1.7rem]">
