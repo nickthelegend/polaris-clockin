@@ -26,6 +26,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The shared component library ships TypeScript source.
+  transpilePackages: ["@polaris/ui", "@polaris/brand"],
   // The workspace root, so a parent directory's lockfile is never mistaken for it.
   turbopack: { root: path.resolve(process.cwd(), "../..") },
   async headers() {

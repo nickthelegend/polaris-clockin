@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The shared component library ships TypeScript source.
+  transpilePackages: ["@polaris/ui", "@polaris/brand"],
   // The Privy Node SDK verifies tokens with `jose` and signs wallet requests with
   // node:crypto. Keep it out of the server bundle so it loads as plain Node.
   serverExternalPackages: ["@privy-io/node"],

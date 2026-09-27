@@ -1,6 +1,7 @@
 "use client";
 
 import { addRpcUrlOverrideToChain, PrivyProvider } from "@privy-io/react-auth";
+import { usePathname } from "next/navigation";
 import { monad, monadTestnet } from "viem/chains";
 
 import { SetupScreen } from "@/components/setup-screen";
@@ -48,5 +49,8 @@ function Privy({ children }: { children: React.ReactNode }) {
  * also what `next build` prerenders when the variable is unset.
  */
 export function Providers({ children }: { children: React.ReactNode }) {
+  // The component gallery is public and self-contained: no Privy, no setup gate.
+  const standalone = usePathname()?.startsWith("/gallery") ?? false;
+  if (standalone) return <ThemeProvider>{children}</ThemeProvider>;
   return <ThemeProvider>{APP_ID ? <Privy>{children}</Privy> : <SetupScreen />}</ThemeProvider>;
 }
