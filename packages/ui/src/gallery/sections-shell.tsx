@@ -81,8 +81,8 @@ export function SectionShell() {
     <Section
       id="shell"
       eyebrow="Web shell"
-      title="The dark dashboard shell"
-      description="The web is dark, like the app. The sidebar (full from 1280px, an icon rail from 768px, the floating BottomNav below), the page header with the avatar menu, notices and error states, instalment ticks, copy buttons, the tabbed code panel and a phone frame for live components on marketing pages."
+      title="The sidebar shell and shared pieces"
+      description="The earlier dashboard shell, kept in the library: the sidebar (full from 1280px, an icon rail from 768px, the floating BottomNav below) and the page header. The merchant web app now uses ref E's frame and top nav (above). Its notices, error states, instalment ticks, copy buttons, the tabbed code panel and the phone frame are still used everywhere."
     >
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[264px_minmax(0,1fr)]">
         <SideNav

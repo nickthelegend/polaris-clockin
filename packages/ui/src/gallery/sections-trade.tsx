@@ -19,6 +19,7 @@ import {
 import { useMemo, useState, type AnchorHTMLAttributes } from "react";
 
 import { CandlestickChart } from "../charts/CandlestickChart";
+import { Chip } from "../primitives/Pill";
 import { Avatar } from "../primitives/Avatar";
 import { ThemeScope } from "../primitives/Card";
 import { Logo } from "../primitives/Logo";
@@ -87,6 +88,8 @@ export function SectionTrade() {
   const [tab, setTab] = useState<"withdraw" | "request">("withdraw");
   const [amount, setAmount] = useState("1,250.00");
   const [metric, setMetric] = useState("sales");
+  const [ways, setWays] = useState<string[]>(["Now", "In 4"]);
+  const [side, setSide] = useState<"buy" | "sell">("buy");
 
   // The gallery has no routes: nav links switch the active item in place.
   const NavAnchor = useMemo(
@@ -285,6 +288,23 @@ export function SectionTrade() {
             <DeltaChip value={7.45} variant="strong" />
             <DeltaChip value={-1.8} suffix="this week" />
             <TimeframeChips options={["1h", "24h", "1w", "1m"]} value={tf} onValueChange={setTf} />
+            <TextTabs
+              size="auto"
+              aria-label="Specimen tabs"
+              options={[
+                { value: "buy", label: "Buy" },
+                { value: "sell", label: "Sell" },
+              ]}
+              value={side}
+              onValueChange={setSide}
+            />
+          </Specimen>
+          <Specimen label="Option chips (Chip variant pill): the ways a buyer can pay">
+            {(["Now", "In 4", "Monthly"] as const).map((w) => (
+              <Chip key={w} variant="pill" selected={ways.includes(w)} onClick={() => setWays((c) => (c.includes(w) ? c.filter((x) => x !== w) : [...c, w]))}>
+                {w}
+              </Chip>
+            ))}
           </Specimen>
           <Specimen label="Coins · WalletPill">
             <PolarisCoin />
