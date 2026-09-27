@@ -16,7 +16,7 @@ import { useData } from "@/lib/data/hooks";
 import { longDate, time } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
-import { signed } from "@/lib/view";
+import { movesBalance, n, signed } from "@/lib/view";
 
 const KIND_LABEL: Record<ActivityItem["kind"], string> = {
   payment: "Paid in full",
@@ -37,6 +37,8 @@ const isOpenLink = (item: ActivityItem) => item.kind === "sent-link" && item.det
 function statusOf(item: ActivityItem): string {
   if (item.status !== "settled") return "Processing";
   if (isOpenLink(item)) return "Waiting";
+  // Taken back by its sender: the money is in a "Link cancelled" row of its own.
+  if (item.kind === "sent-link" && item.detail === "Cancelled") return "Cancelled";
   if (item.kind === "plan-opened") return "Plan open";
   return "Complete";
 }
@@ -88,8 +90,8 @@ export function TransactionSheet({ id }: { id: string }) {
         <ActivityAvatar item={item} size="lg" />
         <p className="mt-2 text-[16px] font-medium">{item.title}</p>
         <Money
-          value={signed(item)}
-          signed
+          value={movesBalance(item) ? signed(item) : n(item.amount)}
+          signed={movesBalance(item)}
           dim="cents"
           className={`text-[40px] leading-none font-semibold tracking-[-0.035em] ${item.direction === "in" ? "text-ui-up" : ""}`}
         />

@@ -18,13 +18,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAccounts } from "@/components/accounts";
+import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar, photoFor } from "@/components/avatars";
 import { TabScreen } from "@/components/screen";
 import { useNotices } from "@/components/use-notices";
 import { useOwner } from "@/lib/account/hooks";
 import { getActivity, getContacts, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { signed, subAmount, balanceChange, when } from "@/lib/view";
+import { subAmount, balanceChange, when } from "@/lib/view";
 
 /** Home, on ref A's first screen. */
 export function Home() {
@@ -108,7 +109,7 @@ export function Home() {
                   leading={<ActivityAvatar item={item} />}
                   title={item.title}
                   subtitle={when(item.at)}
-                  amount={signed(item)}
+                  {...rowAmount(item)}
                   subAmount={subAmount(item)}
                   onClick={() => open(`/activity/${item.id}`)}
                 />

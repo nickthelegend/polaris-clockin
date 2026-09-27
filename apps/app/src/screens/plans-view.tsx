@@ -10,7 +10,7 @@ import { cancelSubscription } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { describeInterval, getPlans, type Subscription } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { longDate, relativeDay, shortDate } from "@/lib/dates";
+import { relativeDay, shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
 import { planProgress } from "@/lib/view";
@@ -124,6 +124,12 @@ export function PlansView() {
   );
 }
 
+/** "Oct 2, in 5 days", or just "Oct 18" when it is further off. */
+function nextCharge(at: number): string {
+  const rel = relativeDay(at);
+  return rel.startsWith("on ") ? shortDate(at) : `${shortDate(at)}, ${rel}`;
+}
+
 /**
  * Manage a subscription (fit): what it costs and when it next charges, and
  * the one way out, which still asks for Face ID.
@@ -161,8 +167,8 @@ function SubscriptionSheet({ sub, onClose }: { sub: Subscription | null; onClose
             <DetailsList
               items={[
                 { label: "Price", value: `${usd(s.price)} ${describeInterval(s.periodSeconds)}` },
-                { label: "Next charge", value: `${shortDate(s.nextChargeAt)}, ${relativeDay(s.nextChargeAt)}` },
-                { label: "Since", value: longDate(s.startedAt) },
+                { label: "Next charge", value: nextCharge(s.nextChargeAt) },
+                { label: "Since", value: shortDate(s.startedAt) },
                 { label: "Paid from", value: "Your dollar account" },
               ]}
             />

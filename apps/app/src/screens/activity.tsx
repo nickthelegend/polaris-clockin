@@ -4,6 +4,7 @@ import { Chip, EmptyState, IconButton, ScreenHeader, SectionHeader, Skeleton, Tx
 import { ArrowRightLeft, SlidersHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar } from "@/components/avatars";
 import { FiltersSheet } from "@/components/filters-sheet";
 import { TabScreen } from "@/components/screen";
@@ -11,7 +12,7 @@ import { useOwner } from "@/lib/account/hooks";
 import { type ActivityItem, getActivity } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { dayLabel, time } from "@/lib/dates";
-import { inPeriod, type Period, PERIOD_LABEL, signed, subAmount } from "@/lib/view";
+import { inPeriod, type Period, PERIOD_LABEL, subAmount } from "@/lib/view";
 
 type Direction = "all" | "in" | "out";
 type Kind = "all" | "payments" | "plans" | "subscriptions" | "links" | "transfers";
@@ -133,7 +134,7 @@ export function Activity() {
                   leading={<ActivityAvatar item={item} />}
                   title={item.title}
                   subtitle={`${time(item.at)} · ${subAmount(item)}`}
-                  amount={signed(item)}
+                  {...rowAmount(item)}
                   onClick={() => router.push(`/activity/${item.id}`, { scroll: false })}
                 />
               ))}
