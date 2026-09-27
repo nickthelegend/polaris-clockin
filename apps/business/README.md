@@ -152,7 +152,7 @@ Other commands (`pnpm --filter @polaris/business <cmd>`):
 | Command | What it does |
 |---|---|
 | `dev` | The landing, dashboard and API on http://localhost:3100 |
-| `test` | 104 unit and route tests (vitest, on SQLite in memory): validation, auth, idempotency, the relayer's policy and signature checks, chain ingestion, webhook signing and retries, payouts, onboarding |
+| `test` | 112 unit and route tests (vitest, on SQLite in memory): validation, auth, idempotency, the relayer's policy and signature checks, chain ingestion, webhook signing and retries, payouts, onboarding, and the web audit's fixes (link turn-off, JSON 404/405, field errors, checksums, the write limit) |
 | `lint` | ESLint, then `scripts/check-api-auth.mjs`: every route must be exported through the authentication its path requires |
 | `typecheck`, `build` | `tsc --noEmit`; `next build` |
 | `dev:merchant` | Create a local merchant with `sk_test_`/`pk_test_` keys (and a webhook endpoint) without Privy |
