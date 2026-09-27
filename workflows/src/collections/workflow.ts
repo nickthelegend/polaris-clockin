@@ -15,6 +15,11 @@
  *      `installment.failed` events (reauthorize vs top up) for the dunning
  *      ladder, posted signed to the Polaris API.
  *
+ * A configured indexer that fails is never silent: the run reads candidates
+ * from the chain (which has no dunning backoff), says so in `indexerError`,
+ * and posts the callback even when nothing else happened, so the API can
+ * raise it instead of the fallback quietly becoming the normal path.
+ *
  * The run returns a JSON summary; the chain events are the record.
  */
 
@@ -45,7 +50,7 @@ import {
   parseIndexerCandidates,
   unpackCandidates,
 } from "./candidates.ts";
-import { eventsFor, outcomeFromReceipt, summarize } from "./outcomes.ts";
+import { type CollectionsEvent, eventsFor, outcomeFromReceipt, summarize } from "./outcomes.ts";
 import {
   ACTION,
   chainWindow,
@@ -100,6 +105,8 @@ const COUNTS_ABI = parseAbi([
 export interface CollectionsResult {
   status: "idle" | "written" | "dry-run";
   source: "indexer" | "chain";
+  /** Why a configured indexer was not used this run, or null. */
+  indexerError: string | null;
   note: string | null;
   checked: number;
   tasks: Array<{ action: string; id: string }>;
@@ -109,6 +116,12 @@ export interface CollectionsResult {
   skipped: number;
   events: number;
   callbackStatus: number | null;
+}
+
+interface CallbackTally {
+  tasks: number;
+  executed: number;
+  skipped: number;
 }
 
 /** Counts every EVM read so a run never asks CRE for more than its quota. */
@@ -206,13 +219,15 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   // 1. Candidates: the indexer proposes, else the chain.
   let source: CollectionsResult["source"] = "indexer";
   let note: string | null = null;
+  let indexerError: string | null = null;
   let candidates: IndexerCandidates;
   const indexed = cfg.candidates.indexerUrl ? fromIndexer(runtime, now) : null;
   if (indexed && !("error" in indexed)) {
     candidates = indexed;
   } else {
     if (indexed && "error" in indexed) {
-      note = `indexer unavailable (${indexed.error}); read candidates from the chain`;
+      indexerError = indexed.error;
+      note = `indexer unavailable (${indexed.error}); read candidates from the chain, which has no dunning backoff`;
       runtime.log(note);
     }
     source = "chain";
@@ -259,6 +274,7 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   const base: CollectionsResult = {
     status: "idle",
     source,
+    indexerError,
     note,
     checked,
     tasks: tasks.map((t) => ({ action: ["", "collect", "charge", "liquidate"][t.action]!, id: t.id.toString() })),
@@ -269,8 +285,36 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
     events: 0,
     callbackStatus: null,
   };
+  /** The signed run callback: whenever a task moved or failed, and whenever the indexer failed. */
+  const callBack = (result: CollectionsResult, run: { id: string; txHash: string | null; tally: CallbackTally; events: CollectionsEvent[] }) => {
+    if (!cfg.callback || (run.events.length === 0 && indexerError === null)) return;
+    const secret = optionalSecret(runtime, cfg.callback.secretId);
+    if (!secret) {
+      runtime.log(`callback skipped: secret ${cfg.callback.secretId} is not set`);
+      return;
+    }
+    result.callbackStatus = postSignedCallback(runtime, {
+      url: cfg.callback.url,
+      secret,
+      payload: {
+        id: run.id,
+        type: "collections.run",
+        createdAt: now,
+        chain: cfg.chainSelectorName,
+        receiver: cfg.receiver,
+        txHash: run.txHash,
+        candidates: { source, indexerError },
+        tally: run.tally,
+        events: run.events,
+      },
+    });
+    runtime.log(`callback ${cfg.callback.url} answered ${result.callbackStatus}`);
+  };
+
   if (tasks.length === 0) {
     runtime.log(`nothing due among ${checked} checks (${source})`);
+    // No transaction to key on: the scheduled tick is the same on every node.
+    callBack(base, { id: `collections:${tick}`, txHash: null, tally: { tasks: 0, executed: 0, skipped: 0 }, events: [] });
     return JSON.stringify(base);
   }
 
@@ -297,32 +341,12 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   result.skipped = outcome.skipped.length;
   result.events = events.length;
 
-  if (cfg.callback && events.length > 0) {
-    const secret = optionalSecret(runtime, cfg.callback.secretId);
-    if (secret) {
-      result.callbackStatus = postSignedCallback(runtime, {
-        url: cfg.callback.url,
-        secret,
-        payload: {
-          id: write.txHash,
-          type: "collections.run",
-          createdAt: now,
-          chain: cfg.chainSelectorName,
-          receiver: cfg.receiver,
-          txHash: write.txHash,
-          tally: {
-            tasks: tasks.length,
-            executed: outcome.executed.length,
-            skipped: outcome.skipped.length,
-          },
-          events,
-        },
-      });
-      runtime.log(`callback ${cfg.callback.url} answered ${result.callbackStatus}`);
-    } else {
-      runtime.log(`callback skipped: secret ${cfg.callback.secretId} is not set`);
-    }
-  }
+  callBack(result, {
+    id: write.txHash,
+    txHash: write.txHash,
+    tally: { tasks: tasks.length, executed: outcome.executed.length, skipped: outcome.skipped.length },
+    events,
+  });
   return JSON.stringify(result);
 }
 

@@ -194,7 +194,10 @@ action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
    newest `recentWindow` ids of each, plus a `sweepWindow` slice of older ids
    that rotates with the cron's scheduled time so every id is revisited. The
    chain keeps no failure history, so this fallback has no dunning backoff: a
-   buyer who is short is tried on every run until the indexer is back.
+   buyer who is short is tried on every run until the indexer is back. So the
+   fallback is never silent: the result's `indexerError` names the failure,
+   and the run posts its callback even when nothing else happened, with
+   `candidates: { source: "chain", indexerError }`, for the API to raise.
 2. **The chain disposes.** `CollectionsReceiver.checkTasks` at the last
    finalized block, 72 tasks per read (CRE caps a read request at 5 KB).
    Liquidation is checked only on loans that are due.
@@ -213,7 +216,7 @@ action 1 collects an instalment, 2 charges a subscription, 3 liquidates.
    revert a whole report when a task runs out of gas, so this estimate cannot
    undershoot that way.
 5. **Outcome:** the receipt's `TaskExecuted` / `TaskSkipped` become events,
-   posted to `callback.url` when set.
+   posted to `callback.url` when set (and on every run whose indexer failed).
 
 | `TaskSkipped` reason | Event | The buyer should |
 |---|---|---|
@@ -313,6 +316,12 @@ Monad testnet, the provider endpoints, gas bounds and schedules.
 from `@polaris/cre-workflows/callback`; event types are in
 `@polaris/cre-workflows/events`. Every node may send it; key on `id`.
 
+`collections.run` carries `txHash` (null for a run that wrote nothing),
+`candidates: { source, indexerError }`, `tally` and `events`; its `id` is the
+transaction hash, or `collections:<scheduled tick>` for a run that wrote
+nothing. `polaris-underwrite` sends `credit.underwritten`, `credit.refused`
+and `credit.thin`.
+
 ## What the tests prove
 
 - `test/encoding.test.ts`: both reports are byte-identical to
@@ -327,7 +336,8 @@ from `@polaris/cre-workflows/callback`; event types are in
   accepts.
 - `test/collections.workflow.test.ts`, `test/underwriting.workflow.test.ts`:
   the handlers on `@chainlink/cre-sdk/test`'s runtime and mocks: reports,
-  gas limits, the indexer and its fallback, the read quota, the simulator's
+  gas limits, the indexer and its fallback (never silent: the failure is in
+  the result and the callback), the read quota, the simulator's
   masked revert, dunning events and their signature; facts equal to what
   the underwriting package derives for the same persona, keys only in
   headers, every response cached, refusals before any paid call; a run

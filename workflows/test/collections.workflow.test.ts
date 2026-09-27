@@ -284,6 +284,57 @@ test("a failing indexer falls back to the chain instead of reading as 'nothing d
   expect(seen.reports[0]).toEqual([{ action: ACTION.COLLECT_INSTALLMENT, id: 2n }]);
 });
 
+test("a failing indexer is not silent: the run names the error and tells the API, even when nothing was due", () => {
+  fakeChain({ loanCount: 2n, subscriptionCount: 0n, ready: () => false });
+  const CALLBACK = "https://api.polaris.test/v1/cre/collections";
+  const sent = httpRecorder((url) =>
+    url === CALLBACK ? { status: 202 } : { status: 200, json: { errors: [{ message: 'Cannot query field "Loan" on type "query_root".' }] } },
+  );
+  const secrets = new Map([["main", new Map([["POLARIS_CALLBACK_SECRET", SECRET]])]]);
+  const out = run(
+    baseConfig({
+      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      callback: { url: CALLBACK, secretId: "POLARIS_CALLBACK_SECRET" },
+    }),
+    secrets,
+  );
+  expect(out).toMatchObject({ status: "idle", source: "chain", indexerError: expect.stringContaining('Cannot query field "Loan"'), callbackStatus: 202 });
+  const posts = sent.filter((s) => s.url === CALLBACK);
+  expect(posts).toHaveLength(1);
+  expect(verifyCallback(SECRET, posts[0]!.body!, posts[0]!.headers["polaris-signature"], NOW_MS / 1000).ok).toBe(true);
+  const body = JSON.parse(posts[0]!.body!);
+  expect(body).toMatchObject({
+    id: `collections:${NOW_MS / 1000}`,
+    type: "collections.run",
+    txHash: null,
+    candidates: { source: "chain", indexerError: expect.stringContaining('Cannot query field "Loan"') },
+    events: [],
+  });
+  expect(posts[0]!.headers["idempotency-key"]).toBe(body.id);
+});
+
+test("a healthy run with nothing to say posts nothing, and a run that did something says where its candidates came from", () => {
+  const CALLBACK = "https://api.polaris.test/v1/cre/collections";
+  const secrets = new Map([["main", new Map([["POLARIS_CALLBACK_SECRET", SECRET]])]]);
+  const withCallback = (indexerUrl: string | null) =>
+    baseConfig({
+      candidates: { indexerUrl, indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      callback: { url: CALLBACK, secretId: "POLARIS_CALLBACK_SECRET" },
+    });
+
+  fakeChain({ loanCount: 2n, subscriptionCount: 0n, ready: () => false });
+  const quiet = httpRecorder(() => ({ status: 202 }));
+  expect(run(withCallback(null))).toMatchObject({ status: "idle", indexerError: null, callbackStatus: null });
+  expect(quiet).toHaveLength(0);
+
+  fakeChain({ loanCount: 999n, subscriptionCount: 0n, ready: (t) => t.action === ACTION.COLLECT_INSTALLMENT, outcome: () => ({ executed: 1n }) });
+  const sent = httpRecorder((url) => (url === CALLBACK ? { status: 202 } : { status: 200, json: { data: { Loan: [{ loanId: "5" }], Subscription: [] } } }));
+  const out = run(withCallback("https://indexer.polaris.test/v1/graphql"), secrets);
+  expect(out).toMatchObject({ status: "written", source: "indexer", indexerError: null, callbackStatus: 202 });
+  const body = JSON.parse(sent.find((s) => s.url === CALLBACK)!.body!);
+  expect(body).toMatchObject({ id: out.txHash, txHash: out.txHash, candidates: { source: "indexer", indexerError: null } });
+});
+
 test("stays inside CRE's 15-read quota however many candidates there are", () => {
   const seen = fakeChain({ loanCount: 5_000n, subscriptionCount: 5_000n, ready: () => false });
   const out = run(baseConfig({ candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 500, sweepWindow: 500 } }));
