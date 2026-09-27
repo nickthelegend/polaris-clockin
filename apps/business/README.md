@@ -159,9 +159,11 @@ deploys every contract with the testnet deploy script, starts this server
 (`:3530`) with the dev relayer adapter, seeds a merchant, and then, with the
 real `polarispay-sdk`: creates a checkout
 session (and replays it with its Idempotency-Key), pays it now through
-`/api/relay` as a buyer with no MON, opens a Pay in 4 plan after a CRE
-underwriting report, pays through the SDK's direct-pay relay, collects
-instalment 1 with a CRE collections report, and checks that `payment.succeeded`,
+`/api/relay` as a buyer with no MON, opens a Pay in 4 plan after a hand-built
+underwriting report (the receiver's format, pushed through the local mock
+forwarder: no CRE workflow runs here), pays through the SDK's direct-pay
+relay, collects instalment 1 with a hand-built collections report, and checks
+that `payment.succeeded`,
 `plan.opened` and `installment.collected` arrive at a local receiver and verify
 with the SDK. Nothing touches Privy, a public chain, or any account.
 
