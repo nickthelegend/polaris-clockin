@@ -5,7 +5,8 @@ import { ArrowRight, Check, Store } from "lucide-react";
 import Link from "next/link";
 
 import { BlurWords, Rise } from "@/components/motion";
-import { DEMO_SHOP_SOON, DEMO_SHOP_URL } from "@/lib/features";
+import { useDemoShopUrl } from "@/lib/demo-shop";
+import { DEMO_SHOP_SOON } from "@/lib/features";
 import { hero } from "./content";
 import { ProductPreview } from "./preview";
 
@@ -15,6 +16,7 @@ import { ProductPreview } from "./preview";
  * interactive with an invented studio's numbers.
  */
 export function Hero() {
+  const DEMO_SHOP_URL = useDemoShopUrl();
   return (
     <section aria-labelledby="hero-title" className="relative isolate pt-4 pb-16 sm:pt-6 lg:pb-24">
       <div className="mx-auto flex max-w-[1280px] flex-col items-center px-4 text-center sm:px-6 lg:px-8">

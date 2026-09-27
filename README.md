@@ -49,6 +49,13 @@ pnpm install
 pnpm contracts:test
 ```
 
+The merchant web app (`apps/business`, http://localhost:3100) and the demo
+shop it links to (`apps/shop`, http://127.0.0.1:3600), side by side:
+
+```bash
+pnpm dev:demo
+```
+
 *TBD: deployment to Monad testnet, the apps and services.*
 
 ---

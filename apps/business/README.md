@@ -59,9 +59,11 @@ The dashboard used to live at the top level: `/payments`, `/links`, `/plans`,
 create flows in a dialog; below 768px both are bottom sheets.
 
 "See the demo shop" opens Halcyon (`apps/shop`, a store on polarispay-sdk) at
-`NEXT_PUBLIC_DEMO_SHOP_URL`, or `http://localhost:3600` in development. A
-production build without it shows the demo shop's buttons disabled ("Demo
-shop coming soon"), never a link to the visitor's own localhost.
+`NEXT_PUBLIC_DEMO_SHOP_URL`, or `http://127.0.0.1:3600` in development
+(`pnpm dev:demo` at the repo root runs both apps). In development the buttons
+check the shop answers first, so with the shop stopped they read "Demo shop
+coming soon" instead of opening a refused connection. A production build
+without it shows them disabled, never a link to the visitor's own localhost.
 
 ## Privy: sign-in and the payout wallet
 
@@ -334,7 +336,7 @@ See [`.env.example`](.env.example) for every variable. The essentials:
 |---|---|
 | `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Sign-in; the dashboard routes answer 503 without them |
 | `NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID` | The payout signer the browser adds for automatic payouts |
-| `NEXT_PUBLIC_DEMO_SHOP_URL` | "See the demo shop" (`http://localhost:3600` in development; disabled in production without it) |
+| `NEXT_PUBLIC_DEMO_SHOP_URL` | "See the demo shop" (`http://127.0.0.1:3600` in development, when it answers; disabled in production without it) |
 | `POLARIS_DEV_MOCK_SESSION` | `next dev` only: the mock merchant for screenshots |
 | `POLARIS_DEPLOYMENT` / `POLARIS_DEPLOYMENT_FILE`, `POLARIS_RPC_URL` | Which contracts, which RPC |
 | `RELAYER_MODE` (+ `PRIVY_RELAYER_*`) | `privy` in production, `local` on a Hardhat node, `off` |

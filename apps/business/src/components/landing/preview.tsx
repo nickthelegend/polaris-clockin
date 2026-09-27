@@ -29,7 +29,8 @@ import { AnimatePresence, motion } from "motion/react";
 import { useId, useMemo, useState } from "react";
 
 import { ModeCoin } from "@/components/dashboard/payment-bits";
-import { DEMO_SHOP_SOON, DEMO_SHOP_URL } from "@/lib/features";
+import { useDemoShopUrl } from "@/lib/demo-shop";
+import { DEMO_SHOP_SOON } from "@/lib/features";
 import { money, parseAmount, payInFourQuote } from "@/lib/data/format";
 
 /*
@@ -192,6 +193,7 @@ type Way = "now" | "later";
 
 /** The widget side: one link, Pay now or Pay in 4, and what you receive. */
 export function CheckoutWidgetPreview({ onPaid, className }: { onPaid?: (cents: number) => void; className?: string }) {
+  const DEMO_SHOP_URL = useDemoShopUrl();
   const [way, setWay] = useState<Way>("later");
   const [amount, setAmount] = useState("200.00");
   const [paid, setPaid] = useState(0);

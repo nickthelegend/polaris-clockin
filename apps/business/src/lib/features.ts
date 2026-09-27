@@ -13,12 +13,13 @@ export const PAYOUT_SIGNER_ID = process.env.NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID |
 /**
  * The demo storefront (apps/shop, "Halcyon"), which pays through
  * polarispay-sdk. Set NEXT_PUBLIC_DEMO_SHOP_URL wherever it's deployed.
- * Development falls back to the local shop; a production build without it
- * shows the demo shop's buttons disabled ("coming soon") rather than
- * sending visitors to their own localhost.
+ * Development falls back to the local shop (`pnpm dev:demo` runs both), and
+ * components read it through useDemoShopUrl(), which checks the shop answers
+ * first. A production build without it shows the demo shop's buttons
+ * disabled ("coming soon") rather than sending visitors to their own localhost.
  */
 export const DEMO_SHOP_URL: string | null =
-  process.env.NEXT_PUBLIC_DEMO_SHOP_URL || (process.env.NODE_ENV === "development" ? "http://localhost:3600" : null);
+  process.env.NEXT_PUBLIC_DEMO_SHOP_URL || (process.env.NODE_ENV === "development" ? "http://127.0.0.1:3600" : null);
 
 /** What the demo shop's controls say while there's no shop to open. */
 export const DEMO_SHOP_SOON = "Demo shop coming soon";

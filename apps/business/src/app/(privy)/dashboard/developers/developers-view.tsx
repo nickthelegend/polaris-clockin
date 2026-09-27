@@ -32,7 +32,8 @@ import { DemoShopButton } from "@/components/landing/demo-shop";
 import { PageCoin, PageHead } from "@/components/dashboard/page-head";
 import { DataError, errorMessage, WEBHOOK_EVENTS, type ApiKey, type WebhookDelivery, type WebhookEndpoint, type WebhookEventType } from "@/lib/data";
 import { formatAgo, formatDate, formatDateTime, formatIn } from "@/lib/data/format";
-import { DEMO_SHOP_SOON, DEMO_SHOP_URL } from "@/lib/features";
+import { useDemoShopUrl } from "@/lib/demo-shop";
+import { DEMO_SHOP_SOON } from "@/lib/features";
 import { useMerchant } from "@/lib/merchant-context";
 import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
@@ -46,6 +47,7 @@ function useOrigin(): string {
 }
 
 export function DevelopersView() {
+  const DEMO_SHOP_URL = useDemoShopUrl();
   // Keys and webhooks are the merchant's own. They are sample only in the
   // development mock session or on a server with no chain (its sample book).
   const { reason } = useSample();
@@ -162,6 +164,7 @@ const SHOP_POINTS = [
 ];
 
 function DemoShopPanel() {
+  const DEMO_SHOP_URL = useDemoShopUrl();
   return (
     <PanelCard variant="filled" className="grid content-start gap-5">
       <span className="grid size-12 place-items-center rounded-full bg-ui-lime-button text-[#121418]">
