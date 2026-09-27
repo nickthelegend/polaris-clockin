@@ -83,6 +83,9 @@ type BuyerBook = {
 /** How the underwriting package names its providers. */
 const PROVIDER_NAMES: Record<string, string> = { nansen: "Nansen", zerion: "Zerion", etherscan: "Etherscan", rpc: "the chain" };
 
+/** Plans still being paid, in the API's words (and the older ones). */
+const OPEN_PLAN_STATES = new Set(["collecting", "dunning", "active", "overdue"]);
+
 /** The most an opening line can be (ScoreManager's opening cap). */
 const OPENING_CAP = 1_000_000_000n;
 
@@ -117,7 +120,8 @@ export function toPlan(p: BuyerBook["plans"][number]): Plan {
     interest: total - principal,
     interval: p.intervalSeconds,
     instalments,
-    status: p.state === "active" || p.state === "overdue" ? "active" : "completed",
+    // The API's plan states (the chain sync's): collecting and dunning are open; repaid and written off are done.
+    status: OPEN_PLAN_STATES.has(p.state) ? "active" : "completed",
     openedAt: p.startedAt * 1000,
   };
 }

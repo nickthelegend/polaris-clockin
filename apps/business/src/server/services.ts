@@ -44,7 +44,7 @@ import type {
   WithdrawInput,
 } from "@/lib/data/types";
 import { hashKey, requireWallet, type AuthedMerchant } from "./auth";
-import { unitsToCents } from "./chain/money";
+import { unitsToCents, unitsToCentsRounded } from "./chain/money";
 import { getDb } from "./db";
 import { checkoutUrl, getConfig } from "./env";
 import { HttpError } from "./http";
@@ -117,8 +117,9 @@ function toPlan(p: PlanRecord): Plan {
     description: p.description,
     buyer: p.borrower,
     principalCents: unitsToCents(p.principalUnits),
-    totalCents: unitsToCents(total),
-    outstandingCents: p.state === "repaid" ? 0 : unitsToCents(total > repaid ? total - repaid : 0n),
+    // What the buyer was quoted, to the cent (half up), so the ledger and the buyer's screens agree.
+    totalCents: unitsToCentsRounded(total),
+    outstandingCents: p.state === "repaid" ? 0 : unitsToCentsRounded(total > repaid ? total - repaid : 0n),
     installmentCount: p.installments,
     installmentsPaid: p.installmentsPaid,
     state: p.state,

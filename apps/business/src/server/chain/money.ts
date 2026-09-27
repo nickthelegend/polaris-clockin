@@ -15,6 +15,15 @@ export function unitsToCents(units: bigint | string): number {
   return Number(BigInt(units) / UNITS_PER_CENT);
 }
 
+/**
+ * Cents rounded half up, as the buyer is quoted a plan's total (polarispay-sdk
+ * quotePayIn4, the app, the shop): 351.677260 is $351.68 everywhere. Balances
+ * keep `unitsToCents`, which never shows more than is there.
+ */
+export function unitsToCentsRounded(units: bigint | string): number {
+  return Number((BigInt(units) + UNITS_PER_CENT / 2n) / UNITS_PER_CENT);
+}
+
 /** "200.00" from 20000 cents. */
 export function formatCents(cents: number | bigint): string {
   const c = BigInt(cents);
