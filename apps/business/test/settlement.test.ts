@@ -247,6 +247,8 @@ describe("a settlement that doesn't match the session never completes it", () =>
     });
     const opened = await json(await openLinkRoute(request("POST", "/api/public/links/pl_singleuse0001/checkout"), params({ id: "pl_singleuse0001" })));
     const pub = opened.body.data;
+    // A dashboard link has no merchant page: the buyer finishes in the Polaris app, not on /pay/{id} again.
+    expect(pub.successUrl).toBe("http://localhost:3000/");
     chainEmits([
       {
         address: ADDR.payments,

@@ -67,14 +67,30 @@ export function postCompleted(link: PaymentLink, mode: Mode, receipt: RelayRecei
 }
 
 /**
+ * The merchant's page to go back to: the session's successUrl, unless that
+ * is this app itself. A dashboard payment link has no merchant page (its
+ * sessions come back to Polaris), so "Back to {merchant}" would only open
+ * the paid checkout again. Before hydration the successUrl stands.
+ */
+export function merchantReturnUrl(link: PaymentLink): string | null {
+  const url = link.successUrl;
+  if (!url || typeof window === "undefined") return url ?? null;
+  try {
+    return new URL(url, window.location.href).origin === window.location.origin ? null : url;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Back to the merchant after the receipt: close the popup (its opener
  * already has the result), or go to the session's success page. Returns
- * false when there is nowhere to go back to (a sample link, or a checkout
- * opened directly), so the buyer stays in Polaris.
+ * false when there is nowhere to go back to (a sample link, a dashboard
+ * payment link, or a checkout opened directly), so the buyer stays in Polaris.
  */
 export function returnToMerchant(link: PaymentLink): boolean {
   if (typeof window === "undefined") return false;
-  const successUrl = link.successUrl;
+  const successUrl = merchantReturnUrl(link);
   if (isPopupCheckout() && window.opener) {
     window.close();
     // A browser that refuses to close the window goes to the success page instead.
@@ -86,15 +102,6 @@ export function returnToMerchant(link: PaymentLink): boolean {
     return true;
   }
   return false;
-}
-
-/**
- * After a confirmed payment, in one step: tell the opener, then close the
- * popup, or go to the merchant's success page.
- */
-export function finishCheckout(link: PaymentLink, mode: Mode, receipt: RelayReceipt): boolean {
-  postCompleted(link, mode, receipt);
-  return returnToMerchant(link);
 }
 
 /**

@@ -562,7 +562,8 @@ export async function openLink(linkId: string): Promise<CheckoutSessionRecord> {
       lineItems: [],
       modes: modes.length ? modes : ["now"],
       subscription: modes.includes("subscribe") ? { interval: "month", intervalCount: 1 } : null,
-      successUrl: `${requireCheckoutOrigin(config)}/pay/{CHECKOUT_SESSION_ID}`,
+      // No merchant page to go back to: the buyer finishes in Polaris (the app shows Done, then Home).
+      successUrl: `${requireCheckoutOrigin(config)}/`,
       cancelUrl: null,
       orderId: `link-${link.id}-${newId("o", 10).slice(2)}`,
       metadata: { linkId: link.id },

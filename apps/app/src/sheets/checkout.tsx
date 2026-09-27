@@ -18,7 +18,7 @@ import {
 import { AlertCircle, BadgeCheck, CircleCheck, Clock, Link2Off, Share2, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
@@ -27,7 +27,7 @@ import { SuccessSheet } from "@/components/success-sheet";
 import { CheckoutDesktop, CheckoutMissing } from "@/desktop/checkout";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
-import { announceReady, cancelCheckout, expireCheckout, isPopupCheckout, postCompleted, returnToMerchant } from "@/lib/checkout-return";
+import { announceReady, cancelCheckout, expireCheckout, isPopupCheckout, merchantReturnUrl, postCompleted, returnToMerchant } from "@/lib/checkout-return";
 import { describeDuration, describeInterval, dueAt, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { shortDate } from "@/lib/dates";
@@ -322,6 +322,8 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
   const done = () => {
     if (!returnToMerchant(link)) onDone();
   };
+  // A merchant's own page to go back to; a dashboard payment link has none, so the buyer is Done.
+  const backTo = merchantReturnUrl(link);
 
   return (
     <SuccessSheet
@@ -331,7 +333,7 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
       subtitle={subtitle}
       rows={rows}
       receiptUrl={paid.receipt.explorerUrl}
-      primary={{ label: link.successUrl ? `Back to ${link.merchant.name}` : "Done", onClick: done }}
+      primary={{ label: backTo ? `Back to ${link.merchant.name}` : "Done", onClick: done }}
     />
   );
 }
@@ -339,7 +341,7 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: PaymentLink | null }) {
   const router = useRouter();
-  const successUrl = link?.successUrl ?? null;
+  const successUrl = link ? merchantReturnUrl(link) : null;
 
   // The merchant's page that opened us learns the checkout is up (or that
   // the session had already expired), over polarispay-sdk's v1 protocol.
@@ -402,9 +404,17 @@ export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: Payme
   );
 }
 
+const noSubscribe = () => () => undefined;
+
 /** A session that was already paid, or has expired: nothing to pay, and the way back. */
 function CheckoutClosed({ link, framed }: { link: PaymentLink; framed?: boolean }) {
   const paid = link.status === "paid";
+  // Read after hydration: the merchant's page, or none when the link came back to Polaris itself.
+  const backTo = useSyncExternalStore(
+    noSubscribe,
+    () => merchantReturnUrl(link),
+    () => link.successUrl,
+  );
   const state = (
     <EmptyState
       icon={paid ? <CircleCheck /> : <Clock />}
@@ -415,13 +425,13 @@ function CheckoutClosed({ link, framed }: { link: PaymentLink; framed?: boolean 
           : `Nothing was charged. Go back to ${link.merchant.name} to start again.`
       }
       action={
-        link.successUrl || link.session?.cancelUrl ? (
+        (paid ? backTo : (link.session?.cancelUrl ?? backTo)) ? (
           <Button
             variant="white"
             size="lg"
             onClick={() => {
               if (paid) returnToMerchant(link);
-              else window.location.assign(link.session?.cancelUrl ?? link.successUrl!);
+              else window.location.assign(link.session?.cancelUrl ?? backTo!);
             }}
           >
             Back to {link.merchant.name}
