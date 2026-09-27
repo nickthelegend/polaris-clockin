@@ -6,6 +6,8 @@ import {
   EmptyState,
   KeyValueGrid,
   type KeyValue,
+  ListGroup,
+  ListRow,
   Money,
   PrimaryButton,
   SecondaryButton,
@@ -13,7 +15,7 @@ import {
   TextTabs,
   Ticks,
 } from "@polaris/ui";
-import { AlertCircle, ArrowLeft, BadgeCheck, Link2Off, LockKeyhole, ScanFace, TrendingUp } from "lucide-react";
+import { AlertCircle, ArrowLeft, BadgeCheck, Link2Off, LockKeyhole, ScanFace, TrendingUp, Zap } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
@@ -46,8 +48,8 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
   const credit = useData(() => getCreditLine(owner), [owner]);
   const now = useNow();
   const modes = modesOf(link);
-  // Pay in 4 first when the link offers it: it is what the link is for.
-  const [mode, setMode] = useState<PayMode>(link.modes.later ? "later" : (modes[0] ?? "now"));
+  // The first mode the link offers, Pay now when it can, as on the phone.
+  const [mode, setMode] = useState<PayMode>(modes[0] ?? "now");
   const [confirming, setConfirming] = useState(false);
   const [paid, setPaid] = useState<Paid | null>(null);
   const [raising, setRaising] = useState(false);
@@ -63,6 +65,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
   const overLimit = mode === "later" && later && credit.value ? credit.value.available < later.total : false;
   const payDate = (i: number) => (later && now ? shortDate(dueAt(now, later.interval, i)) : "");
   const each = later ? usd(later.amounts[0] ?? 0n) : "";
+  const signedIn = available !== undefined && state.status !== "none";
 
   const title =
     mode === "later" && later ? "Start Pay in 4" : mode === "subscription" && sub ? `Subscribe for ${usd(sub.price)}` : `Pay ${usd(link.amount, { trim: true })}`;
@@ -86,12 +89,13 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
             { label: "You pay today", value: usd(link.amount) },
             { label: "Interest", value: usd(0n) },
             { label: "Fees", value: usd(0n) },
-            { label: "From", value: available !== undefined && state.status !== "none" ? usd(available) : "Your dollars" },
+            { label: "From", value: signedIn ? usd(available) : "Your dollars" },
           ];
 
   return (
     <div className="mx-auto w-full max-w-[1040px] pt-2">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] overflow-hidden rounded-[32px] border border-ui-hairline-strong">
+      {/* One height for every mode, so switching tabs never jumps the card. */}
+      <div className="grid min-h-[728px] grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] overflow-hidden rounded-[32px] border border-ui-hairline-strong xl:min-h-[744px]">
         {/* The order */}
         <section aria-label="The order" className="flex flex-col p-8 xl:p-10">
           <div className="flex items-center gap-4">
@@ -119,10 +123,19 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
               { label: "For", value: link.description },
               { label: "Order", value: link.orderId },
               { label: "Merchant", value: `${link.merchant.name}, ${link.merchant.city}` },
+              {
+                label: `${link.merchant.name} gets`,
+                value: mode === "subscription" && sub ? `${usd(sub.price)} today` : `${usd(link.amount)} today, in full`,
+              },
             ]}
           />
 
-          <p className="mt-auto flex items-start gap-2 pt-8 text-[13px] leading-relaxed text-ui-muted">
+          <ListGroup className="mt-6">
+            <ListRow icon={<ScanFace />} tone="tint-lime" title="One Face ID to pay" description="No card number, no password" />
+            <ListRow icon={<Zap />} tone="tint-teal" title="Lands in under a second" description={`${link.merchant.name} sees it straight away`} />
+          </ListGroup>
+
+          <p className="mt-auto flex items-start gap-2 pt-6 text-[13px] leading-relaxed text-ui-muted">
             <LockKeyhole aria-hidden size={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
             Every payment asks for your Face ID. {link.merchant.name} is paid in full the moment you confirm.
           </p>
@@ -164,13 +177,50 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
                   ))}
                 </ol>
               </div>
+            ) : mode === "subscription" && sub ? (
+              <div className="rounded-ui-swap bg-ui-surface-1 p-5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="ui-figure text-[34px] leading-none font-medium tracking-[-0.03em]">
+                    {usd(sub.price)}
+                    <span className="text-[18px] text-ui-muted"> {describeInterval(sub.periodSeconds)}</span>
+                  </p>
+                  <StatusPill tone="teal" size="sm">
+                    Cancel any time
+                  </StatusPill>
+                </div>
+                <p className="mt-2 text-[14px] text-ui-muted">{sub.name}</p>
+                <ol className="mt-4 grid gap-2.5">
+                  {[0, 1, 2, 3].map((i) => (
+                    <li key={i} className="flex items-center gap-3 text-[15px]">
+                      <span className="ui-figure grid size-7 shrink-0 place-items-center rounded-full bg-ui-surface-2 text-[12px] font-semibold">{i + 1}</span>
+                      <span className="flex-1 text-ui-muted">{i === 0 ? "Today" : now ? longDate(now + i * sub.periodSeconds * 1000) : "…"}</span>
+                      <span className="ui-figure">{usd(sub.price)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
             ) : (
               <div className="rounded-ui-swap bg-ui-surface-1 p-5">
-                <p className="text-[14px] text-ui-muted">{mode === "subscription" && sub ? sub.name : "Paid in full, from your dollars"}</p>
-                <p className="ui-figure mt-2 text-[34px] leading-none font-medium tracking-[-0.03em]">
-                  {usd(mode === "subscription" && sub ? sub.price : link.amount)}
-                  {mode === "subscription" && sub ? <span className="text-[18px] text-ui-muted"> {describeInterval(sub.periodSeconds)}</span> : null}
-                </p>
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="ui-figure text-[34px] leading-none font-medium tracking-[-0.03em]">{usd(link.amount)}</p>
+                  <StatusPill tone="lime" size="sm">
+                    Paid in full
+                  </StatusPill>
+                </div>
+                <p className="mt-2 text-[14px] text-ui-muted">Once, from your dollar account</p>
+                <dl className="mt-4 grid gap-2.5 text-[15px]">
+                  {[
+                    { label: "Your balance now", value: signedIn ? usd(available) : "Your dollars" },
+                    { label: "After this payment", value: signedIn && available >= link.amount ? usd(available - link.amount) : "…" },
+                    { label: `${link.merchant.name} has it`, value: "In under a second" },
+                    { label: "Your receipt", value: "In Activity, right away" },
+                  ].map((r) => (
+                    <div key={r.label} className="flex items-center justify-between gap-3">
+                      <dt className="text-ui-muted">{r.label}</dt>
+                      <dd className="ui-figure">{r.value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
             )}
 
@@ -188,6 +238,12 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
                   <span className="ui-figure text-ui-text">{usd(credit.value.available)}</span> of {usd(credit.value.limit, { trim: true })}.
                 </p>
               )
+            ) : mode === "subscription" && sub ? (
+              <p className="text-[14px] leading-snug text-ui-muted">
+                Charged {describeInterval(sub.periodSeconds)} from your dollar account until you cancel, which you can do any time in Pay in 4.
+              </p>
+            ) : mode === "now" ? (
+              <p className="text-[14px] leading-snug text-ui-muted">No interest and no fees. The receipt is in Activity the moment it lands.</p>
             ) : null}
             {short ? (
               <p role="status" className="text-[14px] text-ui-down">
@@ -203,6 +259,18 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
             {mode === "later" && credit.value && !credit.value.historyLinked ? (
               <SecondaryButton size="lg" block iconRight={<TrendingUp />} onClick={() => setRaising(true)}>
                 Raise your limit
+              </SecondaryButton>
+            ) : mode === "now" && later ? (
+              <SecondaryButton size="lg" block onClick={() => setMode("later")}>
+                Or Pay in 4: 4 × {each}, nothing today
+              </SecondaryButton>
+            ) : mode === "now" && sub ? (
+              <SecondaryButton size="lg" block onClick={() => setMode("subscription")}>
+                Or subscribe, {usd(sub.price)} {describeInterval(sub.periodSeconds)}
+              </SecondaryButton>
+            ) : mode === "subscription" && link.modes.now ? (
+              <SecondaryButton size="lg" block onClick={() => setMode("now")}>
+                Or pay once, {usd(link.amount)}
               </SecondaryButton>
             ) : null}
           </div>
