@@ -60,7 +60,11 @@ type ColumnKey = "who" | "what" | "amount" | "status" | "when";
  * Diff · Volume): who with a round icon, what, the amount, the status pill
  * and when. `hide` drops columns for a narrower table.
  */
-export function activityColumns({ hide = [], whenStyle = "relative" }: { hide?: ColumnKey[]; whenStyle?: "relative" | "full" } = {}): TableColumn<ActivityItem>[] {
+export function activityColumns({
+  hide = [],
+  whenStyle = "relative",
+  narrowWhen = false,
+}: { hide?: ColumnKey[]; whenStyle?: "relative" | "full"; /** Drop "When" below 1280px (beside a side column). */ narrowWhen?: boolean } = {}): TableColumn<ActivityItem>[] {
   const all: (TableColumn<ActivityItem> & { key: ColumnKey })[] = [
     {
       key: "who",
@@ -83,6 +87,7 @@ export function activityColumns({ hide = [], whenStyle = "relative" }: { hide?: 
       key: "when",
       header: "When",
       align: "right",
+      hideBelow: narrowWhen ? "xl" : undefined,
       render: (a) => (
         whenStyle === "full" ? (
           <span className="ui-figure block whitespace-nowrap">
@@ -140,12 +145,22 @@ export function PageHead({ title, coins, actions, className }: { title: string; 
   );
 }
 
-/** Ref E's two columns: the page on the left, the widget or summary on the right (sticky from 1280px). */
-export function PageGrid({ main, side, className }: { main: ReactNode; side: ReactNode; className?: string }) {
+/**
+ * Ref E's two columns: the page on the left, the widget or summary on the
+ * right (sticky from 1280px). `stack`: a page whose table needs the whole
+ * width puts the column under it, in two columns, below 1280px.
+ */
+export function PageGrid({ main, side, stack = false, className }: { main: ReactNode; side: ReactNode; stack?: boolean; className?: string }) {
   return (
-    <div className={cn("grid grid-cols-[minmax(0,1fr)_356px] items-start gap-x-10 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px] xl:gap-x-11", className)}>
+    <div
+      className={cn(
+        "grid items-start gap-x-10 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px] xl:gap-x-11",
+        stack ? "grid-cols-[minmax(0,1fr)]" : "grid-cols-[minmax(0,1fr)_356px]",
+        className,
+      )}
+    >
       <section className="min-w-0">{main}</section>
-      <aside className="grid min-w-0 content-start gap-3 xl:sticky xl:top-6">{side}</aside>
+      <aside className={cn("grid min-w-0 content-start gap-3 xl:sticky xl:top-6", stack && "grid-cols-2 items-start xl:grid-cols-1")}>{side}</aside>
     </div>
   );
 }

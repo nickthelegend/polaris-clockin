@@ -78,6 +78,7 @@ export function PlansDesktop() {
     <>
       <PageHead title="Pay in 4" coins={[<FourCoin key="4" />, <DollarCoin key="d" size={50} />]} />
       <PageGrid
+        stack
         main={
           <>
             <FigureRow

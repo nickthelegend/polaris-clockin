@@ -196,7 +196,7 @@ function RecentActivity({ className }: { className?: string }) {
         rowKey={(a) => a.id}
         onRowClick={(a) => router.push(`/activity/${a.id}`, { scroll: false })}
         empty={<EmptyState size="sm" icon={<ArrowRightLeft />} title="Nothing yet" description="Payments, links and instalments show up the moment they happen." />}
-        columns={activityColumns()}
+        columns={activityColumns({ narrowWhen: true })}
       />
       <div className="mt-3 flex items-center justify-end gap-3">
         <SeeAll href="/activity">All activity</SeeAll>

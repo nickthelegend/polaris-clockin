@@ -117,6 +117,7 @@ export function ActivityDesktop() {
         }
       />
       <PageGrid
+        stack
         main={
           <>
             <FigureRow
