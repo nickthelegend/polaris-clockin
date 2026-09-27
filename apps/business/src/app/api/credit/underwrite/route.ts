@@ -1,6 +1,6 @@
 import { withPreflight, withSignedRequest } from "@/server/auth";
 import { requestUnderwriting } from "@/server/credit/underwriting";
-import { ok, readJson } from "@/server/http";
+import { methodNotAllowed, ok, readJson } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -21,3 +21,10 @@ export const POST = withSignedRequest(async (req) => {
 });
 
 export const OPTIONS = withPreflight("app");
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["POST"]);
+export const GET = withSignedRequest(notAllowed);
+export const PUT = withSignedRequest(notAllowed);
+export const PATCH = withSignedRequest(notAllowed);
+export const DELETE = withSignedRequest(notAllowed);
