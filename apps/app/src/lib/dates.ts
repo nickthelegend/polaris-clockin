@@ -31,7 +31,7 @@ export function longDate(ts: number): string {
 }
 
 export function time(ts: number): string {
-  return fmt({ hour: "2-digit", minute: "2-digit" }).format(ts);
+  return fmt({ hour: "numeric", minute: "2-digit" }).format(ts);
 }
 
 export function monthYear(ts: number): string {
