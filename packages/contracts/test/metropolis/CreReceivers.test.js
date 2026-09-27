@@ -409,6 +409,61 @@ describe("Chainlink CRE receivers", () => {
       expect(await s.underwriting.linkedUserOf(other)).to.equal(ethers.ZeroAddress);
     });
 
+    it("one history opens one line: a wallet backing an account cannot then be underwritten as an account itself", async () => {
+      const account = ethers.Wallet.createRandom().address;
+      const history = ethers.Wallet.createRandom().address;
+      await deliver(s.underwriting, cre.encodeUnderwritingReport([{ user: account, linkedWallet: history, facts: facts({ observedAt: await now() }) }]));
+      expect(await s.scores.creditLimitOf(account)).to.equal(AUSD(500));
+
+      // The history wallet asks for a line of its own, alone or linking yet another wallet.
+      for (const linkedWallet of [ethers.ZeroAddress, ethers.Wallet.createRandom().address]) {
+        const { tx } = await deliver(s.underwriting, cre.encodeUnderwritingReport([{ user: history, linkedWallet, facts: facts({ observedAt: await now() }) }]));
+        await expect(tx)
+          .to.emit(s.underwriting, "UnderwritingRefused")
+          .withArgs(history, linkedWallet, s.underwriting.interface.encodeErrorResult("UserIsLinkedHistory", [history, account]));
+      }
+      expect(await s.scores.creditLimitOf(history)).to.equal(0n);
+      expect((await s.scores.profileOf(history)).underwritten).to.equal(false);
+    });
+
+    it("one history opens one line: an account already underwritten cannot be linked as another account's history", async () => {
+      const first = ethers.Wallet.createRandom().address;
+      const second = ethers.Wallet.createRandom().address;
+      await deliver(s.underwriting, cre.encodeUnderwritingReport([{ user: first, facts: facts({ observedAt: await now() }) }]));
+      expect((await s.scores.profileOf(first)).underwritten).to.equal(true);
+
+      const { tx } = await deliver(s.underwriting, cre.encodeUnderwritingReport([{ user: second, linkedWallet: first, facts: facts({ observedAt: await now() }) }]));
+      await expect(tx)
+        .to.emit(s.underwriting, "UnderwritingRefused")
+        .withArgs(second, first, s.underwriting.interface.encodeErrorResult("WalletAlreadyUnderwritten", [first]));
+      expect(await s.scores.creditLimitOf(second)).to.equal(0n);
+      expect(await s.underwriting.linkedUserOf(first)).to.equal(ethers.ZeroAddress, "a refused link records nothing");
+    });
+
+    it("one history opens one line within a single batch too, in either order", async () => {
+      const [x, y, p, q] = [0, 1, 2, 3].map(() => ethers.Wallet.createRandom().address);
+      const t = await now();
+      const { tx } = await deliver(
+        s.underwriting,
+        cre.encodeUnderwritingReport([
+          { user: x, facts: facts({ observedAt: t }) },
+          { user: y, linkedWallet: x, facts: facts({ observedAt: t }) }, // x already has its own line
+          { user: p, linkedWallet: q, facts: facts({ observedAt: t }) },
+          { user: q, facts: facts({ observedAt: t }) }, // q already backs p
+        ])
+      );
+      await expect(tx).to.emit(s.underwriting, "UnderwritingApplied").withArgs(x, ethers.ZeroAddress, 664);
+      await expect(tx).to.emit(s.underwriting, "UnderwritingApplied").withArgs(p, q, 664);
+      await expect(tx)
+        .to.emit(s.underwriting, "UnderwritingRefused")
+        .withArgs(y, x, s.underwriting.interface.encodeErrorResult("WalletAlreadyUnderwritten", [x]));
+      await expect(tx)
+        .to.emit(s.underwriting, "UnderwritingRefused")
+        .withArgs(q, ethers.ZeroAddress, s.underwriting.interface.encodeErrorResult("UserIsLinkedHistory", [q, p]));
+      expect(await s.scores.creditLimitOf(y)).to.equal(0n);
+      expect(await s.scores.creditLimitOf(q)).to.equal(0n);
+    });
+
     it("applies each buyer in a batch independently", async () => {
       const [good, stale] = [0, 1].map(() => ethers.Wallet.createRandom().address);
       const t = await now();

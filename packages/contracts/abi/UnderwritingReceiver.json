@@ -164,6 +164,22 @@
     "inputs": [
       {
         "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "UserIsLinkedHistory",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
         "name": "wallet",
         "type": "address"
       },
@@ -174,6 +190,17 @@
       }
     ],
     "name": "WalletAlreadyLinked",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "wallet",
+        "type": "address"
+      }
+    ],
+    "name": "WalletAlreadyUnderwritten",
     "type": "error"
   },
   {

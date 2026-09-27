@@ -8339,6 +8339,22 @@ export declare const underwritingReceiverAbi: readonly [
     readonly "inputs": readonly [
       {
         readonly "internalType": "address";
+        readonly "name": "user";
+        readonly "type": "address";
+      },
+      {
+        readonly "internalType": "address";
+        readonly "name": "account";
+        readonly "type": "address";
+      }
+    ];
+    readonly "name": "UserIsLinkedHistory";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "address";
         readonly "name": "wallet";
         readonly "type": "address";
       },
@@ -8349,6 +8365,17 @@ export declare const underwritingReceiverAbi: readonly [
       }
     ];
     readonly "name": "WalletAlreadyLinked";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "address";
+        readonly "name": "wallet";
+        readonly "type": "address";
+      }
+    ];
+    readonly "name": "WalletAlreadyUnderwritten";
     readonly "type": "error";
   },
   {

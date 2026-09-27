@@ -162,9 +162,11 @@ Facts = (uint32 walletAgeDays, uint32 txCount, uint64 stableBalance, uint32 defi
 `stableBalance` is 6-decimal base units; `observedAt` must be within 15 minutes of the block.
 Events: `UnderwritingApplied(address indexed user, address indexed linkedWallet, uint16 score)`,
 `UnderwritingRefused(address indexed user, address indexed linkedWallet, bytes reason)` (e.g.
-`StaleEvidence`, `AlreadyHasRecord`, `WalletAlreadyLinked(wallet, user)`). `linkedUserOf(wallet)`: one
-history wallet backs one account. While `simulationTransmitter` is set (simulation), only that
-`tx.origin` may deliver.
+`StaleEvidence`, `AlreadyHasRecord`, `WalletAlreadyLinked(wallet, user)`, `UserIsLinkedHistory(user, account)`,
+`WalletAlreadyUnderwritten(wallet)`). One history opens one line: `linkedUserOf(wallet)` backs one
+account, a wallet backing an account can't be underwritten itself, and an underwritten account can't be
+linked as another's history. While `simulationTransmitter` is set (simulation), only that `tx.origin` may
+deliver, so it must be a dedicated CRE key, never the deployer.
 
 **Forwarders on Monad testnet**: simulation `0xB9F79d863261869B234c481D1f9A7af84AeAd192` (default),
 production `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`. To move to production after Early Access:
