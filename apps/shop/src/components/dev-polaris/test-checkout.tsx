@@ -132,9 +132,9 @@ export function TestCheckout({ session, aprBps }: { session: CheckoutSession; ap
               <ol className="mt-5 grid grid-cols-4 gap-2 text-[0.78rem] text-white/55">
                 {quote.installments.map((inst, i) => (
                   <li key={inst.index} className="grid gap-1.5">
-                    <span className={`h-1.5 rounded-full ${i === 0 ? "bg-[#bffa62]" : "bg-white/15"}`} />
+                    <span className="h-1.5 rounded-full bg-white/15" />
                     <span className="num text-[0.9rem] font-medium text-white">{usd(inst.amount)}</span>
-                    {i === 0 ? "Today" : `Week ${i + 1}`}
+                    {`Week ${i + 1}`}
                   </li>
                 ))}
               </ol>

@@ -5,8 +5,8 @@ import { useEffect, useId, useState, type ReactNode } from "react";
 
 import { WalletIcon } from "@/components/icons";
 import { formatUsd } from "@/lib/money";
+import { aprLabel, payIn4 } from "@/lib/pay-in-4";
 import { PolarisLockup } from "@/components/polaris-lockup";
-import { quotePayIn4 } from "@/lib/polaris-client";
 
 export type Method = "polaris" | "wallet";
 export type Mode = "now" | "later" | "subscribe";
@@ -70,8 +70,7 @@ export function PaymentOptions({
     setHasWallet(typeof (window as { ethereum?: unknown }).ethereum !== "undefined");
   }, []);
 
-  const quote = total > 0 ? quotePayIn4((total / 100).toFixed(2), { aprBps }) : null;
-  const eachCents = quote ? Math.round(Number(quote.each) * 100) : 0;
+  const plan = payIn4(total, aprBps);
   const [today] = useState(() => Date.now());
   const payInFourAllowed = total >= 5000;
 
@@ -79,8 +78,8 @@ export function PaymentOptions({
     kind === "subscription"
       ? [{ id: "subscribe", title: "Subscribe", detail: `${formatUsd(total)} a month` }]
       : [
-          { id: "now", title: "Pay in full", detail: formatUsd(total) },
-          { id: "later", title: "Pay in 4", detail: quote ? `4 × ${formatUsd(eachCents)}` : "" },
+          { id: "now", title: "Pay now", detail: formatUsd(total) },
+          { id: "later", title: "Pay in 4", detail: plan ? `4 × ${formatUsd(plan.each)}` : "" },
         ];
 
   const walletDisabled = kind === "subscription";
@@ -94,7 +93,7 @@ export function PaymentOptions({
           <Radio checked={method === "polaris"} />
           <span className="flex flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <PolarisLockup className="text-[1.08rem]" />
-            <span className="text-[0.9rem] text-muted">{kind === "subscription" ? "Monthly, cancel any time" : quote?.interestFree ? "Pay now, or in 4 interest-free payments" : "Pay now, or in 4 payments"}</span>
+            <span className="text-[0.9rem] text-muted">{kind === "subscription" ? "Monthly, cancel any time" : plan?.interestFree ? "Pay now, or in 4 interest-free payments" : `Pay now, or in 4 payments at ${aprLabel(aprBps)}`}</span>
           </span>
         </label>
         <Expand open={method === "polaris"}>
@@ -118,20 +117,23 @@ export function PaymentOptions({
               })}
             </div>
 
-            {mode === "later" && quote ? (
+            {mode === "later" && plan ? (
               <div className="mt-5">
-                <ol className="grid grid-cols-4 gap-2" aria-label="Pay in 4 schedule">
-                  {quote.installments.map((inst, i) => (
+                <p className="text-[0.9rem] font-medium text-ink">Nothing to pay today. Then:</p>
+                <ol className="mt-3 grid grid-cols-4 gap-2" aria-label="Pay in 4 schedule">
+                  {plan.installments.map((inst) => (
                     <li key={inst.index} className="grid gap-1.5 text-[0.82rem] text-muted" suppressHydrationWarning>
-                      <span className={`h-1 rounded-full ${i === 0 ? "bg-ink" : "bg-hair-strong"}`} />
-                      <span className="num text-[0.95rem] font-medium text-ink">{formatUsd(Math.round(Number(inst.amount) * 100))}</span>
-                      {i === 0 ? "Today" : SHORT_DATE.format(new Date(today + inst.dueInSeconds * 1000))}
+                      <span className="h-1 rounded-full bg-hair-strong" />
+                      <span className="num text-[0.95rem] font-medium text-ink">{formatUsd(inst.amount)}</span>
+                      {SHORT_DATE.format(new Date(today + inst.dueInSeconds * 1000))}
                     </li>
                   ))}
                 </ol>
-                <p className="mt-4 text-[0.9rem] leading-relaxed text-muted">
-                  {quote.interestFree ? "No interest, and no fees when you pay on time. " : `${formatUsd(Math.round(Number(quote.interest) * 100))} of interest in total. `}
-                  Polaris decides instantly; Halcyon is paid in full today.
+                <p className="num mt-4 text-[0.9rem] leading-relaxed text-muted">
+                  {plan.interestFree
+                    ? `No interest, ${formatUsd(plan.total)} in total. `
+                    : `${formatUsd(plan.interest)} interest (${aprLabel(plan.aprBps)}), ${formatUsd(plan.total)} in total. `}
+                  Halcyon is paid in full today.
                 </p>
               </div>
             ) : mode === "subscribe" ? (

@@ -20,7 +20,7 @@ const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digi
 
 const synced = new Set<string>();
 
-const MODE_LABEL: Record<string, string> = { now: "Paid in full", later: "Pay in 4", subscribe: "Subscription", direct: "Direct wallet payment" };
+const MODE_LABEL: Record<string, string> = { now: "Pay now", later: "Pay in 4", subscribe: "Subscription", direct: "Direct wallet payment" };
 
 export function OrderView({
   initial,
@@ -159,6 +159,11 @@ export function OrderView({
                 {formatUsd(order.total)}
                 {order.kind === "subscription" ? <span className="text-muted"> a month</span> : null}
               </dd>
+              {order.plan?.total && order.plan.interest ? (
+                <dd className="num mt-0.5 text-[0.85rem] text-muted">
+                  Plan total {formatUsd(order.plan.total)} incl. {formatUsd(order.plan.interest)} interest
+                </dd>
+              ) : null}
             </div>
           </dl>
 
@@ -285,6 +290,8 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
   const plan = order.plan;
   const sub = order.subscription;
   const collected = plan?.installments.filter((i) => i.status === "paid").length ?? 0;
+  const nextDue = plan?.installments.find((i) => i.status !== "paid");
+  const planTotal = plan ? (plan.total ?? plan.installments.reduce((n, i) => n + i.amount, 0)) : 0;
 
   return (
     <section aria-labelledby="payment-heading" className="mt-12 rounded-2xl bg-paper p-6 shadow-[inset_0_0_0_1px_var(--color-hair)] sm:p-8">
@@ -315,10 +322,16 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
       {plan ? (
         <div className="mt-6">
           <div className="flex items-baseline justify-between">
-            <p className="text-[0.95rem] text-ink-2">
-              {plan.status === "completed" ? "All four payments made." : plan.status === "past_due" ? "A payment was missed; Polaris will retry." : `${collected} of ${plan.installments.length} payments made`}
+            <p className="text-[0.95rem] text-ink-2" suppressHydrationWarning>
+              {plan.status === "completed"
+                ? "All four payments made."
+                : plan.status === "past_due"
+                  ? "A payment was missed; Polaris will retry."
+                  : `${collected} of ${plan.installments.length} paid${nextDue ? ` · next ${DATE_SHORT.format(new Date(nextDue.dueAt))}` : ""}`}
             </p>
-            <p className="num text-[0.9rem] text-muted">{formatUsd(plan.installments.reduce((n, i) => n + i.amount, 0))} in total</p>
+            <p className="num text-[0.9rem] text-muted">
+              {plan.interest ? `${formatUsd(planTotal)} incl. ${formatUsd(plan.interest)} interest` : `${formatUsd(planTotal)} in total`}
+            </p>
           </div>
           <div className="mt-3 grid grid-cols-4 gap-1.5" aria-hidden="true">
             {plan.installments.map((inst) => (
@@ -334,7 +347,7 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
               <li key={inst.index} className="flex items-center justify-between py-3 text-[0.95rem]">
                 <span className="flex items-center gap-3">
                   <span className="num w-5 text-muted">{inst.index}</span>
-                  <span suppressHydrationWarning>{inst.index === 1 ? "Today" : DATE.format(new Date(inst.dueAt))}</span>
+                  <span suppressHydrationWarning>{DATE.format(new Date(inst.dueAt))}</span>
                 </span>
                 <span className="flex items-center gap-4">
                   <span className="num">{formatUsd(inst.amount)}</span>
@@ -350,7 +363,8 @@ function PaymentBlock({ order, devMock }: { order: Order; devMock: boolean }) {
             ))}
           </ol>
           <p className="mt-4 text-[0.88rem] text-muted">
-            Halcyon was paid {formatUsd(order.total)} in full when you ordered. Polaris collects each payment automatically.
+            Halcyon was paid {formatUsd(order.total)} in full when you ordered. Nothing was taken from you then; Polaris collects each
+            payment automatically, a week apart.
           </p>
         </div>
       ) : sub ? (

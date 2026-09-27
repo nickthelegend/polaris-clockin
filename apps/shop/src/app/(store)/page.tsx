@@ -57,7 +57,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <PayOverTimeBand aprBps={aprBps} example={product("lounge-chair")} />
+      <PayOverTimeBand aprBps={aprBps} example={product("halcyon-one")} />
 
       <section aria-labelledby="categories-title" className="mx-auto max-w-[1440px] px-4 pt-24 sm:px-6 lg:px-10 lg:pt-32">
         <h2 id="categories-title" className="display text-[2.6rem] sm:text-[3.4rem]">

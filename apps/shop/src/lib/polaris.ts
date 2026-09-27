@@ -141,10 +141,17 @@ export function browserConfig(): BrowserPolarisConfig {
   };
 }
 
-/** Pay in 4 pricing shown on the store. 0 is interest-free (merchant-funded); the loan engine's own rate is 1000 (10% APR). */
+/**
+ * Pay in 4 pricing shown on the store, in basis points of APR. The default,
+ * 1000 (10% APR), is PolarisLoanEngine.INTEREST_RATE_BPS: what the buyer is
+ * actually charged. Set 0 only for merchant-funded, interest-free plans.
+ */
+export const LOAN_ENGINE_APR_BPS = 1000;
+
 export function payInFourApr(env: Env = process.env): number {
-  const value = Number(env.POLARIS_PAY_IN_4_APR_BPS ?? "0");
-  return Number.isInteger(value) && value >= 0 && value <= 10_000 ? value : 0;
+  const raw = env.POLARIS_PAY_IN_4_APR_BPS?.trim();
+  const value = Number(raw || LOAN_ENGINE_APR_BPS);
+  return Number.isInteger(value) && value >= 0 && value <= 10_000 ? value : LOAN_ENGINE_APR_BPS;
 }
 
 let cached: { key: string; server: PolarisServer } | null = null;

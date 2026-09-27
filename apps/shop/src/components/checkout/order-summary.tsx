@@ -5,7 +5,7 @@ import Image from "next/image";
 import { ChevronDownIcon } from "@/components/icons";
 import type { Product, ProductOption } from "@/lib/catalog";
 import { formatUsd } from "@/lib/money";
-import { quotePayIn4 } from "@/lib/polaris-client";
+import { payIn4 } from "@/lib/pay-in-4";
 
 import type { Mode } from "./payment-options";
 
@@ -19,7 +19,7 @@ export interface SummaryLine {
 }
 
 function Body({ lines, subtotal, shipping, total, mode, aprBps }: Omit<Props, "collapsible">) {
-  const quote = mode === "later" && total > 0 ? quotePayIn4((total / 100).toFixed(2), { aprBps }) : null;
+  const plan = mode === "later" ? payIn4(total, aprBps) : null;
   const subscription = lines.some((l) => l.product.recurring);
   return (
     <>
@@ -62,10 +62,10 @@ function Body({ lines, subtotal, shipping, total, mode, aprBps }: Omit<Props, "c
           <dd className="num text-[1.35rem] font-medium tracking-[-0.01em]">{formatUsd(total)}</dd>
         </div>
       </dl>
-      {quote ? (
+      {plan ? (
         <p className="num mt-3 rounded-lg bg-sand px-3.5 py-2.5 text-[0.9rem] text-ink-2">
-          With Pay in 4: {formatUsd(Math.round(Number(quote.each) * 100))} today, then 3 weekly payments
-          {quote.interestFree ? ", interest-free." : "."}
+          With Pay in 4: nothing today, then 4 weekly payments of {formatUsd(plan.each)} (
+          {plan.interestFree ? `${formatUsd(plan.total)}, no interest` : `${formatUsd(plan.total)} including ${formatUsd(plan.interest)} interest`}).
         </p>
       ) : null}
       {subscription ? <p className="mt-3 text-[0.9rem] text-muted">Then {formatUsd(total)} every month. Skip or cancel any time.</p> : null}

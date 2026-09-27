@@ -6,7 +6,9 @@ for the Monad Metropolis demo: a normal-looking shop, with Polaris only where
 a store embeds a payment provider.
 
 - **Product pages** carry Polaris on-site messaging under the price: *or 4
-  payments of $87.25 with Polaris*, with a *Learn more* popover.
+  payments of $87.92 with Polaris*, with a *Learn more* popover. Pay in 4 is
+  quoted at the loan engine's 10% APR, with nothing to pay at checkout and
+  the first payment a week later.
 - **The bag** (a drawer and `/cart`) repeats it for the bag total.
 - **Checkout** offers two ways to pay:
   - **Polaris**: *Pay in full*, *Pay in 4* on Polaris credit, or *Subscribe*
@@ -155,9 +157,13 @@ from instead of the request's `Host`); with any missing, checkout shows
 *Payments are switched off* instead of guessing. Behind a proxy that sets
 `X-Forwarded-Host`, set `TRUST_PROXY=1`; otherwise those headers are ignored.
 
-`POLARIS_PAY_IN_4_APR_BPS` sets the Pay in 4 price the store advertises: 0
-(the default) is interest-free, 1000 is the loan engine's 10% APR. The copy
-("interest-free", "no fees when you pay on time") follows it.
+`POLARIS_PAY_IN_4_APR_BPS` sets the Pay in 4 price the store advertises. The
+default, 1000 (10% APR), is `PolarisLoanEngine.INTEREST_RATE_BPS`, so the
+badge, checkout and receipt quote exactly what the loan engine charges: $349
+is 4 × $87.92 ($2.68 of interest, $351.68 in total), and $200 is 4 × $50.38.
+Nothing is paid at checkout; the first instalment falls due a week later,
+as `installmentDueAt` dates it. Set 0 only for a merchant-funded,
+interest-free plan; the copy follows it.
 
 ## Checks
 
