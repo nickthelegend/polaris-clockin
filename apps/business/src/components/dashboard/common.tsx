@@ -43,10 +43,12 @@ export function Panel({
             <H className="truncate text-[20px] leading-tight font-medium tracking-[-0.02em] text-ui-text">{title}</H>
             {sample ? <SampleBadge /> : null}
           </div>
-          {subtitle ? <p className="mt-1 text-[14px] text-ui-muted">{subtitle}</p> : null}
+          {/* Beside the action from 640px; below it, full width, on phones. */}
+          {subtitle ? <p className="mt-1 hidden text-[14px] text-ui-muted sm:block">{subtitle}</p> : null}
         </div>
         {action ? <div className="shrink-0">{action}</div> : null}
       </div>
+      {subtitle ? <p className="mt-1.5 text-[14px] text-ui-muted sm:hidden">{subtitle}</p> : null}
       {children}
     </Card>
   );

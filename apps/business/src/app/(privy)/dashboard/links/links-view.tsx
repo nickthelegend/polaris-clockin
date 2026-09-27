@@ -333,7 +333,7 @@ function NewLinkDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="New payment link" description="Buyers choose how to pay; you're paid in full either way.">
       <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
-        <Dialog.Body className="grid gap-5">
+        <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-5">
           <Input
             label="What it's for"
             placeholder="Brand identity package"
@@ -475,7 +475,7 @@ function TurnOffDialog({ link, onClose, onDone }: { link: PaymentLink | null; on
 
   return (
     <Dialog open={link !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Turn off this link?" description={l?.description}>
-      <Dialog.Body className="grid gap-4">
+      <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <p className="text-[15px] leading-relaxed text-ui-muted">
           Buyers who open it will see it no longer takes payments. Payments already made, and Pay in 4 plans still collecting,
           aren&rsquo;t affected. This can&rsquo;t be undone; you can create a new link instead.

@@ -85,8 +85,8 @@ function IntegrationPanel({ sample }: { sample: boolean }) {
             {
               label: "Merchant ID",
               value: merchant.publicId ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <code className="font-mono text-[13px]">{merchant.publicId}</code>
+                <span className="flex min-w-0 items-center justify-end gap-1.5">
+                  <code className="min-w-0 truncate font-mono text-[13px]">{merchant.publicId}</code>
                   <CopyButton value={merchant.publicId} label="merchant ID" tone="ghost" />
                 </span>
               ) : (
@@ -96,15 +96,15 @@ function IntegrationPanel({ sample }: { sample: boolean }) {
             {
               label: "baseUrl",
               value: origin ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <code className="font-mono text-[13px]">{origin}</code>
+                <span className="flex min-w-0 items-center justify-end gap-1.5">
+                  <code className="min-w-0 truncate font-mono text-[13px]">{origin}</code>
                   <CopyButton value={origin} label="API base URL" tone="ghost" />
                 </span>
               ) : (
                 "…"
               ),
             },
-            { label: "Checkout", value: <code className="font-mono text-[13px]">{capabilities?.checkoutOrigin ?? "…"}</code> },
+            { label: "Checkout", value: <code className="font-mono text-[13px]" title={capabilities?.checkoutOrigin}>{capabilities?.checkoutOrigin ?? "…"}</code> },
           ]}
         />
         <div className="grid content-start gap-3">
@@ -359,7 +359,7 @@ function RevokeDialog({ apiKey, onClose, onDone }: { apiKey: ApiKey | null; onCl
   };
   return (
     <Dialog open={apiKey !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Revoke this key?" description={k?.name}>
-      <Dialog.Body className="grid gap-4">
+      <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <p className="text-[15px] leading-relaxed text-ui-muted">
           Anything still using {k?.secretHint} or its publishable key stops working at once. This can&rsquo;t be undone.
         </p>
@@ -507,7 +507,7 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
                     onClick={() => setDelivery(d)}
                     className="flex w-full items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3 text-left transition-colors hover:bg-ui-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus"
                   >
-                    <Badge tone={r.tone} className="shrink-0">
+                    <Badge tone={r.tone} className="hidden shrink-0 sm:inline-flex">
                       {r.text}
                     </Badge>
                     <span className="min-w-0 flex-1">
@@ -521,6 +521,12 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
                         {sample ? <SampleBadge /> : null}
                       </span>
                       <span className="block truncate text-[12px] text-ui-muted">{d.url}</span>
+                      <span className="mt-1.5 flex items-center gap-2 sm:hidden">
+                        <Badge tone={r.tone} size="sm">
+                          {r.text}
+                        </Badge>
+                        <span className="text-[12px] text-ui-muted">{formatAgo(d.createdAt, now)}</span>
+                      </span>
                     </span>
                     <span className="hidden shrink-0 text-[12px] text-ui-muted sm:block">
                       {(d.attempts?.length ?? d.attempt) > 1 ? `${d.attempts?.length ?? d.attempt} attempts · ` : ""}
@@ -618,7 +624,7 @@ function AddEndpointDialog({ open, onClose, onSaved }: { open: boolean; onClose:
         </>
       ) : (
         <form onSubmit={submit} noValidate className="flex min-h-0 flex-1 flex-col">
-          <Dialog.Body className="grid gap-5">
+          <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-5">
             <Input
               label="Endpoint URL"
               placeholder="https://your.shop/api/polaris/webhook"
@@ -688,7 +694,7 @@ function DeleteEndpointDialog({ endpoint, onClose, onDone }: { endpoint: Webhook
   };
   return (
     <Dialog open={endpoint !== null} onOpenChange={(o) => !o && onClose()} size="sm" title="Remove this endpoint?" description={e?.url}>
-      <Dialog.Body className="grid gap-4">
+      <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-4">
         <p className="text-[15px] leading-relaxed text-ui-muted">
           Nothing more is sent to it, and deliveries still waiting for a retry are dropped. Its past deliveries stay in the log.
         </p>
@@ -753,7 +759,7 @@ function DeliveryDrawer({
     <Drawer open={delivery !== null} onOpenChange={(o) => !o && onClose()} size="lg" title="Delivery" description={d?.id}>
       {d && result ? (
         <>
-          <Drawer.Body className="grid content-start gap-4">
+          <Drawer.Body className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone={result.tone}>{result.text}</Badge>
               {d.test ? <Badge tone="neutral">Test event</Badge> : null}

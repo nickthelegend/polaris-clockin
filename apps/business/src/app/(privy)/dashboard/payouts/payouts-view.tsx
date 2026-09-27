@@ -305,7 +305,7 @@ function WithdrawPanel({ state, wallet, onDone }: { state?: PayoutsState; wallet
         title={receipt ? (receipt.status === "paid" ? "Withdrawal sent" : receipt.status === "failed" ? "Withdrawal failed" : "Withdrawal queued") : "Confirm withdrawal"}
         description={receipt ? receipt.id : "Check the amount and the address. Payouts can't be reversed."}
       >
-        <Dialog.Body className="grid gap-4">
+        <Dialog.Body className="grid grid-cols-[minmax(0,1fr)] gap-4">
           {receipt ? (
             <>
               <div className="flex items-center gap-3">
@@ -338,7 +338,10 @@ function WithdrawPanel({ state, wallet, onDone }: { state?: PayoutsState; wallet
                   { label: "Network fee", value: "$0.00" },
                 ]}
               />
-              <DetailsList size="sm" items={[{ label: "To", value: <span className="font-mono text-[13px] break-all">{review.to}</span> }]} />
+              <div className="rounded-ui-tile bg-ui-surface-2 px-5 py-4">
+                <p className="text-[13px] text-ui-muted">To</p>
+                <p className="mt-1 font-mono text-[14px] leading-relaxed break-all">{review.to}</p>
+              </div>
               {failure ? (
                 <Notice tone="down" size="sm" role="alert">
                   {failure}
