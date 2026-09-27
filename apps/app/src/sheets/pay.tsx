@@ -1,6 +1,6 @@
 "use client";
 
-import { AssetRow, Button, Input, ScreenHeader, SectionHeader, Sheet, Skeleton } from "@polaris/ui";
+import { AssetRow, Button, Input, ScanFrame, ScreenHeader, SectionHeader, Sheet, Skeleton } from "@polaris/ui";
 import { ClipboardPaste, ScanLine, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -109,12 +109,11 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
     open(text);
   }
 
-  const corner = "absolute size-10 border-ui-lime";
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader title="Pay or claim" onBack={close} className="-mt-2 shrink-0 px-5" />
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-4 pt-1">
-        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-ui-card bg-ui-candle-panel">
+        <ScanFrame>
           <video
             ref={videoRef}
             muted
@@ -122,12 +121,6 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
             aria-label="Camera preview"
             className={scanning ? "absolute inset-0 size-full object-cover" : "hidden"}
           />
-          <div aria-hidden className="pointer-events-none absolute inset-7">
-            <span className={`${corner} top-0 left-0 rounded-tl-[18px] border-t-[3px] border-l-[3px]`} />
-            <span className={`${corner} top-0 right-0 rounded-tr-[18px] border-t-[3px] border-r-[3px]`} />
-            <span className={`${corner} bottom-0 left-0 rounded-bl-[18px] border-b-[3px] border-l-[3px]`} />
-            <span className={`${corner} right-0 bottom-0 rounded-br-[18px] border-r-[3px] border-b-[3px]`} />
-          </div>
           {!scanning ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 text-center">
               {canScan === null ? null : canScan ? (
@@ -148,7 +141,7 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
               Stop
             </Button>
           )}
-        </div>
+        </ScanFrame>
 
         <form onSubmit={submit} className="flex items-end gap-2">
           <Input

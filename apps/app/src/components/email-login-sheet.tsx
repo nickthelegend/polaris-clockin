@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, Input, Sheet } from "@polaris/ui";
+import { BottomSheet, Button, IconDisc, Input, Sheet } from "@polaris/ui";
 import { KeyRound, Loader2, Mail } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { cancelEmailLogin, finishEmailLogin } from "@/lib/account/email-login";
@@ -162,9 +162,7 @@ export function EmailLoginSheet() {
           </form>
         ) : (
           <div role="status" className="flex flex-col items-center gap-3 py-6 text-center">
-            <span className="grid size-16 place-items-center rounded-full bg-ui-surface-2">
-              <Loader2 aria-hidden size={28} strokeWidth={1.75} className="animate-spin motion-reduce:animate-none" />
-            </span>
+            <IconDisc icon={<Loader2 className="animate-spin motion-reduce:animate-none" />} />
             <p className="text-[15px] text-ui-muted">Opening your account…</p>
           </div>
         )}

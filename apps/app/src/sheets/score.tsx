@@ -13,6 +13,7 @@ import {
   LogoMark,
   RangeTabs,
   ScreenHeader,
+  SegmentedControl,
   Sheet,
   Skeleton,
   StatTile,
@@ -105,28 +106,16 @@ export function ScoreSheet() {
             value={<span className="ui-figure">{score}</span>}
             meta={<DeltaBadge variant="chip" value={pct} amount={`${change >= 0 ? "+" : ""}${change}`} />}
             actions={
-              <div className="flex items-center gap-1 rounded-[14px] bg-black/15 p-1" role="group" aria-label="Chart type">
-                <IconButton
-                  label="Line"
-                  icon={<LineChart />}
-                  shape="square"
-                  size="sm"
-                  tone={chart === "line" ? "white" : "glass"}
-                  className="size-9"
-                  aria-pressed={chart === "line"}
-                  onClick={() => setChart("line")}
-                />
-                <IconButton
-                  label="Candles"
-                  icon={<CandlesIcon />}
-                  shape="square"
-                  size="sm"
-                  tone={chart === "candles" ? "white" : "glass"}
-                  className="size-9"
-                  aria-pressed={chart === "candles"}
-                  onClick={() => setChart("candles")}
-                />
-              </div>
+              <SegmentedControl
+                variant="icon"
+                aria-label="Chart type"
+                value={chart}
+                onValueChange={setChart}
+                options={[
+                  { value: "line", label: "Line", icon: <LineChart /> },
+                  { value: "candles", label: "Candles", icon: <CandlesIcon /> },
+                ]}
+              />
             }
             chart={
               chart === "line" ? (

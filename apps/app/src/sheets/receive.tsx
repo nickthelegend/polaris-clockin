@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, IconButton, Input, Sheet, toast } from "@polaris/ui";
+import { Button, IconButton, IconDisc, Input, Sheet, toast } from "@polaris/ui";
 import { Copy, ScanFace, Share2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr";
@@ -37,9 +37,7 @@ export function ReceiveSheet() {
   if (!url) {
     return (
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 items-center gap-4 pt-4 text-center">
-        <span className="grid size-16 place-items-center rounded-full bg-ui-surface-2">
-          <ScanFace aria-hidden size={30} strokeWidth={1.5} />
-        </span>
+        <IconDisc icon={<ScanFace size={30} strokeWidth={1.5} />} />
         <p className="max-w-[30ch] text-[15px] leading-[1.45] text-ui-muted">
           Your code needs an account first. It takes one Face ID.
         </p>

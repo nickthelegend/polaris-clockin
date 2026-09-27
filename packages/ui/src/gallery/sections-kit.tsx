@@ -9,6 +9,7 @@ import {
   Ellipsis,
   Gift,
   Inbox,
+  CandlestickChart,
   LineChart,
   Mail,
   Plus,
@@ -18,6 +19,7 @@ import {
   Repeat,
   ScanFace,
   QrCode,
+  Smartphone,
   Copy,
   Check,
   LogOut,
@@ -29,9 +31,10 @@ import { TxRow } from "../composites/TxRow";
 import { Avatar, AvatarStack, FlagBadge } from "../primitives/Avatar";
 import { Button, IconButton, type ButtonVariant } from "../primitives/Button";
 import { Card, RowChevron, SectionHeader, ThemeScope, Tile, type Theme } from "../primitives/Card";
-import { EmptyState, Skeleton, SkeletonText } from "../primitives/Feedback";
+import { EmptyState, IconDisc, Skeleton, SkeletonText } from "../primitives/Feedback";
 import { Input, Select, Toggle } from "../primitives/Field";
 import { Logo, LogoMark } from "../primitives/Logo";
+import { ScanFrame } from "../primitives/ScanFrame";
 import { Money } from "../primitives/Money";
 import { Badge, Chip, DeltaBadge, Pill } from "../primitives/Pill";
 import { RangeTabs, SegmentedControl, Tab, TabList, Tabs } from "../primitives/Segmented";
@@ -357,6 +360,17 @@ function Controls({ theme }: { theme: Theme }) {
             { value: "m", label: "Month" },
           ]}
         />
+        <div className="rounded-[18px] bg-[#8a31c6] p-3">
+          <SegmentedControl
+            variant="icon"
+            aria-label="Chart type"
+            defaultValue="line"
+            options={[
+              { value: "line", label: "Line", icon: <LineChart /> },
+              { value: "candles", label: "Candles", icon: <CandlestickChart /> },
+            ]}
+          />
+        </div>
       </Specimen>
 
       <Specimen label="Tabs · text (ref A), pill, segmented">
@@ -470,6 +484,18 @@ function Controls({ theme }: { theme: Theme }) {
             </div>
           </div>
           <Skeleton shape="tile" height={64} />
+        </Card>
+        <Card variant="raised" className="flex flex-col gap-4">
+          <p className="text-[13px] font-medium text-ui-muted">IconDisc · sm, md, lg</p>
+          <div className="flex items-center gap-3">
+            <IconDisc size="sm" icon={<Inbox />} />
+            <IconDisc size="md" icon={<Smartphone />} />
+            <IconDisc icon={<ScanFace />} />
+          </div>
+          <p className="text-[13px] font-medium text-ui-muted">ScanFrame</p>
+          <ScanFrame>
+            <p className="absolute inset-0 grid place-items-center px-10 text-center text-[14px] text-ui-muted">The camera shows here</p>
+          </ScanFrame>
         </Card>
         <Card variant="raised" padding="none">
           <EmptyState

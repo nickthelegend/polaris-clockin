@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, toast } from "@polaris/ui";
+import { Button, IconDisc, toast } from "@polaris/ui";
 import { Copy, Smartphone } from "lucide-react";
 import { useHref } from "@/lib/browser";
 import { QrCode } from "./qr";
@@ -41,9 +41,7 @@ export function OpenOnPhone({ reason = "no-webauthn", compact = false }: { reaso
   return (
     <div className="flex flex-col items-center gap-3 text-center font-satoshi">
       {!compact ? (
-        <span className="grid size-14 place-items-center rounded-full bg-ui-surface-2">
-          <Smartphone aria-hidden size={26} strokeWidth={1.75} />
-        </span>
+        <IconDisc size="md" icon={<Smartphone />} />
       ) : null}
       <h3 className="text-[19px] font-medium tracking-[-0.015em]">{copy.title}</h3>
       <p className="max-w-[34ch] text-[14px] leading-[1.45] text-ui-muted">{copy.body}</p>

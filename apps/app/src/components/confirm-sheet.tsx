@@ -1,6 +1,6 @@
 "use client";
 
-import { BottomSheet, Button, Sheet } from "@polaris/ui";
+import { BottomSheet, Button, IconDisc, Sheet } from "@polaris/ui";
 import { AlertCircle, Check, Mail, ScanFace } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { LocalAccount } from "viem";
@@ -143,13 +143,7 @@ export function ConfirmSheet({
           <OpenOnPhone reason={faceBlocked} compact />
         ) : (
           <>
-            <span className="grid size-16 place-items-center rounded-full bg-ui-surface-2">
-              {email ? (
-                <Check aria-hidden size={28} strokeWidth={1.75} />
-              ) : (
-                <ScanFace aria-hidden size={30} strokeWidth={1.5} />
-              )}
-            </span>
+            <IconDisc icon={email ? <Check /> : <ScanFace size={30} strokeWidth={1.5} />} />
             <div>
               <h2 className="text-[20px] leading-tight font-medium tracking-[-0.02em]">{title}</h2>
               <div className="mx-auto mt-1.5 max-w-[34ch] text-[15px] leading-[1.45] text-ui-muted">{summary}</div>

@@ -56,6 +56,12 @@ export type SegmentedControlProps<T extends string = string> = Omit<HTMLAttribut
   shape?: "rounded" | "pill";
   /** Stretch the segments to the container. */
   block?: boolean;
+  /**
+   * `text` (the default) or `icon`: square, icon-only segments on a dark glass
+   * track, each option's `label` read out instead of shown. Ref B's line /
+   * candles toggle on a chart card.
+   */
+  variant?: "text" | "icon";
   /** Required when there is no visible label. */
   "aria-label"?: string;
 };
@@ -76,6 +82,7 @@ export function SegmentedControl<T extends string = string>({
   size = "md",
   shape = "rounded",
   block = false,
+  variant = "text",
   className,
   ...props
 }: SegmentedControlProps<T>) {
@@ -89,8 +96,19 @@ export function SegmentedControl<T extends string = string>({
   const reduced = useReducedMotion();
   const enabled = options.filter((o) => !o.disabled).map((o) => o.value);
 
-  const h = size === "sm" ? "h-8 text-[13px] px-3" : size === "lg" ? "h-11 text-[16px] px-5" : "h-9 text-[15px] px-4";
-  const track = shape === "pill" ? "rounded-full" : size === "sm" ? "rounded-[10px]" : "rounded-[12px]";
+  const icons = variant === "icon";
+  const h = icons
+    ? size === "sm"
+      ? "size-8"
+      : size === "lg"
+        ? "size-11"
+        : "size-9"
+    : size === "sm"
+      ? "h-8 text-[13px] px-3"
+      : size === "lg"
+        ? "h-11 text-[16px] px-5"
+        : "h-9 text-[15px] px-4";
+  const track = shape === "pill" ? "rounded-full" : icons ? "rounded-[14px]" : size === "sm" ? "rounded-[10px]" : "rounded-[12px]";
   const thumb = shape === "pill" ? "rounded-full" : size === "sm" ? "rounded-[8px]" : "rounded-[10px]";
 
   return (
@@ -98,7 +116,8 @@ export function SegmentedControl<T extends string = string>({
       ref={ref}
       role="radiogroup"
       className={cn(
-        "relative inline-flex items-center gap-0.5 bg-ui-surface-3 p-[3px] font-satoshi",
+        "relative inline-flex items-center font-satoshi",
+        icons ? "gap-1 bg-black/15 p-1" : "gap-0.5 bg-ui-surface-3 p-[3px]",
         track,
         block && "flex w-full",
         className,
@@ -116,6 +135,8 @@ export function SegmentedControl<T extends string = string>({
             aria-checked={active}
             disabled={o.disabled}
             tabIndex={active ? 0 : -1}
+            aria-label={icons && typeof o.label === "string" ? o.label : undefined}
+            title={icons && typeof o.label === "string" ? o.label : undefined}
             data-roving=""
             onClick={() => setCurrent(o.value)}
             className={cn(
@@ -123,7 +144,7 @@ export function SegmentedControl<T extends string = string>({
               h,
               thumb,
               block && "flex-1",
-              active ? "text-[#13141f]" : "text-ui-text hover:opacity-80",
+              active ? "text-[#13141f]" : icons ? "text-white hover:bg-white/10" : "text-ui-text hover:opacity-80",
             )}
           >
             {active ? (
@@ -133,10 +154,17 @@ export function SegmentedControl<T extends string = string>({
                 className={cn("absolute inset-0 bg-white shadow-[0_1px_3px_rgb(19_20_31/0.12)]", thumb)}
               />
             ) : null}
-            <span className="relative inline-flex items-center gap-1.5">
-              {o.icon ? <IconSlot size={16}>{o.icon}</IconSlot> : null}
-              {o.label}
-            </span>
+            {icons ? (
+              <span className="relative inline-flex">
+                {o.icon ? <IconSlot size={18}>{o.icon}</IconSlot> : null}
+                {typeof o.label === "string" ? null : <span className="sr-only">{o.label}</span>}
+              </span>
+            ) : (
+              <span className="relative inline-flex items-center gap-1.5">
+                {o.icon ? <IconSlot size={16}>{o.icon}</IconSlot> : null}
+                {o.label}
+              </span>
+            )}
           </button>
         );
       })}

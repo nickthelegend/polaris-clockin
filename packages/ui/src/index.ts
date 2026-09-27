@@ -24,8 +24,8 @@ export { Money } from "./primitives/Money";
 export type { MoneyProps } from "./primitives/Money";
 export { Input, Textarea, Select, Toggle } from "./primitives/Field";
 export type { InputProps, TextareaProps, SelectProps, SelectOption, ToggleProps } from "./primitives/Field";
-export { Skeleton, SkeletonText, EmptyState } from "./primitives/Feedback";
-export type { SkeletonProps, EmptyStateProps } from "./primitives/Feedback";
+export { Skeleton, SkeletonText, EmptyState, IconDisc } from "./primitives/Feedback";
+export type { SkeletonProps, EmptyStateProps, IconDiscProps } from "./primitives/Feedback";
 export { Toaster, toast } from "./primitives/Toast";
 export type { ToastInput, ToastTone } from "./primitives/Toast";
 export { Table, CellStack } from "./primitives/Table";
@@ -37,6 +37,8 @@ export { SuccessCheck } from "./primitives/SuccessCheck";
 export type { SuccessCheckProps } from "./primitives/SuccessCheck";
 export { PageDots } from "./primitives/PageDots";
 export type { PageDotsProps } from "./primitives/PageDots";
+export { ScanFrame } from "./primitives/ScanFrame";
+export type { ScanFrameProps } from "./primitives/ScanFrame";
 
 // Composites
 export { StatCard } from "./composites/StatCard";
