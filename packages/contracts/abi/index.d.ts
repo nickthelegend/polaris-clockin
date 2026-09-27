@@ -2728,6 +2728,17 @@ export declare const polarisPaymentsAbi: readonly [
   {
     readonly "inputs": readonly [
       {
+        readonly "internalType": "bytes32";
+        readonly "name": "paymentId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "OrderAlreadySettled";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
         readonly "internalType": "address";
         readonly "name": "owner";
         readonly "type": "address";
@@ -3571,6 +3582,19 @@ export declare const polarisPaymentsAbi: readonly [
     readonly "type": "function";
   },
   {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "paymentId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "markSettledByCheckout";
+    readonly "outputs": readonly [];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
     readonly "inputs": readonly [];
     readonly "name": "minPeriod";
     readonly "outputs": readonly [
@@ -3957,6 +3981,25 @@ export declare const polarisPaymentsAbi: readonly [
     readonly "name": "setTreasury";
     readonly "outputs": readonly [];
     readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "settledByCheckout";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bool";
+        readonly "name": "";
+        readonly "type": "bool";
+      }
+    ];
+    readonly "stateMutability": "view";
     readonly "type": "function";
   },
   {

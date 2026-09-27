@@ -94,7 +94,13 @@ SubscribeIntent(address buyer,address merchant,uint256 planId,uint256 pricePerPe
 at most `MAX_SIGNATURE_WINDOW` (1 hour) ahead of the block. The order key is
 `keccak256(abi.encodePacked(merchant, orderId))`, identical to the PolarisPayments
 payment id; an order settles once, in one mode, at its quoted price if
-`PolarisPayments.quoteOrder` pinned one.
+`PolarisPayments.quoteOrder` pinned one. `openPlan` and `subscribe` record the
+order on PolarisPayments (`settledByCheckout(orderKey)`), which then refuses
+every payment on it with `OrderAlreadySettled(paymentId)`: a Pay now
+authorization the buyer signed before choosing Pay in 4 or Subscribe can't be
+redeemed on top of the plan, whether it is sent to the checkout or straight to
+PolarisPayments, and whichever checkout is appointed later. The checkout must be
+PolarisPayments' appointed `checkout` for Pay in 4 as well as Subscribe.
 
 | Function | Buyer signs | Notes |
 |---|---|---|

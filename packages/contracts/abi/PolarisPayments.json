@@ -95,6 +95,17 @@
   {
     "inputs": [
       {
+        "internalType": "bytes32",
+        "name": "paymentId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "OrderAlreadySettled",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "owner",
         "type": "address"
@@ -938,6 +949,19 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "paymentId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "markSettledByCheckout",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "minPeriod",
     "outputs": [
@@ -1324,6 +1348,25 @@
     "name": "setTreasury",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "settledByCheckout",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

@@ -47,6 +47,12 @@ import {ScoreManager} from "./ScoreManager.sol";
  *      twice for one purchase, so each mode refuses an order the others (or
  *      PolarisPayments directly) already settled, and every mode honours a
  *      price the session service pinned with `PolarisPayments.quoteOrder`.
+ *      Pay in 4 and Subscribe also record the order on PolarisPayments
+ *      (`markSettledByCheckout`), which then refuses any payment on it, so a
+ *      Pay now authorization the buyer signed first and never used can't be
+ *      redeemed there on top of the plan. That is why this contract must be
+ *      PolarisPayments' appointed `checkout` for Pay in 4 as well as for
+ *      Subscribe.
  *
  *      Why Pay in 4 takes a permit and not an ERC-3009 authorization: nothing
  *      moves at origination. The merchant is paid from the pool, and the
@@ -266,7 +272,10 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
      *      The same authorization can also be submitted to PolarisPayments
      *      directly; the money moves the same way and only CheckoutPaid is
      *      missing. Either way the order is then settled, and `openPlan` and
-     *      `subscribe` refuse it.
+     *      `subscribe` refuse it. The reverse holds on both paths: once an
+     *      order is a plan or a subscription, PolarisPayments refuses every
+     *      payment on it (`settledByCheckout`), so an authorization the buyer
+     *      signed before choosing another mode can't charge them again.
      */
     function pay(
         address buyer,
@@ -323,6 +332,7 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
 
         bytes32 orderKey = _claimOrder(intent.merchant, intent.orderId, intent.principal);
         _record(orderKey, OrderKind.PayIn4, intent.buyer, intent.principal);
+        payments.markSettledByCheckout(orderKey);
         _applyPermit(intent.buyer, address(loanEngine), permit);
 
         loanId = loanEngine.createLoan(
@@ -375,6 +385,7 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
 
         bytes32 orderKey = _claimOrder(intent.merchant, intent.orderId, intent.pricePerPeriod);
         _record(orderKey, OrderKind.Subscription, intent.buyer, intent.pricePerPeriod);
+        payments.markSettledByCheckout(orderKey);
         _applyPermit(intent.buyer, address(payments), permit);
 
         subId = payments.subscribeFor(intent.buyer, intent.planId);
@@ -485,7 +496,9 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
 
     /// An order settles once, in one mode, at its quoted price if it has one.
     /// PolarisPayments is read too, so an order paid there directly (by the
-    /// same authorization, or by anyone with `pay`) cannot also become a plan.
+    /// same authorization, or by anyone with `pay`) cannot also become a plan,
+    /// and an order a previous checkout settled as a plan or a subscription
+    /// cannot be settled again by this one.
     function _claimOrder(address merchant, string calldata orderId, uint256 amount)
         private
         view
@@ -495,7 +508,7 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
         orderKey = orderKeyOf(merchant, orderId);
         if (orders[orderKey].kind != OrderKind.None) revert OrderAlreadySettled(orderKey);
         (, , , uint64 paidAt) = payments.payments(orderKey);
-        if (paidAt != 0) revert OrderAlreadySettled(orderKey);
+        if (paidAt != 0 || payments.settledByCheckout(orderKey)) revert OrderAlreadySettled(orderKey);
         uint256 quoted = payments.quotedAmount(merchant, orderKey);
         if (quoted != 0 && quoted != amount) revert WrongAmount(quoted, amount);
     }

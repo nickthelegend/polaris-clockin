@@ -446,6 +446,114 @@ describe("PolarisCheckout", () => {
       await expect(relayPay(s.buyer.address, s.merchant.address, "INV-3", c)).to.be.revertedWithCustomError(s.checkout, "OrderAlreadySettled");
     });
 
+    it("a Pay now authorization left over from a timed-out relay cannot charge a buyer whose order became a plan", async () => {
+      // The buyer signs Pay now for INV-42; the relay times out and the
+      // authorization is never submitted. The buyer then chooses Pay in 4.
+      const a = await authorize(s.buyer, s.merchant.address, "INV-42", AUSD(200));
+      await (await openPlan(s.buyer, { orderId: "INV-42" })).tx;
+      const key = paymentId(s.merchant.address, "INV-42");
+      expect((await s.checkout.orderOf(s.merchant.address, "INV-42")).kind).to.equal(2n); // PayIn4
+      expect(await s.payments.settledByCheckout(key)).to.equal(true);
+
+      // A stranger submits the old authorization straight to PolarisPayments.
+      await expect(
+        s.payments
+          .connect(s.stranger)
+          .payWithAuthorization(s.buyer.address, s.merchant.address, AUSD(200), "INV-42", a.validAfter, a.validBefore, a.v, a.r, a.s)
+      )
+        .to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled")
+        .withArgs(key);
+      // Nor can anyone record a payment on it with `pay`, or re-price it.
+      await s.ausd.mint(s.stranger.address, AUSD(200));
+      await s.ausd.connect(s.stranger).approve(s.payments, AUSD(200));
+      await expect(s.payments.connect(s.stranger).pay(s.merchant.address, AUSD(200), "INV-42"))
+        .to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled")
+        .withArgs(key);
+      await expect(s.payments.connect(s.merchant).quoteOrder(s.merchant.address, key, AUSD(1)))
+        .to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled")
+        .withArgs(key);
+
+      expect(await s.ausd.balanceOf(s.buyer.address)).to.equal(AUSD(2_000), "charged only by the plan's instalments");
+      expect((await s.payments.paymentFor(s.merchant.address, "INV-42")).paidAt).to.equal(0n);
+    });
+
+    it("a leftover Pay now authorization cannot charge a buyer whose order became a subscription", async () => {
+      await s.payments.connect(s.merchant).createPlan(AUSD(10), MONTH, "Pro");
+      const planId = await s.payments.planCount();
+      const a = await authorize(s.buyer, s.merchant.address, "SUB-7", AUSD(10));
+      const intent = {
+        buyer: s.buyer.address,
+        merchant: s.merchant.address,
+        planId,
+        pricePerPeriod: AUSD(10),
+        periodSeconds: BigInt(MONTH),
+        orderId: "SUB-7",
+        nonce: await s.checkout.nonces(s.buyer.address),
+        deadline: (await now()) + 600n,
+      };
+      const sig = (await signTyped(s.buyer, s.checkout, { SubscribeIntent: TYPES.PolarisCheckout.SubscribeIntent }, intent)).signature;
+      await s.checkout.connect(s.relayer).subscribe(intent, sig, await permitTo(s.buyer, s.payments, AUSD(120)));
+      const afterFirstPeriod = await s.ausd.balanceOf(s.buyer.address);
+
+      await expect(
+        s.payments
+          .connect(s.stranger)
+          .payWithAuthorization(s.buyer.address, s.merchant.address, AUSD(10), "SUB-7", a.validAfter, a.validBefore, a.v, a.r, a.s)
+      ).to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled");
+      expect(await s.ausd.balanceOf(s.buyer.address)).to.equal(afterFirstPeriod);
+    });
+
+    it("the record of a plan's order lives on PolarisPayments, so it outlasts replacing or switching off the checkout", async () => {
+      const a = await authorize(s.buyer, s.merchant.address, "INV-9", AUSD(200));
+      const { intent } = await openPlan(s.buyer, { orderId: "INV-9" });
+      const key = paymentId(s.merchant.address, "INV-9");
+      const submit = () =>
+        s.payments
+          .connect(s.stranger)
+          .payWithAuthorization(s.buyer.address, s.merchant.address, AUSD(200), "INV-9", a.validAfter, a.validBefore, a.v, a.r, a.s);
+
+      // A new checkout sees the order settled, though its own book is empty.
+      const next = await (await ethers.getContractFactory("PolarisCheckout")).deploy(s.owner.address, s.engine, s.payments, s.scores);
+      await s.payments.setCheckout(next);
+      await s.engine.setOriginator(next, true);
+      const again = { ...(await planIntent({ orderId: intent.orderId })), nonce: await next.nonces(s.buyer.address) };
+      const againSig = (await signTyped(s.buyer, next, { PlanIntent: TYPES.PolarisCheckout.PlanIntent }, again)).signature;
+      await expect(next.connect(s.relayer).openPlan(again, againSig, ZERO_PERMIT))
+        .to.be.revertedWithCustomError(next, "OrderAlreadySettled")
+        .withArgs(key);
+      await expect(submit()).to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled");
+
+      // Switching relayed checkouts off does not reopen it either.
+      await s.payments.setCheckout(ethers.ZeroAddress);
+      await expect(submit()).to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled");
+      expect(await s.ausd.balanceOf(s.buyer.address)).to.equal(AUSD(2_000));
+    });
+
+    it("only the appointed checkout can mark an order settled; a replaced one can no longer open plans", async () => {
+      const key = paymentId(s.merchant.address, "INV-X");
+      for (const who of [s.stranger, s.relayer, s.owner, s.merchant]) {
+        await expect(s.payments.connect(who).markSettledByCheckout(key)).to.be.revertedWithCustomError(s.payments, "NotCheckout");
+      }
+      // An order already paid cannot be marked, so a plan can never be opened on it.
+      const a = await authorize(s.buyer, s.merchant.address, "INV-X", AUSD(200));
+      await s.payments
+        .connect(s.relayer)
+        .payWithAuthorization(s.buyer.address, s.merchant.address, AUSD(200), "INV-X", a.validAfter, a.validBefore, a.v, a.r, a.s);
+      const checkoutAddr = await s.checkout.getAddress();
+      await ethers.provider.send("hardhat_impersonateAccount", [checkoutAddr]);
+      await ethers.provider.send("hardhat_setBalance", [checkoutAddr, "0xDE0B6B3A7640000"]);
+      const asCheckout = await ethers.getSigner(checkoutAddr);
+      await expect(s.payments.connect(asCheckout).markSettledByCheckout(key))
+        .to.be.revertedWithCustomError(s.payments, "OrderAlreadySettled")
+        .withArgs(key);
+      await ethers.provider.send("hardhat_stopImpersonatingAccount", [checkoutAddr]);
+
+      // Once PolarisPayments no longer names it, the old checkout's plans are refused.
+      await s.payments.setCheckout(ethers.ZeroAddress);
+      await expect((await openPlan()).tx).to.be.revertedWithCustomError(s.payments, "NotCheckout");
+      expect(await s.engine.loanCount()).to.equal(0n);
+    });
+
     it("a quoted order can only be paid now at its price", async () => {
       await s.payments.connect(s.merchant).quoteOrder(s.merchant.address, paymentId(s.merchant.address, "INV-Q"), AUSD(80));
       const a = await authorize(s.buyer, s.merchant.address, "INV-Q", AUSD(1));

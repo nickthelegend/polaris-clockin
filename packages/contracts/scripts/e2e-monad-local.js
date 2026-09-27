@@ -185,6 +185,18 @@ async function main() {
     deadline: t + 600n,
   };
   const intentSig = await buyer.signTypedData(checkoutDomain, { PlanIntent: TYPES.PolarisCheckout.PlanIntent }, intent);
+  // The buyer first signed Pay now for this same order (a relay that timed
+  // out, say) and then chose Pay in 4. That authorization stays signed.
+  const leftover = Signature.from(
+    await buyer.signTypedData(tokenDomain, { ReceiveWithAuthorization: TYPES.Stablecoin.ReceiveWithAuthorization }, {
+      from: buyer.address,
+      to: payments.target,
+      value: principal,
+      validAfter: 0,
+      validBefore: t + 1800n,
+      nonce: await checkout.orderKeyOf(merchant, planOrder),
+    })
+  );
   const beforePlan = await token.balanceOf(merchant);
   const planReceipt = await tx.send(checkout, "openPlan", [
     intent,
@@ -194,6 +206,14 @@ async function main() {
   await record(3, `PolarisCheckout.openPlan ${$(principal)} in 4`, planReceipt);
   const [opened] = events(planReceipt, checkout, "PlanOpened");
   const loanId = opened.args.loanId;
+  const refused = await payments
+    .connect(relayer)
+    .payWithAuthorization.staticCall(buyer.address, merchant, principal, planOrder, 0, t + 1800n, leftover.v, leftover.r, leftover.s)
+    .then(() => "accepted", (e) => e.revert?.name ?? e.shortMessage ?? String(e));
+  if (refused !== "OrderAlreadySettled") {
+    throw new Error(`a Pay now authorization for the plan's order could still charge the buyer: ${refused}`);
+  }
+  console.log("     the Pay now authorization signed for the same order is refused: OrderAlreadySettled");
   console.log(
     `     loan #${loanId}: merchant +${$((await token.balanceOf(merchant)) - beforePlan)} now, ` +
       `buyer owes 4 x ${$(quote.installmentAmount)} (${$(quote.interest)} interest), first due in ${interval}s\n`
