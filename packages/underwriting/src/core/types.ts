@@ -131,9 +131,12 @@ export interface CreditReason {
   source: string;
 }
 
-/** One way the facts fall short of the evidence floor (`ATTEST_MINIMUM`, attest.ts). */
+/**
+ * One way out of a thin file (attest.ts): reaching any one `need` clears the
+ * gate, so a thin file lists every way and the buyer needs only one.
+ */
 export interface AttestGap {
-  fact: "walletAgeDays" | "txCount";
+  fact: "walletAgeDays" | "txCount" | "defiTenureDays";
   /** What the facts show. */
   have: number;
   /** What the floor asks for. */
@@ -186,8 +189,9 @@ export interface CreditDecision {
   /**
    * Set when the facts are too thin for the DON to attest (attest.ts): no
    * report is sent and the account stays secured-only, so `limit` is 0 and
-   * collateral counts at face value. Each gap says what is short and by how
-   * much. Null when the facts clear the floor.
+   * collateral counts at face value. Each entry is one way out, with what the
+   * facts show and what it needs; reaching any one clears the gate. Null when
+   * the facts may be attested.
    */
   thinFile: AttestGap[] | null;
   /** One sentence for the top of the screen. */

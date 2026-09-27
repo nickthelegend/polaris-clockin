@@ -104,26 +104,25 @@ export interface DecideInput {
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-/** "Pay in 4 opens after 30 days of history and 5 payments or transfers." */
+/** "Pay in 4 opens after 30 days of history, or after 25 payments and transfers." */
 function thinReason(gaps: readonly AttestGap[]): string {
   const age = gaps.find((g) => g.fact === "walletAgeDays");
   const tx = gaps.find((g) => g.fact === "txCount");
   const parts = [
-    age ? `${plural(age.need, "day", "days")} of history` : null,
-    tx ? plural(tx.need, "payment or transfer", "payments or transfers") : null,
+    age ? `after ${plural(age.need, "day", "days")} of history` : null,
+    tx ? `after ${plural(tx.need, "payment or transfer", "payments and transfers")}` : null,
   ].filter((p): p is string => p !== null);
-  return `Pay in 4 opens after ${parts.join(" and ")}.`;
+  return parts.length > 0 ? `Pay in 4 opens ${parts.join(", or ")}.` : "Pay in 4 opens once there's a little more history here.";
 }
 
-/** "Keep using Polaris: Pay in 4 opens in 27 days, once you've made 3 more payments or transfers." */
+/** "Keep using Polaris: Pay in 4 opens in 27 days, or sooner after 23 more payments and transfers." */
 function buildHistoryStep(gaps: readonly AttestGap[]): NextStep {
   const age = gaps.find((g) => g.fact === "walletAgeDays");
   const tx = gaps.find((g) => g.fact === "txCount");
-  const parts = [
-    age ? `in ${plural(age.need - age.have, "day", "days")}` : null,
-    tx ? `once you've made ${plural(tx.need - tx.have, "more payment or transfer", "more payments or transfers")}` : null,
-  ].filter((p): p is string => p !== null);
-  return { id: "build-history", label: `Keep using Polaris: Pay in 4 opens ${parts.join(", ")}.` };
+  const days = age ? `in ${plural(age.need - age.have, "day", "days")}` : null;
+  const sends = tx ? `after ${plural(tx.need - tx.have, "more payment or transfer", "more payments and transfers")}` : null;
+  const when = days && sends ? `${days}, or sooner ${sends}` : (days ?? sends ?? "with a little more history");
+  return { id: "build-history", label: `Keep using Polaris: Pay in 4 opens ${when}.` };
 }
 
 export function decide(input: DecideInput): CreditDecision {
@@ -131,8 +130,8 @@ export function decide(input: DecideInput): CreditDecision {
   const activeDebt = input.activeDebt ?? 0n;
   const boost = input.collateralBoost ?? 0n;
   const gaps = input.thinFile ?? [];
-  // A thin file is never attested, so it has no unsecured line of its own.
-  const thin = gaps.length > 0;
+  // A thin file is never attested, so it has no unsecured line of its own. A decline is attested, thin or not.
+  const thin = gaps.length > 0 && !declined;
   const securedOnly = declined || thin;
   const limit = thin ? 0n : limitFor(score, declined);
   const lineWithBoost = limit + boost;

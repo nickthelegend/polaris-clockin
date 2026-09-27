@@ -55,8 +55,8 @@ data. Here, Nansen's data decides how much credit a person gets:
 
 Take Nansen away and a linked wallet cannot be underwritten: its risk checks
 cannot run, so it is left out and the buyer is judged on their Polaris
-account alone, which for a new account is below the evidence floor (no line
-until there is history). Every
+account alone, which for a new account is a thin file (no line until there
+is history). Every
 reason line carries `provider: "nansen"` where Nansen backs it, so the app can
 credit it.
 
@@ -69,7 +69,7 @@ credit it.
 | `src/client/` | The typed client the app's server uses to call the gateway (`@polarispay/underwriting/client`) |
 | `fixtures/` | Synthesized provider responses in the documented shapes, clearly labelled ([README](fixtures/README.md)) |
 | `scripts/` | `synthesize-fixtures.ts` writes the fixtures; `record.ts` records real ones once keys exist |
-| `test/` | 260 tests: the mirror, the encoding, derivation, reasons, parsers, HTTP, clients, personas, failures, the recipe in both runtimes, the service and the API. `packages/contracts/test/metropolis/UnderwritingPackage.test.js` holds the package to the deployed contracts |
+| `test/` | 261 tests: the mirror, the encoding, derivation, reasons, parsers, HTTP, clients, personas, failures, the recipe in both runtimes, the service and the API. `packages/contracts/test/metropolis/UnderwritingPackage.test.js` holds the package to the deployed contracts |
 
 `tsconfig.core.json` typechecks `src/core` with no `node` or `dom` types, and
 `test/core-purity.test.ts` rejects `Date.now`, `Math.random`, `Intl`, timers
@@ -189,11 +189,11 @@ from repaying (+12 per on-time week).
 - Cold start (plan §5.5): at the $200 floor a $200 purchase plus interest does
   not fit; the decision says by how much and how much collateral would cover
   it.
-- `thinFile`: the evidence floor, below.
+- `thinFile`: the thin-file gate, below.
 - `nextSteps`: link a wallet, keep using Polaris (`build-history`), repay on
   time, set money aside, or retry.
 
-### The evidence floor: thin files are not attested
+### The thin-file gate: an empty account is never attested
 
 ScoreManager opens every underwritten wallet at the 520 floor, a $200
 unsecured line, whatever the facts say. So a report for an account with no
@@ -202,33 +202,35 @@ each and draw about $196 from every one (security review, "sybil credit
 farming", proven on a Hardhat chain). The sybil and one-link checks only see a
 linked wallet, so they do not help an account that brings none.
 
-`underwrite()` therefore attests only facts that clear `ATTEST_MINIMUM`:
-**30 days of history and 5 payments or transfers**, counted across the account
-and a linked wallet that passed its checks (`attestGaps`, `isAttestable` in
-`core/attest.ts`). Below it the outcome is `final: true, attest: false,
-report: null`, and the decision is secured-only, exactly as ScoreManager treats
-a wallet never underwritten while `requireUnderwriting` is on: `limit` 0,
-collateral at face value, `thinFile` listing each gap (`{ fact, have, need }`),
-and the next steps "Open a line now: confirm with the wallet you already use"
-and "Keep using Polaris: Pay in 4 opens in 27 days, once you've made 3 more
-payments or transfers". No report also means the one underwriting an account
-gets is kept for when it has the history.
+`underwrite()` therefore attests only facts that show something a brand-new
+account cannot: at least one point from time or identity, in ScoreManager's
+own steps. Any one of **30 days of history, 25 payments and transfers, 30
+days with savings or trading apps, or a history wallet first funded from an
+exchange**, counted across the account and a linked wallet that passed its
+checks (`isAttestable`, `attestGaps` and `ATTEST_MINIMUM` in
+`core/attest.ts`). Dollars do not count: one balance can be walked through
+account after account inside the 15 minutes a report is good for. A declined
+file is attested even when thin, so the decline sticks and the wallet can
+never back another account.
 
-Age and activity, not balance: a balance is a snapshot one person can move
-through every account in turn; a month cannot be borrowed. A real linked
-history (mainnet age and gas, Nansen's cluster check, one wallet per account
-on chain) clears the floor at once. `explainOnChainFacts` does not apply the
-floor: facts already attested are explained as the chain scored them.
+Below the gate the outcome is `final: true, attest: false, report: null`,
+and the decision is secured-only, exactly as ScoreManager treats a wallet
+never underwritten while `requireUnderwriting` is on: `limit` 0, collateral
+at face value, `thinFile` listing each way out (`{ fact, have, need }`; any
+one clears it), and the next steps "Open a line now: confirm with the wallet
+you already use" and "Keep using Polaris: Pay in 4 opens in 27 days, or
+sooner after 23 more payments and transfers". No report also keeps the one
+underwriting an account gets for when it has the history.
+`explainOnChainFacts` does not apply the gate: facts already attested are
+explained as the chain scored them.
 
-What the other layers still need to do (tracked in the branch notes): the CRE
-underwriting workflow must call `isAttestable(facts)` before it signs (it
-builds its own facts today), `ScoreManager.underwrite` should refuse thin facts
-with the same numbers so a stray report cannot open the floor, and the API
-should gate merchant auto-activation and rate-limit underwriting per verified
-person.
-- `reasons`: one line per fact with its points (they add up to the score) and
-  the provider behind it. No line uses a word from the plan's "Words the buyer
-  never sees"; a test enforces it.
+The CRE underwriting workflow applies the same gate, point for point
+(`workflows/src/underwriting/thin.ts` on `metropolis/cre`; a seeded sweep in
+`test/facts.test.ts` holds the two together), so the app's preview never
+promises a line the DON will not attest. Still open elsewhere:
+`ScoreManager.underwrite` should refuse thin facts itself so a stray report
+cannot open the floor, and the API should gate merchant auto-activation and
+rate-limit underwriting per verified person.
 
 ## API
 
@@ -246,7 +248,7 @@ underwrite(input: {
 deriveFacts({ account, linked?, observedAt, options? }): Derivation
 scoreFromFacts(f): { score, declined }            scoreBreakdown(f): ScoreBreakdown
 decide({ score, declined, declineReason?, activeDebt?, purchase?, collateralBoost?, reasons?, hasLinked?, pending?, thinFile? }): CreditDecision
-attestGaps(facts): AttestGap[]    isAttestable(facts): boolean    ATTEST_MINIMUM = { walletAgeDays: 30, txCount: 5 }
+isAttestable(facts): boolean    attestGaps(facts): AttestGap[]    ATTEST_MINIMUM = { walletAgeDays: 30, txCount: 25, defiTenureDays: 30 }  // any one, or exchange funding
 explainFacts(facts, breakdown, context?): CreditReason[]    poweredBy(reasons): ProviderCredit[]    PROVIDER_NAMES
 explainOnChainFacts(facts, { activeDebt?, purchase?, hasLinked? }): { breakdown, decision }
 quotePlan(principal, installments = 4, intervalSeconds = 604800, aprBps = 1000): PlanQuote
@@ -360,7 +362,7 @@ const linked = wallet ? runSync(linkedRecipe(wallet, { now }), send) : null;
 // ...consensus on the evidence (identical aggregation: the cache makes every node's replies the same)...
 const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked?.evidence, linkVerified });
 if (!out.final) throw new Error(`not final: ${out.missing.join(", ")}`); // no report; the app retries
-if (!out.attest) return { status: "thin", gaps: out.decision.thinFile }; // below the evidence floor: no report, no retry
+if (!out.attest) return { status: "thin", gaps: out.decision.thinFile }; // a thin file: no report, no retry
 runtime.report(prepareReportRequest(out.report));                       // abi.encode(uint8 2, [(user, linkedWallet, Facts)])
 ```
 

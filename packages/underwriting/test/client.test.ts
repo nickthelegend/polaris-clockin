@@ -86,7 +86,8 @@ describe("the underwriting client", () => {
     assert.equal(a.decision.limit, "0");
     assert.deepEqual(a.decision.thinFile, [
       { fact: "walletAgeDays", have: 3, need: 30 },
-      { fact: "txCount", have: 2, need: 5 },
+      { fact: "txCount", have: 2, need: 25 },
+      { fact: "defiTenureDays", have: 0, need: 30 },
     ]);
   });
 

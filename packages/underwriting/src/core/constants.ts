@@ -20,16 +20,19 @@ export const FACTS_VERSION = 1;
 export const MODEL_VERSION = 2;
 
 /**
- * The evidence floor: the least the facts must show before the DON attests
- * them (attest.ts). Below it no report is sent and the account stays
- * secured-only, because ScoreManager would open even an empty account at the
- * $200 floor.
+ * The thin-file gate (attest.ts): the DON attests facts only when they reach
+ * at least ONE of these (each is where its ScoreManager term earns its first
+ * point), or were first funded from an exchange, or decline. Below all of
+ * them no report is sent and the account stays secured-only, because
+ * ScoreManager would open even an empty account at the $200 floor.
  */
 export const ATTEST_MINIMUM = {
   /** Days since the oldest sign of life across the subjects counted. */
   walletAgeDays: 30,
   /** Payments and transfers sent across the subjects counted. */
-  txCount: 5,
+  txCount: 25,
+  /** Days since the first savings, lending or trading action. */
+  defiTenureDays: 30,
 } as const;
 
 /** ScoreManager constants. */

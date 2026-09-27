@@ -48,7 +48,7 @@ a failure (`fixture_missing`), never an empty answer.
 
 | Persona | Address | What it exercises |
 |---|---|---|
-| fresh-account | `0xacc0…0001` | Thin file: a three-day-old Polaris account, $37.60; below the evidence floor, so never attested |
+| fresh-account | `0xacc0…0001` | Thin file: a three-day-old Polaris account, $37.60; the DON never attests it |
 | regular-account | `0xacc0…0002` | 120 transfers, more than a page, so it is dated with probes |
 | zerion-blind-account | `0xacc0…0003` | No Zerion record; Etherscan token transfers date it |
 | strong | `0xb0b0…0001` | Coinbase-funded 3+ years ago, 900 transactions, $4,200, trading 2 years: score 692, $1,000 |

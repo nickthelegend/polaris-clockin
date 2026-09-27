@@ -56,7 +56,8 @@ describe("the underwriting API", () => {
     assert.equal(body.decision.payIn4.allowed, false);
     assert.deepEqual(body.decision.thinFile, [
       { fact: "walletAgeDays", have: 3, need: 30 },
-      { fact: "txCount", have: 2, need: 5 },
+      { fact: "txCount", have: 2, need: 25 },
+      { fact: "defiTenureDays", have: 0, need: 30 },
     ]);
   });
 

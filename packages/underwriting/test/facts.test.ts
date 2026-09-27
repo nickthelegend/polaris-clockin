@@ -6,6 +6,7 @@ import { ATTEST_MINIMUM, DAY_SECONDS, FACTS_VERSION, U16_MAX, U32_MAX, U64_MAX }
 import { decide } from "../src/core/decision.ts";
 import { accountRules, evidence } from "../src/core/evidence.ts";
 import { deriveFacts } from "../src/core/facts.ts";
+import { scoreBreakdown } from "../src/core/score.ts";
 import type { Address, Funder, SubjectEvidence } from "../src/core/types.ts";
 import { explainOnChainFacts, underwrite } from "../src/core/underwrite.ts";
 
@@ -268,12 +269,23 @@ describe("underwrite: what may be reported", () => {
   });
 });
 
-describe("the evidence floor: a report for an empty account is a free $200 line, so thin files are not attested", () => {
+
+describe("the thin-file gate: a report for an empty account is a free $200 line, so thin files are not attested", () => {
   const empty = (): SubjectEvidence =>
     account({
       firstSeenAt: evidence.empty<number | null>(null, "zerion.transactions"),
       sentCount: evidence.ok(0, "zerion.transactions"),
       stableBalance: evidence.ok(0, "rpc.balance"),
+    });
+  const at = (age: number, sent: number, o: Partial<SubjectEvidence> = {}) =>
+    underwrite({
+      user: ACCOUNT,
+      observedAt: NOW,
+      account: account({
+        firstSeenAt: evidence.ok<number | null>(days(age), "zerion.transactions"),
+        sentCount: evidence.ok(sent, "zerion.transactions"),
+        ...o,
+      }),
     });
 
   it("the review's proof: an account with no history at all is final, but nothing is reported and no line opens", () => {
@@ -292,16 +304,17 @@ describe("the evidence floor: a report for an empty account is a free $200 line,
     assert.equal(out.decision.payIn4.maxPurchase, 0n);
     assert.deepEqual(out.decision.thinFile, [
       { fact: "walletAgeDays", have: 0, need: 30 },
-      { fact: "txCount", have: 0, need: 5 },
+      { fact: "txCount", have: 0, need: 25 },
+      { fact: "defiTenureDays", have: 0, need: 30 },
     ]);
-    assert.equal(out.decision.payIn4.reason, "Pay in 4 opens after 30 days of history and 5 payments or transfers.");
+    assert.equal(out.decision.payIn4.reason, "Pay in 4 opens after 30 days of history, or after 25 payments and transfers.");
     assert.equal(out.decision.headline, "Pay in 4 opens once there's a little more history here.");
     assert.equal(out.decision.nextTier, null, "no line, so repaying has nothing to raise");
     assert.deepEqual(
       out.decision.nextSteps.map((s) => [s.id, s.label]),
       [
         ["link-history", "Open a line now: confirm with the wallet you already use."],
-        ["build-history", "Keep using Polaris: Pay in 4 opens in 30 days, once you've made 5 more payments or transfers."],
+        ["build-history", "Keep using Polaris: Pay in 4 opens in 30 days, or sooner after 25 more payments and transfers."],
         ["secure", "Set money aside to pay in 4 against it."],
       ],
     );
@@ -313,42 +326,52 @@ describe("the evidence floor: a report for an empty account is a free $200 line,
     assert.equal(out.report, null);
     assert.equal(
       out.decision.nextSteps.find((s) => s.id === "build-history")?.label,
-      "Keep using Polaris: Pay in 4 opens in 27 days, once you've made 3 more payments or transfers.",
+      "Keep using Polaris: Pay in 4 opens in 27 days, or sooner after 23 more payments and transfers.",
     );
     // Secured-only, as ScoreManager treats a wallet not yet underwritten: collateral at face value.
     assert.equal(out.decision.nextSteps.find((s) => s.id === "secure")?.label, "Set aside $201.54 to pay in 4 for this purchase.");
   });
 
-  it("the floor is 30 days and 5 payments or transfers, both: one short of either is thin", () => {
-    const at = (age: number, sent: number) =>
-      underwrite({
-        user: ACCOUNT,
-        observedAt: NOW,
-        account: account({
-          firstSeenAt: evidence.ok<number | null>(days(age), "zerion.transactions"),
-          sentCount: evidence.ok(sent, "zerion.transactions"),
-        }),
-      });
-    assert.equal(at(30, 5).attest, true);
-    assert.match(at(30, 5).report ?? "", /^0x[0-9a-f]{832}$/);
-    assert.equal(at(30, 5).decision.limit, 200_000_000n);
-    assert.equal(at(30, 5).decision.thinFile, null);
-    assert.deepEqual(at(29, 5).decision.thinFile, [{ fact: "walletAgeDays", have: 29, need: 30 }]);
-    assert.deepEqual(at(30, 4).decision.thinFile, [{ fact: "txCount", have: 4, need: 5 }]);
-    assert.equal(at(29, 5).decision.payIn4.reason, "Pay in 4 opens after 30 days of history.");
-    assert.equal(at(30, 4).decision.payIn4.reason, "Pay in 4 opens after 5 payments or transfers.");
-    assert.equal(
-      at(29, 4).decision.nextSteps.find((s) => s.id === "build-history")?.label,
-      "Keep using Polaris: Pay in 4 opens in 1 day, once you've made 1 more payment or transfer.",
-    );
-    for (const thin of [at(29, 5), at(30, 4), at(0, 1_000), at(3_000, 0)]) {
-      assert.equal(thin.final, true);
-      assert.equal(thin.report, null);
-      assert.equal(thin.decision.limit, 0n);
+  it("any one point from time or identity clears it: 30 days, 25 payments and transfers, 30 days of trading, or exchange funding", () => {
+    for (const cleared of [
+      at(30, 0),
+      at(0, 25),
+      at(3, 2, { defiSince: evidence.ok<number | null>(days(30), "zerion.probe") }),
+    ]) {
+      assert.equal(cleared.attest, true);
+      assert.match(cleared.report ?? "", /^0x[0-9a-f]{832}$/);
+      assert.equal(cleared.decision.thinFile, null);
+      assert.equal(cleared.decision.limit, 200_000_000n);
     }
+    const exchange = underwrite({
+      user: ACCOUNT,
+      observedAt: NOW,
+      account: empty(),
+      linked: linked({ firstSeenAt: evidence.ok<number | null>(days(2), "nansen.first-funder"), sentCount: evidence.ok(1, "rpc.nonce"), defiSince: evidence.empty<number | null>(null, "zerion.probe") }, { ...coinbase, fundedAt: days(2) }),
+      linkVerified: true,
+    });
+    assert.equal(exchange.facts.exchangeFunded, true);
+    assert.equal(exchange.attest, true, "an exchange's identity checks stand behind a wallet it funded");
   });
 
-  it("a proven history clears the floor at once, even for a brand-new account", () => {
+  it("one short of every way is thin, and dollars do not count: a balance can be walked through account after account", () => {
+    const rich = at(29, 24, { stableBalance: evidence.ok(5_000_000_000, "rpc.balance") });
+    assert.equal(rich.breakdown.balance, 50);
+    assert.equal(rich.final, true);
+    assert.equal(rich.report, null);
+    assert.equal(rich.decision.limit, 0n);
+    assert.deepEqual(rich.decision.thinFile, [
+      { fact: "walletAgeDays", have: 29, need: 30 },
+      { fact: "txCount", have: 24, need: 25 },
+      { fact: "defiTenureDays", have: 0, need: 30 },
+    ]);
+    assert.equal(
+      rich.decision.nextSteps.find((s) => s.id === "build-history")?.label,
+      "Keep using Polaris: Pay in 4 opens in 1 day, or sooner after 1 more payment or transfer.",
+    );
+  });
+
+  it("a proven history clears it at once, even for a brand-new account", () => {
     const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linked: linked({}, coinbase), linkVerified: true });
     assert.equal(out.attest, true);
     assert.ok(out.report);
@@ -378,18 +401,21 @@ describe("the evidence floor: a report for an empty account is a free $200 line,
     assert.ok(!unproven.decision.nextSteps.some((s) => s.id === "link-history"), "confirming this wallet would not help");
   });
 
-  it("a thin file that declines is not attested either: the one underwriting is kept for when there is history", () => {
+  it("a thin file that declines is attested: the decline sticks, and the wallet can never back another account", () => {
     const risky = linked(
       {
         firstSeenAt: evidence.ok<number | null>(days(5), "nansen.first-funder"),
         sentCount: evidence.ok(1, "rpc.nonce"),
+        defiSince: evidence.empty<number | null>(null, "zerion.probe"),
         relatedWallets: evidence.ok(40, "nansen.related-wallets"),
       },
       { ...peer, fundedAt: days(5) },
     );
     const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linked: risky, linkVerified: true });
     assert.equal(out.breakdown.declined, true);
-    assert.equal(out.report, null);
+    assert.equal(out.attest, true);
+    assert.equal(decodeUnderwritingReport(out.report!).items[0]!.linkedWallet, WALLET.toLowerCase());
+    assert.equal(out.decision.thinFile, null);
     assert.equal(out.decision.headline, "We can't offer you credit right now.");
     assert.ok(!out.decision.nextSteps.some((s) => s.id === "build-history" || s.id === "link-history"));
   });
@@ -403,7 +429,7 @@ describe("the evidence floor: a report for an empty account is a free $200 line,
     assert.match(d.headline, /^You can pay in 4 for up to \$29\d\.\d\d\.$/);
   });
 
-  it("facts already attested are explained as the chain scored them: the floor does not apply after the fact", () => {
+  it("facts already attested are explained as the chain scored them: the gate does not apply after the fact", () => {
     const { decision } = explainOnChainFacts({
       walletAgeDays: 0,
       txCount: 0,
@@ -418,10 +444,40 @@ describe("the evidence floor: a report for an empty account is a free $200 line,
     assert.equal(decision.limit, 200_000_000n);
   });
 
-  it("attestGaps is the one rule, exported for the CRE workflow", () => {
-    assert.deepEqual(attestGaps({ walletAgeDays: 30, txCount: 5 }), []);
-    assert.equal(isAttestable({ walletAgeDays: 30, txCount: 5 }), true);
-    assert.equal(isAttestable({ walletAgeDays: 29, txCount: 500 }), false);
-    assert.deepEqual(ATTEST_MINIMUM, { walletAgeDays: 30, txCount: 5 });
+  it("is the CRE workflow's gate, point for point, over a seeded sweep", () => {
+    // workflows/src/underwriting/thin.ts on metropolis/cre, restated: attest when declined, or when
+    // age, activity, trading tenure or exchange funding earns at least one point.
+    const workflowAttests = (f: Parameters<typeof isAttestable>[0]) => {
+      const b = scoreBreakdown(f);
+      return b.declined || b.age + b.activity + b.defi + b.exchange > 0;
+    };
+    let seed = 0x7a1c;
+    const rand = () => ((seed = (seed * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32);
+    const pick = (max: number) => Math.floor(rand() * (max + 1));
+    let thin = 0;
+    for (let i = 0; i < 2_000; i++) {
+      const f = {
+        walletAgeDays: pick(40),
+        txCount: pick(30),
+        stableBalance: BigInt(pick(900)) * 1_000_000n,
+        defiTenureDays: pick(35),
+        priorLiquidations: rand() < 0.05 ? 2 : 0,
+        relatedWallets: rand() < 0.05 ? 30 : pick(5),
+        exchangeFunded: rand() < 0.1,
+      };
+      assert.equal(isAttestable(f), workflowAttests(f), JSON.stringify({ ...f, stableBalance: String(f.stableBalance) }));
+      assert.equal(attestGaps(f).length === 0, workflowAttests(f));
+      if (!workflowAttests(f)) thin += 1;
+    }
+    assert.ok(thin > 100, "the sweep reaches thin files");
+    assert.deepEqual(ATTEST_MINIMUM, { walletAgeDays: 30, txCount: 25, defiTenureDays: 30 });
+    // Each minimum is exactly where its ScoreManager term earns its first point.
+    const zero = { walletAgeDays: 0, txCount: 0, stableBalance: 0n, defiTenureDays: 0, priorLiquidations: 0, relatedWallets: 0, exchangeFunded: false };
+    assert.equal(scoreBreakdown({ ...zero, walletAgeDays: ATTEST_MINIMUM.walletAgeDays - 1 }).age, 0);
+    assert.ok(scoreBreakdown({ ...zero, walletAgeDays: ATTEST_MINIMUM.walletAgeDays }).age > 0);
+    assert.equal(scoreBreakdown({ ...zero, txCount: ATTEST_MINIMUM.txCount - 1 }).activity, 0);
+    assert.ok(scoreBreakdown({ ...zero, txCount: ATTEST_MINIMUM.txCount }).activity > 0);
+    assert.equal(scoreBreakdown({ ...zero, defiTenureDays: ATTEST_MINIMUM.defiTenureDays - 1 }).defi, 0);
+    assert.ok(scoreBreakdown({ ...zero, defiTenureDays: ATTEST_MINIMUM.defiTenureDays }).defi > 0);
   });
 });

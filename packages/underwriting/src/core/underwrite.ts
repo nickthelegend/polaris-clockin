@@ -47,7 +47,7 @@ export interface UnderwriteOutcome {
   /** Every fact the report depends on was read (and a linked wallet's ownership proven). */
   final: boolean;
   /**
-   * The DON may attest this: final, and the facts clear the evidence floor
+   * The DON may attest this: final, and the facts pass the thin-file gate
    * (attest.ts). Exactly when `report` is set. A final outcome that does not
    * attest is a thin file: send nothing, and do not retry until the account
    * has more history; `decision.thinFile` says what is short.
@@ -88,7 +88,8 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
   // A linked wallet that is the account itself links nothing (deriveFacts drops it too).
   const linkedWallet = derivation.linked ? (derivation.linked.address as Address) : null;
 
-  // A report for an empty account opens ScoreManager's $200 floor unsecured: thin facts are never attested.
+  // A report for an empty account opens ScoreManager's $200 floor unsecured: thin facts are never attested
+  // (declines are). The same gate as the CRE workflow's; see attest.ts.
   const gaps = attestGaps(derivation.facts);
   const attest = final && gaps.length === 0;
 
@@ -124,7 +125,7 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
 /**
  * Explain facts that are already on chain (from an `Underwritten` event or a
  * report), without the evidence behind them: the reasons use neutral wording
- * where the source is unknown. The evidence floor is not applied: these facts
+ * where the source is unknown. The thin-file gate is not applied: these facts
  * were attested, and ScoreManager scored them as they are.
  */
 export function explainOnChainFacts(

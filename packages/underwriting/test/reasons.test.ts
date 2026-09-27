@@ -142,11 +142,12 @@ describe("reasons in the buyer's words", () => {
   });
 
   it("a thin file's copy keeps to the same words, for every gap and every pending state", () => {
-    const gapSets = [
-      [{ fact: "walletAgeDays" as const, have: 0, need: 30 }, { fact: "txCount" as const, have: 0, need: 5 }],
-      [{ fact: "walletAgeDays" as const, have: 29, need: 30 }],
-      [{ fact: "txCount" as const, have: 4, need: 5 }],
+    const gaps = (age: number, sent: number, defi: number) => [
+      { fact: "walletAgeDays" as const, have: age, need: 30 },
+      { fact: "txCount" as const, have: sent, need: 25 },
+      { fact: "defiTenureDays" as const, have: defi, need: 30 },
     ];
+    const gapSets = [gaps(0, 0, 0), gaps(29, 24, 29), gaps(3, 2, 0), [gaps(1, 1, 1)[0]!], [gaps(1, 1, 1)[1]!]];
     for (const thinFile of gapSets) {
       for (const pending of [null, "checks", "ownership"] as const) {
         for (const purchase of [null, 200_000_000n]) {
