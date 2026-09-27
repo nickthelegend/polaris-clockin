@@ -42,6 +42,8 @@ export type DesktopPresentation = {
   content?: ReactNode;
   /** A page that stands alone (a checkout): the frame drops the app's nav for the wordmark. */
   focus?: boolean;
+  /** Classes for the Drawer or Dialog (e.g. the app panel's ground under ref E's cards). */
+  className?: string;
 };
 
 type SheetSpec = {
@@ -165,6 +167,7 @@ export function SheetHost({ children }: { children: ReactNode }) {
               title={e.desktop.title}
               description={e.desktop.description}
               aria-label={e.label}
+              className={e.desktop.className}
             >
               {e.desktopContent}
             </Panel>

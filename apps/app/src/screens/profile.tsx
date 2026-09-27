@@ -12,6 +12,7 @@ import {
   ScreenHeader,
   Sheet,
   Skeleton,
+  useIsDesktop,
 } from "@polaris/ui";
 import { Bell, CircleHelp, Link2, LogOut, ScanFace, Settings, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -19,6 +20,7 @@ import { useState } from "react";
 import { photoFor } from "@/components/avatars";
 import { InstallHint } from "@/components/install-hint";
 import { TabScreen } from "@/components/screen";
+import { ProfileDesktop } from "@/desktop/profile";
 import { useNotices } from "@/components/use-notices";
 import { DEV_SIGNER, signIn, signOut } from "@/lib/account";
 import { useAccountState, useOwner, usePrivyStatus } from "@/lib/account/hooks";
@@ -36,6 +38,10 @@ const HOW = [
 
 /** Profile, on ref D's account card: who you are, how you sign in, settings, and sign out. */
 export function Profile() {
+  return useIsDesktop() ? <ProfileDesktop /> : <ProfilePhone />;
+}
+
+function ProfilePhone() {
   const router = useRouter();
   const state = useAccountState();
   const owner = useOwner();

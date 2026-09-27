@@ -27,6 +27,7 @@ import { ConfirmSheet } from "@/components/confirm-sheet";
 import { QrCode } from "@/components/qr";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
+import { SendDialogContent } from "@/desktop/money-widget";
 import { cancelSendLink, type CreatedSendLink, createSendLink, transferTo } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
 import { getContacts, getProfile, getSendLink, type Person } from "@/lib/data";
@@ -314,7 +315,7 @@ export function LinkReady({
               <Button variant="white" size="md" icon={<Share2 />} onClick={() => void share()}>
                 Share link
               </Button>
-              <Button variant="dark" size="md" icon={<Copy />} onClick={() => void copy()}>
+              <Button variant="dark" size="md" icon={<Copy />} className="lg:bg-ui-surface-2 lg:hover:bg-ui-surface-3" onClick={() => void copy()}>
                 Copy
               </Button>
             </div>
@@ -344,7 +345,23 @@ export function LinkReady({
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function SendRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Send" snapPoints={["full"]} cold={cold}>
+    <RouteSheet
+      label="Send"
+      snapPoints={["full"]}
+      cold={cold}
+      desktop={{
+        as: "dialog",
+        size: "md",
+        title: "Send",
+        description: "By link to anyone, or straight to someone with Polaris.",
+        className: "bg-ui-canvas",
+        content: (
+          <Suspense>
+            <SendDialogContent />
+          </Suspense>
+        ),
+      }}
+    >
       <Suspense>
         <SendSheet />
       </Suspense>

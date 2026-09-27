@@ -60,7 +60,7 @@ export function NotificationsSheet() {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function NotificationsRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Notifications" title="Notifications" cold={cold}>
+    <RouteSheet label="Notifications" title="Notifications" cold={cold} desktop={{ as: "drawer", size: "sm", title: "Notifications", description: "Payments due, money in, links claimed" }}>
       <NotificationsSheet />
     </RouteSheet>
   );

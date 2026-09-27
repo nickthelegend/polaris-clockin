@@ -58,7 +58,7 @@ export function ClaimSheet() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader title="Claim" onBack={close} className="-mt-2 shrink-0 px-5" />
+      <ScreenHeader title="Claim" onBack={close} className="-mt-2 shrink-0 px-5 lg:hidden" />
       {parsed === null ? (
         <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-3 pt-1">
           <Skeleton shape="card" height={200} />
@@ -138,7 +138,7 @@ function ClaimReady({ parsed, onDone }: { parsed: { key: Hex; amount: Micros; na
           </p>
         ) : null}
       </Sheet.Body>
-      <Sheet.Footer>
+      <Sheet.Footer className="lg:[&>*]:flex-1">
         {state === undefined ? (
           <Skeleton shape="pill" height={56} />
         ) : state === "open" ? (
@@ -186,7 +186,7 @@ function ClaimReady({ parsed, onDone }: { parsed: { key: Hex; amount: Micros; na
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function ClaimRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Claim your dollars" snapPoints={["full"]} cold={cold}>
+    <RouteSheet label="Claim your dollars" snapPoints={["full"]} cold={cold} desktop={{ as: "dialog", size: "md", title: "Claim your dollars" }}>
       <ClaimSheet />
     </RouteSheet>
   );

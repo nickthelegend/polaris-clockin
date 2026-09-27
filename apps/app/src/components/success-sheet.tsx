@@ -46,7 +46,7 @@ export function SuccessSheet({
         {rows.length ? <DetailsList size="sm" items={rows} className="mt-3 w-full text-left" /> : null}
         {children ? <div className="mt-2 w-full">{children}</div> : null}
       </Sheet.Body>
-      <Sheet.Footer>
+      <Sheet.Footer className="lg:[&>*]:flex-1">
         {receiptUrl ? (
           <Button asChild variant="outline" size="lg" iconRight={<ExternalLink />}>
             <a href={receiptUrl} target="_blank" rel="noopener noreferrer">

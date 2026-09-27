@@ -4,6 +4,7 @@ import { AdaptiveSheet, Button, Input, ListGroup, ListRow, Select, Sheet } from 
 import { LogOut, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
+import { SettingsDesktop } from "@/desktop/profile";
 import { signOut } from "@/lib/account";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
 import { getProfile } from "@/lib/data";
@@ -104,7 +105,14 @@ export function SettingsSheet() {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function SettingsRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Settings" title="Settings" snapPoints={["half", "full"]} cold={cold} fallback="/profile">
+    <RouteSheet
+      label="Settings"
+      title="Settings"
+      snapPoints={["half", "full"]}
+      cold={cold}
+      fallback="/profile"
+      desktop={{ as: "page", content: <SettingsDesktop /> }}
+    >
       <SettingsSheet />
     </RouteSheet>
   );

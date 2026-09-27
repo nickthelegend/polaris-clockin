@@ -59,7 +59,7 @@ export function AccountsSheet() {
           ]}
         />
       </Sheet.Body>
-      <Sheet.Footer>
+      <Sheet.Footer className="lg:[&>*]:flex-1">
         <Button
           variant="lime"
           size="lg"

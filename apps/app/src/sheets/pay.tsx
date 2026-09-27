@@ -111,7 +111,7 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <ScreenHeader title="Pay or claim" onBack={close} className="-mt-2 shrink-0 px-5" />
+      <ScreenHeader title="Pay or claim" onBack={close} className="-mt-2 shrink-0 px-5 lg:hidden" />
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-4 pt-1">
         <ScanFrame>
           <video
@@ -222,7 +222,12 @@ function SampleLinks({ cold }: { cold: boolean }) {
 /** The route: the intercepting page in app/@sheet (over the current tab), or the page itself (cold, over its tab). */
 export function PayRoute({ cold }: { cold?: boolean }) {
   return (
-    <RouteSheet label="Pay or claim a link" snapPoints={["full"]} cold={cold}>
+    <RouteSheet
+      label="Pay or claim a link"
+      snapPoints={["full"]}
+      cold={cold}
+      desktop={{ as: "dialog", size: "md", title: "Pay or claim", description: "Scan a Polaris code, paste a link, or try a sample." }}
+    >
       <PaySheet cold={cold} />
     </RouteSheet>
   );

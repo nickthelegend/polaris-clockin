@@ -15,6 +15,7 @@ import {
   Money,
   PrimaryButton,
   SecondaryButton,
+  Sheet,
   Skeleton,
   SwapCard,
   SwapStack,
@@ -23,12 +24,13 @@ import {
 } from "@polaris/ui";
 import { ArrowDownLeft, ArrowUpRight, Check, Link2, Plus, RefreshCw, ScanFace, ScanLine, Settings, Share2 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
 import { getAddress, isAddress } from "viem";
 import { PersonAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { QrCode } from "@/components/qr";
+import { useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
 import { type CreatedSendLink, createSendLink, transferTo } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
@@ -132,6 +134,20 @@ export function MoneyWidget({ defaultTab = "send", className }: { defaultTab?: M
 }
 
 /* ── SEND ───────────────────────────────────────────────────────────────── */
+
+/** /send from 1024px: the widget's SEND in a Dialog, who from the URL (a Receive code or a contact). */
+export function SendDialogContent() {
+  const params = useSearchParams();
+  const owner = useOwner();
+  const contacts = useData(() => getContacts(owner), [owner]);
+  const close = useCloseSheet();
+  const initial = useRecipientFromUrl(params, contacts.value);
+  return (
+    <Sheet.Body className="grid content-start gap-3 pt-1">
+      <SendForm initial={initial} onDone={close} showPay={false} />
+    </Sheet.Body>
+  );
+}
 
 /** Who the money is for, from the URL: a Receive code (?to=) or a saved contact (?contact=). */
 export function useRecipientFromUrl(params: URLSearchParams | null, contacts: Person[] | undefined): Recipient {
