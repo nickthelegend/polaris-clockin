@@ -10,6 +10,10 @@ type MerchantContextValue = {
   refresh: () => void;
   /** What this server is connected to; null while it loads or if it can't be read. */
   capabilities: Capabilities | null;
+  /** Why the capabilities couldn't be read (they are retried); null otherwise. */
+  capabilitiesError?: string | null;
+  /** Read the capabilities again now. */
+  retryCapabilities?: () => void;
 };
 
 export const MerchantContext = createContext<MerchantContextValue | null>(null);

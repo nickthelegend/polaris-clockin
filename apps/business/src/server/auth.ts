@@ -57,7 +57,7 @@ function bearer(req: Request): string | null {
   return match?.[1] ?? null;
 }
 
-function readToken(req: Request): { token: string; source: TokenSource } | null {
+export function readToken(req: Request): { token: string; source: TokenSource } | null {
   if (req.headers.get("authorization")) {
     const token = bearer(req);
     return token ? { token, source: "header" } : null;
@@ -68,7 +68,13 @@ function readToken(req: Request): { token: string; source: TokenSource } | null 
     const eq = part.indexOf("=");
     if (eq === -1) continue;
     if (part.slice(0, eq).trim() !== COOKIE_NAME) continue;
-    const value = decodeURIComponent(part.slice(eq + 1).trim());
+    let value: string;
+    try {
+      value = decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      // A malformed cookie ("%", "%E0%A4%A") is no session: 401, never a 500.
+      return null;
+    }
     return value ? { token: value, source: "cookie" } : null;
   }
   return null;
@@ -358,10 +364,13 @@ export function withSignedRequest<Ctx = unknown>(handler: Handler<null, Ctx>) {
 
 /**
  * Public, read-only data the hosted checkout needs (never a secret, never
- * another merchant's book). Rate limited per IP.
+ * another merchant's book). Rate limited per IP. The health route has its
+ * own, larger bucket (`{ limit: "health" }`), so checkout traffic can never
+ * leave the dashboard unable to read what the server is connected to.
  */
-export function withPublic<Ctx = unknown>(handler: Handler<null, Ctx>) {
-  return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit: LIMITS.publicPerIp });
+export function withPublic<Ctx = unknown>(handler: Handler<null, Ctx>, options: { limit?: "public" | "health" } = {}) {
+  const limit = options.limit === "health" ? LIMITS.healthPerIp : LIMITS.publicPerIp;
+  return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit });
 }
 
 /** Scheduler routes: `Authorization: Bearer <CRON_SECRET>`. Closed when unset. */

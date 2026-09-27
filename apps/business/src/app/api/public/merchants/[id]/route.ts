@@ -1,6 +1,6 @@
 import { withPublic } from "@/server/auth";
 import { getDb } from "@/server/db";
-import { HttpError, ok } from "@/server/http";
+import { HttpError, ok, methodNotAllowed } from "@/server/http";
 
 export const dynamic = "force-dynamic";
 
@@ -13,3 +13,10 @@ export const GET = withPublic<Ctx>(async (_req, _auth, { params }) => {
   if (!merchant) throw new HttpError(404, "not_found", "No such merchant.");
   return ok({ id: merchant.publicId, name: merchant.businessName, payoutAddress: merchant.walletAddress, since: merchant.createdAt });
 });
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET"]);
+export const POST = withPublic(notAllowed);
+export const PUT = withPublic(notAllowed);
+export const PATCH = withPublic(notAllowed);
+export const DELETE = withPublic(notAllowed);

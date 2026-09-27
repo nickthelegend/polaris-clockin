@@ -96,6 +96,9 @@ export function parseCreateLink(body: Record<string, unknown>): CreateLinkInput 
 
   const usage = body.usage as LinkUsage;
   if (!USAGES.includes(usage)) invalid("Choose single use or reusable.", "usage");
+  // A subscription charges again every month: a link that closes after one
+  // payment can't carry it (it would silently become a one-time Pay now).
+  if (usage === "single" && modes.includes("subscribe")) invalid("Subscriptions need a reusable link.", "usage");
 
   const expires = body.expiresInHours;
   let expiresInHours: number | null = null;

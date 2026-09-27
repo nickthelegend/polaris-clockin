@@ -1,7 +1,7 @@
 import { withPreflight, withPublic } from "@/server/auth";
 import { requireChain } from "@/server/chain/client";
 import { getConfig } from "@/server/env";
-import { ok } from "@/server/http";
+import { ok, methodNotAllowed } from "@/server/http";
 import { polarisDomain } from "@/server/relayer/typed-data";
 
 export const dynamic = "force-dynamic";
@@ -35,3 +35,10 @@ export const GET = withPublic(async () => {
 });
 
 export const OPTIONS = withPreflight("app");
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET"]);
+export const POST = withPublic(notAllowed);
+export const PUT = withPublic(notAllowed);
+export const PATCH = withPublic(notAllowed);
+export const DELETE = withPublic(notAllowed);

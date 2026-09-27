@@ -24,7 +24,8 @@ type Health = {
   relayer: { mode: string; address: string | null };
   activator: string;
   automaticPayouts: boolean;
-  checkoutOrigin: string;
+  checkoutOrigin: string | null;
+  publicUrl?: string | null;
 };
 
 type TokenSource = () => Promise<string | null>;
@@ -95,6 +96,7 @@ export function createHttpData(getAccessToken: TokenSource, options: HttpDataOpt
         automaticPayouts: h.automaticPayouts,
         activation: h.activator !== "off",
         checkoutOrigin: h.checkoutOrigin,
+        registrationUrl: h.publicUrl !== null,
       } satisfies Capabilities;
     },
     getMerchant: () => call<Merchant>("/api/me"),

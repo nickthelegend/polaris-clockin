@@ -236,11 +236,14 @@ export function seedMerchantBook(merchantId: string, now = Date.now()): SampleBo
 
   const balanceCents = sumNet(payments, from, now + 1);
 
+  // Every record is marked, so a server that merges them with the
+  // merchant's own links can label each row.
+  const mark = <T extends object>(rows: T[]) => rows.map((row) => ({ ...row, sample: true }));
   return {
-    links: links.reverse(),
-    payments,
-    plans,
-    payouts,
+    links: mark(links.reverse()),
+    payments: mark(payments),
+    plans: mark(plans),
+    payouts: mark(payouts),
     balanceCents,
     collector: { state: "running", lastPassAt: new Date(now - r.int(20, 90) * 1000).toISOString(), runner: "cre" },
   };

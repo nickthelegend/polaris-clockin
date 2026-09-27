@@ -28,19 +28,23 @@ export type Readiness = {
 };
 
 const CHECKING = "Checking what this server is connected to…";
+const UNCHECKED = "We couldn't check this server's connections. We'll try again in a moment.";
 
 /**
  * Readiness for the dashboard's money controls. The development mock session
  * simulates everything in the browser (and labels it Sample); the preview
  * and a server with no chain refuse, with the reason.
  */
-export function readiness(caps: Capabilities | null | undefined, sample: SampleReason): Readiness {
+export function readiness(caps: Capabilities | null | undefined, sample: SampleReason, failed = false): Readiness {
   if (sample === "mock") return { withdraw: null, autoPayouts: null, links: null, registration: null };
   if (sample === "preview") {
     const reason = "This is the sample preview: there's no real balance behind it. Turn the preview off in your account menu to use your own.";
     return { withdraw: reason, autoPayouts: reason, links: null, registration: null };
   }
-  if (!caps) return { withdraw: CHECKING, autoPayouts: CHECKING, links: CHECKING, registration: CHECKING };
+  if (!caps) {
+    const why = failed ? UNCHECKED : CHECKING;
+    return { withdraw: why, autoPayouts: why, links: why, registration: why };
+  }
 
   const noChain = caps.chain
     ? null
@@ -49,10 +53,13 @@ export function readiness(caps: Capabilities | null | undefined, sample: SampleR
   const noSigner =
     caps.automaticPayouts && PAYOUT_SIGNER_ID ? null : "Automatic payouts switch on once the Privy payout signer is set up on this server.";
 
+  const noCheckout = caps.checkoutOrigin ? null : "Links go live once the checkout origin is configured on this server.";
+  const noPublicUrl = caps.registrationUrl ? null : "Registration on Monad opens once this server's public URL is configured.";
+
   return {
     withdraw: noChain ?? noRelayer,
     autoPayouts: noChain ?? noRelayer ?? noSigner,
-    links: noChain ? "Buyers can open links once this server is connected to Monad." : noRelayer,
-    registration: noChain ? "Registration on Monad opens once this server is connected to it." : noRelayer,
+    links: noChain ? "Buyers can open links once this server is connected to Monad." : (noRelayer ?? noCheckout),
+    registration: noChain ? "Registration on Monad opens once this server is connected to it." : (noRelayer ?? noPublicUrl),
   };
 }

@@ -263,7 +263,9 @@ export function useQuery<T>(load: (data: DashboardData) => Promise<T>, options: 
  * value is null when ready, otherwise the reason to show beside the control.
  */
 export function useReadiness(): Readiness {
-  const capabilities = useContext(MerchantContext)?.capabilities;
+  const ctx = useContext(MerchantContext);
+  const capabilities = ctx?.capabilities;
+  const failed = Boolean(ctx?.capabilitiesError);
   const { reason } = useSample();
-  return useMemo(() => readiness(capabilities, reason), [capabilities, reason]);
+  return useMemo(() => readiness(capabilities, reason, failed), [capabilities, reason, failed]);
 }

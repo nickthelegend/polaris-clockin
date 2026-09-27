@@ -52,8 +52,33 @@ async function syncFromChain(merchant: MerchantRecord, wallet: Address): Promise
   }))) as MerchantRecord;
 }
 
+/**
+ * A registration left in flight (the relay's receipt wait ran out, or it
+ * failed) or registered with an activation error: read the registry again,
+ * one call, so GET /api/me moves it on without the merchant doing anything.
+ * Never throws: the stored state is returned if the chain can't be read.
+ */
+export async function refreshRegistration(merchant: MerchantRecord): Promise<MerchantRecord> {
+  const { state, error } = merchant.registration;
+  const pending = state === "submitted" || state === "failed" || (state === "registered" && error !== null);
+  if (!pending || !merchant.walletAddress || getConfig().chain === null) return merchant;
+  try {
+    return await syncFromChain(merchant, getAddress(merchant.walletAddress));
+  } catch {
+    return merchant;
+  }
+}
+
+/**
+ * Signed into the merchant's MerchantRegistry entry for good, so it must be
+ * a real host: registration waits for POLARIS_PUBLIC_URL in production.
+ */
 function metadataUri(merchant: MerchantRecord): string {
-  return `${getConfig().publicUrl}/api/public/merchants/${merchant.publicId}`;
+  const base = getConfig().publicUrl;
+  if (!base) {
+    throw new HttpError(503, "not_configured", "Registration on Monad opens once this server's public URL is configured.");
+  }
+  return `${base}/api/public/merchants/${merchant.publicId}`;
 }
 
 function registrationMessage(merchant: MerchantRecord, wallet: Address, nonce: bigint, deadline: bigint) {

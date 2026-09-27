@@ -504,7 +504,7 @@ export const COLLECTIONS = {
   links: {
     name: "payment_links",
     id: (d: LinkRecord) => d.id,
-    indexes: { merchantId: (d: LinkRecord) => d.merchantId, createdAt: (d: LinkRecord) => d.createdAt },
+    indexes: { merchantId: (d: LinkRecord) => d.merchantId, createdAt: (d: LinkRecord) => d.createdAt, status: (d: LinkRecord) => d.status },
   } satisfies CollectionSpec<LinkRecord>,
   webhookEndpoints: {
     name: "webhook_endpoints",

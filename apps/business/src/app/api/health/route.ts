@@ -1,6 +1,6 @@
 import { withPublic } from "@/server/auth";
 import { getConfig, productionProblems } from "@/server/env";
-import { ok } from "@/server/http";
+import { ok, methodNotAllowed } from "@/server/http";
 import { getRelayerAccount } from "@/server/relayer/signer";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,9 @@ export const dynamic = "force-dynamic";
 /**
  * What this server is wired to, without a single secret: the chain, the
  * relayer's mode and address, whether payouts and activation are set up.
- * The dashboard's setup screen and the end-to-end script read it.
+ * The dashboard's setup screen and the end-to-end script read it. What is
+ * misconfigured stays private: only whether production is ready (the
+ * details are logged at startup by the workers).
  */
 export const GET = withPublic(async () => {
   const config = getConfig();
@@ -21,6 +23,14 @@ export const GET = withPublic(async () => {
     activator: config.activator.mode,
     automaticPayouts: config.payoutSigner !== null,
     checkoutOrigin: config.checkoutOrigin,
-    problems: productionProblems(config),
+    publicUrl: config.publicUrl,
+    ready: productionProblems(config).length === 0,
   });
-});
+}, { limit: "health" });
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET"]);
+export const POST = withPublic(notAllowed, { limit: "health" });
+export const PUT = withPublic(notAllowed, { limit: "health" });
+export const PATCH = withPublic(notAllowed, { limit: "health" });
+export const DELETE = withPublic(notAllowed, { limit: "health" });

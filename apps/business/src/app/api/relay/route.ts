@@ -1,5 +1,5 @@
 import { withPreflight, withSignedRequest } from "@/server/auth";
-import { ok, readJson } from "@/server/http";
+import { ok, readJson, methodNotAllowed } from "@/server/http";
 import { handleRelay } from "@/server/relayer/relay";
 
 export const dynamic = "force-dynamic";
@@ -14,3 +14,10 @@ export const dynamic = "force-dynamic";
 export const POST = withSignedRequest(async (req) => ok(await handleRelay(await readJson(req))));
 
 export const OPTIONS = withPreflight("app");
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["POST"]);
+export const GET = withSignedRequest(notAllowed);
+export const PUT = withSignedRequest(notAllowed);
+export const PATCH = withSignedRequest(notAllowed);
+export const DELETE = withSignedRequest(notAllowed);

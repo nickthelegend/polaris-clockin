@@ -57,6 +57,8 @@ export type PaymentLink = {
   paymentsCount: number;
   collectedCents: Cents;
   createdAt: IsoDate;
+  /** Part of a server's sample book (no chain yet): labelled, and it can't be changed. */
+  sample?: boolean;
 };
 
 export type CreateLinkInput = {
@@ -90,6 +92,8 @@ export type Payment = {
   /** Set once the indexer has seen the settling transaction. Null for sample rows. */
   txHash: `0x${string}` | null;
   createdAt: IsoDate;
+  /** Part of a server's sample book: labelled in its row. */
+  sample?: boolean;
 };
 
 /* ── Pay in 4 ───────────────────────────────────────────────────────────── */
@@ -114,6 +118,8 @@ export type Plan = {
   attempts: number;
   nextDueAt: IsoDate | null;
   openedAt: IsoDate;
+  /** Part of a server's sample book: labelled in its row. */
+  sample?: boolean;
 };
 
 export type CollectorStatus = {
@@ -164,6 +170,8 @@ export type Payout = {
   signed: boolean;
   txHash: `0x${string}` | null;
   createdAt: IsoDate;
+  /** Part of a server's sample book, or paid out of its sample balance. */
+  sample?: boolean;
 };
 
 export type AutoPayouts = {
@@ -315,6 +323,8 @@ export type Capabilities = {
   automaticPayouts: boolean;
   /** Registered merchants are activated for Pay in 4 automatically. */
   activation: boolean;
-  /** Where payment links and sessions send buyers. */
-  checkoutOrigin: string;
+  /** Where payment links and sessions send buyers; null until it is configured. */
+  checkoutOrigin: string | null;
+  /** This server's public URL is set (it goes in the registry metadata), so merchants can register. */
+  registrationUrl: boolean;
 };

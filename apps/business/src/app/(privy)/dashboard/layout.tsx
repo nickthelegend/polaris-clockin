@@ -50,8 +50,18 @@ function SignedIn({ children }: { children: React.ReactNode }) {
   const { logout, wallet } = useAuth();
   const { data: merchant, error, reload } = useQuery((d) => d.getMerchant());
   // What the server is connected to (chain, relayer, payout signer). Public and
-  // secret-free; the money controls read it to say why they're off.
-  const { data: capabilities } = useQuery((d) => d.getCapabilities());
+  // secret-free; the money controls read it to say why they're off. Read again
+  // every few minutes, and every 10 seconds while it can't be read, so one
+  // failed request never leaves the controls "checking" for good.
+  const caps = useQuery((d) => d.getCapabilities(), { refreshMs: 300_000 });
+  const capabilities = caps.data;
+  const capsFailed = Boolean(caps.error) && !capabilities;
+  const reloadCaps = caps.reload;
+  useEffect(() => {
+    if (!capsFailed) return;
+    const id = setInterval(reloadCaps, 10_000);
+    return () => clearInterval(id);
+  }, [capsFailed, reloadCaps]);
 
   const needsName = merchant !== undefined && !merchant.businessName;
   useEffect(() => {
@@ -71,9 +81,13 @@ function SignedIn({ children }: { children: React.ReactNode }) {
     if (walletPending && wallet.address) reload();
   }, [walletPending, wallet.address, reload]);
 
+  const capabilitiesError = capsFailed ? caps.error : null;
   const value = useMemo(
-    () => (merchant ? { merchant, refresh: reload, capabilities: capabilities ?? null } : null),
-    [merchant, reload, capabilities],
+    () =>
+      merchant
+        ? { merchant, refresh: reload, capabilities: capabilities ?? null, capabilitiesError, retryCapabilities: reloadCaps }
+        : null,
+    [merchant, reload, capabilities, capabilitiesError, reloadCaps],
   );
 
   if (error && !merchant) {

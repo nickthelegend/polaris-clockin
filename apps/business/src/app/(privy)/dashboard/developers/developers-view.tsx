@@ -125,7 +125,7 @@ function IntegrationPanel({ sample }: { sample: boolean }) {
                 "…"
               ),
             },
-            { label: "Checkout", value: <code className="font-mono text-[13px]" title={capabilities?.checkoutOrigin}>{capabilities?.checkoutOrigin ?? "…"}</code> },
+            { label: "Checkout", value: <code className="font-mono text-[13px]" title={capabilities?.checkoutOrigin ?? undefined}>{capabilities ? (capabilities.checkoutOrigin ?? "Not configured") : "…"}</code> },
           ]}
         />
         <div className="grid content-start gap-3">

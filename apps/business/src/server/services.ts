@@ -46,9 +46,10 @@ import type {
 import { hashKey, requireWallet, type AuthedMerchant } from "./auth";
 import { unitsToCents } from "./chain/money";
 import { getDb } from "./db";
-import { getConfig } from "./env";
+import { checkoutUrl, getConfig } from "./env";
 import { HttpError } from "./http";
 import { ensureMerchant, toMerchant } from "./merchants";
+import { refreshRegistration } from "./onboarding";
 import { createPayoutPolicy } from "./payout-policy";
 import { nextRunAt, runPayoutSweep, walletBalanceUnits, withdrawSigned } from "./payouts/payouts";
 import { dispatchDue } from "./webhooks/dispatcher";
@@ -65,7 +66,9 @@ import { emitEvent } from "./webhooks/events";
  */
 
 export async function merchantFor(auth: AuthedMerchant): Promise<Merchant> {
-  return toMerchant(await ensureMerchant(auth));
+  // A registration still in flight is checked against the registry here, so
+  // it never sits at "submitted" after the relay's receipt wait ran out.
+  return toMerchant(await refreshRegistration(await ensureMerchant(auth)));
 }
 
 export async function updateMerchant(auth: AuthedMerchant, patch: { businessName: string }): Promise<Merchant> {
@@ -141,7 +144,9 @@ function toLink(l: LinkRecord): PaymentLink {
   const expired = l.status === "active" && l.expiresAt !== null && Date.parse(l.expiresAt) <= Date.now();
   return {
     id: l.id,
-    url: l.url,
+    // From the current checkout origin, so a link made before it was set
+    // (or moved) still opens; "" while none is configured.
+    url: checkoutUrl(l.id) ?? l.url,
     amountCents: l.amountCents,
     description: l.description,
     modes: l.modes,
@@ -195,7 +200,7 @@ async function collectorStatus(merchant: MerchantRecord): Promise<CollectorStatu
 }
 
 export async function getOverview(auth: AuthedMerchant): Promise<Overview> {
-  const merchant = await ensureMerchant(auth);
+  const merchant = await refreshRegistration(await ensureMerchant(auth));
   const [payments, plans, balance, collector] = await Promise.all([listPayments(auth), listPlans(auth), balanceCents(merchant), collectorStatus(merchant)]);
 
   const now = Date.now();
@@ -277,15 +282,16 @@ const MAX_LINKS = 500;
 
 export async function createLink(auth: AuthedMerchant, input: CreateLinkInput): Promise<PaymentLink> {
   const merchant = await ensureMerchant(auth);
-  const active = await getDb().links.find({ merchantId: merchant.id }, { limit: MAX_LINKS + 1 });
-  if (active.filter((l) => l.status === "active").length >= MAX_LINKS) {
+  // Count the active links only: turned-off ones don't hold a place.
+  const active = await getDb().links.count({ merchantId: merchant.id, status: "active" });
+  if (active >= MAX_LINKS) {
     throw new HttpError(409, "limit_reached", `You can have up to ${MAX_LINKS} active links. Turn off one you no longer use.`);
   }
   const id = `pl_${randomBase62(14)}`;
   const record: LinkRecord = {
     id,
     merchantId: merchant.id,
-    url: `${getConfig().checkoutOrigin}/pay/${id}`,
+    url: checkoutUrl(id) ?? "",
     amountCents: input.amountCents,
     description: input.description,
     modes: input.modes,
@@ -304,7 +310,12 @@ export async function deactivateLink(auth: AuthedMerchant, linkId: string): Prom
   const merchant = await ensureMerchant(auth);
   const db = getDb();
   const link = await db.links.get(linkId);
-  if (!link || link.merchantId !== merchant.id) throw new HttpError(404, "not_found", "That link doesn't exist.");
+  if (!link || link.merchantId !== merchant.id) {
+    if (sampleOf(merchant)?.links.some((l) => l.id === linkId)) {
+      throw new HttpError(409, "sample_data", "Sample links can't be changed. Your own links can.");
+    }
+    throw new HttpError(404, "not_found", "That link doesn't exist.");
+  }
   if (link.status === "inactive") return toLink(link);
   return toLink((await db.links.update(linkId, (l) => ({ ...l, status: "inactive" }))) as LinkRecord);
 }
@@ -319,7 +330,9 @@ export async function listLinks(auth: AuthedMerchant): Promise<PaymentLink[]> {
 
 export async function getPayouts(auth: AuthedMerchant): Promise<PayoutsState> {
   const merchant = await ensureMerchant(auth);
-  const real = (await getDb().payouts.find({ merchantId: merchant.id }, { orderBy: "createdAt", direction: "desc", limit: 200 })).map(toPayout);
+  const rows = await getDb().payouts.find({ merchantId: merchant.id }, { orderBy: "createdAt", direction: "desc", limit: 200 });
+  // Withdrawals against a sample balance are sample rows too.
+  const real = rows.map((p) => (p.sample ? { ...toPayout(p), sample: true } : toPayout(p))).filter((p) => merchant.sample || !p.sample);
   return {
     balanceCents: await balanceCents(merchant),
     walletAddress: merchant.walletAddress,
@@ -375,11 +388,15 @@ export async function withdraw(auth: AuthedMerchant, input: WithdrawInput): Prom
 
 export async function setAutoPayouts(auth: AuthedMerchant, input: AutoPayoutsInput): Promise<AutoPayouts> {
   const merchant = await ensureMerchant(auth);
-  const wallet = requireWallet(auth);
   const current = merchant.autoPayouts;
 
-  if (input.payoutAddress && input.payoutAddress === wallet) {
-    throw new HttpError(400, "invalid_request", "That's your Polaris payout account itself. Enter where the money should go.");
+  // Turning on needs the wallet (the payout address must differ from it);
+  // turning off never does.
+  if (input.enabled) {
+    const wallet = requireWallet(auth);
+    if (input.payoutAddress && input.payoutAddress === wallet) {
+      throw new HttpError(400, "invalid_request", "That's your Polaris payout account itself. Enter where the money should go.");
+    }
   }
   const payoutAddress = input.payoutAddress ?? current.payoutAddress;
   let policyId = current.policyId;

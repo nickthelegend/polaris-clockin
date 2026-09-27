@@ -3,9 +3,11 @@ import "server-only";
 import { newId, randomBytes32, type MerchantRecord, type PayoutRecord } from "@polaris/db";
 import { getAddress, recoverTypedDataAddress, type Address, type Hex } from "viem";
 
+import { money } from "@/lib/data/format";
+
 import { iausdAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
-import { centsToUnits } from "../chain/money";
+import { centsToUnits, unitsToCents } from "../chain/money";
 import { getDb } from "../db";
 import { getConfig, type ChainConfig } from "../env";
 import { HttpError } from "../http";
@@ -126,7 +128,7 @@ export async function withdrawSigned(input: {
   }
   const balance = await walletBalanceUnits(input.wallet);
   if (balance < value) {
-    throw new HttpError(400, "insufficient_balance", `You can withdraw up to $${(Number(balance / 10_000n) / 100).toFixed(2)} right now.`);
+    throw new HttpError(400, "insufficient_balance", `You can withdraw up to ${money(unitsToCents(balance))} right now.`, { param: "amountCents" });
   }
   return recordAndRelay({
     merchant: input.merchant,

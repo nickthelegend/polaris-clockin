@@ -42,11 +42,13 @@ export function stablecoinDomain(): Promise<Domain | null> {
  */
 export function useWithdraw() {
   const data = useDashboardData();
-  const { wallet } = useAuth();
+  const { wallet, mock } = useAuth();
 
   return useCallback(
     async (amountCents: Cents, destination: Address): Promise<Payout> => {
-      const domain = await stablecoinDomain();
+      // The development mock never signs a real authorisation, so it never
+      // asks the server for the network either.
+      const domain = process.env.NODE_ENV === "development" && mock ? null : await stablecoinDomain();
       const input: WithdrawInput = { amountCents, destination };
 
       if (domain) {
@@ -76,7 +78,7 @@ export function useWithdraw() {
 
       return data.withdraw(input);
     },
-    [data, wallet],
+    [data, wallet, mock],
   );
 }
 
@@ -84,7 +86,8 @@ export function useWithdraw() {
  * Automatic daily payouts. The server creates a Privy policy that allows only
  * AUSD transfers to `payoutAddress`; we then add our payout signer to the
  * merchant's wallet with that policy as its override. Turning off removes it,
- * and never needs the wallet on the server side.
+ * and the server never needs the wallet for that (it checks the wallet only
+ * when turning on).
  */
 export function useAutoPayouts() {
   const data = useDashboardData();
@@ -131,7 +134,11 @@ export function useRegisterMerchant() {
 
   return useCallback(async (): Promise<Merchant> => {
     const state = await data.getRegistration();
-    if (!state.typedData) return state.merchant;
+    if (!state.typedData) {
+      // Registered but not yet active (activation failed or is pending): try it again.
+      if (state.merchant.registration?.state === "registered") return (await data.submitRegistration({})).merchant;
+      return state.merchant;
+    }
     if (!wallet.address) throw new Error("Your payout account is still being set up. Try again in a moment.");
     const signature = await wallet.signTypedData(state.typedData, { title: "Register your business", buttonText: "Confirm" });
     const done = await data.submitRegistration({ signature, deadline: state.typedData.message.deadline });

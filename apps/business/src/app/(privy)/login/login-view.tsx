@@ -186,8 +186,11 @@ function Onboarding({ next }: { next: string }) {
     setBusy(true);
     try {
       await data.updateMerchant({ businessName: value });
-      // Register on chain only where it can work: a chain and a relayer.
-      if (capabilities?.chain && capabilities.relayer) setRegistering({ business: value, done: false });
+      // Register on chain only where it can work: a chain and a relayer. If
+      // the capabilities haven't arrived yet, ask for them now rather than
+      // skipping registration; if they can't be read, the dashboard offers it.
+      const caps = capabilities ?? (await data.getCapabilities().catch(() => null));
+      if (caps?.chain && caps.relayer) setRegistering({ business: value, done: false });
       else router.replace(next);
     } catch (err) {
       setFormError(err instanceof DataError ? err.message : errorMessage(err, "We couldn't save that. Try again."));

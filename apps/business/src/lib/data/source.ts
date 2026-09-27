@@ -41,7 +41,8 @@ export interface DashboardData {
   updateMerchant(input: { businessName: string }): Promise<Merchant>;
   /** On-chain registration: the state and, when needed, the typed data to sign. */
   getRegistration(): Promise<RegistrationStep>;
-  submitRegistration(input: { signature: `0x${string}`; deadline: string }): Promise<{ merchant: Merchant }>;
+  /** With the signed Registration; with neither field, a registered merchant's activation is tried again. */
+  submitRegistration(input: { signature?: `0x${string}`; deadline?: string }): Promise<{ merchant: Merchant }>;
 
   getOverview(): Promise<Overview>;
 

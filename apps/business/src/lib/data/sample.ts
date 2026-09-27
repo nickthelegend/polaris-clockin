@@ -115,6 +115,7 @@ export const SAMPLE_CAPABILITIES: Capabilities = {
   automaticPayouts: true,
   activation: true,
   checkoutOrigin: "http://localhost:3000",
+  registrationUrl: true,
 };
 
 function address(r: Rng): Address {

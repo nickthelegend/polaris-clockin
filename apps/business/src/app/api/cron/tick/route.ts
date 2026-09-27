@@ -1,5 +1,5 @@
 import { withCron } from "@/server/auth";
-import { ok } from "@/server/http";
+import { ok, methodNotAllowed } from "@/server/http";
 import { runTick } from "@/server/workers";
 
 export const dynamic = "force-dynamic";
@@ -12,3 +12,9 @@ export const maxDuration = 60;
  */
 export const GET = withCron(async () => ok(await runTick()));
 export const POST = withCron(async () => ok(await runTick()));
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET", "POST"]);
+export const PUT = withCron(notAllowed);
+export const PATCH = withCron(notAllowed);
+export const DELETE = withCron(notAllowed);

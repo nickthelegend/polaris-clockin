@@ -20,6 +20,8 @@ export const LIMITS = {
   relayPerIp: { name: "relay-ip", perMinute: 30, burst: 15 },
   relayPerSigner: { name: "relay-signer", perMinute: 12, burst: 6 },
   publicPerIp: { name: "public-ip", perMinute: 240, burst: 60 },
+  /** GET /api/health: every open dashboard reads it; cheap, and never shared with checkout reads. */
+  healthPerIp: { name: "health-ip", perMinute: 1200, burst: 300 },
   apiPerKey: { name: "api-key", perMinute: 300, burst: 100 },
   onboardPerMerchant: { name: "onboard", perMinute: 6, burst: 3 },
   /** Dashboard writes (POST, PATCH, DELETE) per merchant: plenty for a person, tight for a script. */

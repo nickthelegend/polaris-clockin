@@ -2,7 +2,7 @@
 
 import { Button, Notice, StatusPill, toast, type StatusPillTone } from "@polaris/ui";
 import { BadgeCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { errorMessage } from "@/lib/data";
 import type { Merchant, RegistrationState } from "@/lib/data/types";
@@ -73,24 +73,53 @@ export function useRegisterAction() {
  * Monad, with the one action it needs (or the reason it can't happen yet).
  */
 export function RegistrationNotice({ className }: { className?: string }) {
-  const { merchant } = useMerchant();
+  const { merchant, refresh } = useMerchant();
   const blocker = useReadiness().registration;
   const { run, busy, error } = useRegisterAction();
   const state = registrationOf(merchant);
+  // While it's in flight, look again every few seconds: the server checks the
+  // registry on each read, so it moves on even if the relay stopped waiting.
+  useEffect(() => {
+    if (state !== "submitted") return;
+    const id = setInterval(refresh, 3000);
+    return () => clearInterval(id);
+  }, [state, refresh]);
   if (state === "active") return null;
   const name = merchant.businessName ?? "your business";
 
   if (state === "registered") {
+    const failed = Boolean(merchant.registration?.error);
     return (
-      <Notice tone="lime" icon={<BadgeCheck />} className={className} title={`${name} is registered on Monad`}>
+      <Notice
+        tone="lime"
+        icon={<BadgeCheck />}
+        className={className}
+        title={`${name} is registered on Monad`}
+        action={
+          failed && !blocker ? (
+            <Button variant="outline" size="sm" loading={busy} onClick={() => void run()}>
+              Retry activation
+            </Button>
+          ) : null
+        }
+      >
         Buyers can pay you now. Pay in 4 opens once Polaris activates your account with its order cap.
-        {merchant.registration?.error ? ` ${merchant.registration.error}` : ""}
+        {error ? ` ${error}` : merchant.registration?.error ? ` ${merchant.registration.error}` : ""}
       </Notice>
     );
   }
   if (state === "submitted") {
     return (
-      <Notice tone="info" className={className} title="Registering on Monad">
+      <Notice
+        tone="info"
+        className={className}
+        title="Registering on Monad"
+        action={
+          <Button variant="outline" size="sm" onClick={refresh}>
+            Check again
+          </Button>
+        }
+      >
         The relayer has sent your registration; it confirms in about a second. <TxLink hash={merchant.registration?.txHash ?? null} sample={false} />
       </Notice>
     );

@@ -15,6 +15,10 @@
 //   everything else              withMerchant        (a verified Privy session)
 //
 // OPTIONS (CORS preflight) may be withPreflight(...) on the cross-origin paths.
+//
+// Every route also declares all of GET, POST, PUT, PATCH and DELETE, the ones
+// it doesn't support through its wrapper and methodNotAllowed(...), so an
+// unsupported method gets a JSON 405 rather than Next's empty one.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -22,6 +26,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../src/app/api", import.meta.url));
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+const REQUIRED = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
 const RULES = [
   { prefix: "v1/checkout/", wrappers: ["withSecretKey"], preflight: false },
@@ -60,7 +65,10 @@ for (const file of routes(root)) {
   }
   for (const method of METHODS) {
     const declared = new RegExp(`export\\s+(async\\s+)?(function|const|let|var)\\s+${method}\\b`).test(source);
-    if (!declared) continue;
+    if (!declared) {
+      if (REQUIRED.includes(method)) problems.push(`${rel}: declare ${method} (methodNotAllowed through its wrapper), so it answers a JSON 405`);
+      continue;
+    }
     const allowed = method === "OPTIONS" && rule.preflight ? [...rule.wrappers, "withPreflight"] : rule.wrappers;
     const wrapped = allowed.some((w) => new RegExp(`export\\s+const\\s+${method}\\s*=\\s*${w}\\s*(<[^>]*>)?\\s*\\(`).test(source));
     if (!wrapped) {
