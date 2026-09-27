@@ -1,6 +1,6 @@
 "use client";
 
-import { AssetRow, Button, Input, ScanFrame, ScreenHeader, SectionHeader, Sheet, Skeleton } from "@polaris/ui";
+import { AssetRow, Button, Input, ScanFrame, ScreenHeader, SecondaryButton, SectionHeader, Sheet, Skeleton, useIsDesktop } from "@polaris/ui";
 import { ClipboardPaste, ScanLine, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -43,6 +43,7 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
   const go = useOpenLink(cold);
   const close = useCloseSheet();
   const canScan = useCanScan();
+  const desktop = useIsDesktop();
   const [scanning, setScanning] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -109,11 +110,21 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
     open(text);
   }
 
+  const pasteForm = <PasteForm text={text} setText={setText} message={message} setMessage={setMessage} submit={submit} open={open} />;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <ScreenHeader title="Pay or claim" onBack={close} className="-mt-2 shrink-0 px-5 lg:hidden" />
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-4 pt-1">
-        <ScanFrame>
+        {/* A computer rarely scans: from 1024px the paste field comes first,
+            and the viewfinder only opens when you ask for the camera. */}
+        {desktop ? pasteForm : null}
+        {desktop && canScan && !scanning ? (
+          <SecondaryButton size="lg" block icon={<ScanLine />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void start()}>
+            Scan with this computer&apos;s camera
+          </SecondaryButton>
+        ) : null}
+        <ScanFrame className={desktop && !scanning ? "hidden" : undefined}>
           <video
             ref={videoRef}
             muted
@@ -143,49 +154,70 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
           )}
         </ScanFrame>
 
-        <form onSubmit={submit} className="flex items-end gap-2">
-          <Input
-            hideLabel
-            label="Payment or claim link"
-            inputMode="url"
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            placeholder="Paste a Polaris link"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            wrapperClassName="min-w-0 flex-1"
-            error={message ?? undefined}
-          />
-          {text ? (
-            <Button type="submit" variant="lime" size="lg" className="h-12 px-5">
-              Open
-            </Button>
-          ) : (
-            <Button
-              type="button"
-              variant="dark"
-              size="lg"
-              icon={<ClipboardPaste />}
-              className="h-12 px-5"
-              onClick={async () => {
-                try {
-                  const clip = await navigator.clipboard.readText();
-                  setText(clip);
-                  open(clip);
-                } catch {
-                  setMessage("Paste the link into the box.");
-                }
-              }}
-            >
-              Paste
-            </Button>
-          )}
-        </form>
+        {desktop ? null : pasteForm}
 
         <SampleLinks cold={cold} />
       </Sheet.Body>
     </div>
+  );
+}
+
+/** Paste a link: the field, and Paste (Open once something is in it). */
+function PasteForm({
+  text,
+  setText,
+  message,
+  setMessage,
+  submit,
+  open,
+}: {
+  text: string;
+  setText: (v: string) => void;
+  message: string | null;
+  setMessage: (v: string | null) => void;
+  submit: (e: FormEvent) => void;
+  open: (value: string) => boolean;
+}) {
+  return (
+    <form onSubmit={submit} className="flex items-end gap-2">
+      <Input
+        hideLabel
+        label="Payment or claim link"
+        inputMode="url"
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        placeholder="Paste a Polaris link"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        wrapperClassName="min-w-0 flex-1"
+        error={message ?? undefined}
+      />
+      {text ? (
+        <Button type="submit" variant="lime" size="lg" className="h-12 px-5">
+          Open
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          variant="dark"
+          size="lg"
+          icon={<ClipboardPaste />}
+          className="h-12 px-5 lg:bg-ui-surface-2 lg:hover:bg-ui-surface-3"
+          onClick={async () => {
+            try {
+              const clip = await navigator.clipboard.readText();
+              setText(clip);
+              open(clip);
+            } catch {
+              setMessage("Paste the link into the box.");
+            }
+          }}
+        >
+          Paste
+        </Button>
+      )}
+    </form>
   );
 }
 
@@ -226,7 +258,7 @@ export function PayRoute({ cold }: { cold?: boolean }) {
       label="Pay or claim a link"
       snapPoints={["full"]}
       cold={cold}
-      desktop={{ as: "dialog", size: "md", title: "Pay or claim", description: "Scan a Polaris code, paste a link, or try a sample." }}
+      desktop={{ as: "dialog", size: "md", title: "Pay or claim", description: "Paste a Polaris link, or try a sample. On your phone, point the camera at the code." }}
     >
       <PaySheet cold={cold} />
     </RouteSheet>
