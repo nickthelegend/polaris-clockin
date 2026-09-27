@@ -9,10 +9,12 @@
  *
  *   const out = underwrite({ user, observedAt, account, linked, linkVerified });
  *   if (!out.final) throw new Error(`not final: ${out.missing.join(", ")}`); // no report, the app retries
+ *   if (!out.attest) return { status: "thin" };                             // too thin to attest: no report, no retry
  *   runtime.report(prepareReportRequest(out.report));                       // UnderwritingReceiver's batch, one item
  */
 
 import { encodeUnderwritingReport } from "./abi.ts";
+import { attestGaps } from "./attest.ts";
 import { FACTS_VERSION, MODEL_VERSION } from "./constants.ts";
 import { decide } from "./decision.ts";
 import { deriveFacts, type Derivation, type DeriveOptions } from "./facts.ts";
@@ -42,8 +44,15 @@ export interface UnderwriteInput {
 export interface UnderwriteOutcome {
   version: { facts: number; model: number };
   user: Address;
-  /** Only a final outcome carries a report. */
+  /** Every fact the report depends on was read (and a linked wallet's ownership proven). */
   final: boolean;
+  /**
+   * The DON may attest this: final, and the facts clear the evidence floor
+   * (attest.ts). Exactly when `report` is set. A final outcome that does not
+   * attest is a thin file: send nothing, and do not retry until the account
+   * has more history; `decision.thinFile` says what is short.
+   */
+  attest: boolean;
   /** `<role>.<field>` for everything that kept it from being final. */
   missing: string[];
   facts: Facts;
@@ -55,7 +64,7 @@ export interface UnderwriteOutcome {
   linkedWallet: Address | null;
   /**
    * The report UnderwritingReceiver decodes, with this one underwriting:
-   * `abi.encode(uint8 2, [(user, linkedWallet, facts)])`. Null when not final.
+   * `abi.encode(uint8 2, [(user, linkedWallet, facts)])`. Null unless `attest`.
    */
   report: Hex | null;
   breakdown: ScoreBreakdown;
@@ -79,6 +88,10 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
   // A linked wallet that is the account itself links nothing (deriveFacts drops it too).
   const linkedWallet = derivation.linked ? (derivation.linked.address as Address) : null;
 
+  // A report for an empty account opens ScoreManager's $200 floor unsecured: thin facts are never attested.
+  const gaps = attestGaps(derivation.facts);
+  const attest = final && gaps.length === 0;
+
   const breakdown = scoreBreakdown(derivation.facts);
   const reasons = explainFacts(derivation.facts, breakdown, derivation);
   const decision = decide({
@@ -90,16 +103,18 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
     reasons,
     hasLinked: derivation.linked !== null,
     pending: final ? null : missing.every((m) => m === "linked.ownership") ? "ownership" : "checks",
+    thinFile: gaps,
   });
 
   return {
     version: { facts: FACTS_VERSION, model: MODEL_VERSION },
     user: input.user,
     final,
+    attest,
     missing,
     facts: derivation.facts,
     linkedWallet,
-    report: final ? encodeUnderwritingReport([{ user: input.user, linkedWallet, facts: derivation.facts }]) : null,
+    report: attest ? encodeUnderwritingReport([{ user: input.user, linkedWallet, facts: derivation.facts }]) : null,
     breakdown,
     decision,
     derivation,
@@ -109,7 +124,8 @@ export function underwrite(input: UnderwriteInput): UnderwriteOutcome {
 /**
  * Explain facts that are already on chain (from an `Underwritten` event or a
  * report), without the evidence behind them: the reasons use neutral wording
- * where the source is unknown.
+ * where the source is unknown. The evidence floor is not applied: these facts
+ * were attested, and ScoreManager scored them as they are.
  */
 export function explainOnChainFacts(
   facts: Facts,

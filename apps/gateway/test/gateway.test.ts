@@ -48,12 +48,26 @@ describe("the gateway", () => {
       const res = await fetch(`${url}/v1/underwrite`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ account: "0xacc0000000000000000000000000000000000001" }),
+        body: JSON.stringify({ account: "0xacc0000000000000000000000000000000000002" }),
       });
       const body = await res.json();
       assert.equal(res.status, 200);
       assert.equal(body.dataMode, "fixture");
       assert.equal(body.decision.limit, "200000000");
+      assert.equal(body.attest, true);
+
+      // A three-day-old account is below the evidence floor: final, but nothing to report and no line.
+      const thin = await (
+        await fetch(`${url}/v1/underwrite`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ account: "0xacc0000000000000000000000000000000000001" }),
+        })
+      ).json();
+      assert.equal(thin.final, true);
+      assert.equal(thin.attest, false);
+      assert.equal(thin.report, null);
+      assert.equal(thin.decision.limit, "0");
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }

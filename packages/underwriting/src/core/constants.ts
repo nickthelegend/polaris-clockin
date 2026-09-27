@@ -13,8 +13,24 @@ import type { Address } from "./types.ts";
 
 /** Bumped whenever the Facts derivation rules change. See facts.ts. */
 export const FACTS_VERSION = 1;
-/** Bumped whenever the score or decision rules change. See score.ts. */
-export const MODEL_VERSION = 1;
+/**
+ * Bumped whenever the score or decision rules change. See score.ts.
+ * 2: thin files are not attested (attest.ts, ATTEST_MINIMUM).
+ */
+export const MODEL_VERSION = 2;
+
+/**
+ * The evidence floor: the least the facts must show before the DON attests
+ * them (attest.ts). Below it no report is sent and the account stays
+ * secured-only, because ScoreManager would open even an empty account at the
+ * $200 floor.
+ */
+export const ATTEST_MINIMUM = {
+  /** Days since the oldest sign of life across the subjects counted. */
+  walletAgeDays: 30,
+  /** Payments and transfers sent across the subjects counted. */
+  txCount: 5,
+} as const;
 
 /** ScoreManager constants. */
 export const SCORE = {

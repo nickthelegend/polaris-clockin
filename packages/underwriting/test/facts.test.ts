@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decodeUnderwritingReport, encodeUnderwritingReport } from "../src/core/abi.ts";
-import { DAY_SECONDS, FACTS_VERSION, U16_MAX, U32_MAX, U64_MAX } from "../src/core/constants.ts";
+import { attestGaps, isAttestable } from "../src/core/attest.ts";
+import { ATTEST_MINIMUM, DAY_SECONDS, FACTS_VERSION, U16_MAX, U32_MAX, U64_MAX } from "../src/core/constants.ts";
+import { decide } from "../src/core/decision.ts";
 import { accountRules, evidence } from "../src/core/evidence.ts";
 import { deriveFacts } from "../src/core/facts.ts";
 import type { Address, Funder, SubjectEvidence } from "../src/core/types.ts";
-import { underwrite } from "../src/core/underwrite.ts";
+import { explainOnChainFacts, underwrite } from "../src/core/underwrite.ts";
 
 const NOW = 1_790_424_000;
 const ACCOUNT = "0xacc0000000000000000000000000000000000001" as Address;
@@ -23,6 +25,10 @@ function account(o: Partial<SubjectEvidence> = {}): SubjectEvidence {
     ...o,
   };
 }
+
+/** An account with a few months of its own history: over the evidence floor with no linked wallet. */
+const seasoned = (o: Partial<SubjectEvidence> = {}) =>
+  account({ firstSeenAt: evidence.ok<number | null>(days(90), "zerion.transactions"), sentCount: evidence.ok(12, "zerion.transactions"), ...o });
 
 const coinbase: Funder = { address: "0xc0ba5e0000000000000000000000000000000002", name: "Coinbase: Hot Wallet 2", chain: "ethereum", fundedAt: days(1210) };
 const peer: Funder = { address: "0xfeed000000000000000000000000000000000002", name: null, chain: "base", fundedAt: days(200) };
@@ -216,11 +222,11 @@ describe("underwrite: what may be reported", () => {
   });
 
   it("an account scored alone reports a zero linked wallet, and so does a 'linked' wallet that is the account", () => {
-    const alone = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linkVerified: true });
+    const alone = underwrite({ user: ACCOUNT, observedAt: NOW, account: seasoned(), linkVerified: true });
     assert.equal(alone.linkedWallet, null);
     assert.equal(decodeUnderwritingReport(alone.report!).items[0]!.linkedWallet, null);
 
-    const self = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: { ...linked(), address: ACCOUNT } });
+    const self = underwrite({ user: ACCOUNT, observedAt: NOW, account: seasoned(), linked: { ...linked(), address: ACCOUNT } });
     assert.equal(self.final, true, "linking the account to itself needs no proof");
     assert.equal(self.linkedWallet, null);
     assert.equal(decodeUnderwritingReport(self.report!).items[0]!.linkedWallet, null);
@@ -228,9 +234,14 @@ describe("underwrite: what may be reported", () => {
 
   it("names a linked wallet it left out for a risk label too, so the receiver still holds it to this account", () => {
     const l = linked({ riskLabel: evidence.ok<string | null>("Sanctioned: OFAC", "nansen.first-funder") });
-    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: l, linkVerified: true });
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: seasoned(), linked: l, linkVerified: true });
     assert.equal(out.derivation.linked?.used, false);
     assert.equal(decodeUnderwritingReport(out.report!).items[0]!.linkedWallet, l.address.toLowerCase());
+
+    // Left out, the wallet brings no history: a three-day-old account alone is too thin to attest.
+    const thin = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linked: l, linkVerified: true });
+    assert.equal(thin.final, true);
+    assert.equal(thin.report, null);
   });
 
   it("stamps the facts with the caller's clock, never its own", () => {
@@ -239,11 +250,178 @@ describe("underwrite: what may be reported", () => {
   });
 
   it("keeps the preview when not final, so the app can show a floor", () => {
-    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account({ stableBalance: evidence.missing(0, "rpc.balance") }) });
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: seasoned({ stableBalance: evidence.missing(0, "rpc.balance") }) });
     assert.equal(out.final, false);
     assert.equal(out.report, null);
     assert.equal(out.decision.limit, 200_000_000n);
     assert.equal(out.decision.headline, "Your line is $200 for now. We're finishing a check on your history.");
     assert.equal(out.decision.nextSteps[0]?.id, "retry");
+  });
+
+  it("a thin preview that is not final promises no line: it only says a check is running", () => {
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account({ stableBalance: evidence.missing(0, "rpc.balance") }) });
+    assert.equal(out.final, false);
+    assert.equal(out.attest, false);
+    assert.equal(out.decision.limit, 0n);
+    assert.equal(out.decision.headline, "We're finishing a check on your history.");
+    assert.deepEqual(out.decision.nextSteps.map((s) => s.id), ["retry", "link-history", "secure"]);
+  });
+});
+
+describe("the evidence floor: a report for an empty account is a free $200 line, so thin files are not attested", () => {
+  const empty = (): SubjectEvidence =>
+    account({
+      firstSeenAt: evidence.empty<number | null>(null, "zerion.transactions"),
+      sentCount: evidence.ok(0, "zerion.transactions"),
+      stableBalance: evidence.ok(0, "rpc.balance"),
+    });
+
+  it("the review's proof: an account with no history at all is final, but nothing is reported and no line opens", () => {
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linkVerified: true });
+    assert.deepEqual(
+      { walletAgeDays: out.facts.walletAgeDays, txCount: out.facts.txCount, stableBalance: out.facts.stableBalance },
+      { walletAgeDays: 0, txCount: 0, stableBalance: 0n },
+    );
+    assert.equal(out.breakdown.score, 520, "ScoreManager would open this at the $200 floor");
+    assert.equal(out.final, true, "nothing is missing: this is the answer, not a retry");
+    assert.equal(out.attest, false);
+    assert.equal(out.report, null);
+    assert.equal(out.decision.limit, 0n);
+    assert.equal(out.decision.available, 0n);
+    assert.equal(out.decision.payIn4.allowed, false);
+    assert.equal(out.decision.payIn4.maxPurchase, 0n);
+    assert.deepEqual(out.decision.thinFile, [
+      { fact: "walletAgeDays", have: 0, need: 30 },
+      { fact: "txCount", have: 0, need: 5 },
+    ]);
+    assert.equal(out.decision.payIn4.reason, "Pay in 4 opens after 30 days of history and 5 payments or transfers.");
+    assert.equal(out.decision.headline, "Pay in 4 opens once there's a little more history here.");
+    assert.equal(out.decision.nextTier, null, "no line, so repaying has nothing to raise");
+    assert.deepEqual(
+      out.decision.nextSteps.map((s) => [s.id, s.label]),
+      [
+        ["link-history", "Open a line now: confirm with the wallet you already use."],
+        ["build-history", "Keep using Polaris: Pay in 4 opens in 30 days, once you've made 5 more payments or transfers."],
+        ["secure", "Set money aside to pay in 4 against it."],
+      ],
+    );
+  });
+
+  it("the three-day-old account is told exactly what is left", () => {
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linkVerified: true, purchase: 200_000_000n });
+    assert.equal(out.attest, false);
+    assert.equal(out.report, null);
+    assert.equal(
+      out.decision.nextSteps.find((s) => s.id === "build-history")?.label,
+      "Keep using Polaris: Pay in 4 opens in 27 days, once you've made 3 more payments or transfers.",
+    );
+    // Secured-only, as ScoreManager treats a wallet not yet underwritten: collateral at face value.
+    assert.equal(out.decision.nextSteps.find((s) => s.id === "secure")?.label, "Set aside $201.54 to pay in 4 for this purchase.");
+  });
+
+  it("the floor is 30 days and 5 payments or transfers, both: one short of either is thin", () => {
+    const at = (age: number, sent: number) =>
+      underwrite({
+        user: ACCOUNT,
+        observedAt: NOW,
+        account: account({
+          firstSeenAt: evidence.ok<number | null>(days(age), "zerion.transactions"),
+          sentCount: evidence.ok(sent, "zerion.transactions"),
+        }),
+      });
+    assert.equal(at(30, 5).attest, true);
+    assert.match(at(30, 5).report ?? "", /^0x[0-9a-f]{832}$/);
+    assert.equal(at(30, 5).decision.limit, 200_000_000n);
+    assert.equal(at(30, 5).decision.thinFile, null);
+    assert.deepEqual(at(29, 5).decision.thinFile, [{ fact: "walletAgeDays", have: 29, need: 30 }]);
+    assert.deepEqual(at(30, 4).decision.thinFile, [{ fact: "txCount", have: 4, need: 5 }]);
+    assert.equal(at(29, 5).decision.payIn4.reason, "Pay in 4 opens after 30 days of history.");
+    assert.equal(at(30, 4).decision.payIn4.reason, "Pay in 4 opens after 5 payments or transfers.");
+    assert.equal(
+      at(29, 4).decision.nextSteps.find((s) => s.id === "build-history")?.label,
+      "Keep using Polaris: Pay in 4 opens in 1 day, once you've made 1 more payment or transfer.",
+    );
+    for (const thin of [at(29, 5), at(30, 4), at(0, 1_000), at(3_000, 0)]) {
+      assert.equal(thin.final, true);
+      assert.equal(thin.report, null);
+      assert.equal(thin.decision.limit, 0n);
+    }
+  });
+
+  it("a proven history clears the floor at once, even for a brand-new account", () => {
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linked: linked({}, coinbase), linkVerified: true });
+    assert.equal(out.attest, true);
+    assert.ok(out.report);
+    assert.equal(out.decision.thinFile, null);
+    assert.equal(out.decision.limit, 1_000_000_000n);
+  });
+
+  it("a throwaway wallet does not clear it: a fresh linked wallet with no history is thin too, proof or not", () => {
+    const throwaway = linked(
+      {
+        firstSeenAt: evidence.ok<number | null>(days(2), "nansen.first-funder"),
+        sentCount: evidence.ok(1, "rpc.nonce"),
+        defiSince: evidence.empty<number | null>(null, "zerion.probe"),
+      },
+      { ...peer, fundedAt: days(2) },
+    );
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linked: throwaway, linkVerified: true });
+    assert.equal(out.derivation.linked?.used, true);
+    assert.equal(out.final, true);
+    assert.equal(out.report, null);
+    assert.equal(out.decision.limit, 0n);
+
+    // Before the signature, the preview must not promise a line that confirming would open.
+    const unproven = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linked: throwaway });
+    assert.deepEqual(unproven.missing, ["linked.ownership"]);
+    assert.equal(unproven.decision.headline, "Pay in 4 opens once there's a little more history here.");
+    assert.ok(!unproven.decision.nextSteps.some((s) => s.id === "link-history"), "confirming this wallet would not help");
+  });
+
+  it("a thin file that declines is not attested either: the one underwriting is kept for when there is history", () => {
+    const risky = linked(
+      {
+        firstSeenAt: evidence.ok<number | null>(days(5), "nansen.first-funder"),
+        sentCount: evidence.ok(1, "rpc.nonce"),
+        relatedWallets: evidence.ok(40, "nansen.related-wallets"),
+      },
+      { ...peer, fundedAt: days(5) },
+    );
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: empty(), linked: risky, linkVerified: true });
+    assert.equal(out.breakdown.declined, true);
+    assert.equal(out.report, null);
+    assert.equal(out.decision.headline, "We can't offer you credit right now.");
+    assert.ok(!out.decision.nextSteps.some((s) => s.id === "build-history" || s.id === "link-history"));
+  });
+
+  it("collateral still works on a thin file, at face value", () => {
+    const out = underwrite({ user: ACCOUNT, observedAt: NOW, account: account(), linkVerified: true });
+    const d = decide({ score: out.breakdown.score, declined: false, thinFile: out.decision.thinFile, collateralBoost: 300_000_000n, purchase: 200_000_000n });
+    assert.equal(d.limit, 0n);
+    assert.equal(d.available, 300_000_000n);
+    assert.equal(d.payIn4.allowed, true);
+    assert.match(d.headline, /^You can pay in 4 for up to \$29\d\.\d\d\.$/);
+  });
+
+  it("facts already attested are explained as the chain scored them: the floor does not apply after the fact", () => {
+    const { decision } = explainOnChainFacts({
+      walletAgeDays: 0,
+      txCount: 0,
+      stableBalance: 0n,
+      defiTenureDays: 0,
+      priorLiquidations: 0,
+      relatedWallets: 0,
+      exchangeFunded: false,
+      observedAt: BigInt(NOW),
+    });
+    assert.equal(decision.thinFile, null);
+    assert.equal(decision.limit, 200_000_000n);
+  });
+
+  it("attestGaps is the one rule, exported for the CRE workflow", () => {
+    assert.deepEqual(attestGaps({ walletAgeDays: 30, txCount: 5 }), []);
+    assert.equal(isAttestable({ walletAgeDays: 30, txCount: 5 }), true);
+    assert.equal(isAttestable({ walletAgeDays: 29, txCount: 500 }), false);
+    assert.deepEqual(ATTEST_MINIMUM, { walletAgeDays: 30, txCount: 5 });
   });
 });

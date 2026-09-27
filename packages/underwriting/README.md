@@ -54,7 +54,9 @@ data. Here, Nansen's data decides how much credit a person gets:
   down or cannot track an address.
 
 Take Nansen away and a linked wallet cannot be underwritten: its risk checks
-cannot run, so it is left out and the buyer stays at the $200 floor. Every
+cannot run, so it is left out and the buyer is judged on their Polaris
+account alone, which for a new account is below the evidence floor (no line
+until there is history). Every
 reason line carries `provider: "nansen"` where Nansen backs it, so the app can
 credit it.
 
@@ -186,10 +188,46 @@ from repaying (+12 per on-time week).
 - Cold start (plan §5.5): at the $200 floor a $200 purchase plus interest does
   not fit; the decision says by how much and how much collateral would cover
   it.
+- `thinFile`: the evidence floor, below.
+- `nextSteps`: link a wallet, keep using Polaris (`build-history`), repay on
+  time, set money aside, or retry.
+
+### The evidence floor: thin files are not attested
+
+ScoreManager opens every underwritten wallet at the 520 floor, a $200
+unsecured line, whatever the facts say. So a report for an account with no
+history is a free $200: one person could open many free accounts, underwrite
+each and draw about $196 from every one (security review, "sybil credit
+farming", proven on a Hardhat chain). The sybil and one-link checks only see a
+linked wallet, so they do not help an account that brings none.
+
+`underwrite()` therefore attests only facts that clear `ATTEST_MINIMUM`:
+**30 days of history and 5 payments or transfers**, counted across the account
+and a linked wallet that passed its checks (`attestGaps`, `isAttestable` in
+`core/attest.ts`). Below it the outcome is `final: true, attest: false,
+report: null`, and the decision is secured-only, exactly as ScoreManager treats
+a wallet never underwritten while `requireUnderwriting` is on: `limit` 0,
+collateral at face value, `thinFile` listing each gap (`{ fact, have, need }`),
+and the next steps "Open a line now: confirm with the wallet you already use"
+and "Keep using Polaris: Pay in 4 opens in 27 days, once you've made 3 more
+payments or transfers". No report also means the one underwriting an account
+gets is kept for when it has the history.
+
+Age and activity, not balance: a balance is a snapshot one person can move
+through every account in turn; a month cannot be borrowed. A real linked
+history (mainnet age and gas, Nansen's cluster check, one wallet per account
+on chain) clears the floor at once. `explainOnChainFacts` does not apply the
+floor: facts already attested are explained as the chain scored them.
+
+What the other layers still need to do (tracked in the branch notes): the CRE
+underwriting workflow must call `isAttestable(facts)` before it signs (it
+builds its own facts today), `ScoreManager.underwrite` should refuse thin facts
+with the same numbers so a stray report cannot open the floor, and the API
+should gate merchant auto-activation and rate-limit underwriting per verified
+person.
 - `reasons`: one line per fact with its points (they add up to the score) and
   the provider behind it. No line uses a word from the plan's "Words the buyer
   never sees"; a test enforces it.
-- `nextSteps`: link a wallet, repay on time, set money aside, or retry.
 
 ## API
 
@@ -200,13 +238,14 @@ underwrite(input: {
   user: Address; observedAt: number | bigint;
   account: SubjectEvidence; linked?: SubjectEvidence | null; linkVerified?: boolean;
   activeDebt?: bigint; purchase?: bigint | null; options?: { allowPartial?: boolean; version?: number };
-}): { version; user; final; missing: string[]; facts: Facts; linkedWallet: Address | null;
-      report: Hex | null;   // UnderwritingReceiver's batch with this one underwriting
+}): { version; user; final; attest; missing: string[]; facts: Facts; linkedWallet: Address | null;
+      report: Hex | null;   // UnderwritingReceiver's batch with this one underwriting; set exactly when attest
       breakdown: ScoreBreakdown; decision: CreditDecision; derivation: Derivation }
 
 deriveFacts({ account, linked?, observedAt, options? }): Derivation
 scoreFromFacts(f): { score, declined }            scoreBreakdown(f): ScoreBreakdown
-decide({ score, declined, declineReason?, activeDebt?, purchase?, collateralBoost?, reasons?, hasLinked?, final? }): CreditDecision
+decide({ score, declined, declineReason?, activeDebt?, purchase?, collateralBoost?, reasons?, hasLinked?, pending?, thinFile? }): CreditDecision
+attestGaps(facts): AttestGap[]    isAttestable(facts): boolean    ATTEST_MINIMUM = { walletAgeDays: 30, txCount: 5 }
 explainFacts(facts, breakdown, context?): CreditReason[]
 explainOnChainFacts(facts, { activeDebt?, purchase?, hasLinked? }): { breakdown, decision }
 quotePlan(principal, installments = 4, intervalSeconds = 604800, aprBps = 1000): PlanQuote
@@ -292,6 +331,7 @@ const linked = wallet ? runSync(linkedRecipe(wallet, { now }), send) : null;
 // ...consensus on the evidence (identical aggregation: the cache makes every node's replies the same)...
 const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked?.evidence, linkVerified });
 if (!out.final) throw new Error(`not final: ${out.missing.join(", ")}`); // no report; the app retries
+if (!out.attest) return { status: "thin", gaps: out.decision.thinFile }; // below the evidence floor: no report, no retry
 runtime.report(prepareReportRequest(out.report));                       // abi.encode(uint8 2, [(user, linkedWallet, Facts)])
 ```
 

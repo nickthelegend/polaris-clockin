@@ -24,23 +24,40 @@ describe("the underwriting API", () => {
     const body = JSON.parse(res.body);
     assert.equal(body.ok, true);
     assert.deepEqual(body.modes, { nansen: "fixture", zerion: "fixture", etherscan: "fixture", rpc: "fixture" });
-    assert.deepEqual(body.version, { facts: 1, model: 1 });
+    assert.deepEqual(body.version, { facts: 1, model: 2 });
   });
 
   it("POST /v1/underwrite: the decision, with amounts as base-unit strings", async () => {
-    const res = await createRouter(uw())(req({ json: { account: ACCOUNT.fresh, purchase: "150.00" } }));
+    const res = await createRouter(uw())(req({ json: { account: ACCOUNT.regular, purchase: "150.00" } }));
     assert.equal(res.status, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.final, true);
+    assert.equal(body.attest, true);
     assert.equal(body.dataMode, "fixture");
     assert.equal(body.decision.limit, "200000000");
+    assert.equal(body.decision.thinFile, null);
     assert.equal(body.decision.payIn4.allowed, true);
     assert.equal(body.decision.payIn4.quote.total, "151150684");
-    assert.equal(body.facts.stableBalance, "37600000");
+    assert.equal(body.facts.stableBalance, "455000000");
     assert.match(body.report, /^0x[0-9a-f]{832}$/);
     assert.equal(body.evidence.account.stableBalance.source, "rpc.balance");
     assert.equal(body.derivation, undefined, "the bulky derivation is not sent");
     assert.ok(body.attribution.walletAgeDays);
+  });
+
+  it("a thin file is final with no report: the app shows what is left and does not trigger the DON", async () => {
+    const res = await createRouter(uw())(req({ json: { account: ACCOUNT.fresh, purchase: "150.00" } }));
+    const body = JSON.parse(res.body);
+    assert.equal(body.final, true);
+    assert.equal(body.attest, false);
+    assert.equal(body.report, null);
+    assert.equal(body.retryAfterSeconds, null, "nothing to wait for: a retry gives the same answer");
+    assert.equal(body.decision.limit, "0");
+    assert.equal(body.decision.payIn4.allowed, false);
+    assert.deepEqual(body.decision.thinFile, [
+      { fact: "walletAgeDays", have: 3, need: 30 },
+      { fact: "txCount", have: 2, need: 5 },
+    ]);
   });
 
   it("a linked wallet without a proof comes back as a preview", async () => {
@@ -148,7 +165,7 @@ describe("the underwriting API", () => {
 
   it("the Fetch adapter serves a Next.js route handler", async () => {
     const handle = createFetchHandler(uw());
-    const res = await handle(new Request("http://app.local/v1/underwrite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ account: ACCOUNT.fresh }) }));
+    const res = await handle(new Request("http://app.local/v1/underwrite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ account: ACCOUNT.regular }) }));
     assert.equal(res.status, 200);
     assert.equal(((await res.json()) as { decision: { limit: string } }).decision.limit, "200000000");
   });

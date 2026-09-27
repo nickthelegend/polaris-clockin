@@ -16,7 +16,7 @@
 import { COLLATERAL_MULTIPLIER_BPS, LOAN, OPENING_CAP } from "./constants.ts";
 import { formatDollars } from "./format.ts";
 import { limitFor, nextTierFor, tierFor } from "./score.ts";
-import type { CreditDecision, CreditReason, NextStep, PlanQuote } from "./types.ts";
+import type { AttestGap, CreditDecision, CreditReason, NextStep, PlanQuote } from "./types.ts";
 
 /** `PolarisLoanEngine` interest: simple, pro-rated over the plan's length, rounded down. */
 export function planInterest(principal: bigint, installments: number, intervalSeconds: number, aprBps: number = LOAN.INTEREST_RATE_BPS): bigint {
@@ -94,13 +94,47 @@ export interface DecideInput {
    * linked wallet (`ownership`), or a source has not answered yet (`checks`).
    */
   pending?: "ownership" | "checks" | null;
+  /**
+   * The facts are too thin for the DON to attest (attest.ts): nothing is
+   * reported, so the account stays secured-only, as ScoreManager treats a
+   * wallet not yet underwritten. Empty or null when they clear the floor.
+   */
+  thinFile?: readonly AttestGap[] | null;
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "Pay in 4 opens after 30 days of history and 5 payments or transfers." */
+function thinReason(gaps: readonly AttestGap[]): string {
+  const age = gaps.find((g) => g.fact === "walletAgeDays");
+  const tx = gaps.find((g) => g.fact === "txCount");
+  const parts = [
+    age ? `${plural(age.need, "day", "days")} of history` : null,
+    tx ? plural(tx.need, "payment or transfer", "payments or transfers") : null,
+  ].filter((p): p is string => p !== null);
+  return `Pay in 4 opens after ${parts.join(" and ")}.`;
+}
+
+/** "Keep using Polaris: Pay in 4 opens in 27 days, once you've made 3 more payments or transfers." */
+function buildHistoryStep(gaps: readonly AttestGap[]): NextStep {
+  const age = gaps.find((g) => g.fact === "walletAgeDays");
+  const tx = gaps.find((g) => g.fact === "txCount");
+  const parts = [
+    age ? `in ${plural(age.need - age.have, "day", "days")}` : null,
+    tx ? `once you've made ${plural(tx.need - tx.have, "more payment or transfer", "more payments or transfers")}` : null,
+  ].filter((p): p is string => p !== null);
+  return { id: "build-history", label: `Keep using Polaris: Pay in 4 opens ${parts.join(", ")}.` };
 }
 
 export function decide(input: DecideInput): CreditDecision {
   const { score, declined } = input;
   const activeDebt = input.activeDebt ?? 0n;
   const boost = input.collateralBoost ?? 0n;
-  const limit = limitFor(score, declined);
+  const gaps = input.thinFile ?? [];
+  // A thin file is never attested, so it has no unsecured line of its own.
+  const thin = gaps.length > 0;
+  const securedOnly = declined || thin;
+  const limit = thin ? 0n : limitFor(score, declined);
   const lineWithBoost = limit + boost;
   const available = lineWithBoost > activeDebt ? lineWithBoost - activeDebt : 0n;
 
@@ -115,14 +149,17 @@ export function decide(input: DecideInput): CreditDecision {
     quote = { ...q, fits: q.total <= available };
   }
 
-  // A declined buyer keeps the secured path at face value (ScoreManager._securedOnly).
-  const multiplierBps = declined ? 10_000 : COLLATERAL_MULTIPLIER_BPS;
+  // A declined or never-underwritten buyer keeps the secured path at face value (ScoreManager._securedOnly).
+  const multiplierBps = securedOnly ? 10_000 : COLLATERAL_MULTIPLIER_BPS;
 
   let allowed = maxPurchase > 0n;
   let reason: string | null = null;
   if (declined && boost === 0n) {
     allowed = false;
     reason = input.declineReason ?? "We can't offer you credit right now.";
+  } else if (thin && boost === 0n) {
+    allowed = false;
+    reason = thinReason(gaps);
   } else if (maxPurchase === 0n) {
     allowed = false;
     reason = limit > 0n ? "Your line is in use. It frees up as you pay." : "There's no credit available on this account yet.";
@@ -135,20 +172,26 @@ export function decide(input: DecideInput): CreditDecision {
   if (input.pending === "checks") {
     nextSteps.push({ id: "retry", label: "We're finishing a check on your history. Try again in a minute." });
   }
-  if (input.pending === "ownership" && !declined) {
+  if (thin && !declined && !input.hasLinked && input.pending !== "ownership") {
+    // The Bring your history step, so "wallet" is allowed: a real history clears the floor at once.
+    nextSteps.push({ id: "link-history", label: "Open a line now: confirm with the wallet you already use." });
+  }
+  if (thin && !declined && input.pending !== "checks") nextSteps.push(buildHistoryStep(gaps));
+  // Confirming a linked wallet helps only when its history is what clears the floor.
+  if (input.pending === "ownership" && !declined && !thin) {
     // "Wallet" is allowed only on the Bring your history step (plan §2, "Words the buyer never sees").
     nextSteps.push({ id: "link-history", label: "Confirm with the wallet you already use to count its history." });
   }
   if (quote && !quote.fits) {
-    // Collateral adds lock × multiplier to the line (face value when declined).
+    // Collateral adds lock × multiplier to the line (face value when secured-only).
     const lock = collateralFor(quote.total - available, multiplierBps);
     nextSteps.push({ id: "secure", label: `Set aside ${formatDollars(lock, { cents: true })} to pay in 4 for this purchase.` });
   }
-  if (!declined && !input.hasLinked && input.pending !== "ownership") {
+  if (!securedOnly && !input.hasLinked && input.pending !== "ownership") {
     // The Bring your history step, so "wallet" is allowed here too.
     nextSteps.push({ id: "link-history", label: "Raise your limit: confirm with the wallet you already use." });
   }
-  const next = declined ? null : nextTierFor(score);
+  const next = securedOnly ? null : nextTierFor(score);
   if (next) {
     const weeks = next.onTimeWeeks;
     nextSteps.push({
@@ -159,7 +202,7 @@ export function decide(input: DecideInput): CreditDecision {
   if (!quote || quote.fits) {
     nextSteps.push({
       id: "secure",
-      label: declined
+      label: securedOnly
         ? "Set money aside to pay in 4 against it."
         : `Set aside ${formatDollars(100_000_000n)} to add ${formatDollars((100_000_000n * BigInt(multiplierBps)) / 10_000n)} to your line.`,
     });
@@ -167,8 +210,11 @@ export function decide(input: DecideInput): CreditDecision {
 
   let headline: string;
   if (declined && boost === 0n) headline = "We can't offer you credit right now.";
+  // Thin facts from a source that has not answered may not be thin: say only that a check is running.
+  else if (thin && input.pending === "checks") headline = "We're finishing a check on your history.";
+  else if (thin && boost === 0n) headline = "Pay in 4 opens once there's a little more history here.";
   // Pending ownership is the Bring your history step: the buyer confirms with the wallet they linked.
-  else if (input.pending === "ownership") headline = `Confirm with your wallet to open a ${formatDollars(lineWithBoost)} line.`;
+  else if (input.pending === "ownership" && !thin) headline = `Confirm with your wallet to open a ${formatDollars(lineWithBoost)} line.`;
   else if (input.pending === "checks") headline = `Your line is ${formatDollars(lineWithBoost)} for now. We're finishing a check on your history.`;
   else if (allowed) headline = `You can pay in 4 for up to ${formatDollars(maxPurchase, { cents: true })}.`;
   else if (quote && !quote.fits) headline = `Your line is ${formatDollars(lineWithBoost)}. This purchase needs a little more.`;
@@ -184,6 +230,7 @@ export function decide(input: DecideInput): CreditDecision {
     tier: tierFor(score),
     nextTier: next,
     payIn4: { allowed, installments, intervalSeconds, aprBps, maxPurchase, reason, quote },
+    thinFile: thin ? gaps.map((g) => ({ ...g })) : null,
     headline,
     reasons: input.reasons ?? [],
     nextSteps,

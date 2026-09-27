@@ -35,9 +35,11 @@ async function run(
 const reason = (o: UnderwriteOutcome, id: string) => o.decision.reasons.find((r) => r.id === id);
 
 describe("personas", () => {
-  it("thin file: a three-day-old account opens at the $200 floor, with a way up", async () => {
+  it("thin file: a three-day-old account is not attested, so it opens no unsecured line, and is told the way in", async () => {
     const o = await run(fixtureProviders(), ACCOUNT.fresh, null, { purchase: 200_000_000n });
     assert.equal(o.final, true);
+    assert.equal(o.attest, false);
+    assert.equal(o.report, null, "a report would open ScoreManager's $200 floor on no evidence");
     assert.deepEqual(o.facts, {
       walletAgeDays: 3,
       txCount: 2,
@@ -49,9 +51,20 @@ describe("personas", () => {
       observedAt: BigInt(NOW),
     });
     assert.equal(o.breakdown.score, 520);
+    assert.equal(o.decision.limit, 0n);
+    assert.equal(o.decision.payIn4.allowed, false);
+    assert.deepEqual(o.decision.thinFile?.map((g) => g.fact), ["walletAgeDays", "txCount"]);
+    assert.deepEqual(o.decision.nextSteps.map((s) => s.id), ["link-history", "build-history", "secure"]);
+  });
+
+  it("regular file: an account with three months of its own use clears the floor and opens at $200", async () => {
+    const o = await run(fixtureProviders(), ACCOUNT.regular, null, { purchase: 150_000_000n });
+    assert.equal(o.final, true);
+    assert.equal(o.attest, true);
+    assert.equal(o.facts.walletAgeDays, 90);
     assert.equal(o.decision.limit, 200_000_000n);
-    assert.equal(o.decision.payIn4.allowed, false, "$200 plus interest does not fit a $200 line");
-    assert.deepEqual(o.decision.nextSteps.map((s) => s.id), ["secure", "link-history", "repay"]);
+    assert.equal(o.decision.payIn4.allowed, true);
+    assert.match(o.report ?? "", /^0x[0-9a-f]{832}$/);
   });
 
   it("strong file: Nansen's facts open a $1,000 line, and the reasons say so", async () => {
@@ -177,7 +190,8 @@ describe("provider failures and fallback", () => {
     assert.ok(o.missing.includes("linked.funder"));
     assert.ok(o.missing.includes("linked.relatedWallets"));
     assert.equal(o.derivation.linked?.excludedFor, "missing-risk-check");
-    assert.equal(o.decision.limit, 200_000_000n, "the preview shows the floor, never an unchecked $1,000");
+    assert.equal(o.decision.limit, 0n, "the preview never shows an unchecked $1,000, and the account alone is too thin for a line");
+    assert.equal(o.decision.headline, "We're finishing a check on your history.");
     assert.ok(o.issues.some((i) => i.source === "nansen.first-funder" && i.code === "server_error"));
     const nansenCalls = t.calls.filter((c) => c.url.includes("nansen") && c.url.includes("first-funder")).length;
     assert.equal(nansenCalls, 3, "retried three times, then fell back");
@@ -241,7 +255,7 @@ describe("provider failures and fallback", () => {
     const o = await run(fixtureProviders(t), ACCOUNT.fresh, LINKED.strong);
     assert.equal(o.final, false);
     assert.equal(o.report, null);
-    assert.equal(o.decision.limit, 200_000_000n);
+    assert.equal(o.decision.limit, 0n, "nothing read is nothing to lend on");
     assert.ok(o.missing.includes("account.stableBalance"));
   });
 

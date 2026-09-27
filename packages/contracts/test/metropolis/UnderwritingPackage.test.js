@@ -107,8 +107,23 @@ describe("@polarispay/underwriting against ScoreManager and PolarisLoanEngine", 
     expect(await engine.INTEREST_RATE_BPS()).to.equal(BigInt(core.LOAN.INTEREST_RATE_BPS));
   });
 
+  it("a thin file is never reported, and the chain agrees it has no line: not underwritten is secured-only", async () => {
+    const buyer = ethers.Wallet.createRandom().connect(ethers.provider);
+    const now = await time.latest();
+    const account = await collect.collectAccount("0xacc0000000000000000000000000000000000001", providers(), { now });
+    const out = core.underwrite({ user: buyer.address, observedAt: now, account: account.evidence, linked: null, linkVerified: true });
+    expect(out.final).to.equal(true);
+    expect(out.attest).to.equal(false);
+    expect(out.report).to.equal(null);
+    expect(out.decision.limit).to.equal(0n);
+    expect(await scores.creditLimitOf(buyer.address)).to.equal(out.decision.limit);
+    // Had the DON attested the same facts, ScoreManager would have opened the $200 floor on them.
+    await scores.connect(underwriter).underwrite(buyer.address, out.facts);
+    expect(await scores.creditLimitOf(buyer.address)).to.equal(AUSD(200));
+  });
+
   for (const persona of [
-    { name: "thin file (a new account alone)", account: 1, linked: null },
+    { name: "regular file (an account with three months of its own use)", account: 2, linked: null },
     { name: "strong file (a Coinbase-funded wallet linked)", account: 1, linked: "0xb0b0000000000000000000000000000000000001" },
     { name: "modest file (a small cluster)", account: 2, linked: "0xb0b0000000000000000000000000000000000002" },
     { name: "declined (two liquidations)", account: 1, linked: "0xb0b0000000000000000000000000000000000003" },
@@ -127,6 +142,7 @@ describe("@polarispay/underwriting against ScoreManager and PolarisLoanEngine", 
         linkVerified: true,
       });
       expect(out.final, out.missing.join(", ")).to.equal(true);
+      expect(out.attest).to.equal(true);
 
       // The report's bytes decode as UnderwritingReceiver decodes them, and the
       // one item's Facts are the struct the receiver hands to ScoreManager.

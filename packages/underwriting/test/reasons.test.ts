@@ -116,4 +116,25 @@ describe("reasons in the buyer's words", () => {
       }
     }
   });
+
+  it("a thin file's copy keeps to the same words, for every gap and every pending state", () => {
+    const gapSets = [
+      [{ fact: "walletAgeDays" as const, have: 0, need: 30 }, { fact: "txCount" as const, have: 0, need: 5 }],
+      [{ fact: "walletAgeDays" as const, have: 29, need: 30 }],
+      [{ fact: "txCount" as const, have: 4, need: 5 }],
+    ];
+    for (const thinFile of gapSets) {
+      for (const pending of [null, "checks", "ownership"] as const) {
+        for (const purchase of [null, 200_000_000n]) {
+          for (const collateralBoost of [0n, 300_000_000n]) {
+            const d = decide({ score: 520, declined: false, thinFile, pending, purchase, collateralBoost, hasLinked: pending === "ownership" });
+            for (const text of visible(d)) assert.doesNotMatch(text, JARGON, text);
+            assert.equal(d.limit, 0n);
+          }
+        }
+      }
+    }
+    const step = decide({ score: 520, declined: false, thinFile: gapSets[0] }).nextSteps.find((s) => s.id === "link-history");
+    assert.equal(step?.label, "Open a line now: confirm with the wallet you already use.", "the Bring your history step, the one place 'wallet' is allowed");
+  });
 });

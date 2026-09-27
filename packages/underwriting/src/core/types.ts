@@ -131,9 +131,18 @@ export interface CreditReason {
   source: string;
 }
 
+/** One way the facts fall short of the evidence floor (`ATTEST_MINIMUM`, attest.ts). */
+export interface AttestGap {
+  fact: "walletAgeDays" | "txCount";
+  /** What the facts show. */
+  have: number;
+  /** What the floor asks for. */
+  need: number;
+}
+
 /** What the buyer can do next to raise the line. */
 export interface NextStep {
-  id: "link-history" | "repay" | "secure" | "retry";
+  id: "link-history" | "repay" | "secure" | "retry" | "build-history";
   label: string;
 }
 
@@ -174,6 +183,13 @@ export interface CreditDecision {
     /** The quote for the requested purchase, when one was given. */
     quote: (PlanQuote & { fits: boolean }) | null;
   };
+  /**
+   * Set when the facts are too thin for the DON to attest (attest.ts): no
+   * report is sent and the account stays secured-only, so `limit` is 0 and
+   * collateral counts at face value. Each gap says what is short and by how
+   * much. Null when the facts clear the floor.
+   */
+  thinFile: AttestGap[] | null;
   /** One sentence for the top of the screen. */
   headline: string;
   reasons: CreditReason[];

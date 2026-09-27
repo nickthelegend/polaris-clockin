@@ -21,6 +21,7 @@ export {
   validateFacts,
   type UnderwritingItem,
 } from "./abi.ts";
+export { attestGaps, isAttestable } from "./attest.ts";
 export { deriveFacts, type Attribution, type Derivation, type DeriveOptions, type FactField } from "./facts.ts";
 export { explainFacts, declineReasonFor, type ExplainContext } from "./reasons.ts";
 export { decide, quotePlan, planInterest, maxPrincipal, collateralFor, type DecideInput } from "./decision.ts";
