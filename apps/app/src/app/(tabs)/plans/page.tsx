@@ -1,8 +1,6 @@
-import type { Metadata } from "next";
-import { Plans } from "./plans";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = { title: "Plans" };
-
+/** Plans live under Insights now (Expenses | Plans). */
 export default function PlansPage() {
-  return <Plans />;
+  redirect("/insights?view=plans");
 }
