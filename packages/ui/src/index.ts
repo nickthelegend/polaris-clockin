@@ -123,3 +123,11 @@ export { BalanceSummaryCard } from "./trade/BalanceSummaryCard";
 export type { BalanceSummaryCardProps, BalanceStat } from "./trade/BalanceSummaryCard";
 export { PanelCard } from "./trade/PanelCard";
 export type { PanelCardProps } from "./trade/PanelCard";
+export { FigureRow } from "./trade/FigureRow";
+export type { FigureRowProps } from "./trade/FigureRow";
+
+// One route, two layouts: the phone's below 1024px, ref E's desktop from 1024px
+export { Adaptive, useAdaptive, useIsDesktop, DESKTOP_QUERY } from "./trade/Adaptive";
+export type { AdaptiveProps, AdaptiveMode } from "./trade/Adaptive";
+export { AdaptiveSheet } from "./overlays/AdaptiveSheet";
+export type { AdaptiveSheetProps } from "./overlays/AdaptiveSheet";

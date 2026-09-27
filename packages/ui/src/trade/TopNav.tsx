@@ -109,7 +109,10 @@ export function NavDropdown({ label, items, value, linkAs, align = "start" }: Na
 /* ── WalletPill ──────────────────────────────────────────────────────────── */
 
 export type WalletPillProps = {
+  /** What pressing it copies (an address, a link). */
   address: string | null;
+  /** What the pill shows, when not the address itself ("Dollar account ···· 7C80"). */
+  text?: ReactNode;
   /** What the address is, for the button's name and the toast: "payout wallet". */
   label?: string;
   /** The small round icon; the Polaris mark by default. */
@@ -129,7 +132,7 @@ export type WalletPillProps = {
  * <WalletPill address={merchant.walletAddress} label="payout wallet" />
  * ```
  */
-export function WalletPill({ address, label = "wallet address", icon, pendingText = "Setting up…", maxWidth = 260, className }: WalletPillProps) {
+export function WalletPill({ address, text, label = "wallet address", icon, pendingText = "Setting up…", maxWidth = 260, className }: WalletPillProps) {
   const copy = async () => {
     if (!address) return;
     try {
@@ -157,7 +160,7 @@ export function WalletPill({ address, label = "wallet address", icon, pendingTex
       <span aria-hidden className="grid size-6 shrink-0 place-items-center">
         {icon ?? <LogoMark size={20} title="" />}
       </span>
-      <span className="ui-figure min-w-0 truncate">{address ?? pendingText}</span>
+      <span className="ui-figure min-w-0 truncate">{address ? (text ?? address) : pendingText}</span>
     </button>
   );
 }

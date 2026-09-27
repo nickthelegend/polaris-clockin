@@ -222,7 +222,10 @@ export function useInheritedTheme(open: boolean, explicit?: Theme): Theme | unde
       return;
     }
     const el = document.activeElement as HTMLElement | null;
-    const found = el?.closest("[data-theme]")?.getAttribute("data-theme");
+    const scope = el?.closest("[data-theme]") ?? document.documentElement;
+    // A scope can switch themes at 1024px (`data-theme-lg`, see styles.css).
+    const wide = scope.getAttribute("data-theme-lg");
+    const found = wide && window.matchMedia("(min-width: 1024px)").matches ? wide : scope.getAttribute("data-theme");
     setTheme(found === "light" || found === "dark" || found === "ref-e" ? found : undefined);
   }, [open, explicit]);
   return explicit ?? theme;

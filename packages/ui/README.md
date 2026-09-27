@@ -157,7 +157,7 @@ with them composed into the reference itself.
 |---|---|
 | `AppFrame` | `<AppFrame><TopNav … /><main>…</main></AppFrame>` · a dark panel (a big soft shadow) floating on the lime canvas: from 1024px in 16px of lime with 24px corners, from 1280px in 32px with 32px corners; full bleed below. `floatFrom="xl"` to float only from 1280px, `"always"` for a preview |
 | `TopNav`, `NavLink`, `NavDropdown` | `<TopNav brand={<Logo />} items={nav} more={{ label: "More", items: [developers, settings] }} value="overview" linkAs={Link} actions={…} compactActions={…} sheetFooter={…} />` · the text links with the reference's "Market ⌄" dropdown; below 1024px a compact bar whose menu is a `BottomSheet` that opens tall enough for every link and the footer; `contained` holds the bar to a 1280px content column |
-| `WalletPill` | `<WalletPill address={wallet} label="payout wallet address" />` · the dark pill with an icon and the truncated 0x address; pressing it copies |
+| `WalletPill` | `<WalletPill address={wallet} label="payout wallet address" />` · the dark pill with an icon and the truncated 0x address; pressing it copies · `text` shows something else while `address` is what it copies (the customer web: "Dollar account ···· 7C80", copying the receive link) |
 | `PrimaryButton`, `SecondaryButton` | `<PrimaryButton size="lg" block icon={<ArrowUpFromLine />}>Withdraw $1,250.00</PrimaryButton>` · #B0C956 with a near-black label; the dark #1D2129 one with its icon after; `sm` is the nav's pill, `lg` the widget's 50px buttons |
 | `IconSquareButton` | `<IconSquareButton label="Refresh" icon={<RefreshCw />} />` · the 40px outline squares (refresh, QR, settings); `tone="solid" active` for the chart toggle's raised lime one |
 | `DeltaChip` | `<DeltaChip value={3.27} suffix="today" />` · lime on the dark lime chip, coral when negative, `variant="strong"` in the balance card, `label` for "New" |
@@ -171,6 +171,17 @@ with them composed into the reference itself.
 | `SwapCard`, `SwapToggle`, `SwapStack` | `<SwapStack top={<SwapCard coin={<PolarisCoin size={42} />} symbol="AUSD" caption="You send" value={amount} onValueChange={setAmount} metaLabel="Balance" meta="3,196.97" />} bottom={…} toggle={<SwapToggle label="Switch" onClick={swap} />} />` · the stacked #1D2129 cards with the round button over the seam; the figure can be an input |
 | `BalanceSummaryCard` | `<BalanceSummaryCard label="Available balance" value="$3,196.97" delta={7.45} stats={[{ label: "Network fee", value: "$0.00" }, …]} />` · the outlined card with its chip and the stats row |
 | `PanelCard` | `<PanelCard title="Customers this week" action={<SeeAll />}>…</PanelCard>` · ref E's card for what the reference doesn't show: `variant="outline"` (the summary card's border) or `filled` (#1D2129) |
+| `FigureRow` | `<FigureRow value={<Money value={1284.5} />} delta={4.5} deltaSuffix="this week" right={<TimeframeChips … />} />` · the big figure under the pair header with its delta chip (`deltaLabel` for a figure in dollars, `badge` for another chip), the chips on the right; a skeleton while `value` is undefined |
+
+### One route, two layouts (`src/trade/Adaptive.tsx`, `src/overlays/AdaptiveSheet.tsx`)
+
+The customer app (apps/app) is a phone app below 1024px and ref E's framed desktop from 1024px.
+
+| Component | Usage |
+|---|---|
+| `Adaptive`, `useAdaptive`, `useIsDesktop`, `DESKTOP_QUERY` | `<Adaptive phone={<>{children}<TabBar /></>} desktop={<DesktopShell>{children}</DesktopShell>} />` · the server renders both layouts and CSS shows the one that fits (no flash, no hydration mismatch); after hydration only the matching one stays mounted, without remounting it. `useAdaptive()` gives `{ mode, settled }`: `settled` is false while both are in the page, so something that must exist once (a route sheet) waits for it |
+| `AdaptiveSheet` | `<AdaptiveSheet open={open} onOpenChange={setOpen} snapPoints={["fit"]} maxWidth={440} aria-label="Confirm" desktop="dialog">…</AdaptiveSheet>` · exactly the given BottomSheet below 1024px, a `Dialog` (or `desktop="drawer"`) from 1024px, with the same `Sheet.Body` and `Sheet.Footer` |
+| `data-theme-lg="ref-e"` | `<html data-theme="dark" data-theme-lg="ref-e">` · a scope that is dark below 1024px and ref E from 1024px (styles.css); overlays opened from it follow |
 
 ### Charts (hand-built SVG)
 
