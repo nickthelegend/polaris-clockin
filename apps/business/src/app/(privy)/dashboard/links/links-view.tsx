@@ -105,7 +105,7 @@ export function LinksView() {
         <span className="flex flex-col items-end">
           <span className="ui-figure font-medium">{money(l.amountCents)}</span>
           <span className="ui-figure text-[13px] whitespace-nowrap text-ui-muted">
-            {l.paymentsCount} paid · {money(l.collectedCents)}
+            {l.paymentsCount} paid<span className="hidden sm:inline"> · {money(l.collectedCents)}</span>
           </span>
         </span>
       ),
@@ -228,6 +228,7 @@ function LinkActions({ link, live, onShare, onTurnOff }: { link: PaymentLink; li
     <span className="inline-flex items-center gap-2">
       <IconSquareButton
         size="sm"
+        className="hidden sm:inline-grid"
         label={live ? `Share “${link.description}”` : "Sharing opens once buyers can open links"}
         icon={<Share2 />}
         onClick={onShare}
@@ -245,6 +246,15 @@ function LinkActions({ link, live, onShare, onTurnOff }: { link: PaymentLink; li
           </span>
         }
       >
+        <Menu.Item
+          icon={<Share2 />}
+          className="sm:hidden"
+          disabled={!live || !active}
+          description={live ? undefined : "Once buyers can open links"}
+          onSelect={onShare}
+        >
+          Share
+        </Menu.Item>
         <Menu.Item
           icon={<Copy />}
           disabled={!live || !active}

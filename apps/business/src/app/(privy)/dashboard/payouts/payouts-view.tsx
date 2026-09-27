@@ -109,8 +109,8 @@ export function PayoutsView() {
               Your balance is dollars (AUSD) in a payout account only you control. Move it in one tap, or every day on its own. Polaris&rsquo;s relayer
               pays the network fee.
             </p>
-            <dl className="mt-6 grid grid-cols-3 gap-3">
-              <Stat label="Paid out" value={state ? money(paidOut) : undefined} />
+            <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Stat label="Paid out" value={state ? money(paidOut) : undefined} className="col-span-2 sm:col-span-1" />
               <Stat label="Payouts" value={state ? String(history.length) : undefined} />
               <Stat label="Network fee" value="$0.00" />
             </dl>
@@ -161,9 +161,9 @@ export function PayoutsView() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | undefined }) {
+function Stat({ label, value, className }: { label: string; value: string | undefined; className?: string }) {
   return (
-    <div className="min-w-0 rounded-[20px] bg-ui-surface-1 px-4 py-3.5">
+    <div className={`min-w-0 rounded-[20px] bg-ui-surface-1 px-4 py-3.5 ${className ?? ""}`}>
       <dt className="truncate text-[13px] text-ui-muted">{label}</dt>
       <dd className="ui-figure mt-1 truncate text-[18px] leading-tight font-medium">{value ?? <Skeleton width={80} height={20} />}</dd>
     </div>
