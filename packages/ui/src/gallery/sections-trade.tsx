@@ -288,6 +288,8 @@ export function SectionTrade() {
             <DeltaChip value={3.27} suffix="today" />
             <DeltaChip value={7.45} variant="strong" />
             <DeltaChip value={-1.8} suffix="this week" />
+            <DeltaChip value={0} label="No change" suffix="this hour" />
+            <DeltaChip value={10.15} suffix="vs last week" goodWhen="down" />
             <TimeframeChips options={["1h", "24h", "1w", "1m"]} value={tf} onValueChange={setTf} />
             <TextTabs
               size="auto"
