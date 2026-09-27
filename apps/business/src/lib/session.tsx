@@ -45,7 +45,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const source = useMemo<DashboardData>(
     () =>
-      mock
+      // Only the development mock session sets `mock`; the NODE_ENV test
+      // removes this branch from production builds entirely.
+      process.env.NODE_ENV === "development" && mock
         ? createSampleData(undefined, { empty: !DEV_MOCK_SAMPLE })
         : createHttpData(getAccessToken, { onSessionEnded: announceSessionEnded }),
     [mock, getAccessToken],

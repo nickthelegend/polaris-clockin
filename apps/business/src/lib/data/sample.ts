@@ -99,7 +99,7 @@ export type SampleBook = {
 
 /** The mock session's merchant. Invented, like every sample merchant. */
 export const SAMPLE_MERCHANT: Merchant = {
-  id: "did:privy:dev-mock-session",
+  id: "did:privy:sample-merchant",
   publicId: "mer_sampleOatEmber01",
   businessName: "Oat & Ember",
   walletAddress: "0x7A3f5C21d0b4E8a96F1c2B3D4e5F60718293A1c2",
