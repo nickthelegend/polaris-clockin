@@ -111,6 +111,14 @@ export type ServerConfig = {
   /** Background loops (webhooks, chain sync, payouts) in this process. */
   workers: boolean;
   /**
+   * The CRE underwriting workflow: where its HTTP trigger listens
+   * (`cre workflow simulate ./underwriting --listen` serves
+   * http://localhost:2000/trigger), how far apart runs must be (CRE fires an
+   * HTTP trigger at most once per 30 s), and the secret its signed
+   * callbacks to /api/cre/callback carry.
+   */
+  cre: { underwritingTriggerUrl: string | null; minTriggerIntervalMs: number; callbackSecret: string | null };
+  /**
    * How many proxies we run in front of this server, each appending to
    * X-Forwarded-For: the client's IP is that many entries from the right
    * (http.ts `clientIp`). 0 means Next is exposed directly.
@@ -364,6 +372,11 @@ function build(): ServerConfig {
     },
     receiptTimeoutMs: int("RELAYER_RECEIPT_TIMEOUT_MS", 15_000),
     workers: flag("POLARIS_WORKERS", !production),
+    cre: {
+      underwritingTriggerUrl: env("CRE_UNDERWRITING_TRIGGER_URL") ?? null,
+      minTriggerIntervalMs: Math.max(0, int("CRE_TRIGGER_MIN_INTERVAL_MS", 30_000)),
+      callbackSecret: env("POLARIS_CRE_CALLBACK_SECRET") ?? null,
+    },
     // POLARIS_TRUST_PROXY=1 (the older setting) means one proxy.
     trustedProxies: Math.max(0, int("POLARIS_TRUSTED_PROXIES", flag("POLARIS_TRUST_PROXY") ? 1 : 0)),
   };

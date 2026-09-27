@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getConfig } from "./env";
+import { runUnderwritingQueue } from "./credit/underwriting";
 import { reconcileRelays, syncChain } from "./ingest/sync";
 import { runPayoutSweep } from "./payouts/payouts";
 import { dispatchDue } from "./webhooks/dispatcher";
@@ -33,6 +34,7 @@ export async function runTick(): Promise<TickSummary> {
     relays: chain ? await step("relay reconcile", () => reconcileRelays()) : "not configured",
     webhooks: await step("webhooks", () => dispatchDue({ limit: 100 })),
     payouts: chain ? await step("payouts", () => runPayoutSweep()) : "not configured",
+    underwriting: chain ? await step("underwriting", () => runUnderwritingQueue()) : "not configured",
   };
 }
 
@@ -49,6 +51,7 @@ export function startWorkers(): void {
       { name: "chain sync", everyMs: 2_000, run: () => syncChain({ maxRanges: 5 }) },
       { name: "relay reconcile", everyMs: 5_000, run: () => reconcileRelays() },
       { name: "payouts", everyMs: 5 * 60_000, run: () => runPayoutSweep() },
+      { name: "underwriting", everyMs: 5_000, run: () => runUnderwritingQueue() },
     );
   }
   g.__polarisWorkers = loops.map((loop) => {

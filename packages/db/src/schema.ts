@@ -465,6 +465,49 @@ export type CollectorRunRecord = {
   skipped: number;
 };
 
+/* ── Credit: CRE underwriting requests and outcomes ─────────────────────── */
+
+/** One signed request to underwrite a Polaris account, queued for the CRE underwriting workflow's HTTP trigger. */
+export type UnderwritingRequestRecord = {
+  /** `uwr_…`. */
+  id: string;
+  /** The Polaris account (lower-case), which signed the consent. */
+  account: Address;
+  /** The history wallet it links, or null for the account alone. */
+  wallet: Address | null;
+  /** Exactly what the trigger receives as `input` (the workflow verifies the signatures itself). */
+  payload: {
+    user: Address;
+    consent: { issuedAt: number; nonce: string; signature: Hex };
+    linked: { wallet: Address; issuedAt: number; nonce: string; signature: Hex } | null;
+  };
+  /** queued → sent (the trigger accepted it) → done (the workflow's callback came back), or failed. */
+  state: "queued" | "sent" | "done" | "failed";
+  attempts: number;
+  error: string | null;
+  createdAt: IsoDate;
+  sentAt: IsoDate | null;
+  doneAt: IsoDate | null;
+};
+
+/** What the CRE underwriting workflow decided for an account, from its signed callback. */
+export type CreditDecisionRecord = {
+  /** The account, lower-case. */
+  id: string;
+  /** `applied`: ScoreManager opened the line; `refused`: the receiver refused it; `thin`: no report, not enough evidence yet. */
+  status: "applied" | "refused" | "thin";
+  score: number | null;
+  reason: string | null;
+  linkedWallet: Address | null;
+  txHash: Hex | null;
+  /** The callback's own id, and when it arrived. */
+  callbackId: string;
+  at: IsoDate;
+};
+
+/** A CRE callback we have handled, by its id: every DON node may deliver it. */
+export type CreCallbackRecord = { id: string; type: string; receivedAt: IsoDate };
+
 /* ── Collections ────────────────────────────────────────────────────────── */
 
 const lower = (a: string | null | undefined) => (a ? a.toLowerCase() : null);
@@ -603,6 +646,26 @@ export const COLLECTIONS = {
     id: (d: CollectorRunRecord) => d.id,
     indexes: {},
   } satisfies CollectionSpec<CollectorRunRecord>,
+  underwritingRequests: {
+    name: "underwriting_requests",
+    id: (d: UnderwritingRequestRecord) => d.id,
+    indexes: {
+      account: (d: UnderwritingRequestRecord) => d.account.toLowerCase(),
+      state: (d: UnderwritingRequestRecord) => d.state,
+      createdAt: (d: UnderwritingRequestRecord) => d.createdAt,
+      sentAt: (d: UnderwritingRequestRecord) => d.sentAt,
+    },
+  } satisfies CollectionSpec<UnderwritingRequestRecord>,
+  creditDecisions: {
+    name: "credit_decisions",
+    id: (d: CreditDecisionRecord) => d.id,
+    indexes: { at: (d: CreditDecisionRecord) => d.at },
+  } satisfies CollectionSpec<CreditDecisionRecord>,
+  creCallbacks: {
+    name: "cre_callbacks",
+    id: (d: CreCallbackRecord) => d.id,
+    indexes: { receivedAt: (d: CreCallbackRecord) => d.receivedAt },
+  } satisfies CollectionSpec<CreCallbackRecord>,
   failedLogs: {
     name: "failed_logs",
     id: (d: FailedLogRecord) => d.id,
@@ -631,6 +694,9 @@ export function collections(store: Store) {
     processedLogs: store.collection(COLLECTIONS.processedLogs),
     collectorRuns: store.collection(COLLECTIONS.collectorRuns),
     failedLogs: store.collection(COLLECTIONS.failedLogs),
+    underwritingRequests: store.collection(COLLECTIONS.underwritingRequests),
+    creditDecisions: store.collection(COLLECTIONS.creditDecisions),
+    creCallbacks: store.collection(COLLECTIONS.creCallbacks),
   };
 }
 

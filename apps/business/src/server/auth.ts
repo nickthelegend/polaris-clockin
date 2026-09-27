@@ -9,7 +9,8 @@ import type { Address } from "@/lib/data/types";
 import { ChainNotConfigured } from "./chain/client";
 import { getDb } from "./db";
 import { getConfig } from "./env";
-import { clientIp, corsHeaders, failFrom, fail, HttpError, newRequestId, preflight, type CorsPolicy } from "./http";
+import { verifyCreSignature } from "./credit/callback-signature";
+import { clientIp, corsHeaders, failFrom, fail, HttpError, newRequestId, preflight, readText, type CorsPolicy } from "./http";
 import { PolicyViolation } from "./policy/relayer";
 import { getPrivy } from "./privy";
 import { consume, LIMITS, type Limit } from "./ratelimit";
@@ -363,6 +364,23 @@ export function withCron<Ctx = unknown>(handler: Handler<null, Ctx>) {
     if (!getConfig().cronSecret) throw new HttpError(503, "not_configured", "CRON_SECRET isn't set, so scheduled jobs are closed.");
     if (!hasCronSecret(req)) throw new HttpError(401, "unauthenticated", "Wrong cron secret.");
     return null;
+  }, handler);
+}
+
+/**
+ * The CRE workflows' signed callbacks: `Polaris-Signature: t=<unix>,v1=<hex
+ * HMAC-SHA256(POLARIS_CRE_CALLBACK_SECRET, "<t>.<body>")>`, within 300 s
+ * (the scheme in @polaris/cre-workflows/callback). The handler gets the raw
+ * body it was verified over. Closed when the secret is unset.
+ */
+export function withCreCallback<Ctx = unknown>(handler: (req: Request, body: string, ctx: Ctx, meta: { requestId: string }) => Promise<Response>) {
+  return wrap<string, Ctx>(async (req) => {
+    const secret = getConfig().cre.callbackSecret;
+    if (!secret) throw new HttpError(503, "not_configured", "POLARIS_CRE_CALLBACK_SECRET isn't set, so CRE callbacks are closed.");
+    const body = await readText(req);
+    const check = verifyCreSignature(secret, body, req.headers.get("polaris-signature"), Math.floor(Date.now() / 1000));
+    if (!check.ok) throw new HttpError(401, "bad_signature", `The callback's signature didn't verify: ${check.reason}.`);
+    return body;
   }, handler);
 }
 

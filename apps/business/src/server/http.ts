@@ -70,6 +70,13 @@ async function readLimited(req: Request, maxBytes: number): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+/** The raw body as text, at most `maxBytes` (for bodies whose exact bytes are signed). */
+export async function readText(req: Request, { maxBytes = DEFAULT_MAX_BODY_BYTES * 4 } = {}): Promise<string> {
+  const declared = Number(req.headers.get("content-length") ?? "0");
+  if (declared > maxBytes) throw new HttpError(413, "too_large", "The request body is too large.");
+  return readLimited(req, maxBytes);
+}
+
 /** Parse a JSON object body, refusing anything large, malformed or not an object. */
 export async function readJson(req: Request, { maxBytes = DEFAULT_MAX_BODY_BYTES } = {}): Promise<Record<string, unknown>> {
   const type = req.headers.get("content-type") ?? "";

@@ -12,6 +12,8 @@
 //   src/app/api/public/**        withPublic          (public data only, rate-limited)
 //   src/app/api/health/**        withPublic
 //   src/app/api/cron/**          withCron            (CRON_SECRET)
+//   src/app/api/credit/**        withSignedRequest   (the account's own consent signature)
+//   src/app/api/cre/**           withCreCallback     (the CRE workflows' HMAC-signed callbacks)
 //   everything else              withMerchant        (a verified Privy session)
 //
 // OPTIONS (CORS preflight) may be withPreflight(...) on the cross-origin paths.
@@ -30,6 +32,8 @@ const RULES = [
   { prefix: "public/", wrappers: ["withPublic"], preflight: true },
   { prefix: "health/", wrappers: ["withPublic"], preflight: false },
   { prefix: "cron/", wrappers: ["withCron"], preflight: false },
+  { prefix: "credit/", wrappers: ["withSignedRequest"], preflight: true },
+  { prefix: "cre/", wrappers: ["withCreCallback"], preflight: false },
   { prefix: "", wrappers: ["withMerchant"], preflight: false },
 ];
 

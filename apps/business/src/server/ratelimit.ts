@@ -31,6 +31,9 @@ export const LIMITS = {
   publicPerIp: { name: "public-ip", perMinute: 240, burst: 60 },
   apiPerKey: { name: "api-key", perMinute: 300, burst: 100 },
   onboardPerMerchant: { name: "onboard", perMinute: 6, burst: 3 },
+  /** Underwriting is once per account, and the CRE trigger runs once per 30 s for everyone: a few tries an hour, a few a day. */
+  underwritePerAccount: { name: "underwrite", perMinute: 4 / 60, burst: 2 },
+  underwritePerAccountDaily: { name: "underwrite-day", perMinute: 6 / 1440, burst: 6 },
   /** Opening a payment link costs a relayer transaction (the price quote). */
   linkOpen: { name: "link-open", perMinute: 20, burst: 10 },
 } as const satisfies Record<string, Limit>;

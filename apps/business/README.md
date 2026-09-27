@@ -183,8 +183,12 @@ Dashboard routes: `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`,
 - **Onboarding**: `GET /api/merchant/registration` returns the
   `Registration` typed data for the embedded wallet to sign;
   `POST` verifies it and relays `registerFor`, then (with `REGISTRY_ACTIVATOR`)
-  activates the merchant for Pay in 4 at the cap. The client hook is
-  `useRegisterMerchant()` in `src/lib/payouts.ts`.
+  activates the merchant for Pay in 4 at the cap, once it has settlement
+  history: Pay-now orders from `MERCHANT_ACTIVATION_MIN_PAYMENTS` different
+  customers (3 in production), re-checked on each payment. Until then it
+  takes Pay now only, so a crowd of fresh accounts can't draw their opening
+  credit lines on a merchant that has never sold anything. The client hook
+  is `useRegisterMerchant()` in `src/lib/payouts.ts`.
 - **One-tap withdraw**: `POST /api/payouts` with the wallet's
   `TransferWithAuthorization`; the server rebuilds it from the amount and
   destination, checks the signer and the balance, and relays it.
@@ -195,6 +199,31 @@ Dashboard routes: `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`,
   `POST /api/payouts/automatic/run`) signs with that signer and the relayer
   submits it; it refuses to run if the wallet no longer lists our signer with
   that exact policy.
+
+## Credit: firing the CRE underwriting workflow (plan §5.5)
+
+ScoreManager opens an unsecured Pay in 4 line only from a CRE underwriting
+report, and the workflow runs on an HTTP trigger. The product fires it:
+
+1. `GET /api/public/credit/{account}/messages[?wallet=0x…]`: the exact texts
+   to sign, with a fresh nonce: the account's consent (the workflow's
+   `underwriteConsentMessage`) and, to bring history, the wallet's link proof.
+2. `POST /api/credit/underwrite` with both signatures. The API verifies them
+   (so no one can queue runs for someone else's account or spend the
+   trigger's rate limit), refuses an account already underwritten, limits
+   each account to a few tries a day, and queues the run. The DON verifies
+   the signatures again, so the API can't underwrite anyone who didn't ask.
+3. A worker loop (and `/api/cron/tick`) sends the queue to
+   `CRE_UNDERWRITING_TRIGGER_URL` as `{ "input": payload }`, one run per
+   `CRE_TRIGGER_MIN_INTERVAL_MS` (CRE fires an HTTP trigger once per 30 s).
+   Under simulation that is `cre workflow simulate ./underwriting --listen
+   --broadcast`, at `http://localhost:2000/trigger`.
+4. The workflow's signed callback, `POST /api/cre/callback`
+   (`Polaris-Signature`, HMAC with `POLARIS_CRE_CALLBACK_SECRET`), records
+   `credit.underwritten`, `credit.refused` or `credit.thin`; a
+   `collections.run` callback runs the chain sync at once.
+5. `GET /api/public/credit/{account}`: the line and score from ScoreManager
+   now, the latest request, and the workflow's decision with its reason.
 
 ## Environment
 
@@ -207,7 +236,9 @@ See [`.env.example`](.env.example) for every variable. The essentials:
 | `RELAYER_MODE` (+ `PRIVY_RELAYER_*`) | `privy` in production, `local` on a Hardhat node, `off` |
 | `POLARIS_KEY_PEPPER` | Required in production |
 | `POLARIS_CHECKOUT_ORIGIN` | Where session URLs point (`https://pay.polarispay.app`) |
-| `CRON_SECRET` | For `/api/cron/tick` on serverless hosts |
+| `CRON_SECRET` | For `/api/cron/tick`, and for the list of production problems on `/api/health` |
+| `CRE_UNDERWRITING_TRIGGER_URL`, `POLARIS_CRE_CALLBACK_SECRET` | The CRE underwriting trigger, and the secret its callbacks are signed with |
+| `POLARIS_TRUSTED_PROXIES` | How many proxies append to `X-Forwarded-For` in front of this server (per-IP limits) |
 
 ## Code map
 
@@ -221,7 +252,8 @@ src/server/sessions/           params.ts (the SDK's validation), idempotency.ts,
 src/server/ingest/             ingest.ts (chain events → records + webhooks), sync.ts (the log poller, late receipts)
 src/server/webhooks/           events.ts (emit), dispatcher.ts (deliver, retry)
 src/server/payouts/            withdrawals and the automatic sweep
-src/server/onboarding.ts       MerchantRegistry registration and activation
+src/server/onboarding.ts       MerchantRegistry registration and activation (after settlement history)
+src/server/credit/             CRE underwriting: the texts to sign, the request queue and trigger, the signed callbacks
 src/server/services.ts         the dashboard's reads and writes
 src/instrumentation.ts         starts the background loops on a long-running server
 packages/db                    the store, the record schema, key hashing, webhook signing and delivery
@@ -230,12 +262,18 @@ packages/db                    the store, the record schema, key hashing, webhoo
 ## Storage and deployment
 
 The store is SQLite (`node:sqlite`, nothing to install) at
-`POLARIS_DB_URL` (default `sqlite:.data/polaris.db`), so run it as one server
-with a persistent disk; on a serverless host, implement `@polaris/db`'s
-`Store` over Postgres. The relayer assigns nonces in-process: run one relayer
-instance per wallet. Background work runs in-process (`POLARIS_WORKERS`,
-default on outside production), or from a scheduler calling
-`POST /api/cron/tick` with `CRON_SECRET`.
+`POLARIS_DB_URL` (default `sqlite:.data/polaris.db`), and the relayer assigns
+nonces in-process. So this app runs as **one long-lived Node process with a
+persistent disk**: `next build && next start` on a VM, or on Fly.io or
+Railway with a volume mounted at `.data/`, behind one proxy
+(`POLARIS_TRUSTED_PROXIES=1`). Serverless hosting (Vercel and the like) is
+not supported as is: each instance would have its own nonce lanes and its
+own (lost) database. Moving there means implementing `@polaris/db`'s `Store`
+over Postgres and driving background work only through `/api/cron/tick`.
+
+Background work runs in-process (`POLARIS_WORKERS`, default on outside
+production; turn it on in production on a long-lived host), or from a
+scheduler calling `POST /api/cron/tick` with `CRON_SECRET`.
 
 Without a deployment record the dashboard still runs: new merchants see a
 sample book, labelled as such, and nothing is relayed.
