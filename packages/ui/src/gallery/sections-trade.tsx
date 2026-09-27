@@ -31,6 +31,7 @@ import { ChartTypeToggle, DeltaChip, StatusPill, TextTabs, TimeframeChips, type 
 import { DataTable, TableName } from "../trade/DataTable";
 import { GradientLineChart, type GradientPoint } from "../trade/GradientLineChart";
 import { Coin, DollarCoin, PairHeader, PolarisCoin } from "../trade/PairHeader";
+import { FigureRow } from "../trade/FigureRow";
 import { PanelCard } from "../trade/PanelCard";
 import { SwapCard, SwapStack, SwapToggle } from "../trade/Swap";
 import { TopNav, WalletPill } from "../trade/TopNav";
@@ -314,6 +315,17 @@ export function SectionTrade() {
               M
             </Coin>
             <WalletPill address={WALLET} label="payout wallet" maxWidth={230} />
+            <WalletPill address="https://app.polarispay.app/send?to=0x7C80" text="Dollar account ···· 7C80" label="receive link" maxWidth={260} />
+          </Specimen>
+          <Specimen label="FigureRow: the big figure, its chip and the chips on the right">
+            <FigureRow
+              className="w-full"
+              caption="Spent this week"
+              value={<span>$148.49</span>}
+              delta={10.15}
+              deltaSuffix="vs last week"
+              right={<TimeframeChips options={["1w", "1m", "3m"] as const} value="1w" onValueChange={() => undefined} aria-label="Period" />}
+            />
           </Specimen>
           <Specimen label="PanelCard: outline, filled">
             <PanelCard title="Customers this week" subtitle="Unique buyers per day" className="w-full sm:w-[260px]">
