@@ -138,8 +138,10 @@ export function useFocusTrap(
         node.querySelector<HTMLElement>("[data-autofocus]") ??
         (coarse
           ? node
-          : // The first real control; the close button only if there is nothing else.
-            (focusables(node).find((el) => el.dataset.sheetClose === undefined) ?? node));
+          : // The first real control; not the close button or a scroll area
+            // (focusable only so a keyboard can scroll it).
+            (focusables(node).find((el) => el.dataset.sheetClose === undefined && el.dataset.sheetScroll === undefined) ??
+            node));
       target.focus({ preventScroll: true });
     });
 

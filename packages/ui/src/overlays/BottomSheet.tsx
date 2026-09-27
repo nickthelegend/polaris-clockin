@@ -80,8 +80,21 @@ function naturalHeight(column: HTMLElement): number {
   return h;
 }
 
-/** How many sheets are on screen: a sheet opened over another sits above it, backdrop and all. */
-let openSheets = 0;
+/**
+ * The stack positions of the sheets on screen, including any still animating
+ * out. A sheet takes the slot above the highest one still here, so it sits
+ * above every sheet it opened over, backdrop and all, even when the sheet
+ * below was swapped for another mid-flight (a count would hand out a slot
+ * already taken).
+ */
+const liveDepths = new Set<number>();
+
+/**
+ * Whether the sheet a sheet sits inside is open. A sheet rendered inside
+ * another (a Face ID confirm inside a checkout) closes with it, so it never
+ * outlives the sheet it belongs to.
+ */
+const ParentSheetContext = createContext<boolean | null>(null);
 
 function rubber(overshoot: number): number {
   return -Math.sqrt(Math.max(0, overshoot)) * 4;
@@ -225,7 +238,7 @@ export type BottomSheetProps = {
  * ```
  */
 export function BottomSheet({
-  open,
+  open: openProp,
   onOpenChange,
   snapPoints = ["half"],
   defaultSnap,
@@ -240,6 +253,8 @@ export function BottomSheet({
   className,
   children,
 }: BottomSheetProps) {
+  const parentOpen = useContext(ParentSheetContext);
+  const open = openProp && (parentOpen ?? true);
   const mounted = useMounted();
   const [present, setPresent] = useState(open);
   const [vh, setVh] = useState(0);
@@ -378,10 +393,11 @@ export function BottomSheet({
   const [depth, setDepth] = useState(0);
   useIsomorphicLayoutEffect(() => {
     if (!present) return;
-    setDepth(openSheets);
-    openSheets += 1;
+    const d = liveDepths.size ? Math.max(...liveDepths) + 1 : 0;
+    liveDepths.add(d);
+    setDepth(d);
     return () => {
-      openSheets = Math.max(0, openSheets - 1);
+      liveDepths.delete(d);
     };
   }, [present]);
 
@@ -534,7 +550,8 @@ export function BottomSheet({
       <motion.div
         aria-hidden
         className="fixed inset-0 bg-ui-scrim backdrop-blur-[8px]"
-        style={{ opacity: backdrop, zIndex: 900 + depth * 2 }}
+        // On its way out it no longer takes taps: nothing in it can still run.
+        style={{ opacity: backdrop, zIndex: 900 + depth * 2, pointerEvents: open ? undefined : "none" }}
         onClick={dismissible ? close : undefined}
       />
       <motion.div
@@ -555,7 +572,7 @@ export function BottomSheet({
           "fixed inset-x-0 bottom-0 mx-auto touch-none rounded-t-ui-sheet bg-ui-surface-1 font-satoshi text-ui-text shadow-[0_-12px_40px_rgb(0_0_0/0.25)] outline-none",
           className,
         )}
-        style={{ height: H, maxWidth, y, opacity: fade, zIndex: 901 + depth * 2 }}
+        style={{ height: H, maxWidth, y, opacity: fade, zIndex: 901 + depth * 2, pointerEvents: open ? undefined : "none" }}
       >
         {/* Fills the gap under the sheet when it is pulled past its top snap. */}
         <div aria-hidden className="absolute inset-x-0 top-full h-[120px] bg-ui-surface-1" />
@@ -564,7 +581,7 @@ export function BottomSheet({
             <span aria-hidden className="h-[5px] w-10 rounded-full bg-ui-text/20" />
           </div>
           {title ? <OverlayHeader title={title} description={description} /> : null}
-          {children}
+          <ParentSheetContext.Provider value={open}>{children}</ParentSheetContext.Provider>
         </motion.div>
       </motion.div>
     </OverlayContext.Provider>,

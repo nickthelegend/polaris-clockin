@@ -75,7 +75,7 @@ export function OverlayHeader({
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} className="mt-0.5 truncate text-[13px] text-ui-muted">
+              <p id={descriptionId} className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-ui-muted">
                 {description}
               </p>
             ) : null}
@@ -108,14 +108,19 @@ export function OverlayHeader({
   );
 }
 
-/** The scrolling content. In a sheet it scrolls without fighting the drag. */
-export function OverlayBody({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+/**
+ * The scrolling content. In a sheet it scrolls without fighting the drag.
+ * It takes focus (tabIndex 0) so a keyboard can scroll it even when nothing
+ * inside is focusable; name it with `aria-label` when that helps.
+ */
+export function OverlayBody({ className, tabIndex = 0, ...props }: HTMLAttributes<HTMLDivElement>) {
   const { kind } = useOverlay();
   return (
     <div
       data-sheet-scroll=""
+      tabIndex={tabIndex}
       className={cn(
-        "min-h-0 flex-1 overflow-y-auto overscroll-contain font-satoshi",
+        "min-h-0 flex-1 overflow-y-auto overscroll-contain font-satoshi outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ui-focus",
         kind === "sheet" ? "touch-pan-y px-5 pb-[max(20px,env(safe-area-inset-bottom))]" : "px-6 pb-6",
         className,
       )}
