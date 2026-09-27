@@ -334,6 +334,8 @@ async function main() {
     NEXT_PUBLIC_LOAN_ENGINE_ADDRESS: at("PolarisLoanEngine"),
     NEXT_PUBLIC_LOCAL_DEMO: "1",
     NEXT_PUBLIC_LOCAL_FAUCET_URL: FAUCET_URL,
+    // Nothing live: no Privy ("Continue with email" is hidden), whatever apps/app/.env.local holds.
+    NEXT_PUBLIC_PRIVY_APP_ID: "",
   };
   log(`starting the Polaris app on ${APP_URL}…`);
   background("app", process.execPath, [nextBin(APP), "dev", "--port", String(PORTS.app)], { cwd: APP, env: appEnv });
