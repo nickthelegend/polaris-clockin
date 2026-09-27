@@ -148,7 +148,9 @@ export function PageHead({ title, coins, actions, className }: { title: string; 
 /**
  * Ref E's two columns: the page on the left, the widget or summary on the
  * right (sticky from 1280px). `stack`: a page whose table needs the whole
- * width puts the column under it, in two columns, below 1280px.
+ * width puts the column under it, in two columns, below 1280px; give it two
+ * `SideColumn`s then, so each column stacks on its own (a tall card on one
+ * side never leaves a hole on the other).
  */
 export function PageGrid({ main, side, stack = false, className }: { main: ReactNode; side: ReactNode; stack?: boolean; className?: string }) {
   return (
@@ -172,6 +174,11 @@ export function SampleBadge({ className }: { className?: string }) {
       Sample
     </StatusPill>
   );
+}
+
+/** One of a stacked `PageGrid`'s two side columns (one above the other from 1280px). */
+export function SideColumn({ children }: { children: ReactNode }) {
+  return <div className="grid min-w-0 content-start gap-3">{children}</div>;
 }
 
 /** A muted note under a column's buttons. */

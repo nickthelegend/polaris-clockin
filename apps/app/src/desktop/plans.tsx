@@ -36,7 +36,7 @@ import { dollars, type Micros, usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
 import { SubscriptionSheet } from "@/screens/plans-view";
 import { n, planProgress } from "@/lib/view";
-import { PageGrid, PageHead, SectionTitle, SideNote } from "./bits";
+import { PageGrid, PageHead, SectionTitle, SideColumn, SideNote } from "./bits";
 
 type Show = "all" | "open" | "done";
 
@@ -208,53 +208,57 @@ export function PlansDesktop() {
         }
         side={
           <>
-            {credit.value ? (
-              <BalanceSummaryCard
-                label="Pay later line"
-                value={<Money value={n(credit.value.available)} />}
-                badge={<StatusPill tone="lime" size="sm">{credit.value.aprBps / 100}% APR</StatusPill>}
-                stats={[
-                  { label: "Your line", value: usd(credit.value.limit, { trim: true }) },
-                  { label: "In use", value: usd(credit.value.used) },
-                  { label: "Score", value: credit.value.score },
-                ]}
-              />
-            ) : (
-              <Skeleton shape="card" height={170} />
-            )}
-            <PanelCard title="How Pay in 4 works" padding="md">
-              <div className="mt-4 rounded-[20px] bg-ui-surface-1 p-4">
-                <p className="text-[13px] text-ui-muted">A $200.00 order</p>
-                <p className="ui-figure mt-1 text-[28px] leading-tight font-medium tracking-[-0.02em]">4 × {usd(example.amounts[0] ?? 0n)}</p>
-                <Ticks done={0} total={4} className="mt-3" />
-                <p className="mt-3 text-[13px] leading-snug text-ui-muted">
-                  Every 7 days · {example.aprBps / 100}% APR · {usd(example.interest)} interest · {usd(example.total)} in total
-                </p>
-              </div>
-              <ul className="mt-4 grid gap-2.5 text-[14px] leading-snug">
-                {[
-                  "Nothing to pay at checkout: the first payment is a week later.",
-                  "Every payment and the total interest are shown before you confirm.",
-                  "Pay any payment early from its plan, at no extra cost.",
-                ].map((t) => (
-                  <li key={t} className="flex gap-2.5">
-                    <Check aria-hidden size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-ui-lime-text" />
-                    {t}
-                  </li>
-                ))}
-              </ul>
-            </PanelCard>
-            {next ? (
-              <PrimaryButton asChild size="lg" block className="mt-1">
-                <Link href={`/plans/${next.planId}`} scroll={false}>
-                  Pay {usd(next.amount)} early
-                </Link>
-              </PrimaryButton>
-            ) : null}
-            <SecondaryButton asChild size="lg" block iconRight={<Layers />}>
-              <Link href="/credit">Your credit line</Link>
-            </SecondaryButton>
-            <SideNote>Pay in 4 is 10% a year, worked out per plan: a $200 order is 4 × $50.38.</SideNote>
+            <SideColumn>
+              {credit.value ? (
+                <BalanceSummaryCard
+                  label="Pay later line"
+                  value={<Money value={n(credit.value.available)} />}
+                  badge={<StatusPill tone="lime" size="sm">{credit.value.aprBps / 100}% APR</StatusPill>}
+                  stats={[
+                    { label: "Your line", value: usd(credit.value.limit, { trim: true }) },
+                    { label: "In use", value: usd(credit.value.used) },
+                    { label: "Score", value: credit.value.score },
+                  ]}
+                />
+              ) : (
+                <Skeleton shape="card" height={170} />
+              )}
+              {next ? (
+                <PrimaryButton asChild size="lg" block className="mt-1">
+                  <Link href={`/plans/${next.planId}`} scroll={false}>
+                    Pay {usd(next.amount)} early
+                  </Link>
+                </PrimaryButton>
+              ) : null}
+              <SecondaryButton asChild size="lg" block iconRight={<Layers />} className={next ? undefined : "mt-1"}>
+                <Link href="/credit">Your credit line</Link>
+              </SecondaryButton>
+            </SideColumn>
+            <SideColumn>
+              <PanelCard title="How Pay in 4 works" padding="md">
+                <div className="mt-4 rounded-[20px] bg-ui-surface-1 p-4">
+                  <p className="text-[13px] text-ui-muted">A $200.00 order</p>
+                  <p className="ui-figure mt-1 text-[28px] leading-tight font-medium tracking-[-0.02em]">4 × {usd(example.amounts[0] ?? 0n)}</p>
+                  <Ticks done={0} total={4} className="mt-3" />
+                  <p className="mt-3 text-[13px] leading-snug text-ui-muted">
+                    Every 7 days · {example.aprBps / 100}% APR · {usd(example.interest)} interest · {usd(example.total)} in total
+                  </p>
+                </div>
+                <ul className="mt-4 grid gap-2.5 text-[14px] leading-snug">
+                  {[
+                    "Nothing to pay at checkout: the first payment is a week later.",
+                    "Every payment and the total interest are shown before you confirm.",
+                    "Pay any payment early from its plan, at no extra cost.",
+                  ].map((t) => (
+                    <li key={t} className="flex gap-2.5">
+                      <Check aria-hidden size={16} strokeWidth={2} className="mt-0.5 shrink-0 text-ui-lime-text" />
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              </PanelCard>
+              <SideNote>Pay in 4 is 10% a year, worked out per plan: a $200 order is 4 × $50.38.</SideNote>
+            </SideColumn>
           </>
         }
       />

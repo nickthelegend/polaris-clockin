@@ -27,7 +27,7 @@ import { type ActivityItem, getActivity } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { toNumber } from "@/lib/money";
 import { inPeriod, movesBalance, n, type Period, PERIOD_LABEL } from "@/lib/view";
-import { activityColumns, PageCoin, PageGrid, PageHead, SideNote } from "./bits";
+import { activityColumns, PageCoin, PageGrid, PageHead, SideColumn, SideNote } from "./bits";
 
 type Quick = "all" | "in" | "out" | "plans" | "links";
 
@@ -169,45 +169,49 @@ export function ActivityDesktop() {
         }
         side={
           <>
-            {balance && month ? (
-              <BalanceSummaryCard
-                label="Dollar account"
-                value={<Money value={n(balance.available)} />}
-                stats={[
-                  { label: "In, 30 days", value: dollars(month.in) },
-                  { label: "Out, 30 days", value: dollars(month.out) },
-                  { label: "Fees", value: "$0.00" },
-                ]}
-              />
-            ) : (
-              <Skeleton shape="card" height={170} />
-            )}
-            <PanelCard title="Where it went" subtitle="Share of spending, last 30 days" padding="md">
-              {month ? (
-                month.out > 0 ? (
-                  <ProgressLegend
-                    className="mt-5"
-                    direction="column"
-                    items={month.spend.map((s) => ({ label: s.label, value: Math.round(s.share), color: s.color }))}
-                  />
-                ) : (
-                  <p className="mt-4 text-[14px] text-ui-muted">Nothing spent in the last 30 days.</p>
-                )
+            <SideColumn>
+              {balance && month ? (
+                <BalanceSummaryCard
+                  label="Dollar account"
+                  value={<Money value={n(balance.available)} />}
+                  stats={[
+                    { label: "In, 30 days", value: dollars(month.in) },
+                    { label: "Out, 30 days", value: dollars(month.out) },
+                    { label: "Fees", value: "$0.00" },
+                  ]}
+                />
               ) : (
-                <Skeleton shape="tile" height={140} className="mt-4" />
+                <Skeleton shape="card" height={170} />
               )}
-            </PanelCard>
-            <PrimaryButton asChild size="lg" block icon={<ArrowUpRight />} className="mt-1">
-              <Link href="/send" scroll={false}>
-                Send money
-              </Link>
-            </PrimaryButton>
-            <SecondaryButton asChild size="lg" block iconRight={<Plus />}>
-              <Link href="/add" scroll={false}>
-                Add money
-              </Link>
-            </SecondaryButton>
-            <SideNote>Every payment lands in under a second. Sending and paying in full cost nothing; Pay in 4 is 10% a year, with every payment and the interest shown before you confirm.</SideNote>
+              <PrimaryButton asChild size="lg" block icon={<ArrowUpRight />} className="mt-1">
+                <Link href="/send" scroll={false}>
+                  Send money
+                </Link>
+              </PrimaryButton>
+              <SecondaryButton asChild size="lg" block iconRight={<Plus />}>
+                <Link href="/add" scroll={false}>
+                  Add money
+                </Link>
+              </SecondaryButton>
+            </SideColumn>
+            <SideColumn>
+              <PanelCard title="Where it went" subtitle="Share of spending, last 30 days" padding="md">
+                {month ? (
+                  month.out > 0 ? (
+                    <ProgressLegend
+                      className="mt-5"
+                      direction="column"
+                      items={month.spend.map((s) => ({ label: s.label, value: Math.round(s.share), color: s.color }))}
+                    />
+                  ) : (
+                    <p className="mt-4 text-[14px] text-ui-muted">Nothing spent in the last 30 days.</p>
+                  )
+                ) : (
+                  <Skeleton shape="tile" height={140} className="mt-4" />
+                )}
+              </PanelCard>
+              <SideNote>Every payment lands in under a second. Sending and paying in full cost nothing; Pay in 4 is 10% a year, with every payment and the interest shown before you confirm.</SideNote>
+            </SideColumn>
           </>
         }
       />
