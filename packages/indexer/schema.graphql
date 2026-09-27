@@ -719,30 +719,64 @@ type CreReport {
 }
 
 """
-The webhook outbox: one row per merchant-facing event, in chain order. The
-dispatcher tails it by `cursor` and signs each row as a webhook. Kinds:
-payment.succeeded, plan.opened, installment.collected, installment.failed,
-plan.completed, plan.liquidated, subscription.charged, subscription.canceled,
-payout.paid.
+The webhook outbox: one row per webhook polarispay-sdk defines, in chain
+order, carrying everything its data needs (the client's toWebhookEvent turns
+a row into the event). The dispatcher tails it by `cursor`. Kinds:
+payment.succeeded (Pay now), plan.opened, installment.collected (one row per
+completed instalment), installment.failed (one per miss on the dunning
+ladder), plan.completed, plan.liquidated, subscription.charged (every charge,
+the first included), subscription.canceled, payout.paid.
 """
 type Activity {
   "<cursor>"
   id: ID!
-  "blockNumber * 10^7 + logIndex * 10 + slot: unique, and increasing in chain order."
+  "blockNumber * 10^8 + logIndex * 100 + slot: unique, and increasing in chain order."
   cursor: BigInt! @index
   kind: String! @index
   merchant: Merchant!
   buyer: String
   orderId: String
   orderKey: String
-  "PAY_NOW, PAY_IN_4 or SUBSCRIPTION, for payment.succeeded."
+  "PAY_NOW (payment.succeeded) or SUBSCRIPTION (subscription.charged)."
   mode: String
+  """
+  payment.succeeded: the amount paid; plan.opened, plan.completed: the total
+  owed; installment.*: that instalment's amount; plan.liquidated: what was
+  owed; subscription.*: the price; payout.paid: the amount.
+  """
   amount: BigInt!
   fee: BigInt
   "The payment id, loan id, subscription id or payout id this is about."
   refId: String!
+  "installment.*: which instalment, 0-based."
   installmentIndex: Int
-  "installment.failed: the decoded reason; subscription.canceled: cancelled or lapsed."
+  "plan.opened, installment.*: how many instalments the plan has."
+  installmentCount: Int
+  "plan.opened: the principal, paid to the merchant in full."
+  principal: BigInt
+  "plan.opened: seconds between instalments."
+  interval: Int
+  "plan.opened: when instalment 0 falls due."
+  firstDueAt: Int
+  "installment.collected: still owed after this instalment."
+  remaining: BigInt
+  "plan.liquidated: recovered from the buyer's collateral and allowance."
+  recovered: BigInt
+  "installment.failed: which miss this is on the dunning ladder, 1 for the first."
+  attempt: Int
+  "installment.failed: the next collection attempt; null when the next step is liquidation."
+  nextAttemptAt: Int
+  "installment.failed: insufficient_funds, allowance_lost or other (polarispay-sdk's InstallmentFailureReason)."
+  failureReason: String
+  "subscription.*: the PolarisPayments plan id."
+  subscriptionPlanId: String
+  "subscription.charged: the period charged, 1 for the first."
+  period: Int
+  "subscription.charged: when the next charge falls due."
+  nextChargeAt: Int
+  "subscription.canceled: subscriber, merchant or lapsed."
+  canceledBy: String
+  "installment.failed: the decoded revert; subscription.canceled: cancelled or lapsed."
   reason: String
   "installment.failed: RESIGN, TOP_UP or OTHER."
   reasonAction: String

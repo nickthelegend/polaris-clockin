@@ -1,24 +1,25 @@
 /**
- * The pure helpers: CRE task building, webhook events, money and the credit
- * line mirror (kept equal to the indexer's own copy).
+ * The pure helpers: CRE task building, money, and the credit line and loan
+ * ladder mirrors (kept equal to the indexer's own copies). Webhook events are
+ * in webhooks.test.ts.
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { creditLimitOf as indexerCreditLimit } from "../../src/lib/credit.js";
+import { installmentSlice as indexerSlice, thresholdFor as indexerThreshold } from "../../src/lib/loans.js";
 import {
-  committed,
   creditLimitOf,
   dueCandidatesRequest,
+  formatAmount,
   formatUsd,
   fromCents,
-  nextCursor,
+  installmentSlice,
   parseDueCandidates,
   readyTasks,
+  thresholdFor,
   toCents,
-  toWebhookEvent,
-  type Activity,
 } from "../src/index.js";
 
 describe("CRE candidates", () => {
@@ -57,64 +58,6 @@ describe("CRE candidates", () => {
   });
 });
 
-describe("webhook events", () => {
-  const base: Activity = {
-    id: "12000000010",
-    cursor: 12_000_000_010n,
-    kind: "installment.failed",
-    merchant_id: "0x11",
-    buyer: "0x22",
-    orderId: "logo-work",
-    orderKey: "0xab",
-    mode: null,
-    amount: 50_383_562n,
-    fee: null,
-    refId: "1",
-    installmentIndex: 0,
-    reason: "InsufficientBalance",
-    reasonAction: "TOP_UP",
-    destination: null,
-    timestamp: 1_790_000_000,
-    blockNumber: 1200,
-    logIndex: 1,
-    txHash: "0xfeed",
-  };
-
-  it("is the SDK's envelope, with a stable id and only the fields that apply", () => {
-    const event = toWebhookEvent(base, { merchantId: "mer_123" });
-    assert.equal(event.id, "evt_12000000010");
-    assert.equal(event.object, "event");
-    assert.equal(event.type, "installment.failed");
-    assert.equal(event.createdAt, "2026-09-21T14:13:20.000Z");
-    assert.equal(event.livemode, false);
-    assert.equal(event.merchantId, "mer_123");
-    assert.equal(toWebhookEvent(base).merchantId, "0x11");
-    assert.deepEqual(event.data, {
-      merchant: "0x11",
-      id: "1",
-      amount: "50383562",
-      currency: "ausd",
-      orderId: "logo-work",
-      orderKey: "0xab",
-      buyer: "0x22",
-      installmentIndex: 0,
-      reason: "InsufficientBalance",
-      reasonAction: "TOP_UP",
-      transaction: { hash: "0xfeed", blockNumber: 1200, logIndex: 1 },
-      cursor: "12000000010",
-    });
-    assert.equal(JSON.parse(JSON.stringify(event)).data.amount, "50383562");
-  });
-
-  it("delivers only committed rows and resumes after the last one", () => {
-    const later = { ...base, cursor: 13_000_000_000n, blockNumber: 1300 };
-    assert.deepEqual(committed([base, later], 1250), [base]);
-    assert.deepEqual(committed([base], null), []);
-    assert.equal(nextCursor(0n, [base, later]), 13_000_000_000n);
-    assert.equal(nextCursor(99n, []), 99n);
-  });
-});
-
 describe("money", () => {
   it("converts base units to cents without floats", () => {
     assert.equal(toCents(50_383_562n), 5038);
@@ -123,6 +66,32 @@ describe("money", () => {
     assert.equal(fromCents(5038), 50_380_000n);
     assert.equal(formatUsd(1_234_567_890n), "$1,234.57");
     assert.equal(formatUsd(0n), "$0.00");
+  });
+
+  it("writes amounts as webhooks carry them: dollars with 2 to 6 decimals", () => {
+    assert.equal(formatAmount(25_000_000n), "25.00");
+    assert.equal(formatAmount(201_534_246n), "201.534246");
+    assert.equal(formatAmount(1_000_050n), "1.00005");
+    assert.equal(formatAmount(125_000n), "0.125");
+    assert.equal(formatAmount(1n), "0.000001");
+    assert.equal(formatAmount(0n), "0.00");
+    assert.equal(formatAmount(-2_500_000n), "-2.50");
+  });
+});
+
+describe("loan ladder", () => {
+  it("matches the indexer's PolarisLoanEngine mirror everywhere", () => {
+    for (const owed of [1n, 3n, 100_000_076n, 201_534_246n, 5_000_000_001n]) {
+      for (const n of [1, 2, 3, 4, 6, 12, 24]) {
+        let sum = 0n;
+        for (let k = -1; k <= n + 1; k++) assert.equal(thresholdFor(owed, n, k), indexerThreshold(owed, n, k));
+        for (let i = 0; i < n; i++) {
+          assert.equal(installmentSlice(owed, n, i), indexerSlice(owed, n, i));
+          sum += installmentSlice(owed, n, i);
+        }
+        assert.equal(sum, owed);
+      }
+    }
   });
 });
 

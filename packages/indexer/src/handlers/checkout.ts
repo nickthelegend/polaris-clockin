@@ -12,7 +12,7 @@ import { changePlan, recordPayment, settleOrder } from "../lib/domain.js";
 import { installmentSlice, dueAt } from "../lib/loans.js";
 import { configChange } from "../lib/config.js";
 import { withStore } from "../lib/store.js";
-import { toInt } from "../lib/util.js";
+import { cursorOf, toInt } from "../lib/util.js";
 
 indexer.onEvent({ contract: "PolarisCheckout", event: "CheckoutPaid" }, async ({ event, context }) =>
   withStore(context, event, async (st) => {
@@ -85,9 +85,18 @@ indexer.onEvent({ contract: "PolarisCheckout", event: "PlanOpened" }, async ({ e
     });
     await settleOrder(st, { orderKey, merchant, orderId, kind: "PAY_IN_4", buyer, amount: principal, paymentId: payment.id, planId: plan.id });
 
-    const base = { buyer: buyer.toLowerCase(), orderId, orderKey, refId: plan.id };
-    st.activity("payment.succeeded", merchant.toLowerCase(), { ...base, amount: principal, fee: 0n, mode: "PAY_IN_4" }, 0);
-    st.activity("plan.opened", merchant.toLowerCase(), { ...base, amount: totalOwed }, 1);
+    // polarispay-sdk announces a Pay in 4 order as plan.opened alone (no payment.succeeded).
+    st.activity("plan.opened", merchant.toLowerCase(), {
+      buyer: buyer.toLowerCase(),
+      orderId,
+      orderKey,
+      refId: plan.id,
+      amount: totalOwed,
+      principal,
+      installmentCount: count,
+      interval: intervalSeconds,
+      firstDueAt: first,
+    });
   }),
 );
 
@@ -111,17 +120,18 @@ indexer.onEvent({ contract: "PolarisCheckout", event: "SubscriptionStarted" }, a
       first.orderId = orderId;
       first.orderKey = orderKey;
       first.viaCheckout = true;
+      // polarispay-sdk announces a subscription through its charges: the first
+      // one's subscription.charged row (written a moment ago, by the charge
+      // this checkout made) learns the order it paid.
+      if (first.txHash === st.m.txHash) {
+        const charged = await st.find("Activity", cursorOf(first.blockNumber, first.logIndex).toString());
+        if (charged?.kind === "subscription.charged") {
+          charged.orderId = orderId;
+          charged.orderKey = orderKey;
+        }
+      }
     }
     await settleOrder(st, { orderKey, merchant, orderId, kind: "SUBSCRIPTION", buyer, amount: pricePerPeriod, paymentId: first?.id, subscriptionId: id });
-    st.activity("payment.succeeded", merchant.toLowerCase(), {
-      buyer: buyer.toLowerCase(),
-      orderId,
-      orderKey,
-      refId: id,
-      amount: pricePerPeriod,
-      fee: first?.fee,
-      mode: "SUBSCRIPTION",
-    });
   }),
 );
 

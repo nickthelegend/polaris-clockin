@@ -34,14 +34,28 @@ export function dateOf(day: number): string {
 }
 
 /**
- * The Activity cursor: blockNumber * 10^7 + logIndex * 10 + slot. Unique per
- * activity (one log yields at most ten), and increasing in chain order, so the
- * webhook dispatcher can page with `cursor > last`.
+ * The Activity cursor: blockNumber * 10^8 + logIndex * 100 + slot. Unique per
+ * activity (one log yields at most 100; a repayment that completes all 24
+ * instalments of the longest plan yields 24), and increasing in chain order,
+ * so the webhook dispatcher can page with `cursor > last`.
  */
+export const MAX_ACTIVITY_SLOT = 99;
 export function cursorOf(blockNumber: number, logIndex: number, slot = 0): bigint {
-  if (slot < 0 || slot > 9) throw new Error(`activity slot ${slot} out of range`);
+  if (slot < 0 || slot > MAX_ACTIVITY_SLOT) throw new Error(`activity slot ${slot} out of range`);
   if (logIndex < 0 || logIndex >= 1_000_000) throw new Error(`log index ${logIndex} out of range`);
-  return BigInt(blockNumber) * 10_000_000n + BigInt(logIndex) * 10n + BigInt(slot);
+  return BigInt(blockNumber) * 100_000_000n + BigInt(logIndex) * 100n + BigInt(slot);
+}
+
+/**
+ * polarispay-sdk's InstallmentFailureReason, from what a skipped collection
+ * asks of the buyer: top up (insufficient_funds) or sign again
+ * (allowance_lost). The API, the SDK and the webhooks use this vocabulary.
+ */
+export type FailureReason = "insufficient_funds" | "allowance_lost" | "other";
+export function failureReasonOf(action: string | undefined): FailureReason {
+  if (action === "TOP_UP") return "insufficient_funds";
+  if (action === "RESIGN") return "allowance_lost";
+  return "other";
 }
 
 /** `<txHash>-<logIndex>`: the id of a row that one log creates. */

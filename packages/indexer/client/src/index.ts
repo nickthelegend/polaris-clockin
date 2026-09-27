@@ -20,7 +20,32 @@ export {
   type CollectionAction,
   type Task,
 } from "./cre.js";
-export { committed, nextCursor, toWebhookEvent, type WebhookEvent, type WebhookEventData } from "./webhooks.js";
-export { AUSD_DECIMALS, formatUsd, fromCents, toCents } from "./money.js";
+export {
+  committed,
+  failureReasonOf,
+  IncompleteActivityError,
+  nextCursor,
+  toWebhookEvent,
+  webhookEventId,
+  webhookSourceKey,
+  type InstallmentCollectedData,
+  type InstallmentFailedData,
+  type PaymentSucceededData,
+  type PayoutPaidData,
+  type PlanCompletedData,
+  type PlanInstallment,
+  type PlanLiquidatedData,
+  type PlanOpenedData,
+  type SubscriptionCanceledData,
+  type SubscriptionChargedData,
+  type WebhookContext,
+  type WebhookEvent,
+  type WebhookEventDataMap,
+  type WebhookEventType,
+  type WebhookSession,
+} from "./webhooks.js";
+export { AUSD_DECIMALS, formatAmount, formatUsd, fromCents, toCents } from "./money.js";
+export { installmentSlice, thresholdFor } from "./loans.js";
+export { checksumAddress, keccak256Hex, sha256Hex } from "./hash.js";
 export { availableCredit, baseLimitOf, creditLimitOf, securedOnly, type CreditInputs, type CreditSettings } from "./credit.js";
 export * from "./types.js";

@@ -17,8 +17,9 @@ const { merchant, days } = await indexer.merchantOverview(wallet);
 ```
 
 - `@polarispay/indexer-client`: `createIndexerClient` (dashboard, checkout,
-  webhooks, app), `toWebhookEvent` / `nextCursor`, `toCents` / `formatUsd`,
-  `creditLimitOf`, the row types.
+  webhooks, app); `toWebhookEvent` (an outbox row to exactly polarispay-sdk's
+  `WebhookEvent`, with the API's event id) / `nextCursor`; `toCents` /
+  `formatUsd` / `formatAmount`; `creditLimitOf`; the row types.
 - `@polarispay/indexer-client/cre`: pure helpers for the CRE workflow
   (`dueCandidatesRequest`, `parseDueCandidates`, `readyTasks`).
 - `@polarispay/indexer-client/documents`: the raw GraphQL documents.

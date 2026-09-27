@@ -9,8 +9,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { encodeErrorResult, parseAbi, toFunctionSelector } from "viem";
+import { encodeErrorResult, getAddress, keccak256, parseAbi, sha256, toFunctionSelector } from "viem";
 import { describe, expect, it } from "vitest";
+
+import { checksumAddress, keccak256Hex, sha256Hex } from "../client/src/hash.js";
+import { failureReasonOf as clientFailureReason } from "../client/src/webhooks.js";
 
 import { baseLimitOf, creditLimitOf, type CreditInputs, type CreditSettings } from "../src/lib/credit.js";
 import {
@@ -23,7 +26,7 @@ import {
   thresholdFor,
 } from "../src/lib/loans.js";
 import { decodeRevert, ERROR_SELECTORS } from "../src/lib/revert.js";
-import { cursorOf, dateOf, dayOf, monthlyValue } from "../src/lib/util.js";
+import { cursorOf, dateOf, dayOf, failureReasonOf, monthlyValue } from "../src/lib/util.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const USD = (n: number) => BigInt(Math.round(n * 1e6));
@@ -158,9 +161,9 @@ describe("revert decoding (CollectionsReceiver.TaskSkipped reasons)", () => {
 describe("cursors and days", () => {
   it("orders activities by block, log and slot", () => {
     expect(cursorOf(5, 2, 1) > cursorOf(5, 2, 0)).toBe(true);
-    expect(cursorOf(5, 3, 0) > cursorOf(5, 2, 9)).toBe(true);
-    expect(cursorOf(6, 0, 0) > cursorOf(5, 999_999, 9)).toBe(true);
-    expect(() => cursorOf(1, 0, 10)).toThrow();
+    expect(cursorOf(5, 3, 0) > cursorOf(5, 2, 99)).toBe(true);
+    expect(cursorOf(6, 0, 0) > cursorOf(5, 999_999, 99)).toBe(true);
+    expect(() => cursorOf(1, 0, 100)).toThrow();
   });
 
   it("buckets by UTC day", () => {
@@ -201,5 +204,30 @@ describe("generated config", () => {
         expect(config, `${name}.${e.name}`).toContain(`"${e.name}(`);
       }
     }
+  });
+});
+
+describe("the webhook helpers the client ships", () => {
+  it("hashes exactly as viem does, over one, two and three Keccak blocks", () => {
+    const lengths = [0, 1, 31, 32, 55, 56, 64, 135, 136, 137, 200, 271, 272, 273, 409, 500];
+    for (const n of lengths) {
+      const bytes = Uint8Array.from({ length: n }, (_, i) => (i * 31 + n) & 0xff);
+      expect(`0x${keccak256Hex(bytes)}`, `keccak256, ${n} bytes`).toBe(keccak256(bytes));
+      expect(`0x${sha256Hex(bytes)}`, `sha256, ${n} bytes`).toBe(sha256(bytes));
+    }
+  });
+
+  it("checksums addresses as viem's getAddress", () => {
+    for (let i = 1; i < 200; i++) {
+      const address = `0x${(BigInt(i) * 0x9e3779b97f4a7c15f39cc0605cedc835n).toString(16).padStart(40, "0").slice(-40)}`;
+      expect(checksumAddress(address)).toBe(getAddress(address));
+    }
+  });
+
+  it("names a failed collection in polarispay-sdk's words, the same in the indexer and the client", () => {
+    for (const action of ["TOP_UP", "RESIGN", "STALE", "OTHER"] as const) {
+      expect(failureReasonOf(action)).toBe(clientFailureReason(action));
+    }
+    expect([failureReasonOf("TOP_UP"), failureReasonOf("RESIGN"), failureReasonOf("OTHER")]).toEqual(["insufficient_funds", "allowance_lost", "other"]);
   });
 });

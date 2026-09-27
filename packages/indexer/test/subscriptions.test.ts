@@ -71,8 +71,13 @@ describe("Subscriptions", () => {
     await sim.run();
     sub = await sim.indexer.Subscription.getOrThrow("1");
     expect(sub).toMatchObject({ periodsCharged: 2, nextChargeAt: next + PERIOD, nextAttemptAt: next + PERIOD, totalCharged: 2n * price });
-    const kinds = (await sim.indexer.Activity.getAll()).map((a) => a.kind).sort();
-    expect(kinds).toEqual(["payment.succeeded", "subscription.charged", "subscription.charged"]);
+    // polarispay-sdk announces a subscription through its charges, the first included, each with its order.
+    const charges = (await sim.indexer.Activity.getAll()).sort((a, b) => (a.cursor < b.cursor ? -1 : 1));
+    expect(charges.map((a) => a.kind)).toEqual(["subscription.charged", "subscription.charged"]);
+    expect(charges.map((a) => [a.period, a.nextChargeAt, a.orderId, a.orderKey, a.subscriptionPlanId, a.amount, a.fee])).toEqual([
+      [1, next, "sub-order", orderKey, "1", price, fee],
+      [2, next + PERIOD, "sub-order", orderKey, "1", price, fee],
+    ]);
   });
 
   it("backs off after a failed charge, and skips to the next boundary after a missed window", async () => {
@@ -91,6 +96,19 @@ describe("Subscriptions", () => {
     const failedAt = sim.time;
     let sub = await sim.indexer.Subscription.getOrThrow("1");
     expect(sub).toMatchObject({ failedAttempts: 1, lastFailureReason: "ERC20InsufficientBalance", nextAttemptAt: failedAt + SETTINGS.dunningRetrySeconds[0]! });
+
+    // Tried again a minute later, inside the wait: the same miss.
+    sim.wait(60);
+    sim
+      .tx({ from: TRANSMITTER, to: SETTINGS.creForwarders[0] })
+      .log("CollectionsReceiver", "TaskSkipped", {
+        action: 2n,
+        id: 1n,
+        reason: encodeErrorResult({ abi: errors, errorName: "ERC20InsufficientBalance", args: [buyer, 0n, price] }),
+      });
+    await sim.run();
+    sub = await sim.indexer.Subscription.getOrThrow("1");
+    expect(sub).toMatchObject({ failedAttempts: 1, lastFailureAt: failedAt, nextAttemptAt: failedAt + SETTINGS.dunningRetrySeconds[0]! });
 
     // Eight days later chargeDue records a miss and moves to the next boundary.
     sim.wait(8 * 86_400);
@@ -115,7 +133,10 @@ describe("Subscriptions", () => {
     expect(await sim.indexer.Subscription.getOrThrow("2")).toMatchObject({ status: "CANCELLED", cancelledBy: buyer });
     expect(await sim.indexer.Merchant.getOrThrow(merchant)).toMatchObject({ activeSubscriptionCount: 0, mrr: 0n });
     expect(await sim.indexer.Protocol.getOrThrow("polaris")).toMatchObject({ subscriptionCount: 2, activeSubscriptionCount: 0 });
-    const reasons = (await sim.indexer.Activity.getAll()).filter((a) => a.kind === "subscription.canceled").map((a) => a.reason).sort();
-    expect(reasons).toEqual(["cancelled by the buyer", "lapsed"]);
+    const ended = (await sim.indexer.Activity.getAll()).filter((a) => a.kind === "subscription.canceled").sort((a, b) => (a.cursor < b.cursor ? -1 : 1));
+    expect(ended.map((a) => [a.refId, a.canceledBy, a.reason, a.subscriptionPlanId])).toEqual([
+      ["1", "lapsed", "lapsed", "1"],
+      ["2", "subscriber", "cancelled by the buyer", "1"],
+    ]);
   });
 });

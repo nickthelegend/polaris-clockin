@@ -13,7 +13,7 @@ import { indexer } from "envio";
 
 import { configChange } from "../lib/config.js";
 import { changePlan } from "../lib/domain.js";
-import { dueAt, installmentsEarned, paidToward } from "../lib/loans.js";
+import { dueAt, installmentSlice, installmentsEarned, paidToward, thresholdFor } from "../lib/loans.js";
 import { withStore } from "../lib/store.js";
 import { logId, toInt } from "../lib/util.js";
 
@@ -160,15 +160,27 @@ indexer.onEvent({ contract: "PolarisLoanEngine", event: "InstallmentPaid" }, asy
     pd.repaidVolume += amount;
     pd.installmentsCompleted += completed;
 
-    if (completed > 0) {
-      st.activity("installment.collected", merchant.id, {
-        buyer: borrower,
-        orderId: plan.orderId,
-        orderKey: plan.orderKey,
-        refId: plan.id,
-        amount,
-        installmentIndex: toInt(installmentIndex),
-      });
+    // polarispay-sdk sends installment.collected once per instalment a payment
+    // completes (a prepayment of the whole plan sends one per instalment),
+    // with that instalment's own amount and what is still owed after it.
+    for (let k = before; k < plan.installmentsPaid; k++) {
+      const last = k + 1 === plan.installmentsPaid;
+      const remaining = last ? plan.outstanding : plan.totalOwed - thresholdFor(plan.totalOwed, plan.installmentCount, k + 1);
+      st.activity(
+        "installment.collected",
+        merchant.id,
+        {
+          buyer: borrower,
+          orderId: plan.orderId,
+          orderKey: plan.orderKey,
+          refId: plan.id,
+          amount: installmentSlice(plan.totalOwed, plan.installmentCount, k),
+          installmentIndex: k,
+          installmentCount: plan.installmentCount,
+          remaining: remaining > 0n ? remaining : 0n,
+        },
+        k - before,
+      );
     }
   }),
 );
@@ -215,7 +227,7 @@ indexer.onEvent({ contract: "PolarisLoanEngine", event: "LoanFullyRepaid" }, asy
       orderId: plan.orderId,
       orderKey: plan.orderKey,
       refId: plan.id,
-      amount: plan.totalRepaid,
+      amount: plan.totalOwed,
     });
   }),
 );
@@ -255,6 +267,7 @@ indexer.onEvent({ contract: "PolarisLoanEngine", event: "LoanLiquidated" }, asyn
       orderKey: plan.orderKey,
       refId: plan.id,
       amount: outstanding,
+      recovered,
       reason: recovered >= outstanding ? "recovered in full" : `recovered ${recovered} of ${outstanding}`,
     });
   }),

@@ -74,7 +74,7 @@ export const BIGINT_FIELDS = {
     "balanceClose",
   ],
   Order: ["quotedAmount", "amount"],
-  Activity: ["cursor", "amount", "fee"],
+  Activity: ["cursor", "amount", "fee", "principal", "remaining", "recovered"],
   Buyer: ["baseLimit", "collateral", "creditLimit", "activeDebt", "available", "spent", "sentVolume", "claimedVolume"],
   ScoreEvent: [],
   BuyerDay: ["spent", "repaid"],

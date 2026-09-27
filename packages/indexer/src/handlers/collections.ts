@@ -16,10 +16,10 @@ import { indexer } from "envio";
 
 import { configChange } from "../lib/config.js";
 import { changePlan } from "../lib/domain.js";
-import { nextAttemptAfterFailure } from "../lib/loans.js";
+import { installmentSlice, nextAttemptAfterFailure } from "../lib/loans.js";
 import { decodeRevert } from "../lib/revert.js";
 import { withStore } from "../lib/store.js";
-import { COLLECTION_ACTION as ACTION, logId, toInt } from "../lib/util.js";
+import { COLLECTION_ACTION as ACTION, failureReasonOf, logId, toInt } from "../lib/util.js";
 
 function actionName(action: number): string {
   switch (action) {
@@ -90,6 +90,12 @@ indexer.onEvent({ contract: "CollectionsReceiver", event: "TaskSkipped" }, async
     if (action === ACTION.COLLECT_INSTALLMENT) {
       const plan = await st.find("Plan", id);
       if (!plan || plan.status !== "ACTIVE") return;
+      // A skip before the attempt the ladder scheduled (the workflow sweeping
+      // the chain when the indexer is down, another keeper) is the same miss,
+      // not a new one: counting it would walk the buyer down the whole ladder
+      // in minutes and send them a failure webhook a minute. The API counts
+      // misses the same way.
+      if (plan.dunning && plan.nextAttemptAt !== undefined && st.m.timestamp < plan.nextAttemptAt) return;
       await changePlan(st, plan, () => {
         plan.dunning = true;
         plan.failedAttempts += 1;
@@ -106,19 +112,29 @@ indexer.onEvent({ contract: "CollectionsReceiver", event: "TaskSkipped" }, async
       }
       const merchant = await st.merchant(plan.merchant_id);
       (await st.merchantDay(merchant)).failedCollections += 1;
+      const index = Math.min(plan.installmentsPaid, plan.installmentCount - 1);
+      // The ladder never waits past the moment the plan turns liquidatable;
+      // when it would have, the next step is liquidation, not another try.
+      const liquidationNext = plan.liquidatableAt !== undefined && plan.nextAttemptAt !== undefined && plan.nextAttemptAt >= plan.liquidatableAt;
       st.activity("installment.failed", merchant.id, {
         buyer: plan.buyer_id,
         orderId: plan.orderId,
         orderKey: plan.orderKey,
         refId: plan.id,
-        amount: why.need ?? plan.installmentAmount,
-        installmentIndex: plan.installmentsPaid,
+        amount: installmentSlice(plan.totalOwed, plan.installmentCount, index),
+        installmentIndex: index,
+        installmentCount: plan.installmentCount,
+        attempt: plan.failedAttempts,
+        nextAttemptAt: liquidationNext ? undefined : plan.nextAttemptAt,
+        failureReason: failureReasonOf(why.action),
         reason: why.name,
         reasonAction: why.action,
       });
     } else if (action === ACTION.CHARGE_SUBSCRIPTION) {
       const sub = await st.find("Subscription", id);
       if (!sub || sub.status !== "ACTIVE") return;
+      // As for instalments: a skip inside the current wait is the same miss.
+      if (sub.failedAttempts > 0 && sub.nextAttemptAt !== undefined && st.m.timestamp < sub.nextAttemptAt) return;
       sub.failedAttempts += 1;
       sub.lastFailureReason = why.name;
       sub.lastFailureAt = st.m.timestamp;

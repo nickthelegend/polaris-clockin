@@ -166,7 +166,7 @@ carry personal data.
 | `Payout`, `Batch`, `BatchLeg` | Merchant withdrawals; batch settlements with memos | Dashboard, webhooks |
 | `Buyer`, `ScoreEvent`, `Underwriting`, `LinkedWallet` | The credit line (mirrors `creditLimitOf`), every score move and why, CRE underwriting results | App |
 | `CollectionRun`, `CollectionTask`, `CreReport` | Every CRE report: tasks executed or skipped and why | Dashboard (collector card), evidence |
-| `Activity` | The webhook outbox, with a strictly increasing `cursor` | Webhook dispatcher |
+| `Activity` | The webhook outbox: one row per polarispay-sdk webhook, with everything its data needs and a strictly increasing `cursor` | Webhook dispatcher |
 | `MerchantDay`, `ProtocolDay`, `BuyerDay` | Daily totals and candles (payment sizes, balance, score) | Charts |
 | `Customer`, `Protocol`, `ConfigChange` | Merchant x buyer; protocol totals and settings; every role and setting change (e.g. exactly what the relayer may do) | Dashboard, evidence |
 
@@ -190,7 +190,11 @@ unix seconds; addresses are lowercase.
   failure puts the plan into dunning and moves `nextAttemptAt` along the
   6 h / 24 h / 72 h / weekly ladder (`packages/keeperhub`), never past the
   liquidation point, so the workflow does not pay gas to retry a failing buyer
-  every minute.
+  every minute. A skip before that scheduled attempt (the workflow sweeping
+  the chain while its indexer is down, another keeper) is the same miss, not a
+  new one, as the API counts it: it is recorded as a `CollectionTask` but
+  neither moves the buyer down the ladder nor writes another
+  `installment.failed`.
 - **Payouts.** A stablecoin transfer out of a merchant account in a
   transaction sent to the stablecoin itself (the relayer carrying the
   merchant's signed `transferWithAuthorization`) is a payout; money leaving
@@ -200,7 +204,14 @@ unix seconds; addresses are lowercase.
   test checks totals against a recount.
 - **Webhooks never fire from a handler** (handlers run twice and can be rolled
   back); they are rows in `Activity`. `block_lag: 2` (Monad's finality) means
-  a row is final when it appears.
+  a row is final when it appears. The rows are exactly polarispay-sdk's nine
+  events: `payment.succeeded` is Pay now only, a Pay in 4 order is
+  `plan.opened` (with its schedule), a subscription is its
+  `subscription.charged` rows (the first one learns its order from the
+  checkout's `SubscriptionStarted`), and a repayment that completes several
+  instalments writes one `installment.collected` per instalment. The client's
+  `toWebhookEvent` turns a row into the SDK's event, and the replay and live
+  tests run every row they index through the SDK's own `validateWebhookEvent`.
 - **Merchant balances** count every stablecoin transfer since the merchant
   registered (`registeredAt`), which for a Polaris business is before any
   money. An account paid without ever registering is not followed: its
@@ -230,9 +241,26 @@ const order = await indexer.waitForOrder(orderKey); // keccak256(encodePacked(me
 // Webhook dispatcher: tail the outbox, sign and send each event in order
 let cursor = await loadCursor();
 const { activities } = await indexer.activityAfter(cursor, 100);
-for (const a of activities) await deliver(toWebhookEvent(a, { merchantId })); // the SDK's envelope; sign and send with @polaris/db
+for (const a of activities) {
+  const merchant = await merchantByWallet(a.merchant_id);             // the API's record: its public mer_… id
+  const session = a.orderKey ? await sessionByOrderKey(a.orderKey) : null; // the checkout session, if the order came through one
+  const event = toWebhookEvent(a, { merchantId: merchant.publicId, session, automatic: await wasAutomaticPayout(a) });
+  await deliver(event);                                                // serializeEvent, sign and send with @polaris/db
+}
 await saveCursor(nextCursor(cursor, activities));
 ```
+
+`toWebhookEvent` builds exactly polarispay-sdk's `WebhookEvent<T>` (held to
+a copy of the SDK's types and its `validateWebhookEvent` in the client's
+tests): amounts as USD decimal strings with 2 to 6 decimals (`"25.00"`,
+`"201.534246"`), currency `"USD"`, mode `"now"` / `"later"`, EIP-55
+addresses, ISO times, instalments numbered from 1, and `session.orderId`,
+`sessionId` and `metadata` from the session you pass. Its `id` is the API's
+own, `evt_` + the first 28 hex characters of
+`sha256("<txHash>:<logIndex>:<type>")` (`webhookSourceKey`,
+`webhookEventId`), so if both the API's chain sync and the indexer path ever
+emit the same chain event, a receiver deduplicating on `id` sees it once.
+(Payouts are the exception: the API keys a payout on its own payout record.)
 
 The CRE workflow cannot use `fetch`; it sends the same document through its
 HTTP capability. `DUE_CANDIDATES` answers in the shape the
@@ -260,11 +288,11 @@ package ships TypeScript source).
 
 | Suite | What it proves |
 |---|---|
-| `test/lib.test.ts` | The schedule mirror gives the contract's numbers ($200 x 4 weekly = 201534246 owed, 50383562 first instalment); the credit line mirrors `ScoreManager`; every revert selector recomputed with viem; `config.yaml` is current and indexes every event in every ABI |
-| `test/paynow`, `plans`, `subscriptions`, `accounts` | Simulated flows through Envio's own test indexer: Pay now, Pay in 4 with dunning, CRE collection, prepayment and liquidation, subscriptions with backoff, missed windows, lapses and cancellations, sends, payouts, batches, credit, CRE reports, roles |
+| `test/lib.test.ts` | The schedule mirror gives the contract's numbers ($200 x 4 weekly = 201534246 owed, 50383562 first instalment); the credit line mirrors `ScoreManager`; every revert selector recomputed with viem; `config.yaml` is current and indexes every event in every ABI; the client's SHA-256, Keccak-256 and checksums equal viem's |
+| `test/paynow`, `plans`, `subscriptions`, `accounts` | Simulated flows through Envio's own test indexer: Pay now, Pay in 4 with dunning (a repeated skip is one miss), CRE collection, prepayment and liquidation, subscriptions with backoff, missed windows, lapses and cancellations, sends, payouts, batches, credit, CRE reports, roles; only registered merchants are followed |
 | `test/live.test.ts` (`wsl.sh live`) | The same checks, but Envio's runtime fetches the chain itself over RPC: the config, the dynamic registration and the source-side filters are exercised too |
-| `test/replay.test.ts` | A real chain: `scripts/record-fixture.mjs` runs the deploy script, the contracts' end-to-end flows and `scripts/fixture-scenarios.cjs` on a Hardhat node (port 3540) and records 142 logs of 62 kinds; replayed through the handlers, every plan, subscription, credit line, merchant balance and link equals what the contracts report, every webhook kind appears, and totals equal a recount |
-| `client/test` | Every document is valid against the schema; BigInt decoding is complete; the client's requests, errors and paging; CRE task building; webhook events; money; the credit mirror equals the indexer's |
+| `test/replay.test.ts` | A real chain: `scripts/record-fixture.mjs` runs the deploy script, the contracts' end-to-end flows and `scripts/fixture-scenarios.cjs` on a Hardhat node (port 3540) and records 142 logs of 62 kinds; replayed through the handlers, every plan, subscription, credit line, merchant balance and link equals what the contracts report, every webhook kind appears once per SDK event, every row passes polarispay-sdk's `validateWebhookEvent`, and totals equal a recount |
+| `client/test` | Every document is valid against the schema; BigInt decoding is complete; the client's requests, errors and paging; CRE task building; every webhook kind equals polarispay-sdk's types (compile time) and passes its runtime check, with the API's amounts, addresses and event ids; SHA-256 and Keccak-256 against published vectors; money; the credit and loan mirrors equal the indexer's |
 
 Re-record the fixture after a contract change (Windows or Linux, with the
 workspace installed): `node packages/indexer/scripts/record-fixture.mjs`.

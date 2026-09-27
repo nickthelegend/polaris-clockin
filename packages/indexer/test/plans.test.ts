@@ -93,8 +93,19 @@ describe("Pay in 4", () => {
       balance: principal,
     });
     expect(await sim.indexer.Buyer.getOrThrow(buyer)).toMatchObject({ activeDebt: totalOwed, planCount: 1, activePlanCount: 1 });
-    const kinds = (await sim.indexer.Activity.getAll()).sort((a, b) => (a.cursor < b.cursor ? -1 : 1)).map((a) => a.kind);
-    expect(kinds).toEqual(["payment.succeeded", "plan.opened"]);
+    // polarispay-sdk announces a Pay in 4 order as plan.opened alone, with its schedule.
+    const activities = await sim.indexer.Activity.getAll();
+    expect(activities.map((a) => a.kind)).toEqual(["plan.opened"]);
+    expect(activities[0]).toMatchObject({
+      refId: "1",
+      orderId: "logo-work",
+      amount: totalOwed,
+      principal,
+      installmentCount: 4,
+      interval: WEEK,
+      firstDueAt,
+      buyer,
+    });
   });
 
   it("duns a short buyer along the ladder, then clears it when CRE collects", async () => {
@@ -121,7 +132,18 @@ describe("Pay in 4", () => {
     expect(await sim.indexer.Merchant.getOrThrow(merchant)).toMatchObject({ dunningPlanCount: 1, atRiskOutstanding: totalOwed });
     expect(await sim.indexer.Installment.getOrThrow("1-0")).toMatchObject({ failedAttempts: 1, lastFailureReason: "InsufficientBalance", status: "PENDING" });
     const failed = (await sim.indexer.Activity.getAll()).find((a) => a.kind === "installment.failed");
-    expect(failed).toMatchObject({ reason: "InsufficientBalance", reasonAction: "TOP_UP", amount: first, installmentIndex: 0, refId: "1" });
+    expect(failed).toMatchObject({
+      reason: "InsufficientBalance",
+      reasonAction: "TOP_UP",
+      failureReason: "insufficient_funds",
+      amount: first,
+      installmentIndex: 0,
+      installmentCount: 4,
+      attempt: 1,
+      refId: "1",
+    });
+    // The ladder would wait past the grace period, so the next step is liquidation.
+    expect(failed!.nextAttemptAt).toBeUndefined();
     const [task] = await sim.indexer.CollectionTask.getAll();
     expect(task).toMatchObject({ executed: false, actionName: "COLLECT_INSTALLMENT", reason: "InsufficientBalance", have: USD(10), need: first, plan_id: "1" });
     expect(await sim.indexer.Protocol.getOrThrow("polaris")).toMatchObject({ collectionsRuns: 1, lastCollectionsRunAt: failedAt, creReports: 1 });
@@ -163,6 +185,28 @@ describe("Pay in 4", () => {
     expect(await sim.indexer.Protocol.getOrThrow("polaris")).toMatchObject({ creCollections: 1, installmentsCompleted: 1, outstanding: totalOwed - first });
   });
 
+  it("counts a skip before the scheduled retry as the same miss, not a new one", async () => {
+    const sim = new Sim().registerMerchant(merchant);
+    const firstDueAt = open(sim, 1n, `0x${"aa".repeat(32)}`, "logo-work");
+    const short = encodeErrorResult({ abi: errors, errorName: "InsufficientBalance", args: [USD(10), first] });
+    sim.wait(WEEK + 10);
+    report(sim, (s) => s.log("CollectionsReceiver", "TaskSkipped", { action: 1n, id: 1n, reason: short }), 1, 0);
+    await sim.run();
+    const retryAt = (await sim.indexer.Plan.getOrThrow("1")).nextAttemptAt!;
+    expect(retryAt).toBe(firstDueAt + SETTINGS.graceSeconds + 1);
+
+    // The workflow sweeping the chain (its indexer is down) tries again a minute later.
+    sim.wait(60);
+    report(sim, (s) => s.log("CollectionsReceiver", "TaskSkipped", { action: 1n, id: 1n, reason: short }), 1, 0);
+    await sim.run();
+    expect(sim.time < retryAt).toBe(true);
+    expect(await sim.indexer.Plan.getOrThrow("1")).toMatchObject({ failedAttempts: 1, nextAttemptAt: retryAt });
+    expect((await sim.indexer.Installment.getOrThrow("1-0")).failedAttempts).toBe(1);
+    expect((await sim.indexer.Activity.getAll()).filter((a) => a.kind === "installment.failed")).toHaveLength(1);
+    // Both skips are still on record.
+    expect(await sim.indexer.CollectionTask.getAll()).toHaveLength(2);
+  });
+
   it("counts a partial payment toward the instalment without completing it", async () => {
     const sim = new Sim().registerMerchant(merchant);
     open(sim, 1n, `0x${"aa".repeat(32)}`, "o");
@@ -188,9 +232,22 @@ describe("Pay in 4", () => {
     expect(installments.every((i) => i.status === "PAID" && i.paidBy === "BUYER")).toBe(true);
     expect(await sim.indexer.Merchant.getOrThrow(merchant)).toMatchObject({ activePlanCount: 0, outstanding: 0n, repaidPlanCount: 1 });
     expect(await sim.indexer.Buyer.getOrThrow(buyer)).toMatchObject({ activeDebt: 0n, activePlanCount: 0, onTimeInstallments: 4 });
-    expect((await sim.indexer.Activity.getAll()).map((a) => a.kind).sort()).toEqual(
-      ["installment.collected", "payment.succeeded", "plan.completed", "plan.opened"].sort(),
-    );
+    const activities = (await sim.indexer.Activity.getAll()).sort((a, b) => (a.cursor < b.cursor ? -1 : 1));
+    expect(activities.map((a) => a.kind)).toEqual([
+      "plan.opened",
+      "installment.collected",
+      "installment.collected",
+      "installment.collected",
+      "installment.collected",
+      "plan.completed",
+    ]);
+    // One webhook per instalment the prepayment completed, each with its own amount.
+    const collected = activities.filter((a) => a.kind === "installment.collected");
+    const slices = [0, 1, 2, 3].map((i) => installmentSlice(totalOwed, 4, i));
+    expect(collected.map((a) => a.installmentIndex)).toEqual([0, 1, 2, 3]);
+    expect(collected.map((a) => a.amount)).toEqual(slices);
+    expect(collected.map((a) => a.remaining)).toEqual([totalOwed - slices[0]!, slices[2]! + slices[3]!, slices[3]!, 0n]);
+    expect(activities.at(-1)).toMatchObject({ kind: "plan.completed", amount: totalOwed });
     expect(await sim.indexer.Protocol.getOrThrow("polaris")).toMatchObject({ activePlanCount: 0, outstanding: 0n, repaidVolume: totalOwed });
   });
 
@@ -217,6 +274,6 @@ describe("Pay in 4", () => {
     expect(await sim.indexer.Merchant.getOrThrow(merchant)).toMatchObject({ liquidatedPlanCount: 1, activePlanCount: 0, outstanding: 0n });
     expect(await sim.indexer.Protocol.getOrThrow("polaris")).toMatchObject({ liquidationCount: 1, lossVolume: owed - USD(20) });
     const liquidated = (await sim.indexer.Activity.getAll()).find((a) => a.kind === "plan.liquidated");
-    expect(liquidated).toMatchObject({ refId: "7", amount: owed });
+    expect(liquidated).toMatchObject({ refId: "7", amount: owed, recovered: USD(20) });
   });
 });

@@ -172,6 +172,8 @@ indexer.onEvent({ contract: "PolarisPayments", event: "SubscriptionCharged" }, a
     if (n > 1 && sub.nextChargeAt !== undefined) sub.nextChargeAt += sub.periodSeconds;
     sub.nextAttemptAt = sub.nextChargeAt;
     sub.updatedAt = st.m.timestamp;
+    // The first charge comes before the checkout's SubscriptionStarted, which
+    // fills in its order (checkout.ts).
     st.activity("subscription.charged", sub.merchant_id, {
       buyer: sub.buyer_id,
       orderId: sub.orderId,
@@ -180,6 +182,9 @@ indexer.onEvent({ contract: "PolarisPayments", event: "SubscriptionCharged" }, a
       amount,
       fee,
       mode: "SUBSCRIPTION",
+      subscriptionPlanId: sub.plan_id,
+      period: n,
+      nextChargeAt: sub.nextChargeAt,
     });
   }),
 );
@@ -217,6 +222,8 @@ indexer.onEvent({ contract: "PolarisPayments", event: "SubscriptionLapsed" }, as
       orderKey: sub.orderKey,
       refId: sub.id,
       amount: sub.pricePerPeriod,
+      subscriptionPlanId: sub.plan_id,
+      canceledBy: "lapsed",
       reason: "lapsed",
     });
   }),
@@ -239,7 +246,10 @@ indexer.onEvent({ contract: "PolarisPayments", event: "SubscriptionCancelled" },
       orderKey: sub.orderKey,
       refId: sub.id,
       amount: sub.pricePerPeriod,
-      reason: event.params.by === sub.buyer_id ? "cancelled by the buyer" : "cancelled by the merchant",
+      subscriptionPlanId: sub.plan_id,
+      // PolarisPayments lets the subscriber (directly or by signature) or the merchant cancel.
+      canceledBy: event.params.by === sub.merchant_id ? "merchant" : "subscriber",
+      reason: event.params.by === sub.merchant_id ? "cancelled by the merchant" : "cancelled by the buyer",
     });
   }),
 );

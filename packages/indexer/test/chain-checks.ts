@@ -9,6 +9,9 @@
 import { expect, it } from "vitest";
 import type { TestIndexer } from "envio";
 
+import type { Activity } from "../client/src/types.js";
+import { toWebhookEvent } from "../client/src/webhooks.js";
+import { validateWebhookEvent } from "../client/test/sdk-event-shape.js";
 import { WEBHOOK_KINDS } from "../src/lib/util.js";
 
 export type Recorded = {
@@ -105,9 +108,32 @@ export function chainChecks(get: () => TestIndexer, fixture: Fixture): void {
     expect(new Set(cursors).size).toBe(cursors.length);
     const count = (event: string) => fixture.events.filter((e) => `${e.contract}.${e.event}` === event).length;
     const kind = (k: string) => activities.filter((a) => a.kind === k).length;
-    expect(kind("payment.succeeded")).toBe(count("PolarisPayments.PaymentMade") + count("PolarisCheckout.PlanOpened") + count("PolarisCheckout.SubscriptionStarted"));
+    // One row per polarispay-sdk webhook: payment.succeeded is Pay now only,
+    // Pay in 4 is plan.opened, a subscription is its charges.
+    expect(kind("payment.succeeded")).toBe(count("PolarisPayments.PaymentMade"));
+    expect(kind("plan.opened")).toBe(count("PolarisCheckout.PlanOpened"));
     expect(kind("subscription.charged")).toBe(count("PolarisPayments.SubscriptionCharged"));
+    expect(kind("plan.completed")).toBe(count("PolarisLoanEngine.LoanFullyRepaid"));
     expect(kind("plan.liquidated")).toBe(count("PolarisLoanEngine.LoanLiquidated"));
+    expect(kind("subscription.canceled")).toBe(count("PolarisPayments.SubscriptionCancelled") + count("PolarisPayments.SubscriptionLapsed"));
+    // installment.collected: one per instalment completed, as the engine counts them.
+    const completed = Object.values(fixture.expected.loans).reduce((n, l) => n + l.installmentsPaid, 0);
+    expect(kind("installment.collected")).toBe(completed);
+    // Every charge of a subscription that came through the checkout names its order.
+    const started = new Set(fixture.events.filter((e) => e.event === "SubscriptionStarted").map((e) => String(e.params.subId)));
+    const charges = activities.filter((a) => a.kind === "subscription.charged" && started.has(a.refId));
+    expect(charges.length).toBeGreaterThan(0);
+    for (const a of charges) expect(a.orderId, `subscription ${a.refId} period ${a.period}`).toBeTruthy();
+  });
+
+  it("turns every outbox row into an event polarispay-sdk accepts", async () => {
+    const activities = await get().Activity.getAll();
+    for (const row of activities) {
+      // Hasura sends a missing column as null; the test indexer leaves it undefined.
+      const a = Object.fromEntries(Object.entries(row).map(([k, v]) => [k, v ?? null])) as unknown as Activity;
+      const event = toWebhookEvent(a, { merchantId: "mer_live" });
+      expect(validateWebhookEvent(event), `${a.kind} ${a.id}`).toEqual([]);
+    }
   });
 
   it("explains every collection: executed, short on funds, or stale", async () => {

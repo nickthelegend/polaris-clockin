@@ -14,6 +14,10 @@ export type SendStatus = "OPEN" | "CLAIMED" | "CANCELLED" | "REFUNDED";
 export type OrderStatus = "QUOTED" | "PAID";
 /** What a skipped collection asks of the buyer. */
 export type ReasonAction = "RESIGN" | "TOP_UP" | "STALE" | "OTHER";
+/** Why a collection failed, in polarispay-sdk's words (its InstallmentFailureReason). */
+export type InstallmentFailureReason = "insufficient_funds" | "allowance_lost" | "other";
+/** Who ended a subscription, in polarispay-sdk's words. */
+export type CanceledBy = "subscriber" | "merchant" | "lapsed";
 export type PaidBy = "BUYER" | "CRE" | "KEEPER";
 
 export const WEBHOOK_KINDS = [
@@ -260,7 +264,22 @@ export type Activity = {
   amount: bigint;
   fee: bigint | null;
   refId: string;
+  /** installment.*: 0-based. */
   installmentIndex: number | null;
+  installmentCount: number | null;
+  principal: bigint | null;
+  interval: number | null;
+  firstDueAt: number | null;
+  remaining: bigint | null;
+  recovered: bigint | null;
+  attempt: number | null;
+  /** installment.failed: null when the next step is liquidation. */
+  nextAttemptAt: number | null;
+  failureReason: InstallmentFailureReason | null;
+  subscriptionPlanId: string | null;
+  period: number | null;
+  nextChargeAt: number | null;
+  canceledBy: CanceledBy | null;
   reason: string | null;
   reasonAction: ReasonAction | null;
   destination: string | null;

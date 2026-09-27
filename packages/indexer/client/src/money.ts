@@ -31,3 +31,17 @@ export function formatUsd(units: bigint): string {
   const dollars = Math.floor(abs / 100).toLocaleString("en-US");
   return `${sign}$${dollars}.${String(abs % 100).padStart(2, "0")}`;
 }
+
+/**
+ * A USD decimal string with 2 to 6 decimals, the way webhooks carry amounts
+ * (polarispay-sdk's documented format, and exactly what the API writes):
+ * 25000000 is "25.00", 201534246 is "201.534246", 1000050 is "1.00005".
+ */
+export function formatAmount(units: bigint): string {
+  const sign = units < 0n ? "-" : "";
+  const abs = units < 0n ? -units : units;
+  const whole = abs / 1_000_000n;
+  let frac = (abs % 1_000_000n).toString().padStart(AUSD_DECIMALS, "0").replace(/0+$/, "");
+  if (frac.length < 2) frac = frac.padEnd(2, "0");
+  return `${sign}${whole}.${frac}`;
+}

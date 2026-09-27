@@ -89,8 +89,9 @@ export const ORDER_FIELDS = /* GraphQL */ `
 
 export const ACTIVITY_FIELDS = /* GraphQL */ `
   fragment ActivityFields on Activity {
-    id cursor kind merchant_id buyer orderId orderKey mode amount fee refId installmentIndex reason reasonAction
-    destination timestamp blockNumber logIndex txHash
+    id cursor kind merchant_id buyer orderId orderKey mode amount fee refId installmentIndex installmentCount
+    principal interval firstDueAt remaining recovered attempt nextAttemptAt failureReason subscriptionPlanId period
+    nextChargeAt canceledBy reason reasonAction destination timestamp blockNumber logIndex txHash
   }
 `;
 
