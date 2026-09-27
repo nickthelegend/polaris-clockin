@@ -6,7 +6,8 @@ import { Slot } from "../lib/slot";
 
 /* ── ThemeScope ──────────────────────────────────────────────────────────── */
 
-export type Theme = "dark" | "light";
+/** `ref-e` is ref E (LumaTrade): the merchant web app's dark theme on a lime canvas. */
+export type Theme = "dark" | "light" | "ref-e";
 
 export type ThemeScopeProps = HTMLAttributes<HTMLDivElement> & {
   theme: Theme;

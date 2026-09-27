@@ -91,6 +91,7 @@ bars, gradient lines), cards, bottom sheets, drawers and dialogs.
 | Path | What it is |
 |---|---|
 | `apps/app` | The Polaris app: the buyer's PWA (Face ID accounts with Mera, checkout, send by link). See its [README](apps/app/README.md) |
+| `apps/shop` | Halcyon, a demo store that takes payment through the Polaris SDK: Pay now, Pay in 4 on Polaris credit, a subscription, and direct wallet payment, with signed webhooks. See its [README](apps/shop/README.md) |
 | `packages/contracts` | Solidity: loan engine, payments, score manager, collateral vault, merchant registry, batch settlement, plus the Metropolis additions |
 | `packages/underwriting` | Nansen-powered underwriting: provider clients, the Facts the DON attests, the score and Pay in 4 decision, plain-language reasons. See its [README](packages/underwriting/README.md) |
 | `apps/gateway` | Serves the underwriting API on port 3510. See its [README](apps/gateway/README.md) |
@@ -112,6 +113,13 @@ pnpm --filter @polarispay/underwriting test   # runs on labelled fixtures; no ke
 pnpm --filter @polarispay/gateway start       # the underwriting API on :3510
 pnpm --filter @polaris/cre-workflows test     # the CRE workflows on the SDK's test runtime
 pnpm --filter @polaris/cre-workflows e2e:local  # both workflows against real contracts on a local node
+```
+
+The merchant web app (`apps/business`, http://localhost:3100) and the demo
+shop it links to (`apps/shop`, http://127.0.0.1:3600), side by side:
+
+```bash
+pnpm dev:demo
 ```
 
 *TBD: deployment to Monad testnet, the apps and services.*

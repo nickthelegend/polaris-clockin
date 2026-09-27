@@ -1,6 +1,6 @@
 import { hasCronSecret, withPublic } from "@/server/auth";
 import { getConfig, productionProblems } from "@/server/env";
-import { ok } from "@/server/http";
+import { ok, methodNotAllowed } from "@/server/http";
 import { getRelayerAccount } from "@/server/relayer/signer";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * What production is still missing (`productionProblems`) names our own
  * weak spots ("POLARIS_KEY_PEPPER is not set"), so the list goes only to
  * the operator (`Authorization: Bearer <CRON_SECRET>`); everyone else sees
- * whether there are any.
+ * whether production is ready (the details are also logged at startup).
  */
 export const GET = withPublic(async (req) => {
   const config = getConfig();
@@ -27,7 +27,16 @@ export const GET = withPublic(async (req) => {
     activator: config.activator.mode,
     automaticPayouts: config.payoutSigner !== null,
     checkoutOrigin: config.checkoutOrigin,
+    publicUrl: config.publicUrl,
+    ready: problems.length === 0,
     productionReady: problems.length === 0,
     ...(hasCronSecret(req) ? { problems } : {}),
   });
-});
+}, { limit: "health" });
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET"]);
+export const POST = withPublic(notAllowed, { limit: "health" });
+export const PUT = withPublic(notAllowed, { limit: "health" });
+export const PATCH = withPublic(notAllowed, { limit: "health" });
+export const DELETE = withPublic(notAllowed, { limit: "health" });

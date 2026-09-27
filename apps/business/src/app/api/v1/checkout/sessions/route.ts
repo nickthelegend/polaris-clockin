@@ -1,6 +1,6 @@
 import { withSecretKey } from "@/server/auth";
 import { afterResponse } from "@/server/background";
-import { ok, readJson } from "@/server/http";
+import { ok, readJson, methodNotAllowed } from "@/server/http";
 import { fingerprint, withIdempotency } from "@/server/sessions/idempotency";
 import { parseCreateSession } from "@/server/sessions/params";
 import { createSession, ensureSubscriptionPlan, toApiSession } from "@/server/sessions/sessions";
@@ -27,3 +27,10 @@ export const POST = withSecretKey(async (req, { merchant, key }) => {
   });
   return ok(result.body, result.replayed ? 200 : result.status);
 });
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["POST"]);
+export const GET = withSecretKey(notAllowed);
+export const PUT = withSecretKey(notAllowed);
+export const PATCH = withSecretKey(notAllowed);
+export const DELETE = withSecretKey(notAllowed);

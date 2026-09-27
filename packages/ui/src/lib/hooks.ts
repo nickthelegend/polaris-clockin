@@ -205,8 +205,11 @@ export function useMounted(): boolean {
  * around whatever had focus when it opened (so a sheet opened from a light
  * panel is light).
  */
-export function useInheritedTheme(open: boolean, explicit?: "dark" | "light"): "dark" | "light" | undefined {
-  const [theme, setTheme] = useState<"dark" | "light" | undefined>(explicit);
+/** The library's themes (primitives/Card re-exports it). */
+export type Theme = "dark" | "light" | "ref-e";
+
+export function useInheritedTheme(open: boolean, explicit?: Theme): Theme | undefined {
+  const [theme, setTheme] = useState<Theme | undefined>(explicit);
   useIsomorphicLayoutEffect(() => {
     if (!open) return;
     if (explicit) {
@@ -215,7 +218,34 @@ export function useInheritedTheme(open: boolean, explicit?: "dark" | "light"): "
     }
     const el = document.activeElement as HTMLElement | null;
     const found = el?.closest("[data-theme]")?.getAttribute("data-theme");
-    setTheme(found === "light" || found === "dark" ? found : undefined);
+    setTheme(found === "light" || found === "dark" || found === "ref-e" ? found : undefined);
   }, [open, explicit]);
   return explicit ?? theme;
+}
+
+/* ── Reduced motion, hydration-safe ──────────────────────────────────────── */
+
+const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeReduced(onChange: () => void) {
+  const mql = window.matchMedia(REDUCED_QUERY);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
+/**
+ * Whether the person asked for reduced motion, reading `false` on the server
+ * and while hydrating (so the first client render matches the server HTML),
+ * and the real preference right after. Anything whose first render depends on
+ * it (a chart's draw-in `initial`) should key its animated element on the
+ * result, so it remounts in its final state when the preference arrives.
+ * Motion's own `useReducedMotion` reads the preference during hydration,
+ * which makes the server and client markup differ.
+ */
+export function useReducedMotionSafe(): boolean {
+  return useSyncExternalStore(
+    subscribeReduced,
+    () => window.matchMedia(REDUCED_QUERY).matches,
+    () => false,
+  );
 }

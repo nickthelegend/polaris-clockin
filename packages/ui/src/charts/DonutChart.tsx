@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { useState, type HTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "../lib/cn";
+import { useReducedMotionSafe } from "../lib/hooks";
 import { arcPath, polar } from "./geometry";
 
 export type DonutSegment = { label: string; value: number; color: string };
@@ -64,7 +65,8 @@ export function DonutChart({
   style,
   ...props
 }: DonutChartProps) {
-  const reduced = useReducedMotion();
+  // Hydration-safe: false until mounted, so the draw-in markup matches the server.
+  const reduced = useReducedMotionSafe();
   const [focus, setFocus] = useState<number | null>(null);
   const total = data.reduce((a, d) => a + d.value, 0) || 1;
   const R = size / 2;
@@ -105,7 +107,7 @@ export function DonutChart({
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="overflow-visible">
         {segs.map(({ d, i, s0, s1, share }) => (
           <motion.path
-            key={d.label}
+            key={`${d.label}-${reveal ? "reveal" : "still"}`}
             d={arcPath(cx, cy, r, s0, s1)}
             fill="none"
             stroke={d.color}
@@ -150,7 +152,7 @@ export function DonutChart({
             const [tx, ty] = polar(cx, cy, R - stroke * 0.18, mid).map((v) => Math.round(v * 100) / 100) as [number, number];
             return (
               <motion.span
-                key={`tag-${d.label}`}
+                key={`tag-${d.label}-${reveal ? "reveal" : "still"}`}
                 aria-hidden
                 initial={reveal ? { opacity: 0, y: 6 } : false}
                 animate={{ opacity: focus === null || focus === i ? 1 : 0.4, y: 0 }}

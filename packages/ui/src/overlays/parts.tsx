@@ -75,7 +75,7 @@ export function OverlayHeader({
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} className="mt-0.5 truncate text-[13px] text-ui-muted">
+              <p id={descriptionId} className="mt-0.5 line-clamp-3 text-[13px] text-balance text-ui-muted">
                 {description}
               </p>
             ) : null}

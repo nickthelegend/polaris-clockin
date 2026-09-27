@@ -1,5 +1,5 @@
 import { withMerchant } from "@/server/auth";
-import { ok, readJson } from "@/server/http";
+import { ok, readJson, methodNotAllowed } from "@/server/http";
 import { getRegistration, submitRegistration } from "@/server/onboarding";
 
 export const dynamic = "force-dynamic";
@@ -14,3 +14,9 @@ export const dynamic = "force-dynamic";
 export const GET = withMerchant(async (_req, auth) => ok(await getRegistration(auth)));
 
 export const POST = withMerchant(async (req, auth) => ok(await submitRegistration(auth, await readJson(req))));
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET", "POST"]);
+export const PUT = withMerchant(notAllowed);
+export const PATCH = withMerchant(notAllowed);
+export const DELETE = withMerchant(notAllowed);

@@ -58,7 +58,7 @@ function bearer(req: Request): string | null {
   return match?.[1] ?? null;
 }
 
-function readToken(req: Request): { token: string; source: TokenSource } | null {
+export function readToken(req: Request): { token: string; source: TokenSource } | null {
   if (req.headers.get("authorization")) {
     const token = bearer(req);
     return token ? { token, source: "header" } : null;
@@ -69,7 +69,13 @@ function readToken(req: Request): { token: string; source: TokenSource } | null 
     const eq = part.indexOf("=");
     if (eq === -1) continue;
     if (part.slice(0, eq).trim() !== COOKIE_NAME) continue;
-    const value = decodeURIComponent(part.slice(eq + 1).trim());
+    let value: string;
+    try {
+      value = decodeURIComponent(part.slice(eq + 1).trim());
+    } catch {
+      // A malformed cookie ("%", "%E0%A4%A") is no session: 401, never a 500.
+      return null;
+    }
     return value ? { token: value, source: "cookie" } : null;
   }
   return null;
@@ -146,7 +152,15 @@ async function lookupProfile(userId: string): Promise<Profile> {
   try {
     const user = await privy.users()._get(userId);
     accounts = (user.linked_accounts ?? []) as readonly LinkedAccount[];
-  } catch {
+  } catch (error) {
+    const status = privyStatus(error);
+    // A valid token for a user Privy no longer has (deleted): the session is over.
+    if (status === 404) throw new HttpError(401, "invalid_token", "Your session has expired. Sign in again.");
+    // Privy refused our app secret: a server configuration problem, not the merchant's.
+    if (status === 401 || status === 403) {
+      console.error("[auth] Privy rejected the app credentials while loading a user", status);
+      throw new HttpError(503, "auth_not_configured", "Sign-in isn't configured correctly on this server.");
+    }
     throw new HttpError(502, "privy_unavailable", "We couldn't reach Privy to load your account. Try again.");
   }
 
@@ -154,6 +168,13 @@ async function lookupProfile(userId: string): Promise<Profile> {
   if (profiles.size >= MAX_CACHED) profiles.clear();
   profiles.set(userId, { value, expires: Date.now() + (value.walletAddress ? PROFILE_TTL_MS : PENDING_TTL_MS) });
   return value;
+}
+
+/** The HTTP status of a failed Privy API call, when it had one. */
+function privyStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
 }
 
 /* ── Test seam: route tests authenticate without Privy ──────────────────── */
@@ -318,7 +339,11 @@ function clientKey(req: Request): string {
  * `app/api` that a merchant's browser calls is exported through this.
  */
 export function withMerchant<Ctx = unknown>(handler: (req: Request, merchant: AuthedMerchant, ctx: Ctx) => Promise<Response>) {
-  return wrap<AuthedMerchant, Ctx>(authenticate, (req, merchant, ctx) => handler(req, merchant, ctx));
+  return wrap<AuthedMerchant, Ctx>(authenticate, (req, merchant, ctx) => {
+    // Writes are rate limited per merchant, so a script can't grow the store without bound.
+    if (UNSAFE_METHODS.has(req.method.toUpperCase())) consume(LIMITS.dashboardWritesPerMerchant, merchant.userId);
+    return handler(req, merchant, ctx);
+  });
 }
 
 /** Server-to-server API (`/api/v1`): a secret key. */
@@ -343,10 +368,13 @@ export function withSignedRequest<Ctx = unknown>(handler: Handler<null, Ctx>) {
 
 /**
  * Public, read-only data the hosted checkout needs (never a secret, never
- * another merchant's book). Rate limited per IP.
+ * another merchant's book). Rate limited per IP. The health route has its
+ * own, larger bucket (`{ limit: "health" }`), so checkout traffic can never
+ * leave the dashboard unable to read what the server is connected to.
  */
-export function withPublic<Ctx = unknown>(handler: Handler<null, Ctx>) {
-  return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit: LIMITS.publicPerIp });
+export function withPublic<Ctx = unknown>(handler: Handler<null, Ctx>, options: { limit?: "public" | "health" } = {}) {
+  const limit = options.limit === "health" ? LIMITS.healthPerIp : LIMITS.publicPerIp;
+  return wrap<null, Ctx>(async () => null, handler, { cors: appCors, limit });
 }
 
 /** Whether the request carries `Authorization: Bearer <CRON_SECRET>` (constant time; false when unset). */

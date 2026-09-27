@@ -44,7 +44,15 @@ export function orderKeyOf(merchant: Address, orderId: string): Hex {
 }
 
 export function sessionUrl(id: string, config: ServerConfig = getConfig()): string {
-  return `${config.checkoutOrigin}/pay/${id}`;
+  return config.checkoutOrigin ? `${config.checkoutOrigin}/pay/${id}` : "";
+}
+
+/** Sessions send buyers to the hosted checkout: none can open until it is configured. */
+function requireCheckoutOrigin(config: ServerConfig = getConfig()): string {
+  if (!config.checkoutOrigin) {
+    throw new HttpError(503, "checkout_not_configured", "Checkout isn't configured on this server yet (POLARIS_CHECKOUT_ORIGIN).");
+  }
+  return config.checkoutOrigin;
 }
 
 /** The SDK's `CheckoutSession`, field for field. */
@@ -109,6 +117,7 @@ export async function createSession(
 ): Promise<CheckoutSessionRecord> {
   const config = getConfig();
   const chain = requireChain();
+  requireCheckoutOrigin(config);
   if (!merchant.walletAddress) {
     throw new HttpError(409, "account_incomplete", "This merchant's payout account isn't set up yet: sign in to Polaris for Business once to finish.");
   }
@@ -536,6 +545,7 @@ export async function openLink(linkId: string): Promise<CheckoutSessionRecord> {
   const link: LinkRecord | null = await db.links.get(linkId);
   if (!link || link.sample) throw new HttpError(404, "not_found", "This payment link doesn't exist.");
   if (link.status === "used") throw new HttpError(410, "link_used", "This payment link has already been paid.");
+  if (link.status === "inactive") throw new HttpError(410, "link_inactive", "This payment link has been turned off.");
   if (link.status === "expired" || (link.expiresAt && Date.parse(link.expiresAt) <= Date.now())) {
     throw new HttpError(410, "link_expired", "This payment link has expired.");
   }
@@ -552,7 +562,7 @@ export async function openLink(linkId: string): Promise<CheckoutSessionRecord> {
       lineItems: [],
       modes: modes.length ? modes : ["now"],
       subscription: modes.includes("subscribe") ? { interval: "month", intervalCount: 1 } : null,
-      successUrl: `${config.checkoutOrigin}/pay/{CHECKOUT_SESSION_ID}`,
+      successUrl: `${requireCheckoutOrigin(config)}/pay/{CHECKOUT_SESSION_ID}`,
       cancelUrl: null,
       orderId: `link-${link.id}-${newId("o", 10).slice(2)}`,
       metadata: { linkId: link.id },

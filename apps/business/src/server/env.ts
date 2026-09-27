@@ -103,10 +103,14 @@ export type ServerConfig = {
   privyDisabled: boolean;
   keyPepper: string | undefined;
   dbUrl: string;
-  /** The hosted checkout: session URLs are `${checkoutOrigin}/pay/${id}`. */
-  checkoutOrigin: string;
-  /** This server's own public URL. */
-  publicUrl: string;
+  /**
+   * The hosted checkout: session URLs are `${checkoutOrigin}/pay/${id}`.
+   * Null in production until POLARIS_CHECKOUT_ORIGIN is set: links and
+   * sessions don't go live on a guessed host.
+   */
+  checkoutOrigin: string | null;
+  /** This server's own public URL; null in production until POLARIS_PUBLIC_URL is set. */
+  publicUrl: string | null;
   /** Origins allowed to call /api/relay and /api/public from a browser. */
   appOrigins: string[];
   cronSecret: string | null;
@@ -332,14 +336,21 @@ function build(): ServerConfig {
     }
   }
 
-  const checkoutOrigin = origin(env("POLARIS_CHECKOUT_ORIGIN") ?? (production ? "https://pay.polarispay.app" : "http://localhost:3000"), "POLARIS_CHECKOUT_ORIGIN");
-  const publicUrl = origin(env("POLARIS_PUBLIC_URL") ?? (production ? "https://business.polarispay.app" : "http://localhost:3100"), "POLARIS_PUBLIC_URL");
+  // Development defaults to the local apps; production has none, so a
+  // missing setting is reported (productionProblems) instead of handing
+  // buyers, or the MerchantRegistry, a host that doesn't exist.
+  const checkoutRaw = env("POLARIS_CHECKOUT_ORIGIN") ?? (production ? null : "http://localhost:3000");
+  const publicRaw = env("POLARIS_PUBLIC_URL") ?? (production ? null : "http://localhost:3100");
+  const checkoutOrigin = checkoutRaw ? origin(checkoutRaw, "POLARIS_CHECKOUT_ORIGIN") : null;
+  const publicUrl = publicRaw ? origin(publicRaw, "POLARIS_PUBLIC_URL") : null;
   const extraOrigins = (env("POLARIS_APP_ORIGINS") ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
     .map((s) => origin(s, "POLARIS_APP_ORIGINS"));
-  const appOrigins = [...new Set([checkoutOrigin, ...extraOrigins, ...(production ? [] : ["http://localhost:3000"])])];
+  const appOrigins = [
+    ...new Set([...(checkoutOrigin ? [checkoutOrigin] : []), ...extraOrigins, ...(production ? [] : ["http://localhost:3000"])]),
+  ];
 
   const signerId = env("PRIVY_PAYOUT_SIGNER_ID") ?? env("NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID");
   const signerKey = env("PRIVY_PAYOUT_SIGNER_KEY");
@@ -407,7 +418,7 @@ export function resetConfig(): void {
   cached = null;
 }
 
-/** What production needs before it takes money: called by the health route and the workers. */
+/** What production needs before it takes money: logged at startup (instrumentation.ts); the health route reports only whether there is any. */
 export function productionProblems(config = getConfig()): string[] {
   if (!config.production) return [];
   const problems: string[] = [];
@@ -420,7 +431,14 @@ export function productionProblems(config = getConfig()): string[] {
   if (config.trustedProxies === 0) {
     problems.push("POLARIS_TRUSTED_PROXIES is not set: per-IP rate limits can't tell a client's own X-Forwarded-For from the one our proxy wrote.");
   }
+  if (!config.checkoutOrigin) problems.push("POLARIS_CHECKOUT_ORIGIN is not set: payment links and checkout sessions have nowhere to send buyers.");
+  if (!config.publicUrl) problems.push("POLARIS_PUBLIC_URL is not set: merchants can't register on Monad (it goes in their registry metadata).");
   return problems;
+}
+
+/** The hosted checkout's URL for a link or session id, or null while no checkout origin is configured. */
+export function checkoutUrl(id: string, config = getConfig()): string | null {
+  return config.checkoutOrigin ? `${config.checkoutOrigin}/pay/${id}` : null;
 }
 
 export function explorerTxUrl(hash: string, config = getConfig()): string | null {

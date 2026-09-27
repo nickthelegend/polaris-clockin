@@ -367,7 +367,8 @@ export type LinkRecord = {
   modes: CheckoutMode[];
   usage: "single" | "reusable";
   expiresAt: IsoDate | null;
-  status: "active" | "used" | "expired";
+  /** `inactive`: the merchant turned it off; it opens no more checkouts. */
+  status: "active" | "used" | "expired" | "inactive";
   paymentsCount: number;
   collectedCents: number;
   createdAt: IsoDate;
@@ -619,7 +620,7 @@ export const COLLECTIONS = {
   links: {
     name: "payment_links",
     id: (d: LinkRecord) => d.id,
-    indexes: { merchantId: (d: LinkRecord) => d.merchantId, createdAt: (d: LinkRecord) => d.createdAt },
+    indexes: { merchantId: (d: LinkRecord) => d.merchantId, createdAt: (d: LinkRecord) => d.createdAt, status: (d: LinkRecord) => d.status },
   } satisfies CollectionSpec<LinkRecord>,
   webhookEndpoints: {
     name: "webhook_endpoints",

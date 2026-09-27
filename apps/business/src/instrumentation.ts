@@ -7,6 +7,12 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  try {
+    const { productionProblems } = await import("./server/env");
+    for (const problem of productionProblems()) console.warn(`[config] ${problem}`);
+  } catch (error) {
+    console.error("[config] can't be read:", (error as Error).message);
+  }
   if (process.env.POLARIS_WORKERS === "0") return;
   try {
     const { startWorkers } = await import("./server/workers");

@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import type { HTMLAttributes } from "react";
 
 import { cn } from "../lib/cn";
+import { useReducedMotionSafe } from "../lib/hooks";
 
 export type HBar = { label: string; /** Share in percent. */ value: number; color?: string };
 
@@ -49,7 +50,8 @@ export function HBarList({
   className,
   ...props
 }: HBarListProps) {
-  const reduced = useReducedMotion();
+  // Hydration-safe: false until mounted, so the draw-in markup matches the server.
+  const reduced = useReducedMotionSafe();
   const max = Math.max(1, ...data.map((d) => d.value));
   const reveal = animate && !reduced;
   return (
@@ -59,6 +61,7 @@ export function HBarList({
         return (
           <li key={d.label} className="flex">
             <motion.div
+              key={reveal ? "reveal" : "still"}
               initial={reveal ? { width: `${minWidth * 0.6}%`, opacity: 0 } : false}
               animate={{ width: `${width}%`, opacity: 1 }}
               transition={{ delay: reveal ? i * 0.06 : 0, type: "spring", stiffness: 160, damping: 22 }}

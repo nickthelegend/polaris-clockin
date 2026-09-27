@@ -1,5 +1,5 @@
 import { withPreflight, withPublishableKey } from "@/server/auth";
-import { ok, readJson } from "@/server/http";
+import { ok, readJson, methodNotAllowed } from "@/server/http";
 import { handleSdkRelay } from "@/server/relayer/relay";
 
 export const dynamic = "force-dynamic";
@@ -13,3 +13,10 @@ export const dynamic = "force-dynamic";
 export const POST = withPublishableKey(async (req, { merchant }) => ok(await handleSdkRelay(merchant, await readJson(req)), 201));
 
 export const OPTIONS = withPreflight("any");
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["POST"]);
+export const GET = withPublishableKey(notAllowed);
+export const PUT = withPublishableKey(notAllowed);
+export const PATCH = withPublishableKey(notAllowed);
+export const DELETE = withPublishableKey(notAllowed);

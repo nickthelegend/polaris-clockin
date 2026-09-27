@@ -159,7 +159,7 @@ export type BottomSheetProps = {
   /** When there is no visible title. */
   "aria-label"?: string;
   /** Scope the sheet to a theme (it inherits the page's otherwise). */
-  theme?: "dark" | "light";
+  theme?: "dark" | "light" | "ref-e";
   /** Widest it gets on a large screen. */
   maxWidth?: number;
   className?: string;

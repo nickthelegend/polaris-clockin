@@ -29,6 +29,8 @@ export const LIMITS = {
   /** Every transfer and send by link, from anyone (no merchant checkout behind them): the relayer's circuit breaker. */
   relayOpenGlobal: { name: "relay-open-global", perMinute: 60, burst: 120 },
   publicPerIp: { name: "public-ip", perMinute: 240, burst: 60 },
+  /** GET /api/health: every open dashboard reads it; cheap, and never shared with checkout reads. */
+  healthPerIp: { name: "health-ip", perMinute: 1200, burst: 300 },
   apiPerKey: { name: "api-key", perMinute: 300, burst: 100 },
   onboardPerMerchant: { name: "onboard", perMinute: 6, burst: 3 },
   /** Underwriting is once per account, and the CRE trigger runs once per 30 s for everyone: a few tries an hour, a few a day. */
@@ -36,6 +38,8 @@ export const LIMITS = {
   underwritePerAccountDaily: { name: "underwrite-day", perMinute: 6 / 1440, burst: 6 },
   /** Opening a payment link makes a session (its price is pinned on chain when someone pays it). */
   linkOpen: { name: "link-open", perMinute: 20, burst: 10 },
+  /** Dashboard writes (POST, PATCH, DELETE) per merchant: plenty for a person, tight for a script. */
+  dashboardWritesPerMerchant: { name: "dashboard-writes", perMinute: 30, burst: 30 },
 } as const satisfies Record<string, Limit>;
 
 const buckets = new Map<string, Bucket>();

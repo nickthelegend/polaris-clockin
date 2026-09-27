@@ -21,6 +21,11 @@ export type Merchant = {
   /** What webhooks and the public API call this merchant: `mer_…`. */
   publicId?: string;
   /**
+   * The server has no chain connected, so this merchant's payments, plans and
+   * payouts are a labelled sample book (and nothing can be relayed).
+   */
+  sample?: boolean;
+  /**
    * MerchantRegistry, on chain. `registered` merchants can take payments;
    * `active` ones can also offer Pay in 4 (activation sets their cap).
    */
@@ -37,7 +42,8 @@ export type Merchant = {
 /** How a buyer may pay: in full, in four instalments, or on a subscription. */
 export type PayMode = "now" | "later" | "subscribe";
 export type LinkUsage = "single" | "reusable";
-export type LinkStatus = "active" | "used" | "expired";
+/** inactive: the merchant turned it off; it takes no more payments. */
+export type LinkStatus = "active" | "used" | "expired" | "inactive";
 
 export type PaymentLink = {
   id: string;
@@ -51,6 +57,8 @@ export type PaymentLink = {
   paymentsCount: number;
   collectedCents: Cents;
   createdAt: IsoDate;
+  /** Part of a server's sample book (no chain yet): labelled, and it can't be changed. */
+  sample?: boolean;
 };
 
 export type CreateLinkInput = {
@@ -61,6 +69,9 @@ export type CreateLinkInput = {
   /** Hours from now, or null for a link that never expires. */
   expiresInHours: number | null;
 };
+
+/** Links are never deleted (payments point at them); they can be turned off. */
+export type UpdateLinkInput = { active: false };
 
 /* ── Payments ───────────────────────────────────────────────────────────── */
 
@@ -81,6 +92,8 @@ export type Payment = {
   /** Set once the indexer has seen the settling transaction. Null for sample rows. */
   txHash: `0x${string}` | null;
   createdAt: IsoDate;
+  /** Part of a server's sample book: labelled in its row. */
+  sample?: boolean;
 };
 
 /* ── Pay in 4 ───────────────────────────────────────────────────────────── */
@@ -105,6 +118,8 @@ export type Plan = {
   attempts: number;
   nextDueAt: IsoDate | null;
   openedAt: IsoDate;
+  /** Part of a server's sample book: labelled in its row. */
+  sample?: boolean;
 };
 
 export type CollectorStatus = {
@@ -155,6 +170,8 @@ export type Payout = {
   signed: boolean;
   txHash: `0x${string}` | null;
   createdAt: IsoDate;
+  /** Part of a server's sample book, or paid out of its sample balance. */
+  sample?: boolean;
 };
 
 export type AutoPayouts = {
@@ -276,4 +293,38 @@ export type WebhookDelivery = {
 export type WebhooksState = {
   endpoints: WebhookEndpoint[];
   deliveries: WebhookDelivery[];
+};
+
+/* ── Onboarding on chain ────────────────────────────────────────────────── */
+
+export type RegistrationState = NonNullable<Merchant["registration"]>["state"];
+
+/** GET /api/merchant/registration: the state and, when needed, what to sign. */
+export type RegistrationStep = {
+  merchant: Merchant;
+  /** EIP-712 `Registration` for the payout wallet, uint256 values as decimal strings. Null when nothing is left to sign. */
+  typedData: {
+    domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+    types: Record<string, { name: string; type: string }[]>;
+    primaryType: "Registration";
+    message: Record<string, string> & { deadline: string };
+  } | null;
+};
+
+/* ── What this server is connected to ───────────────────────────────────── */
+
+/** GET /api/health, reduced to what the dashboard decides with. No secrets. */
+export type Capabilities = {
+  /** A deployment record and an RPC: payments, registration and balances are real. */
+  chain: { id: number; name: string } | null;
+  /** The relayer can submit (withdrawals, registration, buyer payments). */
+  relayer: boolean;
+  /** The Privy payout signer exists on the server (automatic payouts). */
+  automaticPayouts: boolean;
+  /** Registered merchants are activated for Pay in 4 automatically. */
+  activation: boolean;
+  /** Where payment links and sessions send buyers; null until it is configured. */
+  checkoutOrigin: string | null;
+  /** This server's public URL is set (it goes in the registry metadata), so merchants can register. */
+  registrationUrl: boolean;
 };

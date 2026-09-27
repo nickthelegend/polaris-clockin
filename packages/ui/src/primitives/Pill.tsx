@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowUpRight, ChevronDown } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Check, ChevronDown } from "lucide-react";
 import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
 
 import { cn } from "../lib/cn";
@@ -99,8 +99,8 @@ export type ChipProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onChange"
   icon?: ReactNode;
   /** A trailing count ("Pending 3"). */
   count?: number;
-  /** `plain` (ref C's timeframe chips) or `outline` (filter chips). */
-  variant?: "plain" | "outline" | "solid";
+  /** `plain` (ref C's timeframe chips), `outline` (filter chips), `solid`, or `pill` (ref E's option chips). */
+  variant?: "plain" | "outline" | "solid" | "pill";
   size?: "sm" | "md";
   chevron?: boolean;
 };
@@ -135,11 +135,22 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
             : "border border-ui-hairline-strong text-ui-text hover:bg-ui-surface-2"),
         variant === "solid" &&
           (selected ? "bg-ui-lime text-ui-on-lime" : "bg-ui-surface-2 text-ui-text hover:bg-ui-surface-3"),
+        // Ref E: an option chip. On: the lime button's fill with a check, so
+        // a choice reads as chosen at a glance; off: a hairline and muted
+        // text, and hovering only brightens the hairline (never looking chosen).
+        variant === "pill" &&
+          (selected
+            ? "border border-transparent bg-ui-lime-button pl-2.5 text-[#121418]"
+            : "border border-ui-hairline-strong text-ui-muted hover:border-ui-muted"),
         className,
       )}
       {...props}
     >
-      {icon ? <IconSlot size={size === "sm" ? 14 : 16}>{icon}</IconSlot> : null}
+      {icon ? (
+        <IconSlot size={size === "sm" ? 14 : 16}>{icon}</IconSlot>
+      ) : variant === "pill" && selected ? (
+        <Check aria-hidden size={size === "sm" ? 14 : 15} strokeWidth={2.5} className="shrink-0" />
+      ) : null}
       {children}
       {typeof count === "number" ? (
         <span

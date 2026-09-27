@@ -6,7 +6,7 @@
 // Helpers
 export { cn } from "./lib/cn";
 export { formatMoney, formatPercent, formatCompact, moneyParts, currencySymbol, groupTyped } from "./lib/format";
-export { useMediaQuery, useControllable, useScrollLock, useFocusTrap, SHEET_QUERY } from "./lib/hooks";
+export { useMediaQuery, useControllable, useScrollLock, useFocusTrap, useReducedMotionSafe, SHEET_QUERY } from "./lib/hooks";
 export { IconSlot, IconProvider, ICON_STROKE } from "./lib/icon";
 
 // Primitives
@@ -32,6 +32,14 @@ export { Table, CellStack } from "./primitives/Table";
 export type { TableProps, TableColumn, SortState } from "./primitives/Table";
 export { Logo, LogoMark } from "./primitives/Logo";
 export { Keypad, AmountDisplay, applyKey } from "./primitives/Keypad";
+export { Notice, ErrorState } from "./primitives/Notice";
+export type { NoticeProps, NoticeTone, ErrorStateProps } from "./primitives/Notice";
+export { Ticks } from "./primitives/Ticks";
+export type { TicksProps } from "./primitives/Ticks";
+export { CopyButton } from "./primitives/CopyButton";
+export type { CopyButtonProps } from "./primitives/CopyButton";
+export { Menu } from "./primitives/Menu";
+export type { MenuProps, MenuItemProps } from "./primitives/Menu";
 export type { KeypadProps, KeypadKey, AmountDisplayProps } from "./primitives/Keypad";
 
 // Composites
@@ -53,6 +61,14 @@ export { MiniCardCarousel, MINI_CARD_TINTS } from "./composites/MiniCardCarousel
 export type { MiniCardCarouselProps, MiniCard } from "./composites/MiniCardCarousel";
 export { BottomNav, AppHeader, ScreenHeader } from "./composites/Navigation";
 export type { BottomNavProps, NavItem, AppHeaderProps, ScreenHeaderProps } from "./composites/Navigation";
+export { SideNav } from "./composites/SideNav";
+export type { SideNavProps, SideNavItem } from "./composites/SideNav";
+export { PageHeader } from "./composites/PageHeader";
+export type { PageHeaderProps } from "./composites/PageHeader";
+export { CodeBlock } from "./composites/CodeBlock";
+export type { CodeBlockProps, CodeSample } from "./composites/CodeBlock";
+export { PhoneFrame } from "./composites/PhoneFrame";
+export type { PhoneFrameProps } from "./composites/PhoneFrame";
 
 // Charts
 export { Sparkline } from "./charts/Sparkline";
@@ -77,3 +93,25 @@ export { Drawer, Dialog } from "./overlays/Panels";
 export type { DrawerProps, DialogProps } from "./overlays/Panels";
 export { useOverlay } from "./overlays/parts";
 export type { OverlayHeaderProps } from "./overlays/parts";
+
+// Ref E (LumaTrade): the merchant web app's frame, nav, chart and trade widget
+export { AppFrame } from "./trade/AppFrame";
+export type { AppFrameProps } from "./trade/AppFrame";
+export { TopNav, NavLink, NavDropdown, WalletPill } from "./trade/TopNav";
+export type { TopNavProps, TopNavItem, NavLinkProps, NavDropdownProps, WalletPillProps } from "./trade/TopNav";
+export { PrimaryButton, SecondaryButton, IconSquareButton } from "./trade/Buttons";
+export type { TradeButtonProps, TradeButtonSize, IconSquareButtonProps } from "./trade/Buttons";
+export { DeltaChip, StatusPill, TimeframeChips, ChartTypeToggle, TextTabs } from "./trade/Chips";
+export type { DeltaChipProps, StatusPillProps, StatusPillTone, TimeframeChipsProps, ChartType, ChartTypeToggleProps, TextTabsProps } from "./trade/Chips";
+export { PairHeader, Coin, CoinPair, PolarisCoin, DollarCoin } from "./trade/PairHeader";
+export type { PairHeaderProps, PairOption, CoinProps, CoinTone, CoinPairProps } from "./trade/PairHeader";
+export { GradientLineChart, compactNumber, spanTicks } from "./trade/GradientLineChart";
+export type { GradientLineChartProps, GradientPoint } from "./trade/GradientLineChart";
+export { DataTable, TableName } from "./trade/DataTable";
+export type { DataTableProps } from "./trade/DataTable";
+export { SwapCard, SwapToggle, SwapStack } from "./trade/Swap";
+export type { SwapCardProps, SwapToggleProps, SwapStackProps } from "./trade/Swap";
+export { BalanceSummaryCard } from "./trade/BalanceSummaryCard";
+export type { BalanceSummaryCardProps, BalanceStat } from "./trade/BalanceSummaryCard";
+export { PanelCard } from "./trade/PanelCard";
+export type { PanelCardProps } from "./trade/PanelCard";

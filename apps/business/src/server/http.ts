@@ -40,6 +40,19 @@ export function failFrom(error: HttpError): Response {
   return fail(error.status, error.code, error.message, error.headers, error.param);
 }
 
+/**
+ * A handler for a method the route doesn't support: a JSON 405 with `Allow`,
+ * instead of Next's empty body. Export it through the route's wrapper like
+ * any other handler.
+ */
+export function methodNotAllowed(allowed: readonly string[]) {
+  return async function notAllowed(): Promise<Response> {
+    return fail(405, "method_not_allowed", `This endpoint accepts ${allowed.join(" and ")} only.`, {
+      Allow: allowed.join(", "),
+    });
+  };
+}
+
 /** `req_…`: returned as `Polaris-Request-Id` on every response, and logged with every error. */
 export function newRequestId(): string {
   return `req_${randomBytes(12).toString("base64url")}`;

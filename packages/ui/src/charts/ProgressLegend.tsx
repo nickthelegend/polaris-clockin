@@ -1,9 +1,10 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import type { HTMLAttributes } from "react";
 
 import { cn } from "../lib/cn";
+import { useReducedMotionSafe } from "../lib/hooks";
 
 export type LegendItem = { label: string; /** Percent, 0 to 100. */ value: number; color: string };
 
@@ -31,7 +32,8 @@ export function ProgressLegend({
   className,
   ...props
 }: ProgressLegendProps) {
-  const reduced = useReducedMotion();
+  // Hydration-safe: false until mounted, so the draw-in markup matches the server.
+  const reduced = useReducedMotionSafe();
   const reveal = animate && !reduced;
   return (
     <ul
@@ -54,6 +56,7 @@ export function ProgressLegend({
             className="mt-2.5 h-[5px] overflow-hidden rounded-full bg-ui-track"
           >
             <motion.div
+              key={reveal ? "reveal" : "still"}
               className="h-full rounded-full"
               style={{ background: it.color }}
               initial={reveal ? { width: 0 } : false}
