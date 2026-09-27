@@ -709,14 +709,18 @@ function LinkReady({ link, blocker, sample }: { link: PaymentLink; blocker: stri
       {blocker ? (
         <p className="mt-4 text-[13px] leading-snug text-ui-muted">{blocker} Sharing and the QR code switch on then.</p>
       ) : (
-        <div className="mt-4 flex min-w-0 items-center gap-2 rounded-ui-field bg-ui-canvas p-1.5 pl-3.5">
-          <code className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ui-muted">{link.url}</code>
-          <Button asChild variant="outline" size="sm" icon={<ArrowUpRight />}>
-            <a href={link.url} target="_blank" rel="noreferrer">
-              Open
-            </a>
-          </Button>
-          <CopyButton value={link.url} label="link" variant="button" buttonVariant="lime" size="sm" />
+        <div className="mt-4 grid min-w-0 gap-2">
+          <code className="block min-w-0 truncate rounded-ui-field bg-ui-canvas px-3.5 py-2.5 font-mono text-[12.5px] text-ui-muted" title={link.url}>
+            {link.url}
+          </code>
+          <div className="grid grid-cols-2 gap-2">
+            <Button asChild variant="outline" size="sm" icon={<ArrowUpRight />} className="w-full">
+              <a href={link.url} target="_blank" rel="noreferrer">
+                Open
+              </a>
+            </Button>
+            <CopyButton value={link.url} label="link" variant="button" buttonVariant="lime" size="sm" className="w-full" />
+          </div>
         </div>
       )}
     </div>
