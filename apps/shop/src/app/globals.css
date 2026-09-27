@@ -167,6 +167,7 @@
   }
   .btn[aria-disabled="true"]:not([aria-busy="true"]) {
     cursor: default;
+    opacity: 0.55;
   }
   .btn-ink {
     background: var(--color-ink);

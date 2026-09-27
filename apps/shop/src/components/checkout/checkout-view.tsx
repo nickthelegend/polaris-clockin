@@ -107,6 +107,15 @@ export function CheckoutView({
     };
   }, []);
 
+  // A notice under the pay button can land just below the fold: bring it into view.
+  useEffect(() => {
+    if (notice?.at !== "inline") return;
+    const el = document.getElementById("checkout-notice");
+    if (!el) return;
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "nearest", behavior: smooth ? "smooth" : "auto" });
+  }, [notice]);
+
   const clientErrors = validateBuyer(buyer);
   const errors = { ...(touched ? clientErrors : {}), ...serverErrors };
   const valid = Object.keys(clientErrors).length === 0 && lines.length > 0;
