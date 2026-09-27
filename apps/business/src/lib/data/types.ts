@@ -18,6 +18,23 @@ export type Merchant = {
   walletAddress: Address | null;
   email: string | null;
   createdAt: IsoDate;
+  /** What webhooks and the public API call this merchant: `mer_…`. */
+  publicId?: string;
+  /**
+   * The server has no chain connected, so this merchant's payments, plans and
+   * payouts are a labelled sample book (and nothing can be relayed).
+   */
+  sample?: boolean;
+  /**
+   * MerchantRegistry, on chain. `registered` merchants can take payments;
+   * `active` ones can also offer Pay in 4 (activation sets their cap).
+   */
+  registration?: {
+    state: "none" | "submitted" | "registered" | "active" | "failed";
+    txHash: `0x${string}` | null;
+    activationTxHash: `0x${string}` | null;
+    error: string | null;
+  };
 };
 
 /* ── Payment links ──────────────────────────────────────────────────────── */
@@ -224,8 +241,6 @@ export type WebhookEndpoint = {
   events: WebhookEventType[];
   /** `whsec_…` plus the last four characters. */
   secretHint: string;
-  /** Off: registered, but nothing is signed or sent for it. */
-  enabled: boolean;
   createdAt: IsoDate;
 };
 
@@ -240,12 +255,6 @@ export type CreateWebhookInput = {
   events: WebhookEventType[];
 };
 
-export type UpdateWebhookInput = {
-  url?: string;
-  events?: WebhookEventType[];
-  enabled?: boolean;
-};
-
 export type WebhookDelivery = {
   id: string;
   endpointId: string;
@@ -257,17 +266,55 @@ export type WebhookDelivery = {
   durationMs: number | null;
   attempt: number;
   test: boolean;
-  /** Test deliveries are signed and logged but not sent until live events are wired. */
+  /** True only for a delivery that was signed and logged but never sent. Live and test deliveries are sent. */
   simulated: boolean;
-  /** The exact headers and body that were (or would be) sent. */
+  /** The exact headers and body of the last attempt (the body is the same on every attempt). */
   request: {
     headers: Record<string, string>;
     body: string;
   };
   createdAt: IsoDate;
+  /** pending: queued or waiting for a retry; delivering: in flight; then succeeded or failed (retries exhausted). */
+  state?: "pending" | "delivering" | "succeeded" | "failed";
+  /** When the next retry runs, while `state` is pending. */
+  nextAttemptAt?: IsoDate | null;
+  /** Every attempt so far, oldest first. */
+  attempts?: Array<{ at: IsoDate; status: number | null; durationMs: number; error: string | null; responseBody: string | null }>;
 };
 
 export type WebhooksState = {
   endpoints: WebhookEndpoint[];
   deliveries: WebhookDelivery[];
+};
+
+/* ── Onboarding on chain ────────────────────────────────────────────────── */
+
+export type RegistrationState = NonNullable<Merchant["registration"]>["state"];
+
+/** GET /api/merchant/registration: the state and, when needed, what to sign. */
+export type RegistrationStep = {
+  merchant: Merchant;
+  /** EIP-712 `Registration` for the payout wallet, uint256 values as decimal strings. Null when nothing is left to sign. */
+  typedData: {
+    domain: { name: string; version: string; chainId: number; verifyingContract: Address };
+    types: Record<string, { name: string; type: string }[]>;
+    primaryType: "Registration";
+    message: Record<string, string> & { deadline: string };
+  } | null;
+};
+
+/* ── What this server is connected to ───────────────────────────────────── */
+
+/** GET /api/health, reduced to what the dashboard decides with. No secrets. */
+export type Capabilities = {
+  /** A deployment record and an RPC: payments, registration and balances are real. */
+  chain: { id: number; name: string } | null;
+  /** The relayer can submit (withdrawals, registration, buyer payments). */
+  relayer: boolean;
+  /** The Privy payout signer exists on the server (automatic payouts). */
+  automaticPayouts: boolean;
+  /** Registered merchants are activated for Pay in 4 automatically. */
+  activation: boolean;
+  /** Where payment links and sessions send buyers. */
+  checkoutOrigin: string;
 };

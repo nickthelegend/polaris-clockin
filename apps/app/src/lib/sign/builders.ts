@@ -4,9 +4,11 @@ import {
   cancelSubscriptionTypes,
   cancelTypes,
   claimTypes,
+  openTypes,
   permitTypes,
   planIntentTypes,
   receiveWithAuthorizationTypes,
+  repayIntentTypes,
   subscribeIntentTypes,
   transferWithAuthorizationTypes,
 } from "./types.ts";
@@ -29,16 +31,29 @@ export type Typed<T extends TypedData, P extends keyof T & string, M> = TypedDat
 };
 
 export type PlanIntent = {
-  borrower: Address;
+  buyer: Address;
   merchant: Address;
   principal: bigint;
   installments: number;
   interval: bigint;
-  orderId: Hex;
+  /** The merchant's order reference, as a string: the same one the Pay-now nonce commits to. */
+  orderId: string;
+  /** PolarisCheckout.nonces(buyer). */
+  nonce: bigint;
   deadline: bigint;
 };
 
-export type SubscribeIntent = { subscriber: Address; planId: bigint; deadline: bigint };
+export type SubscribeIntent = {
+  buyer: Address;
+  merchant: Address;
+  planId: bigint;
+  pricePerPeriod: bigint;
+  periodSeconds: bigint;
+  orderId: string;
+  /** PolarisCheckout.nonces(buyer), shared with PlanIntent. */
+  nonce: bigint;
+  deadline: bigint;
+};
 
 export type Authorization = {
   from: Address;
@@ -51,11 +66,15 @@ export type Authorization = {
 
 export type Permit = { owner: Address; spender: Address; value: bigint; nonce: bigint; deadline: bigint };
 
-export type Claim = { to: Address };
+export type Open = { sender: Address; amount: bigint; expiresAt: bigint };
+
+export type Claim = { to: Address; deadline: bigint };
 
 export type Cancel = { linkKey: Address; deadline: bigint };
 
 export type CancelSubscription = { subId: bigint; deadline: bigint };
+
+export type RepayIntent = { loanId: bigint; amount: bigint; expectedRepaid: bigint; nonce: bigint; deadline: bigint };
 
 /** PolarisCheckout.openPlan: signed by the buyer together with a Permit. */
 export function buildPlanIntent(
@@ -103,6 +122,11 @@ export function buildPermit(
   return { domain, types: permitTypes, primaryType: "Permit", message };
 }
 
+/** PolarisSend.send: the link's throwaway key opens the link for this sender and amount. */
+export function buildOpen(domain: Eip712Domain, message: Open): Typed<typeof openTypes, "Open", Open> {
+  return { domain, types: openTypes, primaryType: "Open", message };
+}
+
 /** PolarisSend.claim: signed by the link's throwaway key, never by an account. */
 export function buildClaim(domain: Eip712Domain, message: Claim): Typed<typeof claimTypes, "Claim", Claim> {
   return { domain, types: claimTypes, primaryType: "Claim", message };
@@ -114,6 +138,14 @@ export function buildCancel(
   message: Cancel,
 ): Typed<typeof cancelTypes, "Cancel", Cancel> {
   return { domain, types: cancelTypes, primaryType: "Cancel", message };
+}
+
+/** PolarisLoanEngine.repayWithSig: signed by the borrower. */
+export function buildRepayIntent(
+  domain: Eip712Domain,
+  message: RepayIntent,
+): Typed<typeof repayIntentTypes, "RepayIntent", RepayIntent> {
+  return { domain, types: repayIntentTypes, primaryType: "RepayIntent", message };
 }
 
 /** PolarisPayments.cancelWithSignature: signed by the subscriber. */

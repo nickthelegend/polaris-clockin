@@ -1,18 +1,78 @@
 /**
- * Headless entry point. Deliberately free of React.
+ * polarispay-sdk: the browser client and everything shared.
  *
- * The React widget lives behind `polarispay-sdk/react` rather than here,
- * because a barrel that re-exports it makes React a hard requirement of every
- * import -- a Node backend calling `createPolaris` would fail to resolve
- * `react/jsx-runtime` before running a line. Splitting the entry points is what
- * makes the optional peer dependency actually optional.
+ * Deliberately free of React (that's `polarispay-sdk/react`) and of anything
+ * that holds a secret key (that's `polarispay-sdk/server`). ethers is loaded
+ * only when a wallet method runs, so opening the hosted checkout costs a page
+ * a few kilobytes.
  */
 
-export { createPolaris, SEPOLIA } from "./polaris.js";
+export { createPolaris } from "./client.js";
+export type { Polaris, PolarisOptions } from "./client.js";
+
+export {
+  AUSD,
+  CHAINS,
+  MONAD,
+  MONAD_TESTNET,
+  SEPOLIA,
+  ZERO_ADDRESS,
+  assertDeployed,
+  chainById,
+  explorerTxUrl,
+  isDeployed,
+  isZeroAddress,
+  resolveChain,
+} from "./chains.js";
+export type { PolarisChain, PolarisContracts } from "./chains.js";
+export { DEPLOYMENTS } from "./deployments.js";
+export type { DeploymentRecord } from "./deployments.js";
+
+export {
+  DEFAULT_CHECKOUT_ORIGIN,
+  DEV_CHECKOUT_ORIGIN,
+  defaultCheckoutOrigin,
+  resolveCheckoutUrl,
+} from "./checkout/browser.js";
+export type { CheckoutDisplay, CheckoutSource, OpenCheckoutOptions } from "./checkout/browser.js";
+export {
+  CHECKOUT_MESSAGE_TYPE,
+  CHECKOUT_PROTOCOL_VERSION,
+  createCheckoutMessage,
+  parseCheckoutMessage,
+} from "./checkout/protocol.js";
+export type { CheckoutMessage, CheckoutMessageEvent, ParsedCheckoutMessage } from "./checkout/protocol.js";
 export type {
-  CreditProfile,
-  Polaris,
-  PolarisContracts,
-  PolarisOptions,
-  Result,
-} from "./polaris.js";
+  CheckoutCompleted,
+  CheckoutPaymentStatus,
+  CheckoutResult,
+  CheckoutResultStatus,
+  CheckoutSession,
+  CheckoutSessionCreateParams,
+  CheckoutSessionPayment,
+  CheckoutSessionStatus,
+  CheckoutTarget,
+  LineItem,
+  RequestOptions,
+  SessionLineItem,
+  SubscriptionInterval,
+  SubscriptionTerms,
+} from "./checkout/types.js";
+
+export { WEBHOOK_EVENT_TYPES, isWebhookEventType } from "./events.js";
+export type * from "./events.js";
+
+export { PAY_IN_4, formatUsd, normaliseAmount, quotePayIn4 } from "./money.js";
+export type { AmountInput, PayIn4Installment, PayIn4Options, PayIn4Quote } from "./money.js";
+
+export type { PayParams, PayResult, PayStage, RelayPayRequest, RelayPayResponse, Result } from "./pay/direct.js";
+export type { CreditProfile } from "./legacy.js";
+
+export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "./errors.js";
+export type { PolarisErrorType, SignatureFailureReason } from "./errors.js";
+export { parseKey } from "./keys.js";
+export type { KeyKind, KeyMode, ParsedKey } from "./keys.js";
+
+export { CHECKOUT_MODES } from "./types.js";
+export type { Address, CheckoutMode, ContractName, Eip1193Provider, Hex } from "./types.js";
+export { VERSION } from "./version.js";

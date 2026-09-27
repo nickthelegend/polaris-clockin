@@ -1,12 +1,12 @@
 import { withMerchant } from "@/server/auth";
-import { methodNotAllowed, ok } from "@/server/http";
+import { ok, methodNotAllowed } from "@/server/http";
 import { revokeApiKey } from "@/server/services";
 
 export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-/** Revoke one of the caller's API keys. It stops working at once. */
+/** Revoke a key pair. Requests with its secret or publishable key fail from now on. */
 export const DELETE = withMerchant<Ctx>(async (_req, auth, { params }) => {
   const { id } = await params;
   return ok(await revokeApiKey(auth, id));

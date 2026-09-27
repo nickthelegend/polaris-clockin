@@ -13,21 +13,20 @@ import {
   type LinkUsage,
   type PayMode,
   type UpdateLinkInput,
-  type UpdateWebhookInput,
   type WebhookEventType,
   type WithdrawInput,
 } from "@/lib/data/types";
 import { HttpError } from "./http";
-import { webhookUrlProblem } from "./net-guard";
 
 /**
  * Request validation. Each function takes the parsed JSON body and returns a
  * typed input or throws a 400 whose message a person can act on, plus the
- * `field` it is about (the code name, for the client; never in the message).
+ * `param` it is about (the field's code name, for the client to mark; never
+ * in the message).
  */
 
-function invalid(message: string, field?: string): never {
-  throw new HttpError(400, "invalid_request", message, field);
+function invalid(message: string, param?: string): never {
+  throw new HttpError(400, "invalid_request", message, { param });
 }
 
 type TextRule = { min?: number; max?: number; name: string };
@@ -160,6 +159,11 @@ export function parseCreateApiKey(body: Record<string, unknown>): CreateApiKeyIn
   return { name: text(body, "name", { max: 60, name: "a name for the key" }) };
 }
 
+/**
+ * The endpoint's URL, parsed. Whether it may be delivered to (https, a public
+ * address) is checked by `assertDeliverableUrl` when it is stored and again,
+ * after DNS, at every delivery (`@polaris/db`).
+ */
 function webhookUrl(raw: string): string {
   let url: URL;
   try {
@@ -167,8 +171,8 @@ function webhookUrl(raw: string): string {
   } catch {
     invalid("Enter the full endpoint URL, starting with https://.", "url");
   }
-  const problem = webhookUrlProblem(url);
-  if (problem) invalid(problem.message, "url");
+  if (url.protocol !== "https:" && url.protocol !== "http:") invalid("Webhook endpoints must use https://.", "url");
+  if (url.username || url.password) invalid("Put credentials in your receiver, not in the URL.", "url");
   return url.toString();
 }
 
@@ -182,16 +186,4 @@ function webhookEvents(raw: unknown): WebhookEventType[] {
 export function parseCreateWebhook(body: Record<string, unknown>): CreateWebhookInput {
   const url = webhookUrl(text(body, "url", { max: 500, name: "the endpoint URL" }));
   return { url, events: webhookEvents(body.events) };
-}
-
-export function parseUpdateWebhook(body: Record<string, unknown>): UpdateWebhookInput {
-  const patch: UpdateWebhookInput = {};
-  if (body.url !== undefined) patch.url = webhookUrl(text(body, "url", { max: 500, name: "the endpoint URL" }));
-  if (body.events !== undefined) patch.events = webhookEvents(body.events);
-  if (body.enabled !== undefined) {
-    if (typeof body.enabled !== "boolean") invalid("Choose on or off.", "enabled");
-    patch.enabled = body.enabled;
-  }
-  if (Object.keys(patch).length === 0) invalid("Change the URL, the events, or whether it's on.");
-  return patch;
 }

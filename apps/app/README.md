@@ -40,7 +40,18 @@ inlined at build time, and public.
 | `NEXT_PUBLIC_RPC_URL` | viem's default for the chain | Read-only RPC (EIP-712 domains, permit nonces) |
 | `NEXT_PUBLIC_EXPLORER_URL` | `https://testnet.monadvision.com` | Where "View receipt" goes |
 | `NEXT_PUBLIC_AUSD_ADDRESS` | AUSD on Monad testnet | The dollar token |
-| `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. Unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
+| `NEXT_PUBLIC_POLARIS_API_URL` | unset | Polaris for Business (e.g. `http://localhost:3100`): the relayer (`POST /api/relay`), checkout sessions and payment links (`/api/public/…`), and the network's contracts and EIP-712 domains (`/api/public/network`). Unset: the stub relayer and sample links. |
+| `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
+
+## With Polaris for Business (the real relayer)
+
+Set `NEXT_PUBLIC_POLARIS_API_URL` to the business app (`http://localhost:3100`
+locally) and every Confirm goes to its relayer, `POST /api/relay`; checkout
+links (`/pay/cs_test_…` from a merchant's `polarispay-sdk` session,
+`/pay/pl_…` from a dashboard payment link) load from its public API. Against
+a local Hardhat node also set `NEXT_PUBLIC_CHAIN_ID=31337` and
+`NEXT_PUBLIC_RPC_URL=http://127.0.0.1:<node port>`: the app refuses to sign
+for a network other than the one it was built for.
 
 ## Face ID accounts
 
@@ -118,7 +129,10 @@ because it is for people who already have one.
 | `src/lib/account/` | The Mera account layer, capability check, dev signer |
 | `src/lib/sign/` | EIP-712 builders for `PlanIntent`, `SubscribeIntent`, ERC-3009, ERC-2612, `Claim`, `Cancel`, `CancelSubscription`; domain reading (ERC-5267); nonce derivations |
 | `src/lib/actions.ts` | Each money action: build, sign, relay |
-| `src/lib/relayer.ts` | The typed relayer client. **A stub for now**: it returns a made-up receipt |
+| `src/lib/relayer.ts` | The relayer client: `POST {NEXT_PUBLIC_POLARIS_API_URL}/api/relay`, errors mapped to `RelayError` with the server's message for the buyer. Without the API, a local stub |
+| `src/lib/network.ts`, `src/lib/api.ts` | The network (contracts and EIP-712 domains) from Polaris for Business; the fetch helper |
+| `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
+| `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
 | `src/lib/data/` | The data interface every screen reads; `mock.ts` is placeholder data behind it |
 | `src/components/` | The design system: buttons, cards, sheets, keypad, QR, tab bar |
 | `public/assets/` | Generated images, picked up as soon as they exist (see below) |
@@ -135,10 +149,12 @@ stand-in, so dropping the files in needs no code change:
 
 ## Not built yet
 
-- The relayer and indexer: receipts are simulated, and all balances, plans and
-  activity are placeholder data (`src/lib/data/mock.ts`).
+- Balances, plans and activity are still placeholder data
+  (`src/lib/data/mock.ts`) until the Envio indexer lands; checkout links and
+  the relayer are real when `NEXT_PUBLIC_POLARIS_API_URL` is set.
+- The `/pay/[id]` screen doesn't yet call `src/lib/checkout-return.ts`, so a
+  popup checkout doesn't post its result to the merchant page.
 - *Raise your limit* simulates the WalletConnect signature and the
   underwriting call.
-- Pay early has no signed early-repayment entry point on the loan engine yet.
 - Receipts only you can read (plan §3.5) and the opt-in recovery key.
 - Local-currency rates are placeholders.

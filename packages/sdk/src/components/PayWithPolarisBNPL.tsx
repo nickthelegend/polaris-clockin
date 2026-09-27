@@ -24,9 +24,11 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { createPolaris, SEPOLIA, type CreditProfile } from '../polaris.js';
+import { SEPOLIA, type PolarisChain, type PolarisContracts } from '../chains.js';
+import { createPolaris } from '../client.js';
+import type { CreditProfile } from '../legacy.js';
 
-/** Public Sepolia deployment. Override for your own. */
+/** Public Sepolia deployment (0.2). Override for your own. */
 export const POLARIS_SEPOLIA = SEPOLIA;
 
 export interface PayWithPolarisBNPLProps {
@@ -39,7 +41,7 @@ export interface PayWithPolarisBNPLProps {
   orderId: string;
   installments?: number;
   intervalSeconds?: number;
-  contracts?: typeof SEPOLIA;
+  contracts?: PolarisChain | PolarisContracts;
   /** Read-only RPC, so eligibility can be shown before the buyer connects. */
   rpcUrl?: string;
   onSuccess?: (result: { loanId?: string; transactionHash?: string }) => void;

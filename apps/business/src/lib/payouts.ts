@@ -4,20 +4,41 @@ import { useCallback } from "react";
 
 import { useAuth } from "./auth-context";
 import { ausdDomain, AUTHORIZATION_TTL_SECONDS, CENTS_TO_AUSD_UNITS, TRANSFER_WITH_AUTHORIZATION_TYPES } from "./chain";
-import type { Address, AutoPayouts, Cents, Payout, WithdrawInput } from "./data/types";
-import { AUTO_PAYOUTS_READY, PAYOUT_SIGNER_ID } from "./features";
+import type { Address, AutoPayouts, Cents, Merchant, Payout, WithdrawInput } from "./data/types";
+import { PAYOUT_SIGNER_ID } from "./features";
 import { useDashboardData } from "./session";
+
+type Domain = { name: string; version: string; chainId: number; verifyingContract: Address };
 
 function randomNonce(): `0x${string}` {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
+let networkDomain: Promise<Domain | null> | null = null;
+
+/**
+ * AUSD's EIP-712 domain as the server serves it (`/api/public/network`, from
+ * the deployment record, so the chain id and address are the ones the relayer
+ * uses), falling back to this build's NEXT_PUBLIC_AUSD_* settings. Null when
+ * the server has no chain: the merchant's book is then sample data.
+ */
+export function stablecoinDomain(): Promise<Domain | null> {
+  networkDomain ??= fetch("/api/public/network", { cache: "no-store" })
+    .then(async (res) =>
+      res.ok ? ((await res.json()) as { data?: { domains?: { stablecoin?: Domain } } }).data?.domains?.stablecoin ?? null : null,
+    )
+    .catch(() => null)
+    .then((d) => d ?? (ausdDomain() as Domain | null));
+  return networkDomain;
+}
+
 /**
  * One-tap withdraw. The merchant's embedded wallet signs an ERC-3009
- * TransferWithAuthorization (no gas: the relayer submits it) and the server
- * checks the signature came from that wallet before queueing it. Callers
- * only reach this when WITHDRAW_READY (see features.ts).
+ * TransferWithAuthorization (no gas: the relayer submits it as
+ * `AUSD.transferWithAuthorization`) and the server checks the signature came
+ * from that wallet before relaying it. Callers only reach this once the
+ * server reports a chain and a relayer (see `useCapabilities`).
  */
 export function useWithdraw() {
   const data = useDashboardData();
@@ -25,7 +46,7 @@ export function useWithdraw() {
 
   return useCallback(
     async (amountCents: Cents, destination: Address): Promise<Payout> => {
-      const domain = ausdDomain();
+      const domain = await stablecoinDomain();
       const input: WithdrawInput = { amountCents, destination };
 
       if (domain) {
@@ -62,8 +83,8 @@ export function useWithdraw() {
 /**
  * Automatic daily payouts. The server creates a Privy policy that allows only
  * AUSD transfers to `payoutAddress`; we then add our payout signer to the
- * merchant's wallet with that policy. Turning off removes it, and never needs
- * the wallet on the server side.
+ * merchant's wallet with that policy as its override. Turning off removes it,
+ * and never needs the wallet on the server side.
  */
 export function useAutoPayouts() {
   const data = useDashboardData();
@@ -72,7 +93,7 @@ export function useAutoPayouts() {
   const enable = useCallback(
     async (payoutAddress: Address): Promise<AutoPayouts> => {
       const auto = await data.setAutoPayouts({ enabled: true, payoutAddress });
-      if (AUTO_PAYOUTS_READY && auto.policyId) {
+      if (PAYOUT_SIGNER_ID && auto.policyId) {
         try {
           await wallet.addPayoutSigner(PAYOUT_SIGNER_ID, [auto.policyId]);
         } catch (error) {
@@ -89,11 +110,31 @@ export function useAutoPayouts() {
   const disable = useCallback(
     async (payoutAddress: Address | null): Promise<AutoPayouts> => {
       const auto = await data.setAutoPayouts({ enabled: false, payoutAddress });
-      if (AUTO_PAYOUTS_READY) await wallet.removePayoutSigners().catch(() => undefined);
+      if (PAYOUT_SIGNER_ID) await wallet.removePayoutSigners().catch(() => undefined);
       return auto;
     },
     [data, wallet],
   );
 
   return { enable, disable };
+}
+
+/**
+ * Register the business on chain (MerchantRegistry), right after it is named:
+ * the embedded wallet signs the `Registration` the server prepares, and the
+ * relayer sends `registerFor`. The merchant never holds MON. Resolves with the
+ * merchant as the server now sees it (its `registration.state`).
+ */
+export function useRegisterMerchant() {
+  const data = useDashboardData();
+  const { wallet } = useAuth();
+
+  return useCallback(async (): Promise<Merchant> => {
+    const state = await data.getRegistration();
+    if (!state.typedData) return state.merchant;
+    if (!wallet.address) throw new Error("Your payout account is still being set up. Try again in a moment.");
+    const signature = await wallet.signTypedData(state.typedData, { title: "Register your business", buttonText: "Confirm" });
+    const done = await data.submitRegistration({ signature, deadline: state.typedData.message.deadline });
+    return done.merchant;
+  }, [data, wallet]);
 }

@@ -1,15 +1,37 @@
-// Fails if any route handler under src/app/api is exported without withMerchant.
+// Fails if any route handler under src/app/api is exported without the
+// authentication its path requires.
 //
-// The old merchant platform trusted a wallet address sent in a header. The rule
-// here is that every handler authenticates through src/server/auth.ts, and this
-// check makes it a build-time fact rather than a convention.
+// The old merchant platform trusted a wallet address sent in a header. The
+// rule here is that every handler authenticates through src/server/auth.ts,
+// with the wrapper its path calls for, and this check makes that a build-time
+// fact rather than a convention:
+//
+//   src/app/api/v1/checkout/**   withSecretKey       (sk_ key: merchants' servers)
+//   src/app/api/v1/relay/**      withPublishableKey  (pk_ key: merchants' pages)
+//   src/app/api/relay/**         withSignedRequest   (the buyer's own signature)
+//   src/app/api/public/**        withPublic          (public data only, rate-limited)
+//   src/app/api/health/**        withPublic
+//   src/app/api/cron/**          withCron            (CRON_SECRET)
+//   everything else              withMerchant        (a verified Privy session)
+//
+// OPTIONS (CORS preflight) may be withPreflight(...) on the cross-origin paths.
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../src/app/api", import.meta.url));
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
+const RULES = [
+  { prefix: "v1/checkout/", wrappers: ["withSecretKey"], preflight: false },
+  { prefix: "v1/relay/", wrappers: ["withPublishableKey"], preflight: true },
+  { prefix: "relay/", wrappers: ["withSignedRequest"], preflight: true },
+  { prefix: "public/", wrappers: ["withPublic"], preflight: true },
+  { prefix: "health/", wrappers: ["withPublic"], preflight: false },
+  { prefix: "cron/", wrappers: ["withCron"], preflight: false },
+  { prefix: "", wrappers: ["withMerchant"], preflight: false },
+];
 
 function* routes(dir) {
   for (const name of readdirSync(dir)) {
@@ -20,11 +42,14 @@ function* routes(dir) {
 }
 
 const problems = [];
+const counts = {};
 let checked = 0;
 
 for (const file of routes(root)) {
   const source = readFileSync(file, "utf8");
   const rel = relative(process.cwd(), file);
+  const apiPath = relative(root, file).split(sep).join("/");
+  const rule = RULES.find((r) => apiPath.startsWith(r.prefix));
   checked++;
 
   if (!/from\s+["']@\/server\/auth["']/.test(source)) {
@@ -36,11 +61,17 @@ for (const file of routes(root)) {
   for (const method of METHODS) {
     const declared = new RegExp(`export\\s+(async\\s+)?(function|const|let|var)\\s+${method}\\b`).test(source);
     if (!declared) continue;
-    const wrapped = new RegExp(`export\\s+const\\s+${method}\\s*=\\s*withMerchant\\s*(<[^>]*>)?\\s*\\(`).test(source);
-    if (!wrapped) problems.push(`${rel}: ${method} is not wrapped in withMerchant(...)`);
+    const allowed = method === "OPTIONS" && rule.preflight ? [...rule.wrappers, "withPreflight"] : rule.wrappers;
+    const wrapped = allowed.some((w) => new RegExp(`export\\s+const\\s+${method}\\s*=\\s*${w}\\s*(<[^>]*>)?\\s*\\(`).test(source));
+    if (!wrapped) {
+      problems.push(`${rel}: ${method} must be exported as ${allowed.join(" or ")}(...) on /api/${rule.prefix || "*"}`);
+    } else {
+      const used = allowed.find((w) => new RegExp(`export\\s+const\\s+${method}\\s*=\\s*${w}\\b`).test(source));
+      counts[used] = (counts[used] ?? 0) + 1;
+    }
   }
-  if (/export\s*\{[^}]*\b(GET|POST|PUT|PATCH|DELETE)\b[^}]*\}/.test(source)) {
-    problems.push(`${rel}: re-exports a handler; declare it with withMerchant in place`);
+  if (/export\s*\{[^}]*\b(GET|POST|PUT|PATCH|DELETE|OPTIONS)\b[^}]*\}/.test(source)) {
+    problems.push(`${rel}: re-exports a handler; declare it with its wrapper in place`);
   }
 }
 
@@ -48,4 +79,7 @@ if (problems.length) {
   console.error(`API auth check failed:\n  ${problems.join("\n  ")}`);
   process.exit(1);
 }
-console.log(`API auth check: ${checked} route files, every handler wrapped in withMerchant.`);
+const summary = Object.entries(counts)
+  .map(([w, n]) => `${n} ${w}`)
+  .join(", ");
+console.log(`API auth check: ${checked} route files, every handler authenticated (${summary}).`);

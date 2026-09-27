@@ -8,8 +8,8 @@ const MOVED = ["payments", "links", "plans", "payouts", "developers"];
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  // The shared component library and the brand ship TypeScript source.
-  transpilePackages: ["@polaris/ui", "@polaris/brand"],
+  // The component library, the brand and @polaris/db ship TypeScript source.
+  transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/db"],
   // The Privy Node SDK verifies tokens with `jose` and signs wallet requests with
   // node:crypto. Keep it out of the server bundle so it loads as plain Node.
   serverExternalPackages: ["@privy-io/node"],
