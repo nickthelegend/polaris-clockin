@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import type { ReactNode } from "react";
 
 import { CartDrawer } from "@/components/cart-drawer";
@@ -7,7 +8,11 @@ import { Header } from "@/components/header";
 import { browserConfig } from "@/lib/polaris";
 import { ShopProvider } from "@/lib/shop-context";
 
-export default function StoreLayout({ children }: { children: ReactNode }) {
+export default async function StoreLayout({ children }: { children: ReactNode }) {
+  // The Polaris settings (publishable key, checkout origin, relay, APR) are
+  // read when a page is served, never baked in when the store is built: a
+  // build made without keys, or with other keys, must not stick to them.
+  await connection();
   const polaris = browserConfig();
   return (
     <ShopProvider polarisConfig={polaris}>
