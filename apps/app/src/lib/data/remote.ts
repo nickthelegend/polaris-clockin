@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { type Address, getAddress, type Hex } from "viem";
 import { api } from "../api";
 import type { PaymentLink } from "./types";
@@ -8,8 +9,10 @@ import type { PaymentLink } from "./types";
  * - `cs_test_…`: a checkout session a merchant's server created with
  *   polarispay-sdk (`GET /api/public/sessions/{id}`);
  * - `pl_…`: a payment link from the dashboard. Opening one creates a fresh
- *   session with the link's terms (`POST /api/public/links/{id}/checkout`),
- *   once per page load; later reads refresh that session.
+ *   session with the link's terms (`POST /api/public/links/{id}/checkout`):
+ *   one per request on the server (the page and its metadata share it), one
+ *   per page load in the browser. Never one shared between visitors: a
+ *   reusable link paid by one person stays open for the next.
  *
  * Only public data: what the buyer needs to see and sign, never the
  * merchant's metadata or keys.
@@ -87,24 +90,39 @@ export function toPaymentLink(s: PublicSession): PaymentLink {
   };
 }
 
-/** Payment link id → the session opened for it on this page load. */
-const opened = new Map<string, Promise<string>>();
+const openSession = (id: string) =>
+  api<PublicSession>(`/api/public/links/${encodeURIComponent(id)}/checkout`, { method: "POST", body: {} }).then((s) => s.id);
 
-export async function getRemotePaymentLink(id: string): Promise<PaymentLink | null> {
-  let sessionId = id;
-  if (id.startsWith("pl_")) {
-    let pending = opened.get(id);
-    if (!pending) {
-      pending = api<PublicSession>(`/api/public/links/${encodeURIComponent(id)}/checkout`, { method: "POST", body: {} }).then((s) => s.id);
-      pending.catch(() => opened.delete(id));
-      opened.set(id, pending);
-    }
-    sessionId = await pending;
+/** Server: one session per link per request (React's request cache), so generateMetadata and the page share it. */
+const openForRequest = cache(openSession);
+
+/** Browser only: payment link id → the session opened for it on this page load. */
+const opened = typeof window === "undefined" ? null : new Map<string, Promise<string>>();
+
+function sessionFor(id: string, fresh: boolean): Promise<string> {
+  if (!opened) return openForRequest(id);
+  let pending = fresh ? undefined : opened.get(id);
+  if (!pending) {
+    pending = openSession(id);
+    pending.catch(() => opened.delete(id));
+    opened.set(id, pending);
   }
+  return pending;
+}
+
+async function readSession(sessionId: string): Promise<PaymentLink | null> {
   try {
     return toPaymentLink(await api<PublicSession>(`/api/public/sessions/${encodeURIComponent(sessionId)}`));
   } catch (error) {
     if ((error as { status?: number }).status === 404) return null;
     throw error;
   }
+}
+
+export async function getRemotePaymentLink(id: string): Promise<PaymentLink | null> {
+  if (!id.startsWith("pl_")) return readSession(id);
+  const link = await readSession(await sessionFor(id, false));
+  // A reusable link whose session someone already paid opens a new one for this buyer.
+  if (link && link.status !== "open" && opened) return readSession(await sessionFor(id, true));
+  return link;
 }
