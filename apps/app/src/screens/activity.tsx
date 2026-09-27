@@ -101,7 +101,7 @@ export function Activity() {
       </div>
 
       <SectionHeader
-        title="Transactions"
+        title="All activity"
         actionLabel="Analytics"
         onAction={() => router.push("/insights")}
         size="lg"
