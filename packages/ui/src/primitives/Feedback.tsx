@@ -56,7 +56,41 @@ export function SkeletonText({ lines = 3, className }: { lines?: number; classNa
   );
 }
 
-/* ── EmptyState ──────────────────────────────────────────────────────────── */
+/* ── IconDisc ───────────────────────────────────────────────────────────── */
+
+export type IconDiscProps = Omit<HTMLAttributes<HTMLSpanElement>, "children"> & {
+  icon: ReactNode;
+  /** `sm` 48, `md` 56, `lg` 64 (a confirm or status sheet's lead). */
+  size?: "sm" | "md" | "lg";
+};
+
+const DISC: Record<NonNullable<IconDiscProps["size"]>, { box: string; icon: number }> = {
+  sm: { box: "size-12", icon: 20 },
+  md: { box: "size-14", icon: 26 },
+  lg: { box: "size-16", icon: 28 },
+};
+
+/**
+ * The round icon well that leads a confirm, a status or an empty state:
+ * one icon on surface-2. Decorative; say what it means in the text beside it.
+ *
+ * ```tsx
+ * <IconDisc icon={<ScanFace />} />
+ * ```
+ */
+export function IconDisc({ icon, size = "lg", className, ...props }: IconDiscProps) {
+  return (
+    <span
+      aria-hidden
+      className={cn("grid shrink-0 place-items-center rounded-full bg-ui-surface-2 text-ui-text", DISC[size].box, className)}
+      {...props}
+    >
+      <IconSlot size={DISC[size].icon}>{icon}</IconSlot>
+    </span>
+  );
+}
+
+/* ── EmptyState ─────────────────────────────────────────────────────────── */
 
 export type EmptyStateProps = Omit<HTMLAttributes<HTMLDivElement>, "title"> & {
   icon?: ReactNode;
@@ -85,16 +119,7 @@ export function EmptyState({ icon, title, description, action, size = "md", clas
       )}
       {...props}
     >
-      {icon ? (
-        <span
-          className={cn(
-            "mb-1 grid place-items-center rounded-full bg-ui-surface-2 text-ui-text",
-            size === "sm" ? "size-12" : "size-16",
-          )}
-        >
-          <IconSlot size={size === "sm" ? 20 : 26}>{icon}</IconSlot>
-        </span>
-      ) : null}
+      {icon ? <IconDisc icon={icon} size={size === "sm" ? "sm" : "lg"} className="mb-1" /> : null}
       <h3 className={cn("font-medium tracking-[-0.015em] text-ui-text", size === "sm" ? "text-[16px]" : "text-[19px]")}>
         {title}
       </h3>

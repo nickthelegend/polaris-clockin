@@ -138,8 +138,10 @@ export function useFocusTrap(
         node.querySelector<HTMLElement>("[data-autofocus]") ??
         (coarse
           ? node
-          : // The first real control; the close button only if there is nothing else.
-            (focusables(node).find((el) => el.dataset.sheetClose === undefined) ?? node));
+          : // The first real control; not the close button or a scroll area
+            // (focusable only so a keyboard can scroll it).
+            (focusables(node).find((el) => el.dataset.sheetClose === undefined && el.dataset.sheetScroll === undefined) ??
+            node));
       target.focus({ preventScroll: true });
     });
 
@@ -153,6 +155,9 @@ export function useFocusTrap(
         return;
       }
       if (event.key !== "Tab") return;
+      // Stacked layers (a confirm sheet over a checkout): only the top one keeps focus.
+      const layers = document.querySelectorAll("[data-ui-layer]");
+      if (node.hasAttribute("data-ui-layer") && layers[layers.length - 1] !== node) return;
       const items = focusables(node);
       if (items.length === 0) {
         event.preventDefault();
@@ -217,7 +222,10 @@ export function useInheritedTheme(open: boolean, explicit?: Theme): Theme | unde
       return;
     }
     const el = document.activeElement as HTMLElement | null;
-    const found = el?.closest("[data-theme]")?.getAttribute("data-theme");
+    const scope = el?.closest("[data-theme]") ?? document.documentElement;
+    // A scope can switch themes at 1024px (`data-theme-lg`, see styles.css).
+    const wide = scope.getAttribute("data-theme-lg");
+    const found = wide && window.matchMedia("(min-width: 1024px)").matches ? wide : scope.getAttribute("data-theme");
     setTheme(found === "light" || found === "dark" || found === "ref-e" ? found : undefined);
   }, [open, explicit]);
   return explicit ?? theme;

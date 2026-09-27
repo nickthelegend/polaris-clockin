@@ -6,7 +6,7 @@ import { getRemotePaymentLink, isRemoteLinkId } from "./remote";
 import type { PolarisData } from "./types";
 
 export type * from "./types";
-export { DAY, describeDuration, describeInterval, quotePlan, WEEK } from "./quote";
+export { DAY, describeDuration, describeInterval, dueAt, quotePlan, WEEK } from "./quote";
 
 /**
  * The one data source every screen reads through. With Polaris for Business
@@ -15,6 +15,13 @@ export { DAY, describeDuration, describeInterval, quotePlan, WEEK } from "./quot
  * which the app labels as a demo (`DEMO_MODE`).
  */
 export const data: PolarisData = apiConfigured() ? liveData : mockData;
+
+/**
+ * Whether the balances, plans and activity on screen are the sample book
+ * (`mock.ts`), not the signed-in person's own. The desktop marks every card
+ * that shows them with a Sample pill, like the merchant web.
+ */
+export const SAMPLE_DATA: boolean = data === mockData;
 
 /** Sample payment links for the Pay screen. Empty once real links exist. */
 export { DEMO_LINK_IDS as SAMPLE_LINK_IDS } from "./mock";

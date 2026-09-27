@@ -59,6 +59,7 @@ import { Select } from "../primitives/Field";
 import { AmountDisplay, applyKey, Keypad } from "../primitives/Keypad";
 import { LogoMark } from "../primitives/Logo";
 import { Money } from "../primitives/Money";
+import { PageDots } from "../primitives/PageDots";
 import { DeltaBadge, Pill } from "../primitives/Pill";
 import { RangeTabs, SegmentedControl, Tab, TabList, Tabs } from "../primitives/Segmented";
 import {
@@ -105,7 +106,7 @@ export function SectionA() {
     >
       <Screens>
         <Screen theme="dark" label="Home · BalanceCard, ActionRow, QuickTransfer, TxRow, BottomNav (icons)">
-          <AppHeader name="Ana Ruiz" unread />
+          <AppHeader mark name="Ana Ruiz" unread />
           <BalanceCard
             account="Main account"
             onAccountClick={() => {}}
@@ -199,6 +200,7 @@ export function SectionB() {
   const [chart, setChart] = useState<"line" | "candles">("line");
   const [order, setOrder] = useState("now");
   const [tab, setTab] = useState("home");
+  const [dot, setDot] = useState(0);
   return (
     <Section
       id="ref-b"
@@ -361,11 +363,7 @@ export function SectionB() {
           <p className="max-w-[30ch] text-[15px] leading-[1.45] text-ui-muted">
             Pay in full, in four or every month, and send dollars anywhere with a link.
           </p>
-          <div className="flex gap-1.5" aria-hidden>
-            <span className="h-1.5 w-6 rounded-full bg-white" />
-            <span className="size-1.5 rounded-full bg-white/30" />
-            <span className="size-1.5 rounded-full bg-white/30" />
-          </div>
+          <PageDots count={3} index={dot} onSelect={setDot} label="Introduction" />
           <Button variant="white" size="lg" shape="rounded" block>
             Get Started
           </Button>

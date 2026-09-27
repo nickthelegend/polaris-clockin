@@ -4,6 +4,7 @@ import { CalendarDays } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -55,6 +56,12 @@ export type SegmentedControlProps<T extends string = string> = Omit<HTMLAttribut
   shape?: "rounded" | "pill";
   /** Stretch the segments to the container. */
   block?: boolean;
+  /**
+   * `text` (the default) or `icon`: square, icon-only segments on a dark glass
+   * track, each option's `label` read out instead of shown. Ref B's line /
+   * candles toggle on a chart card.
+   */
+  variant?: "text" | "icon";
   /** Required when there is no visible label. */
   "aria-label"?: string;
 };
@@ -75,6 +82,7 @@ export function SegmentedControl<T extends string = string>({
   size = "md",
   shape = "rounded",
   block = false,
+  variant = "text",
   className,
   ...props
 }: SegmentedControlProps<T>) {
@@ -88,8 +96,19 @@ export function SegmentedControl<T extends string = string>({
   const reduced = useReducedMotion();
   const enabled = options.filter((o) => !o.disabled).map((o) => o.value);
 
-  const h = size === "sm" ? "h-8 text-[13px] px-3" : size === "lg" ? "h-11 text-[16px] px-5" : "h-9 text-[15px] px-4";
-  const track = shape === "pill" ? "rounded-full" : size === "sm" ? "rounded-[10px]" : "rounded-[12px]";
+  const icons = variant === "icon";
+  const h = icons
+    ? size === "sm"
+      ? "size-8"
+      : size === "lg"
+        ? "size-11"
+        : "size-9"
+    : size === "sm"
+      ? "h-8 text-[13px] px-3"
+      : size === "lg"
+        ? "h-11 text-[16px] px-5"
+        : "h-9 text-[15px] px-4";
+  const track = shape === "pill" ? "rounded-full" : icons ? "rounded-[14px]" : size === "sm" ? "rounded-[10px]" : "rounded-[12px]";
   const thumb = shape === "pill" ? "rounded-full" : size === "sm" ? "rounded-[8px]" : "rounded-[10px]";
 
   return (
@@ -97,7 +116,8 @@ export function SegmentedControl<T extends string = string>({
       ref={ref}
       role="radiogroup"
       className={cn(
-        "relative inline-flex items-center gap-0.5 bg-ui-surface-3 p-[3px] font-satoshi",
+        "relative inline-flex items-center font-satoshi",
+        icons ? "gap-1 bg-black/15 p-1" : "gap-0.5 bg-ui-surface-3 p-[3px]",
         track,
         block && "flex w-full",
         className,
@@ -115,6 +135,8 @@ export function SegmentedControl<T extends string = string>({
             aria-checked={active}
             disabled={o.disabled}
             tabIndex={active ? 0 : -1}
+            aria-label={icons && typeof o.label === "string" ? o.label : undefined}
+            title={icons && typeof o.label === "string" ? o.label : undefined}
             data-roving=""
             onClick={() => setCurrent(o.value)}
             className={cn(
@@ -122,7 +144,7 @@ export function SegmentedControl<T extends string = string>({
               h,
               thumb,
               block && "flex-1",
-              active ? "text-[#13141f]" : "text-ui-text hover:opacity-80",
+              active ? "text-[#13141f]" : icons ? "text-white hover:bg-white/10" : "text-ui-text hover:opacity-80",
             )}
           >
             {active ? (
@@ -132,10 +154,17 @@ export function SegmentedControl<T extends string = string>({
                 className={cn("absolute inset-0 bg-white shadow-[0_1px_3px_rgb(19_20_31/0.12)]", thumb)}
               />
             ) : null}
-            <span className="relative inline-flex items-center gap-1.5">
-              {o.icon ? <IconSlot size={16}>{o.icon}</IconSlot> : null}
-              {o.label}
-            </span>
+            {icons ? (
+              <span className="relative inline-flex">
+                {o.icon ? <IconSlot size={18}>{o.icon}</IconSlot> : null}
+                {typeof o.label === "string" ? null : <span className="sr-only">{o.label}</span>}
+              </span>
+            ) : (
+              <span className="relative inline-flex items-center gap-1.5">
+                {o.icon ? <IconSlot size={16}>{o.icon}</IconSlot> : null}
+                {o.label}
+              </span>
+            )}
           </button>
         );
       })}
@@ -256,6 +285,9 @@ type TabsContextValue = {
   variant: "text" | "pill" | "segmented";
   size: "sm" | "md" | "lg";
   reduced: boolean;
+  /** Panels on the page right now: a tab only points at a panel that exists. */
+  panels: ReadonlySet<string>;
+  registerPanel: (value: string) => () => void;
 };
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -294,8 +326,19 @@ export function Tabs({ value, defaultValue, onValueChange, variant = "pill", siz
   const [current, select] = useControllable({ value, defaultValue: defaultValue ?? "", onChange: onValueChange });
   const baseId = useId();
   const reduced = useReducedMotion() ?? false;
+  const [panels, setPanels] = useState<ReadonlySet<string>>(() => new Set());
+  const registerPanel = useCallback((v: string) => {
+    setPanels((prev) => (prev.has(v) ? prev : new Set(prev).add(v)));
+    return () =>
+      setPanels((prev) => {
+        if (!prev.has(v)) return prev;
+        const next = new Set(prev);
+        next.delete(v);
+        return next;
+      });
+  }, []);
   return (
-    <TabsContext.Provider value={{ value: current, select, baseId, variant, size, reduced }}>
+    <TabsContext.Provider value={{ value: current, select, baseId, variant, size, reduced, panels, registerPanel }}>
       <div className={cn("font-satoshi", className)} {...props}>
         {children}
       </div>
@@ -367,7 +410,7 @@ export type TabProps = Omit<HTMLAttributes<HTMLButtonElement>, "value"> & {
 };
 
 export function Tab({ value, disabled, count, className, children, ...props }: TabProps) {
-  const { value: current, select, baseId, variant, size, reduced } = useTabs();
+  const { value: current, select, baseId, variant, size, reduced, panels } = useTabs();
   const active = current === value;
   const sizes =
     variant === "text"
@@ -387,7 +430,7 @@ export function Tab({ value, disabled, count, className, children, ...props }: T
       role="tab"
       id={`${baseId}-tab-${value}`}
       aria-selected={active}
-      aria-controls={`${baseId}-panel-${value}`}
+      aria-controls={panels.has(value) ? `${baseId}-panel-${value}` : undefined}
       tabIndex={active ? 0 : -1}
       data-value={value}
       data-roving=""
@@ -433,9 +476,11 @@ export function Tab({ value, disabled, count, className, children, ...props }: T
 export type TabPanelProps = HTMLAttributes<HTMLDivElement> & { value: string; keepMounted?: boolean };
 
 export function TabPanel({ value, keepMounted = false, className, children, ...props }: TabPanelProps) {
-  const { value: current, baseId } = useTabs();
+  const { value: current, baseId, registerPanel } = useTabs();
   const active = current === value;
-  if (!active && !keepMounted) return null;
+  const rendered = active || keepMounted;
+  useEffect(() => (rendered ? registerPanel(value) : undefined), [rendered, value, registerPanel]);
+  if (!rendered) return null;
   return (
     <div
       role="tabpanel"

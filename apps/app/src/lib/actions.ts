@@ -255,7 +255,11 @@ export async function createSendLink(
   };
 }
 
-/** Claim: the link's key signs the recipient's address, briefly. No account signature needed. */
+/**
+ * Claim: the link's key signs the recipient's address and a deadline. No
+ * account signature needed. Until the deadline passes the claim can't be
+ * redirected (PolarisSend), so it is kept short.
+ */
 export async function claimLink(
   recipient: Address,
   linkPrivateKey: Hex,
@@ -264,8 +268,9 @@ export async function claimLink(
 ): Promise<RelayReceipt> {
   const linkAccount = privateKeyToAccount(linkPrivateKey);
   const domain = await getDomain("send");
-  const claim = await sign(linkAccount, buildClaim(domain, { to: recipient, deadline: now() + 10n * MINUTE }));
-  return relayer.claim({ linkKey: linkAccount.address, claim, amount, senderName });
+  const deadline = now() + 15n * MINUTE;
+  const claim = await sign(linkAccount, buildClaim(domain, { to: recipient, deadline }));
+  return relayer.claim({ linkKey: linkAccount.address, claim, deadline, amount, senderName });
 }
 
 export async function cancelSendLink(account: LocalAccount, linkKey: Address): Promise<RelayReceipt> {

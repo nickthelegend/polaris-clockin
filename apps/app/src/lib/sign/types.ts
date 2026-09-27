@@ -2,9 +2,11 @@
  * EIP-712 struct definitions, field for field with the contracts.
  *
  * Each `*_TYPE` string is the exact preimage of the contract's typehash
- * (`keccak256("PlanIntent(address borrower,...)")`). `scripts/verify-signatures.ts`
- * rebuilds every string from the field lists below and checks the digest viem
- * signs equals the one the contract computes, so the two cannot drift silently.
+ * (`keccak256("PlanIntent(address buyer,...)")`). `scripts/verify-signatures.ts`
+ * reads the typehash strings out of the Solidity sources themselves, checks
+ * each one against the string here and the field list below, and checks the
+ * digest viem signs equals the one the contract computes, so the two cannot
+ * drift silently.
  *
  * Field order matters: EIP-712 hashes fields in declaration order.
  */
@@ -136,23 +138,64 @@ export const repayIntentTypes = {
 } as const;
 
 /** Every struct with the typehash preimage the contract declares for it. */
+/**
+ * Every struct with the typehash preimage the app believes the contract
+ * declares, and where the contract declares it (`contract`: the Solidity
+ * file under packages/contracts/contracts, `constant`: the typehash constant),
+ * so the check can read the real one.
+ */
 export const TYPE_REGISTRY = [
-  { primaryType: "PlanIntent", types: planIntentTypes, solidity: PLAN_INTENT_TYPE },
-  { primaryType: "SubscribeIntent", types: subscribeIntentTypes, solidity: SUBSCRIBE_INTENT_TYPE },
+  {
+    primaryType: "PlanIntent",
+    types: planIntentTypes,
+    solidity: PLAN_INTENT_TYPE,
+    contract: "PolarisCheckout.sol",
+    constant: "PLAN_INTENT_TYPEHASH",
+  },
+  {
+    primaryType: "SubscribeIntent",
+    types: subscribeIntentTypes,
+    solidity: SUBSCRIBE_INTENT_TYPE,
+    contract: "PolarisCheckout.sol",
+    constant: "SUBSCRIBE_INTENT_TYPEHASH",
+  },
   {
     primaryType: "ReceiveWithAuthorization",
     types: receiveWithAuthorizationTypes,
     solidity: RECEIVE_WITH_AUTHORIZATION_TYPE,
+    contract: "MockAUSD.sol",
+    constant: "RECEIVE_WITH_AUTHORIZATION_TYPEHASH",
   },
   {
     primaryType: "TransferWithAuthorization",
     types: transferWithAuthorizationTypes,
     solidity: TRANSFER_WITH_AUTHORIZATION_TYPE,
+    contract: "MockAUSD.sol",
+    constant: "TRANSFER_WITH_AUTHORIZATION_TYPEHASH",
   },
-  { primaryType: "Permit", types: permitTypes, solidity: PERMIT_TYPE },
-  { primaryType: "Open", types: openTypes, solidity: OPEN_TYPE },
-  { primaryType: "Claim", types: claimTypes, solidity: CLAIM_TYPE },
-  { primaryType: "Cancel", types: cancelTypes, solidity: CANCEL_TYPE },
-  { primaryType: "CancelSubscription", types: cancelSubscriptionTypes, solidity: CANCEL_SUBSCRIPTION_TYPE },
-  { primaryType: "RepayIntent", types: repayIntentTypes, solidity: REPAY_INTENT_TYPE },
+  // ERC-2612 comes from OpenZeppelin's ERC20Permit, which MockAUSD inherits.
+  {
+    primaryType: "Permit",
+    types: permitTypes,
+    solidity: PERMIT_TYPE,
+    contract: "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol",
+    constant: "PERMIT_TYPEHASH",
+  },
+  { primaryType: "Open", types: openTypes, solidity: OPEN_TYPE, contract: "PolarisSend.sol", constant: "OPEN_TYPEHASH" },
+  { primaryType: "Claim", types: claimTypes, solidity: CLAIM_TYPE, contract: "PolarisSend.sol", constant: "CLAIM_TYPEHASH" },
+  { primaryType: "Cancel", types: cancelTypes, solidity: CANCEL_TYPE, contract: "PolarisSend.sol", constant: "CANCEL_TYPEHASH" },
+  {
+    primaryType: "CancelSubscription",
+    types: cancelSubscriptionTypes,
+    solidity: CANCEL_SUBSCRIPTION_TYPE,
+    contract: "PolarisPayments.sol",
+    constant: "CANCEL_SUBSCRIPTION_TYPEHASH",
+  },
+  {
+    primaryType: "RepayIntent",
+    types: repayIntentTypes,
+    solidity: REPAY_INTENT_TYPE,
+    contract: "PolarisLoanEngine.sol",
+    constant: "REPAY_INTENT_TYPEHASH",
+  },
 ] as const;

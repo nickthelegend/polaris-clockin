@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type HTMLAttributes, type KeyboardEvent, t
 
 import { cn } from "../lib/cn";
 import { useControllable } from "../lib/hooks";
-import { niceTicks, useSize } from "./geometry";
+import { niceTicks, roundTimes, useSize } from "./geometry";
 
 export type Candle = {
   /** The period: an ISO date, a timestamp or a label. */
@@ -35,7 +35,20 @@ export type CandlestickChartProps = Omit<HTMLAttributes<HTMLDivElement>, "childr
   /** Shows ref C's candles button at the right of the chip row. */
   onTypeToggle?: () => void;
   formatPrice?: (v: number) => string;
+  /** The price axis's labels; defaults to the bare number ("1400"). */
+  formatAxis?: (v: number) => string;
+  /** The price axis's width in px: room for its labels and the price tags. */
+  axisWidth?: number;
   formatTime?: (t: Candle["t"]) => string;
+  /**
+   * Round time labels along the bottom, like `GradientLineChart`'s ("2:00 AM",
+   * "Sep 24"), when the candles' `t` are times. Off by default.
+   */
+  timeAxis?: boolean;
+  /** The time axis's label at the last candle ("Now"). */
+  lastLabel?: string;
+  /** Which clock the time labels fall on. */
+  tickZone?: "local" | "utc";
   /** What the chart shows, for screen readers. */
   label: string;
   animate?: boolean;
@@ -44,8 +57,8 @@ export type CandlestickChartProps = Omit<HTMLAttributes<HTMLDivElement>, "childr
 // A theme can recolour the bodies (ref E: lime up, orange down).
 const UP = "var(--ui-candle-up, var(--ui-lime-bright))";
 const DOWN = "var(--ui-candle-down, var(--ui-purple-deep))";
-const AXIS_W = 52;
 const CHIP_ROW = 52;
+const TIME_ROW = 30;
 
 function defaultTime(t: Candle["t"]): string {
   const d = t instanceof Date ? t : typeof t === "number" ? new Date(t) : new Date(t);
@@ -80,7 +93,12 @@ export function CandlestickChart({
   leading,
   onTypeToggle,
   formatPrice = (v) => v.toFixed(2),
+  formatAxis = (t) => String(Number.isInteger(t) ? t : t.toFixed(1)),
+  axisWidth: AXIS_W = 52,
   formatTime = defaultTime,
+  timeAxis = false,
+  lastLabel,
+  tickZone = "local",
   label,
   animate = true,
   className,
@@ -98,6 +116,8 @@ export function CandlestickChart({
 
   const hasRow = Boolean(timeframes?.length || leading || onTypeToggle);
   const plotH = height - (hasRow ? CHIP_ROW : 0);
+  // The candles' own height: the time labels sit under them.
+  const areaH = plotH - (timeAxis ? TIME_ROW : 0);
   const W = size.width;
   const plotW = Math.max(0, W - AXIS_W);
   const n = data.length;
@@ -114,13 +134,14 @@ export function CandlestickChart({
   hi += pad;
   const top = 10;
   const bottom = 10;
-  const y = (v: number) => top + (plotH - top - bottom) * (1 - (v - lo) / (hi - lo));
-  const priceAt = (py: number) => lo + (1 - (py - top) / (plotH - top - bottom)) * (hi - lo);
+  const y = (v: number) => top + (areaH - top - bottom) * (1 - (v - lo) / (hi - lo));
+  const priceAt = (py: number) => lo + (1 - (py - top) / (areaH - top - bottom)) * (hi - lo);
   const ticks = n ? niceTicks(lo, hi, 6).filter((t) => t > lo && t < hi) : [];
   const vEvery = Math.max(1, Math.round(n / 6));
 
   const tagYs = [last != null ? y(last) : null, reference ? y(reference.value) : null].filter((v): v is number => v !== null);
-  const clashes = (ty: number) => tagYs.some((t) => Math.abs(t - ty) < 14);
+  // A 23px tag hides any axis label within 20px of its middle.
+  const clashes = (ty: number) => tagYs.some((t) => Math.abs(t - ty) < 20);
 
   const locate = (e: PointerEvent<HTMLDivElement>) => {
     const el = ref.current;
@@ -129,7 +150,7 @@ export function CandlestickChart({
     const px = e.clientX - r.left;
     const py = e.clientY - r.top;
     const i = Math.max(0, Math.min(n - 1, Math.floor(px / slot)));
-    setCross({ i, y: Math.max(top, Math.min(plotH - bottom, py)) });
+    setCross({ i, y: Math.max(top, Math.min(areaH - bottom, py)) });
   };
 
   const onKey = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -154,6 +175,24 @@ export function CandlestickChart({
   const reveal = animate && !reduced && !drawn.current;
   const first = data[0];
   const change = first && last != null ? ((last - first.o) / first.o) * 100 : 0;
+
+  // Round times under the candles, placed where they fall between the first
+  // and last candle's times; the last label ("Now") under the last candle.
+  const timeLabels: { key: string; px: number; text: string }[] = (() => {
+    if (!timeAxis || n < 2 || plotW <= 0) return [];
+    const ms = (t: Candle["t"]) => (t instanceof Date ? t.getTime() : typeof t === "number" ? t : Date.parse(t));
+    const t0 = ms(data[0]!.t);
+    const t1 = ms(data[n - 1]!.t);
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) return [];
+    const px = (t: number) => slot * 0.5 + ((t - t0) / (t1 - t0)) * slot * (n - 1);
+    const endPx = px(t1);
+    const fit = Math.max(2, Math.min(6, Math.floor(plotW / 96) + 1));
+    const out = roundTimes(t0, t1, lastLabel ? fit - 1 : fit, tickZone)
+      .map((t) => ({ key: String(t), px: px(t), text: formatTime(t) }))
+      .filter((l) => !lastLabel || endPx - l.px >= 72);
+    if (lastLabel) out.push({ key: "last", px: endPx, text: lastLabel });
+    return out;
+  })();
 
   return (
     <div
@@ -231,14 +270,14 @@ export function CandlestickChart({
             ))}
             {data.map((_, i) =>
               i > 0 && i % vEvery === 0 ? (
-                <line key={`v${i}`} x1={i * slot} x2={i * slot} y1={0} y2={plotH} stroke="var(--ui-candle-grid)" strokeWidth={1} />
+                <line key={`v${i}`} x1={i * slot} x2={i * slot} y1={0} y2={areaH} stroke="var(--ui-candle-grid)" strokeWidth={1} />
               ) : null,
             )}
-            <line x1={plotW} x2={plotW} y1={0} y2={plotH} stroke="var(--ui-candle-grid)" strokeWidth={1} />
+            <line x1={plotW} x2={plotW} y1={0} y2={areaH} stroke="var(--ui-candle-grid)" strokeWidth={1} />
 
             {/* axis */}
             {ticks.map((t) =>
-              clashes(y(t)) || (crossY !== null && Math.abs(crossY - y(t)) < 14) ? null : (
+              clashes(y(t)) || (crossY !== null && Math.abs(crossY - y(t)) < 20) ? null : (
                 <text
                   key={`a${t}`}
                   x={plotW + AXIS_W / 2}
@@ -249,10 +288,24 @@ export function CandlestickChart({
                   fontSize="13"
                   className="ui-figure"
                 >
-                  {Number.isInteger(t) ? t : t.toFixed(1)}
+                  {formatAxis(t)}
                 </text>
               ),
             )}
+
+            {/* time axis */}
+            {timeLabels.map((l) => (
+              <text
+                key={`x${l.key}`}
+                x={l.px}
+                y={plotH - 9}
+                textAnchor={l.px < 36 ? "start" : plotW - l.px < 36 ? "end" : "middle"}
+                fill="var(--ui-candle-axis)"
+                fontSize="13"
+              >
+                {l.text}
+              </text>
+            ))}
 
             {/* candles */}
             {data.map((d, i) => {
@@ -309,7 +362,7 @@ export function CandlestickChart({
                   x1={slot * (cross.i + 0.5)}
                   x2={slot * (cross.i + 0.5)}
                   y1={0}
-                  y2={plotH}
+                  y2={areaH}
                   stroke="#ffffff"
                   strokeOpacity={0.55}
                   strokeDasharray="3 4"

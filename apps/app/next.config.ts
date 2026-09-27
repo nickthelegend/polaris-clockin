@@ -26,6 +26,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // No floating dev badge over the phone layout.
+  devIndicators: false,
   // The shared component library ships TypeScript source.
   transpilePackages: ["@polaris/ui", "@polaris/brand"],
   // The workspace root, so a parent directory's lockfile is never mistaken for it.

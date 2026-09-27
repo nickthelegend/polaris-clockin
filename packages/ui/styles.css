@@ -227,6 +227,57 @@
   --ui-bar-selected: #b0c956;
 }
 
+/* The same theme from 1024px only: `data-theme="dark" data-theme-lg="ref-e"`
+   on the customer app's <html>, whose phone layout is dark and whose desktop
+   layout is ref E. Keep it in step with the block above. */
+@media (min-width: 1024px) {
+  [data-theme-lg="ref-e"] {
+    --ui-canvas: #121418;
+    --ui-surface-1: #1d2129;
+    --ui-surface-2: #252a33;
+    --ui-surface-3: #2e343e;
+    --ui-hairline: #2a2d33;
+    --ui-hairline-strong: #37393d;
+    --ui-text: #ffffff;
+    --ui-muted: #8e9199;
+    --ui-dim: #565961;
+
+    --ui-ink: #1d2129;
+    --ui-on-ink: #ffffff;
+    --ui-track: #2a2e36;
+    --ui-up: #aabc6d;
+    --ui-down: #e8847b;
+    --ui-warn: #e2b866;
+    --ui-info: #71c8c2;
+    --ui-purple-text: #b77fd2;
+    --ui-focus: #c8df6c;
+    --ui-scrim: rgb(8 9 11 / 0.66);
+    --ui-glass: rgb(29 33 41 / 0.8);
+
+    /* Every lime control in the library takes the reference's lime. */
+    --ui-lime: #b0c956;
+    --ui-lime-bright: #c3da63;
+    --ui-on-lime: #121418;
+
+    --ui-shadow-pop: 0 24px 60px -16px rgb(0 0 0 / 0.75), 0 0 0 1px #37393d;
+    --ui-shadow-nav: 0 16px 40px -10px rgb(0 0 0 / 0.8);
+    --ui-shadow-card: none;
+
+    /* The candle panel matches the app panel. */
+    --ui-candle-panel: #121418;
+    --ui-candle-chip: #1d2129;
+    --ui-candle-grid: rgb(255 255 255 / 0.05);
+    --ui-candle-axis: #7c7f87;
+    --ui-candle-up: #b0c956;
+    --ui-candle-down: #ee9443;
+
+    /* Bars: olive tracks filled in a darker olive, the selected day in lime. */
+    --ui-bar-fill: #4f5a2c;
+    --ui-bar-low: #3a4027;
+    --ui-bar-selected: #b0c956;
+  }
+}
+
 @theme inline {
   --color-ui-canvas: var(--ui-canvas);
   --color-ui-surface-1: var(--ui-surface-1);

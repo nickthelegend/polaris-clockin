@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { type AccountState, getServerSnapshot, getSnapshot, subscribe } from "./index";
+import { emailLoginOpen, subscribeEmailLogin } from "./email-login";
+import { onPrivyChange, type PrivyStatus, privyStatus } from "./privy";
 import { type AccountSupport, checkAccountSupport, isInAppBrowser } from "./support";
 
 /** The account's state, kept in sync across the app (and other tabs). */
@@ -46,4 +48,22 @@ export function useInAppBrowser(): boolean {
     () => isInAppBrowser(navigator.userAgent),
     () => false,
   );
+}
+
+/** Privy's session, for the Profile screen (the signed-in email). */
+export function usePrivyStatus(): PrivyStatus {
+  return useSyncExternalStore(onPrivyChange, privyStatus, () => SERVER_PRIVY);
+}
+
+const SERVER_PRIVY: PrivyStatus = { ready: false, authenticated: false, address: null, email: null };
+
+/** Whether the email sheet is open (see email-login.ts). */
+export function useEmailLoginOpen(): boolean {
+  return useSyncExternalStore(subscribeEmailLogin, emailLoginOpen, () => false);
+}
+
+/** The address data is read for: the account on this device, or null (sample data). */
+export function useOwner(): `0x${string}` | null {
+  const state = useAccountState();
+  return state.status === "ready" || state.status === "locked" ? state.address : null;
 }

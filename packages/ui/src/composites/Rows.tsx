@@ -28,7 +28,7 @@ export type QuickTransferProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"
 export function QuickTransfer({ people, onAdd, onSelect, showNames = false, addLabel = "Send by link", className, ...props }: QuickTransferProps) {
   return (
     <div
-      className={cn("ui-no-scrollbar -mx-5 flex snap-x items-start gap-1 overflow-x-auto px-5 pb-1 font-satoshi", className)}
+      className={cn("ui-no-scrollbar -mx-5 flex snap-x scroll-px-5 items-start gap-1 overflow-x-auto px-5 pb-1 font-satoshi", className)}
       {...props}
     >
       <div className="flex shrink-0 snap-start flex-col items-center gap-1.5 pr-1">
@@ -69,6 +69,11 @@ export type AssetRowProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "title
   subtitle?: ReactNode;
   /** The sparkline in the middle. */
   spark?: number[];
+  /**
+   * Instalment ticks in the sparkline's place: `done` paid in lime, the
+   * `current` one (this row's payment) in white, the rest dim.
+   */
+  progress?: { done: number; total: number; current?: number };
   /** Colour of the sparkline and delta: follows the trend unless set. */
   trend?: "up" | "down" | "flat";
   value: ReactNode;
@@ -94,6 +99,7 @@ export function AssetRow({
   title,
   subtitle,
   spark,
+  progress,
   trend,
   value,
   meta,
@@ -115,6 +121,18 @@ export function AssetRow({
       </span>
       {spark && spark.length > 1 ? (
         <Sparkline data={spark} color={color} height={30} width={64} strokeWidth={1.5} fill={sparkFill} className="shrink-0" />
+      ) : progress ? (
+        <span role="img" aria-label={`${progress.done} of ${progress.total} paid`} className="flex w-16 shrink-0 gap-1">
+          {Array.from({ length: progress.total }, (_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1.5 flex-1 rounded-full",
+                i < progress.done ? "bg-ui-lime" : i === progress.current ? "bg-ui-text" : "bg-ui-surface-3",
+              )}
+            />
+          ))}
+        </span>
       ) : null}
       <span className="min-w-[72px] shrink-0 text-right">
         <span className="ui-figure block text-[16px] leading-tight font-medium text-ui-text">{value}</span>
@@ -183,11 +201,14 @@ export function FeaturedTile({ leading, title, subtitle, value, meta, progress, 
         <span className="shrink-0">{leading}</span>
         <span className="min-w-0">
           <span className="block truncate text-[16px] leading-tight font-semibold text-ui-text">{title}</span>
-          {subtitle ? <span className="block truncate text-[13px] leading-tight text-ui-muted">{subtitle}</span> : null}
+          {subtitle ? (
+            <span className={cn("block truncate text-[13px] leading-tight", tint ? "text-ui-text/70" : "text-ui-muted")}>{subtitle}</span>
+          ) : null}
         </span>
       </span>
       <span className="ui-figure mt-5 block text-[20px] leading-tight font-medium tracking-[-0.02em] text-ui-text">{value}</span>
-      {meta ? <span className="mt-1 block text-[13px] text-ui-muted">{meta}</span> : null}
+      {/* On a tinted tile the muted grey loses contrast; the text colour at 70% keeps AA. */}
+      {meta ? <span className={cn("mt-1 block text-[13px]", tint ? "text-ui-text/70" : "text-ui-muted")}>{meta}</span> : null}
       {progress ? (
         <span
           role="img"

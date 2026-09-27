@@ -1,3 +1,13 @@
+/**
+ * Your receive link (`/send?to=<account>&n=<name>`, what your code holds) and
+ * how it reads on screen: the site and your name, never the account's 0x
+ * address. The real URL is only ever copied, shared or put in the code.
+ */
+export function receiveLink(origin: string, address: string, name: string): { url: string; shown: string } {
+  const url = `${origin}/send?${new URLSearchParams({ to: address, ...(name ? { n: name } : {}) }).toString()}`;
+  return { url, shown: `${origin.replace(/^https?:\/\//, "")}/send · ${name || "your link"}` };
+}
+
 /** A link slug, a payment link id (`pl_…`) or a checkout session id (`cs_test_…`). */
 const ID = /^[a-z0-9][a-z0-9_-]{1,135}$/i;
 

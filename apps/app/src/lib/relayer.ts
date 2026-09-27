@@ -61,10 +61,12 @@ export type SendRequest = {
   open: Signed<Open>;
 };
 
-/** PolarisSend.claim: signed by the link's key, naming the recipient. */
+/** PolarisSend.claim(linkKey, to, deadline, v, r, s): signed by the link's key, naming the recipient. */
 export type ClaimRequest = {
   linkKey: Address;
   claim: Signed<Claim>;
+  /** The same deadline the claim signs; PolarisSend takes it as its own argument. */
+  deadline: bigint;
   /** Display only, from the link. The chain pays what was escrowed. */
   amount: Micros;
   senderName: string;
@@ -290,7 +292,7 @@ const stubRelayer: Relayer = {
     if (mockLedger.creditAvailable() < offer.total) {
       throw new RelayError("over-limit", "This is more than your limit right now.");
     }
-    needBalance(offer.amounts[0] ?? 0n);
+    // Nothing moves from the buyer at origination: the merchant is paid from the pool.
     return settle((tx) => mockLedger.openPlan(link, tx));
   },
   async subscribe({ link, intent, permit }) {
@@ -305,8 +307,11 @@ const stubRelayer: Relayer = {
     needBalance(amount);
     return settle((tx) => mockLedger.send(linkKey, amount, senderName, Number(expiresAt) * 1000, tx));
   },
-  async claim({ linkKey, claim, amount, senderName }) {
+  async claim({ linkKey, claim, deadline, amount, senderName }) {
     assertSignature(claim);
+    if (claim.message.deadline !== deadline) {
+      throw new RelayError("invalid-signature", "That claim didn't go through. Try again.");
+    }
     return settle((tx) => mockLedger.claim(linkKey, amount, senderName, tx));
   },
   async cancelSend({ cancel }) {

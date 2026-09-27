@@ -97,7 +97,7 @@ wins) and forwards refs where it renders one element.
 | `Tile` | `<Tile variant="raised">…</Tile>` |
 | `ThemeScope` | `<ThemeScope theme="light" root>…</ThemeScope>` |
 | `SectionHeader` | `<SectionHeader title="Recent sales" actionLabel="See all" href="/payments" />` · `size="lg"`, `subtitle`, `action` |
-| `SegmentedControl` | `<SegmentedControl aria-label="Pay" options={[{ value: "now", label: "Pay now" }, { value: "four", label: "Pay in 4" }]} />` · `shape="pill"`, `size`, `block` |
+| `SegmentedControl` | `<SegmentedControl aria-label="Pay" options={[{ value: "now", label: "Pay now" }, { value: "four", label: "Pay in 4" }]} />` · `shape="pill"`, `size`, `block`, `variant="icon"` (square icon-only segments on a dark glass track, each `label` read out: ref B's line / candles toggle) |
 | `RangeTabs` | `<RangeTabs value={range} onValueChange={setRange} onCalendar={pick} />` · `tone="onColor" \| "surface"` |
 | `Tabs`, `TabList`, `Tab`, `TabPanel` | `<Tabs defaultValue="all" variant="pill"><TabList aria-label="Payments"><Tab value="all" count={24}>All</Tab></TabList><TabPanel value="all">…</TabPanel></Tabs>` · `text` (ref A), `pill`, `segmented` |
 | `Money` | `<Money value={25841.11} />` · the dim dollar: `dim="both" \| "symbol" \| "cents" \| "none"`, `signed`, `compact`, `spaced` (ref D), `animate` |
@@ -106,11 +106,15 @@ wins) and forwards refs where it renders one element.
 | `Toggle` | `<Toggle label="Automatic payouts" description="Every day at 17:00" />` |
 | `Skeleton`, `SkeletonText` | `<Skeleton shape="card" height={200} />` |
 | `EmptyState` | `<EmptyState icon={<Link2 />} title="No links yet" description="…" action={<Button>New link</Button>} />` |
+| `IconDisc` | `<IconDisc icon={<ScanFace />} />` · the round icon well that leads a confirm, status or empty state; `size="sm" \| "md" \| "lg"` (48, 56, 64) |
 | `Toaster`, `toast` | mount `<Toaster />` once; `toast({ title: "Link copied", tone: "success" })` |
 | `Table`, `CellStack` | `<Table caption="Payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · `variant="lined" \| "rows"`, sorting, loading, `empty`, `hideBelow` (`sm` to `xl`) · `variant="plain"` is ref E's (see `DataTable`) |
 | `Keypad`, `applyKey` | `<Keypad onKey={(k) => setAmount((a) => applyKey(a, k))} captureKeyboard />` |
 | `AmountDisplay` | `<AmountDisplay value={amount} hint="Available $1,284.50" invalid={over} />` · shrinks as it grows, shakes when `invalid`, optional `caret` |
 | `Logo`, `LogoMark` | `<Logo height={30} />` (the team's wordmark) · `<LogoMark size={28} />` (the star) |
+| `SuccessCheck` | `<SuccessCheck label="Paid" />` · a disc that springs in, a ring that pulses once, a check that draws itself; `tone="lime" \| "up" \| "purple"`, `size` |
+| `PageDots` | `<PageDots count={3} index={page} onSelect={setPage} />` · ref B's onboarding dots: the current page a white bar |
+| `ScanFrame` | `<ScanFrame><video className="absolute inset-0 size-full object-cover" />…</ScanFrame>` · the 4:3 camera well with lime corner marks for a QR scanner |
 | `Notice` | `<Notice tone="warn" title="Showing data from 2 minutes ago" action={<Button size="sm">Retry</Button>}>The last refresh failed.</Notice>` · `info`, `warn`, `down`, `lime`, `neutral`; why a control is disabled, a stale refresh, sample data |
 | `ErrorState` | `<ErrorState title="We couldn't load your payments" description={message} onRetry={reload} />` · announced (`role="alert"`) |
 | `Ticks` | `<Ticks done={2} total={4} />` · instalment ticks, `late` in amber, `size="sm"` for rows |
@@ -126,7 +130,7 @@ wins) and forwards refs where it renders one element.
 | `GradientCard` | `<GradientCard tone="crimson" label="Your credit line" value={<Money value={500} dim="cents" />} meta={<DeltaBadge variant="chip" … />} />` · `purple` + `layout="side"` (ref A), `purple-chart` (ref B) |
 | `QuickTransfer` | `<QuickTransfer people={contacts} onAdd={newLink} onSelect={sendTo} />` |
 | `TxRow` | `<TxRow leading={<Avatar … />} title="Oat & Ember" subtitle="9:10 AM" amount={-59} subAmount="Pay in 4 · $14.75" />` · `variant="card"` (ref D) |
-| `AssetRow` | `<AssetRow leading={…} title="Kiko Ramen" subtitle="Oct 14 · 2 of 4" spark={[…]} value="$9.40" meta="+2.24%" />` · `variant="sunken"`, `sparkFill` |
+| `AssetRow` | `<AssetRow leading={…} title="Kiko Ramen" subtitle="Oct 14 · 2 of 4" spark={[…]} value="$9.40" meta="+2.24%" />` · `variant="sunken"`, `sparkFill`, or `progress={{ done: 1, total: 4, current: 1 }}` for instalment ticks in the sparkline's place |
 | `FeaturedTile` | `<FeaturedTile leading={…} title="Oat & Ember" value="$90.00" meta="Next Oct 12" progress={{ done: 2, total: 4 }} tint="#c2410c" />` |
 | `MiniCardCarousel` | `<MiniCardCarousel aria-label="Pay from" cards={accounts} value={id} onValueChange={setId} />` |
 | `StatTile` | `<StatTile value="+$850" label="Saved" tone="up" />` |
@@ -134,9 +138,10 @@ wins) and forwards refs where it renders one element.
 | `DetailsList` | `<DetailsList items={[{ label: "Merchant", value: "Oat & Ember" }]} />` |
 | `TileButton` | `<TileButton tone="purple" icon={<ArrowDownLeft />} label="Receive" />` · `ink`, `purple`, `lime`, `surface` |
 | `BottomNav` | `<BottomNav floating items={tabs} value="home" linkAs={Link} />` · `variant="labelled"` (ref C), `activeTone="white"` (ref B), `size="sm"` (six 48px items on a phone) |
-| `AppHeader` | `<AppHeader name="Ana Ruiz" unread onBell={open} />` · `variant="greeting"` (ref C) |
+| `AppHeader` | `<AppHeader name="Ana Ruiz" unread onBell={open} />` · `mark` (the star before the wordmark, ref A), `logoHref` + `linkAs`, `variant="greeting"` (ref C) |
 | `ScreenHeader` | `<ScreenHeader title="Send" onBack={back} action={…} />` · `variant="plain" \| "square" \| "arrow"` |
-| `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) · an action can be `disabled` with a `title` saying why |
+| `CardStack` | `<CardStack name="Oat & Ember" last4="2431" balance={62745} delta={11.05} actions={[…]} />` (ref D) · an action can be `disabled` with a `title` saying why · `decimals={2}` (with `spaced` off) to match figures written $1,284.50 |
+| `ListRow`, `ListGroup` | `<ListGroup label="Account"><ListRow icon={<Bell />} title="Notifications" description="Payments due" href="/notifications" linkAs={Link} /></ListGroup>` · settings, menus and feeds: an icon well (`tone` `surface`, `lime`, `purple`, `down`, or ref E's pill tints `tint-lime`, `tint-purple`, `tint-teal`), a value, toggle or chevron; `variant="card"` (ref D) |
 | `SideNav` | `<SideNav items={nav} value="payments" linkAs={Link} brand={<Logo height={30} />} brandCompact={<LogoMark size={30} />} />` · the web sidebar: hidden below 768px, an icon rail with tooltips to 1279px, full from 1280px; the lime active pill slides |
 | `PageHeader` | `<PageHeader eyebrow="Good morning, Oat & Ember" title="Overview" actions={…} trailing={<Menu … />} />` |
 | `CodeBlock` | `<CodeBlock samples={[{ key: "node", label: "Node", filename: "route.ts", code }]} copyable />` · tabs, line numbers, brand-accent syntax colour; the right edge fades while a line runs past it; the note hides in a narrow panel so Copy stays on the tab row; leave `copyable` off for code that doesn't run yet |
@@ -152,20 +157,31 @@ with them composed into the reference itself.
 |---|---|
 | `AppFrame` | `<AppFrame><TopNav … /><main>…</main></AppFrame>` · a dark panel (a big soft shadow) floating on the lime canvas: from 1024px in 16px of lime with 24px corners, from 1280px in 32px with 32px corners; full bleed below. `floatFrom="xl"` to float only from 1280px, `"always"` for a preview |
 | `TopNav`, `NavLink`, `NavDropdown` | `<TopNav brand={<Logo />} items={nav} more={{ label: "More", items: [developers, settings] }} value="overview" linkAs={Link} actions={…} compactActions={…} sheetFooter={…} />` · the text links with the reference's "Market ⌄" dropdown; below 1024px a compact bar whose menu is a `BottomSheet` that opens tall enough for every link and the footer; `contained` holds the bar to a 1280px content column |
-| `WalletPill` | `<WalletPill address={wallet} label="payout wallet address" />` · the dark pill with an icon and the truncated 0x address; pressing it copies |
+| `WalletPill` | `<WalletPill address={wallet} label="payout wallet address" />` · the dark pill with an icon and the truncated 0x address; pressing it copies · `text` shows something else while `address` is what it copies (the customer web: "Dollar account ···· 4821", copying the receive link) · `displayAddress` is what the toast, tooltip and name show when the copied value isn't fit to show (a link with an account in it) · `onPendingClick` and `pendingLabel` make the pill act before there is anything to copy ("Sample account ···· 2451" starts an account) |
 | `PrimaryButton`, `SecondaryButton` | `<PrimaryButton size="lg" block icon={<ArrowUpFromLine />}>Withdraw $1,250.00</PrimaryButton>` · #B0C956 with a near-black label; the dark #1D2129 one with its icon after; `sm` is the nav's pill, `lg` the widget's 50px buttons |
 | `IconSquareButton` | `<IconSquareButton label="Refresh" icon={<RefreshCw />} />` · the 40px outline squares (refresh, QR, settings); `tone="solid" active` for the chart toggle's raised lime one |
-| `DeltaChip` | `<DeltaChip value={3.27} suffix="today" />` · lime on the dark lime chip, coral when negative, `variant="strong"` in the balance card, `label` for "New" |
+| `DeltaChip` | `<DeltaChip value={3.27} suffix="today" />` · lime on the dark lime chip, coral when negative, grey at 0.00%, `variant="strong"` in the balance card, `label` for "New" · `goodWhen="down"` for money going out (spending): a rise turns amber, a fall lime |
 | `StatusPill` | `<StatusPill tone="purple">Pay in 4</StatusPill>` · `lime`, `purple`, `teal` (the reference's), `amber` (retrying, at risk), `red`, `neutral`; `icon`, `size="sm"` |
 | `TimeframeChips` | `<TimeframeChips options={["1h", "24h", "1w", "1m"]} value={tf} onValueChange={setTf} />` · a radio group; the active chip on #1D2129; options can carry labels (`All 638`) |
 | `ChartTypeToggle` | `<ChartTypeToggle value={type} onValueChange={setType} />` · line and candles |
 | `TextTabs` | `<TextTabs aria-label="Move money" options={[{ value: "withdraw", label: "Withdraw" }, …]} value={tab} onValueChange={setTab} />` · BUY / SELL: uppercase, the active one lime; a real tablist; `size="auto"` fits phones |
 | `PairHeader`, `Coin`, `CoinPair`, `PolarisCoin`, `DollarCoin` | `<PairHeader coins={[<PolarisCoin key="p" />, <DollarCoin key="d" />]} title="Sales / USD" options={metrics} value={metric} onValueChange={setMetric} trailing={<ChartTypeToggle … />} />` · overlapping round coins, the first in front; the title opens a menu when it has options; `as="h1"` for a page head; `titleClassName` (e.g. `max-sm:text-[20px]`) |
-| `GradientLineChart` | `<GradientLineChart label="Sales, last 24 hours" data={points} height={380} formatValue={usd} formatBubbleNote={null} lastLabel="Now" />` · the line runs lime yellow to orange with a warm fill; a white bubble, a glowing dot and a dashed crosshair on hover, drag and arrow keys; four round y labels from under the lowest point to over the highest (`spanTicks`); x labels on round times (`tickZone` local or UTC) as many as fit; below `compactBelow` (480px) a 48px axis with short labels (`compactNumber`: "2.5k"); all zero: a dashed baseline and `empty` (which can hold buttons) |
+| `GradientLineChart` | `<GradientLineChart label="Sales, last 24 hours" data={points} height={380} formatValue={usd} formatBubbleNote={null} lastLabel="Now" />` · the line runs lime yellow to orange with a warm fill; a white bubble, a glowing dot and a dashed crosshair on hover, drag and arrow keys; four round y labels from under the lowest point to over the highest (`spanTicks`); x labels on round times (`tickZone` local or UTC) as many as fit; below `compactBelow` (480px) a 48px axis with short labels (`compactNumber`: "2.5k"); all zero: a dashed baseline and `empty` (which can hold buttons); a line that never moves is drawn in the top colour, not one mid-plot orange |
 | `DataTable`, `TableName` | `<DataTable caption="Recent payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · borderless on the panel, muted headers, 54px rows; `TableName` is the small round icon and the name |
 | `SwapCard`, `SwapToggle`, `SwapStack` | `<SwapStack top={<SwapCard coin={<PolarisCoin size={42} />} symbol="AUSD" caption="You send" value={amount} onValueChange={setAmount} metaLabel="Balance" meta="3,196.97" />} bottom={…} toggle={<SwapToggle label="Switch" onClick={swap} />} />` · the stacked #1D2129 cards with the round button over the seam; the figure can be an input |
 | `BalanceSummaryCard` | `<BalanceSummaryCard label="Available balance" value="$3,196.97" delta={7.45} stats={[{ label: "Network fee", value: "$0.00" }, …]} />` · the outlined card with its chip and the stats row |
 | `PanelCard` | `<PanelCard title="Customers this week" action={<SeeAll />}>…</PanelCard>` · ref E's card for what the reference doesn't show: `variant="outline"` (the summary card's border) or `filled` (#1D2129) |
+| `FigureRow` | `<FigureRow value={<Money value={1284.5} />} delta={4.5} deltaSuffix="this week" right={<TimeframeChips … />} />` · the big figure under the pair header with its delta chip (`deltaLabel` for a figure in dollars, `badge` for another chip, `deltaGoodWhen` for spending), the chips on the right; a skeleton while `value` is undefined |
+
+### One route, two layouts (`src/trade/Adaptive.tsx`, `src/overlays/AdaptiveSheet.tsx`)
+
+The customer app (apps/app) is a phone app below 1024px and ref E's framed desktop from 1024px.
+
+| Component | Usage |
+|---|---|
+| `Adaptive`, `useAdaptive`, `useIsDesktop`, `DESKTOP_QUERY` | `<Adaptive phone={<>{children}<TabBar /></>} desktop={<DesktopShell>{children}</DesktopShell>} />` · the server renders both layouts and CSS shows the one that fits (no flash, no hydration mismatch); after hydration only the matching one stays mounted, without remounting it. `useAdaptive()` gives `{ mode, settled }`: `settled` is false while both are in the page, so something that must exist once (a route sheet) waits for it |
+| `AdaptiveSheet` | `<AdaptiveSheet open={open} onOpenChange={setOpen} snapPoints={["fit"]} maxWidth={440} aria-label="Confirm" desktop="dialog">…</AdaptiveSheet>` · exactly the given BottomSheet below 1024px, a `Dialog` (or `desktop="drawer"`) from 1024px, with the same `Sheet.Body` and `Sheet.Footer` |
+| `data-theme-lg="ref-e"` | `<html data-theme="dark" data-theme-lg="ref-e">` · a scope that is dark below 1024px and ref E from 1024px (styles.css); overlays opened from it follow |
 
 ### Charts (hand-built SVG)
 
@@ -173,7 +189,7 @@ with them composed into the reference itself.
 |---|---|
 | `Sparkline` | `<Sparkline data={series} color="var(--ui-up)" height={32} />` · `fill`, `baseline="avg"`, `curve="linear"` |
 | `LineArea` | `<LineArea label="Credit score" data={weeks} height={200} glow reference="avg" interactive />` |
-| `CandlestickChart` | `<CandlestickChart label="Daily volume" data={ohlc} timeframes={["1D", "1W", "1M"]} reference={{ value: 97.45 }} />` · lime up, purple-deep down, dashed last-price line with a lime tag, crosshair on hover, drag and arrow keys, draw-in |
+| `CandlestickChart` | `<CandlestickChart label="Daily volume" data={ohlc} timeframes={["1D", "1W", "1M"]} reference={{ value: 97.45 }} />` · lime up, purple-deep down, dashed last-price line with a lime tag, crosshair on hover, drag and arrow keys, draw-in · `formatAxis` and `axisWidth` for the price axis ("1,300.00" beside a "$1,284.50" tag), `timeAxis` (with `lastLabel`) for the line chart's round times along the bottom |
 | `DonutChart` | `<DonutChart label="Sales by mode" data={[{ label: "Pay now", value: 56685, color: "var(--ui-teal)" }, …]} />` · round ends overlapping like ref D (`gap` opens them), `startAngle`, glass value tags, hover or focus a segment to read it |
 | `BarChart` | `<BarChart label="Customers this week" data={week} formatValue={(v) => `$ ${v}`} />` |
 | `HBarList` | `<HBarList label="Spending by category" data={[{ label: "Food", value: 35 }, …]} />` |
@@ -186,8 +202,8 @@ stay still under reduced motion.
 
 | Component | Usage |
 |---|---|
-| `BottomSheet` | `<BottomSheet open={open} onOpenChange={setOpen} snapPoints={["half", "full"]} title="Plan"><Sheet.Body>…</Sheet.Body><Sheet.Footer>…</Sheet.Footer></BottomSheet>` · snaps `compact`, `half`, `full` or px; velocity-based swipe to dismiss; content scrolls without fighting the drag |
-| `SheetStage` | `<SheetStage className="min-h-dvh"><App /></SheetStage>` · scales the page behind an open sheet to 0.96 with rounded corners and makes it inert |
+| `BottomSheet` | `<BottomSheet open={open} onOpenChange={setOpen} snapPoints={["half", "full"]} title="Plan"><Sheet.Body>…</Sheet.Body><Sheet.Footer>…</Sheet.Footer></BottomSheet>` · snaps `compact`, `half`, `full`, `fit` (hugs its content, up to full) or px; velocity-based swipe to dismiss; content scrolls without fighting the drag; a sheet opened over another stacks above it with its own backdrop; `onClosed` fires once the exit animation has finished (route sheets navigate then) |
+| `SheetStage` | `<SheetStage className="min-h-dvh"><App /></SheetStage>` · scales the page behind an open sheet to 0.96 with rounded corners and makes it inert; stacked sheets keep it back until the last one closes |
 | `Sheet.Header`, `Sheet.Body`, `Sheet.Footer` | the parts every overlay shares (also `Drawer.*`, `Dialog.*`) |
 | `Drawer` | `<Drawer open={!!p} onOpenChange={…} title="Payment" description={p.id}><Drawer.Body>…</Drawer.Body></Drawer>` · right side on desktop, a half/full sheet below 768px |
 | `Dialog` | `<Dialog open={open} onOpenChange={setOpen} title="New payment link"><Dialog.Body>…</Dialog.Body><Dialog.Footer>…</Dialog.Footer></Dialog>` · centred on desktop, a sheet below 768px |

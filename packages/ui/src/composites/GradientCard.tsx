@@ -7,8 +7,9 @@ export type GradientTone = "crimson" | "purple" | "purple-chart" | "lime";
 const TONES: Record<GradientTone, string> = {
   // Ref B: "Your portfolio", brighter at the left.
   crimson: "linear-gradient(100deg, #f5335e 0%, #e93158 45%, #de2f53 75%, #d02d52 100%)",
-  // Ref A: "My Spending", flat.
-  purple: "#8e5cf0",
+  // Ref A: "My Spending", flat. A shade under ref A's #8e5cf0 so white text
+  // on it passes AA (4.77:1).
+  purple: "#8452ec",
   // Ref B: the price chart card.
   "purple-chart": "linear-gradient(160deg, #9a3ed4 0%, #923eca 40%, #8a31c6 70%, #7e2ab5 100%)",
   lime: "#9cef5e",
@@ -67,7 +68,7 @@ export function GradientCard({
         // Ref A: the chart rides beside the label and figure; the change runs full width under both.
         <div className="grid grid-cols-[minmax(0,1fr)_44%] gap-x-3">
           <div className="min-w-0">
-            {label ? <div className="text-[17px] font-medium opacity-85">{label}</div> : null}
+            {label ? <div className={cn("text-[17px] font-medium", tone !== "purple" && "opacity-85")}>{label}</div> : null}
             {value ? <div className="mt-5 text-[34px] leading-none font-bold tracking-[-0.03em]">{value}</div> : null}
           </div>
           <div className="-mr-1 self-center">{chart}</div>
@@ -77,7 +78,7 @@ export function GradientCard({
         <div>
           {label || actions ? (
             <div className="flex items-start justify-between gap-3">
-              {label ? <div className="text-[17px] font-medium opacity-80">{label}</div> : <span />}
+              {label ? <div className={cn("text-[17px] font-medium", tone !== "purple" && "opacity-80")}>{label}</div> : <span />}
               {actions ? <div className="-mt-1 -mr-1 flex shrink-0 items-center gap-2">{actions}</div> : null}
             </div>
           ) : null}

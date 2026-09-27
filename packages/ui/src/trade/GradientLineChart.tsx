@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type HTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
-import { smoothPath, useSize, type Pt } from "../charts/geometry";
+import { roundTimes, smoothPath, useSize, type Pt } from "../charts/geometry";
 import { cn } from "../lib/cn";
 import { useReducedMotionSafe } from "../lib/hooks";
 
@@ -50,12 +50,6 @@ export type GradientLineChartProps = Omit<HTMLAttributes<HTMLDivElement>, "child
 
 const X_AXIS = 36;
 const TOP = 44; // room for the bubble over the highest point
-
-const MIN = 60_000;
-const HR = 60 * MIN;
-const DY = 24 * HR;
-/** Round steps for time labels, smallest first. */
-const TIME_STEPS = [5 * MIN, 10 * MIN, 15 * MIN, 30 * MIN, HR, 2 * HR, 3 * HR, 4 * HR, 6 * HR, 8 * HR, 12 * HR, DY, 2 * DY, 7 * DY, 14 * DY];
 
 /**
  * Exactly `count` evenly spaced round labels whose top sits at or above the
@@ -147,6 +141,9 @@ export function GradientLineChart({
   const n = data.length;
   const values = data.map((d) => d.value);
   const allZero = values.every((v) => v === 0);
+  // Nothing moved: one level line, drawn in the top colour (the gradient
+  // would paint it all one mid-plot orange).
+  const flat = !allZero && n > 1 && values.every((v) => v === values[0]);
   const W = size.width;
   const compact = W > 0 && W < compactBelow;
   const axisWidth = compact ? compactAxisWidth : axisWidthWide;
@@ -221,12 +218,8 @@ export function GradientLineChart({
     if (t0 !== null && t1 !== null && t1 > t0) {
       const spanMs = t1 - t0;
       const room = lastLabel ? fit - 1 : fit;
-      const step = TIME_STEPS.find((s) => Math.floor(spanMs / s) <= room) ?? TIME_STEPS[TIME_STEPS.length - 1]!;
-      // Align to local time: whole hours, and local midnight for days.
-      const offset = tickZone === "utc" ? 0 : new Date(t0).getTimezoneOffset() * MIN;
-      const first = Math.ceil((t0 - offset) / step) * step + offset;
       const out: { key: string; px: number; text: string }[] = [];
-      for (let t = first; t <= t1; t += step) {
+      for (const t of roundTimes(t0, t1, room, tickZone)) {
         const px = x(((t - t0) / spanMs) * (n - 1));
         if (lastLabel && endPx - px < 72) continue;
         out.push({ key: String(t), px, text: formatTime(t) });
@@ -329,7 +322,14 @@ export function GradientLineChart({
               <g clipPath={`url(#${id}-clip)`}>
                 {n > 1 ? <path d={area} fill={`url(#${id}-fill)`} /> : null}
                 {n > 1 ? (
-                  <path d={line} fill="none" stroke={`url(#${id}-stroke)`} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" />
+                  <path
+                    d={line}
+                    fill="none"
+                    stroke={flat ? "var(--ui-chart-top)" : `url(#${id}-stroke)`}
+                    strokeWidth={2.25}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 ) : null}
               </g>
             )}

@@ -123,3 +123,25 @@ export function useSize<T extends HTMLElement>(): [React.RefObject<T | null>, { 
 export function valuesOf(data: number[] | { value: number }[]): number[] {
   return data.map((d) => (typeof d === "number" ? d : d.value));
 }
+
+const MIN = 60_000;
+const HR = 60 * MIN;
+const DY = 24 * HR;
+/** Round steps for time labels, smallest first. */
+const TIME_STEPS = [5 * MIN, 10 * MIN, 15 * MIN, 30 * MIN, HR, 2 * HR, 3 * HR, 4 * HR, 6 * HR, 8 * HR, 12 * HR, DY, 2 * DY, 7 * DY, 14 * DY];
+
+/**
+ * Round times between `t0` and `t1` (ms) for at most `room` labels: whole
+ * minutes and hours, or midnights for days, on the viewer's clock (or UTC).
+ * The charts' x axes ("2:00 AM", "6:00 AM"…, like the reference).
+ */
+export function roundTimes(t0: number, t1: number, room: number, zone: "local" | "utc" = "local"): number[] {
+  if (!(t1 > t0)) return [];
+  const span = t1 - t0;
+  const step = TIME_STEPS.find((s) => Math.floor(span / s) <= room) ?? TIME_STEPS[TIME_STEPS.length - 1]!;
+  const offset = zone === "utc" ? 0 : new Date(t0).getTimezoneOffset() * MIN;
+  const first = Math.ceil((t0 - offset) / step) * step + offset;
+  const out: number[] = [];
+  for (let t = first; t <= t1; t += step) out.push(t);
+  return out;
+}

@@ -1,7 +1,8 @@
 /** Formatting shared by Money, the charts and the gallery. */
 
 export type MoneyParts = {
-  sign: "" | "-" | "+";
+  /** A true minus (U+2212), like the chips, not a hyphen. */
+  sign: "" | "−" | "+";
   symbol: string;
   integer: string;
   /** The decimal separator and the fraction ("" when there are no decimals). */
@@ -55,11 +56,11 @@ export function moneyParts(
   const dot = fixed.indexOf(".");
   const integer = dot === -1 ? fixed : fixed.slice(0, dot);
   const fraction = dot === -1 ? "" : fixed.slice(dot);
-  const sign = negative && abs > 0 ? "-" : signed && abs > 0 ? "+" : "";
+  const sign = negative && abs > 0 ? "−" : signed && abs > 0 ? "+" : "";
   return { sign, symbol: currencySymbol(currency), integer, fraction, suffix };
 }
 
-/** "$1,284.50", "-$15.00", "+$2.1K". */
+/** "$1,284.50", "−$15.00", "+$2.1K". */
 export function formatMoney(
   value: number,
   options?: { currency?: string; decimals?: number; signed?: boolean; compact?: boolean },

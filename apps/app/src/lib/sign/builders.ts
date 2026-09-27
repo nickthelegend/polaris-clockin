@@ -36,9 +36,9 @@ export type PlanIntent = {
   principal: bigint;
   installments: number;
   interval: bigint;
-  /** The merchant's order reference, as a string: the same one the Pay-now nonce commits to. */
+  /** The merchant's order reference, as the text it is (a Solidity `string`). */
   orderId: string;
-  /** PolarisCheckout.nonces(buyer). */
+  /** `PolarisCheckout.nonces(buyer)`: one sequence shared with SubscribeIntent. */
   nonce: bigint;
   deadline: bigint;
 };
@@ -95,6 +95,9 @@ export function buildSubscribeIntent(
   domain: Eip712Domain,
   message: SubscribeIntent,
 ): Typed<typeof subscribeIntentTypes, "SubscribeIntent", SubscribeIntent> {
+  if (message.periodSeconds < 0n || message.periodSeconds > 0xffffffffffffffffn) {
+    throw new RangeError("periodSeconds must fit a uint64");
+  }
   return { domain, types: subscribeIntentTypes, primaryType: "SubscribeIntent", message };
 }
 

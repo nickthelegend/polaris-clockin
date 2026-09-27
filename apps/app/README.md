@@ -4,7 +4,9 @@ The consumer side of Polaris: a mobile-first, installable PWA where a buyer
 creates an account with Face ID, pays merchant links in full, in four or on a
 subscription, and sends dollars anywhere with a link. The plan is in
 [`docs/plan.md`](../../docs/plan.md) (§2, §3.1, §5.3, §5.5, §5.6) and the visual
-design in [`docs/design/mobile.md`](../../docs/design/mobile.md).
+design in [`docs/design/system.md`](../../docs/design/system.md): dark, built
+entirely from the shared library [`@polaris/ui`](../../packages/ui) (open
+`/gallery` to see every component beside its reference).
 
 ## Run it
 
@@ -35,6 +37,10 @@ inlined at build time, and public.
 | Variable | Default | What it is |
 |---|---|---|
 | `NEXT_PUBLIC_RP_ID` | the page's hostname | The WebAuthn relying party. **Production: `polarispay.app`**, so `app.` and `pay.` share one account per person. A passkey, and the account derived from it, belongs to this id forever. |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | unset | The Privy app (the dashboard's) behind **Continue with email**. Unset hides the option; Face ID works either way. |
+| `NEXT_PUBLIC_PRIVY_CLIENT_ID` | unset | Optional: a Privy *app client* made for the web origin. |
+| `NEXT_PUBLIC_BUILD_TARGET` | unset | `android` for the Android build only. |
+| `NEXT_PUBLIC_PRIVY_ANDROID_CLIENT_ID` | unset | The Privy app client for the **Android build** (read only when `NEXT_PUBLIC_BUILD_TARGET=android`). It is locked to the Android package, so the web build never passes it as its `clientId`. |
 | `NEXT_PUBLIC_DEV_SIGNER` | unset | `1` replaces Face ID with a random key in the tab's `sessionStorage`, for headless runs. A "Dev signer" badge is always on screen while it is set. Never set it in a deployment. |
 | `NEXT_PUBLIC_CHAIN_ID` | `10143` | Monad testnet; `143` for mainnet |
 | `NEXT_PUBLIC_RPC_URL` | viem's default for the chain | Read-only RPC (EIP-712 domains, permit nonces) |
@@ -66,17 +72,34 @@ Without it, the app is the offline demo and says so on every screen
 ("Demo mode · sample data, nothing is on chain"): the stub relayer's receipts
 are marked `simulated` and never link a made-up hash to the explorer.
 
-## Face ID accounts
+## Accounts
 
-[Mera](https://mera.category.xyz) is the entire account layer: no seed phrase,
-no extension, no custody backend.
+One interface (`AccountImplementation` in `src/lib/account/index.ts`), three
+implementations; the rest of the app never asks which one is in use:
+
+| Source | How you get in | What signs |
+|---|---|---|
+| `mera` | **Face ID**, the primary sign-up | A key derived from the passkey's PRF (below) |
+| `privy` | **Continue with email**, beneath Face ID: an email code, and Privy creates an embedded wallet on login (`createOnLogin: "users-without-wallets"`; the Privy dashboard leaves it off, so the client asks) | The embedded wallet, through Privy's `useSignTypedData`, with no Privy UI. `src/lib/account/privy.ts` wraps it as a viem account, and every signature is checked to recover to the wallet before it is used |
+| `dev` | `NEXT_PUBLIC_DEV_SIGNER=1` | A key in the tab's `sessionStorage` |
+
+All three sign the same EIP-712 payloads (`src/lib/actions.ts` is unchanged by
+which one is in use). Only email is offered: Google is off in the Privy app.
+The email sheet is ours (`components/email-login-sheet.tsx`); it never says
+wallet.
+
+### Face ID (Mera)
+
+[Mera](https://mera.category.xyz): no seed phrase, no extension, no custody
+backend.
 
 ```
 Face ID ─► passkey PRF (32 bytes) ─► BIP-39 entropy ─► m/44'/60'/0'/0/0 ─► Mera signing session ─► viem LocalAccount
 ```
 
-- `src/lib/account` exposes `createAccount()`, `signIn()`, `getAccount()`,
-  `authorize()` (what every Confirm calls) and `signOut()`.
+- `src/lib/account` exposes `createAccount()`, `continueWithEmail()`,
+  `signIn()`, `getAccount()`, `authorize()` (what every Confirm calls) and
+  `signOut()`.
 - Only public metadata is stored, in `localStorage`: the credential id, its
   transports, the rpId and the account's address. The PRF output and the key
   are never stored; every sign-in recomputes them.
@@ -118,37 +141,101 @@ is always offered before creating a second account.
 
 ## Screens
 
-| Route | What it is |
-|---|---|
-| `/` | Home: dollar balance with a local-currency equivalent, credit available, Send / Receive, the send-abroad promo, Send again, History |
-| `/onboard?next=…` | Create your account with Face ID, then back to `next` |
-| `/pay` | The raised Pay tab: scan a code (where the browser can), paste a link, or try a sample |
-| `/pay/[id]` | Checkout for a merchant link: Pay now, Pay in 4 (schedule and total interest shown), Subscribe; the limit and its reasons; Raise your limit; one Face ID; the receipt |
-| `/send` | Keypad, then a send link (`/claim#k=…&a=…&n=…`) shared with the share sheet or copied, then "Waiting to be claimed" |
-| `/claim` | Reads the link's fragment, which never reaches a server; Face ID to create or sign in; Claim; "Arrived" |
-| `/plans` | Pay in 4 schedules with instalment ticks and *Pay early*; subscriptions with *Cancel* |
-| `/activity` | Every receipt, grouped by day; *View receipt* opens the explorer |
-| `/cards`, `/profile` | Select card; name on links, local currency, sign out |
+Only the five tabs are full screens, under ref A's floating nav. Everything
+you *do* slides up as a `BottomSheet`, routed through the root layout's
+`@sheet` parallel route: from inside the app an intercepting route
+(`app/@sheet/(.)send` and so on) presents it over the current tab, which
+scales back behind it like iOS; a cold link (a checkout link from a merchant)
+opens the page itself, the sheet over a blurred tab. Back, the close button
+and a swipe down close it and restore the URL. The sheet lives in a host
+(`components/shell/sheet-host.tsx`) that outlives the route, so it springs
+out again even when the browser's Back removed it.
+
+| Route | Presentation | What it is |
+|---|---|---|
+| `/` | tab | Home (ref A): the lime balance card, quick transfer, recent activity |
+| `/insights` | tab | My spending, Expenses by category, and `?view=plans`: Pay in 4, subscriptions, paid off |
+| `/cards` | tab | Ref D's balance card with side squares, the three accounts, details |
+| `/activity` | tab | All activity, grouped by day, with filter chips and Filters |
+| `/profile` | tab | Who you are, how you sign in, settings, log out |
+| `/send` | full sheet | Ref A's transfer: who, from which account, the amount, the keypad; a link (`/claim#k=…`) or straight to a Polaris account |
+| `/receive` | half sheet | Your code and link for getting paid |
+| `/add` | half sheet | Ask, show your code, or claim a link |
+| `/pay` | full sheet | Scan a code, paste a link, or try a sample |
+| `/pay/[id]` | full sheet | Checkout (ref C): Pay now, Pay in 4 or Subscribe, the limit, Raise your limit |
+| `/claim` | full sheet | Reads the link's fragment, which never reaches a server; claim with one Face ID |
+| `/accounts` | half sheet | Select account (the card carousel); which one Home shows |
+| `/activity/[id]` | half sheet | Payment details and *View receipt*; an unclaimed send link can be cancelled here |
+| `/plans/[id]` | half, drags to full | Plan detail and *Pay early* |
+| `/credit` | full sheet | Credit line (ref B): active plans, upcoming payments |
+| `/credit/score` | full sheet | Credit score, line or candles, week by week |
+| `/notifications` | half sheet | Payments due, money in, links claimed |
+| `/settings` | half sheet | Name on links, local currency, log out, remove from this device |
+| `/onboard?next=…` | page | Three pages (ref B), then Face ID with *Continue with email* beneath |
+| `/gallery` | page | Every `@polaris/ui` component |
+
+Inside those: Confirm with Face ID (compact: it fits its content), the success
+receipt with its check-mark (half), Filters, and Continue with email. A sheet
+opened over another stacks above it, with its own dimmed backdrop.
 
 The buyer never reads *wallet, address, seed phrase, passkey, sign, approve,
 transaction, gas, MON, AUSD, USDC, token, blockchain, on-chain* or *Monad*. The
-only exception is the optional *Raise your limit* step, which says "wallet"
-because it is for people who already have one.
+exceptions are the optional *Raise your limit* step, which says "wallet"
+because it is for people who already have one, and Home's small "USD · AUSD"
+tag, which names what the dollars are held in (plan.md, "Words the buyer never
+sees").
+
+Pay in 4 charges nothing at checkout, as the contracts do: the merchant is paid
+from the credit pool, and payment 1 is due one interval after the plan opens
+(`PolarisLoanEngine.installmentDueAt(i) = startedAt + (i + 1) × interval`).
+$200 at 10% a year over four weeks is 4 × $50.38, $1.53 of interest.
+
+### From 1024px: the customer web
+
+The same routes render ref E's desktop layout from 1024px (`<html
+data-theme-lg="ref-e">`, `Adaptive` in the tabs layout, screens in
+`src/desktop/`): the lime canvas, the dark panel and the top nav, like the
+merchant web. Below 1024px nothing changes.
+
+| Route | From 1024px |
+|---|---|
+| `/` | Home: Balance / USD chart (line or candles, 1h to 1m), recent activity, the SEND / RECEIVE widget and your credit |
+| `/activity`, `/cards`, `/insights`, `/profile` | Pages in the frame |
+| `/plans` | Pay in 4: every plan with its ticks, subscriptions (a phone goes to `/insights?view=plans`) |
+| `/activity/[id]`, `/plans/[id]`, `/notifications` | Right Drawer |
+| `/send`, `/receive`, `/add`, `/pay`, `/claim`, `/accounts` | Centred Dialog |
+| `/credit`, `/credit/score`, `/settings` | Pages in the frame |
+| `/pay/[id]` | The checkout card on its own, under the wordmark |
+| `/onboard` | Sign-up beside the animated art |
+
+The desktop shell is `src/components/shell/desktop-shell.tsx`; the route
+sheets say how they present with `desktop` on `<RouteSheet>`.
+
+The sample book is marked: while balances, plans and activity come from
+`mock.ts` (`SAMPLE_DATA` in `src/lib/data`), every desktop page figure and
+summary card carries an amber **Sample** pill, and signed out the nav's pill
+reads "Sample account ···· 2451". The sample is a month of an ordinary life
+(about 45 payments, 8 of them in the last day), so the Home chart moves like
+the reference's. The stub relayer's writes are kept in the tab's
+`sessionStorage`, so a reload after paying or sending keeps them.
 
 ## Code map
 
 | Path | What it is |
 |---|---|
-| `src/lib/account/` | The Mera account layer, capability check, dev signer |
+| `src/lib/account/` | The account layer: one interface; Mera (Face ID), Privy (email) and the dev signer; capability check |
 | `src/lib/sign/` | EIP-712 builders for `PlanIntent`, `SubscribeIntent`, ERC-3009, ERC-2612, `Claim`, `Cancel`, `CancelSubscription`; domain reading (ERC-5267); nonce derivations |
 | `src/lib/actions.ts` | Each money action: build, sign, relay |
 | `src/lib/relayer.ts` | The relayer client: `POST {NEXT_PUBLIC_POLARIS_API_URL}/api/relay`, errors mapped to `RelayError` with the server's message for the buyer. Without the API, a local stub |
 | `src/lib/network.ts`, `src/lib/api.ts` | The network (contracts and EIP-712 domains) from Polaris for Business; the fetch helper |
 | `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
 | `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
-| `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data) without |
+| `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data, marked Sample) without |
 | `src/lib/underwriting.ts` | Pay in 4 credit: consent and link-proof signatures, the CRE underwriting request, waiting for the decision |
-| `src/components/` | The design system: buttons, cards, sheets, keypad, QR, tab bar |
+| `src/desktop/` | The desktop layouts (from 1024px): Home and its money widget, the pages, the checkout card, onboarding; `lib/series.ts` draws their charts |
+| `src/screens/`, `src/sheets/` | The five tabs, and every sheet with its route wrapper (`SendRoute`, `CheckoutRoute`…), which the pages in `app/(tabs)` (cold) and `app/@sheet` (intercepted) render |
+| `src/components/` | App pieces composed from `@polaris/ui`: the shell (stage, sheet host, nav), Confirm with Face ID, the success receipt, the email sheet, QR |
+| `src/lib/view.ts` | Figures the screens derive from the data layer (spending by category, the score week by week) |
 | `public/assets/` | Generated images, picked up as soon as they exist (see below) |
 
 ## Images
@@ -158,7 +245,8 @@ stand-in, so dropping the files in needs no code change:
 
 | Path | What it is | Until it exists |
 |---|---|---|
-| `public/assets/coin.png` | The 3D silver coin on the promo and claim cards (transparent PNG) | The drawn SVG coin |
+| `public/assets/coin.png` | The 3D coin on the claim card | — |
+| `public/lottie/onboarding-{1,2,3}.json` | The onboarding animations (played with lottie-react) | The glass renders in `public/assets/onboarding/`, floating |
 | `public/assets/avatars/<first name>.jpg` | A person's portrait, e.g. `marisol.jpg`, `tomas.jpg` (lower case, no accents) | Tinted initials |
 
 ## Not built yet

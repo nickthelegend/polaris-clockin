@@ -1,21 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { Button, IconDisc, toast } from "@polaris/ui";
+import { Copy, Smartphone } from "lucide-react";
 import { useHref } from "@/lib/browser";
-import { Icon } from "./icon";
 import { QrCode } from "./qr";
-import { Button, Card } from "./ui";
 
-type Reason = "no-webauthn" | "no-prf" | "insecure" | "host" | "unsupported" | "in-app";
+export type OpenOnPhoneReason = "no-webauthn" | "no-prf" | "insecure" | "host" | "unsupported" | "in-app";
 
-const COPY: Record<Reason, { title: string; body: string }> = {
+const COPY: Record<OpenOnPhoneReason, { title: string; body: string }> = {
   "no-webauthn": {
     title: "Open Polaris on your phone",
-    body: "This browser can't hold a Polaris account. Scan the code with your phone's camera and carry on there, with Face ID.",
+    body: "This browser can't hold a Face ID account. Scan the code with your phone's camera and carry on there.",
   },
   "no-prf": {
     title: "Open Polaris on your phone",
-    body: "This browser can't hold a Polaris account. Scan the code with your phone's camera and carry on there, with Face ID.",
+    body: "This browser can't hold a Face ID account. Scan the code with your phone's camera and carry on there.",
   },
   unsupported: {
     title: "Open Polaris on your phone",
@@ -31,45 +30,39 @@ const COPY: Record<Reason, { title: string; body: string }> = {
   },
   "in-app": {
     title: "Open in Safari or Chrome",
-    body: "This app's built-in browser can't use Face ID for Polaris. Tap ··· and choose Open in browser, or copy the link.",
+    body: "This app's built-in browser can't use Face ID. Tap ··· and choose Open in browser, or copy the link.",
   },
 };
 
-/** The friendly dead end: the same page, on a device that can hold an account. */
-export function OpenOnPhone({ reason = "no-webauthn" }: { reason?: Reason }) {
+/** The friendly dead end for Face ID: the same page, on a device that can hold an account. */
+export function OpenOnPhone({ reason = "no-webauthn", compact = false }: { reason?: OpenOnPhoneReason; compact?: boolean }) {
   const href = useHref();
-  const [copied, setCopied] = useState(false);
   const copy = COPY[reason];
-
   return (
-    <Card className="p-5 text-center">
-      <span className="mx-auto grid size-12 place-items-center rounded-full bg-pill text-fg">
-        <Icon name="phone" size={24} />
-      </span>
-      <h2 className="mt-4 font-display text-[22px] font-semibold tracking-[-0.03em]">{copy.title}</h2>
-      <p className="mx-auto mt-2 max-w-[32ch] text-[15px] text-muted">{copy.body}</p>
-      {href && reason !== "in-app" ? (
-        <div className="mt-5 flex justify-center">
-          <QrCode value={href} size={184} label="QR code that opens this page on your phone" />
-        </div>
+    <div className="flex flex-col items-center gap-3 text-center font-satoshi">
+      {!compact ? (
+        <IconDisc size="md" icon={<Smartphone />} />
+      ) : null}
+      <h3 className="text-[19px] font-medium tracking-[-0.015em]">{copy.title}</h3>
+      <p className="max-w-[34ch] text-[14px] leading-[1.45] text-ui-muted">{copy.body}</p>
+      {href && reason !== "in-app" && !compact ? (
+        <QrCode value={href} size={148} label="QR code that opens this page on your phone" className="mt-1" />
       ) : null}
       {href ? (
         <Button
-          variant="quiet"
-          size="md"
-          icon={copied ? "check" : "copy"}
-          className="mt-5"
+          variant="outline"
+          size="sm"
+          icon={<Copy />}
           onClick={() => {
             void navigator.clipboard?.writeText(href).then(
-              () => setCopied(true),
-              () => setCopied(false),
+              () => toast({ title: "Link copied", tone: "success" }),
+              () => toast({ title: "Copy the link from the address bar", tone: "info" }),
             );
           }}
         >
-          {copied ? "Link copied" : "Copy link"}
+          Copy link
         </Button>
       ) : null}
-      <p className="mt-4 text-[13px] text-muted">Works on iPhone (iOS 18+) and Android with Chrome.</p>
-    </Card>
+    </div>
   );
 }

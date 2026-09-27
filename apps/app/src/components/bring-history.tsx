@@ -1,18 +1,11 @@
 "use client";
 
+import { AdaptiveSheet, Button, DetailsList, ListGroup, ListRow, Sheet } from "@polaris/ui";
+import { Clock, Globe, ShieldCheck, Wallet } from "lucide-react";
 import { useState } from "react";
-import { usd } from "@/lib/money";
 import type { CreditLine } from "@/lib/data";
+import { usd } from "@/lib/money";
 import { bringHistory } from "@/lib/underwriting";
-import { Icon, type IconName } from "./icon";
-import { Sheet } from "./sheet";
-import { Button } from "./ui";
-
-const LOOKS_AT: Array<{ icon: IconName; text: string }> = [
-  { icon: "clock", text: "How long the wallet has been in use" },
-  { icon: "globe", text: "Where its money came from" },
-  { icon: "shield", text: "How long it has held dollars" },
-];
 
 /**
  * "Raise your limit": the one optional step that may say "wallet", because
@@ -20,68 +13,68 @@ const LOOKS_AT: Array<{ icon: IconName; text: string }> = [
  */
 export function BringHistorySheet({
   open,
-  onClose,
+  onOpenChange,
   credit,
 }: {
   open: boolean;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   credit: CreditLine | undefined;
 }) {
   const [state, setState] = useState<"idle" | "working" | "done">("idle");
+  // Each opening starts fresh.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setState("idle");
+  }
 
+  const done = state === "done" && credit;
   return (
-    <Sheet
+    <AdaptiveSheet
       open={open}
-      onClose={() => {
-        onClose();
-        if (state === "done") setState("idle");
-      }}
-      title={state === "done" ? "Your limit went up" : "Raise your limit"}
-      description={
-        state === "done"
-          ? undefined
-          : "Confirm with the wallet you already use. We read its history to raise your limit. Nothing moves from it."
-      }
+      onOpenChange={(next) => state !== "working" && onOpenChange(next)}
+      dismissible={state !== "working"}
+      snapPoints={["half", "full"]}
+      title={done ? "Your limit went up" : "Raise your limit"}
+      description={done ? undefined : "We read the history of a wallet you already use. Nothing moves from it."}
+      maxWidth={440}
     >
-      {state === "done" && credit ? (
-        <div>
-          <p className="tabular font-display text-[40px] font-bold tracking-[-0.045em]">{usd(credit.limit, { trim: true })}</p>
-          <p className="text-[15px] text-muted">is your Pay later limit now.</p>
-          <ul className="mt-4 flex flex-col gap-2">
-            {credit.reasons.slice(-3).map((r) => (
-              <li key={r.label} className="flex justify-between text-[15px]">
-                <span>{r.label}</span>
-                <span className="tabular text-positive">+{r.points}</span>
-              </li>
-            ))}
-          </ul>
-          <Button block className="mt-6" onClick={onClose}>
-            Back to checkout
+      <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-4 pt-1">
+        {done ? (
+          <>
+            <p className="ui-figure text-[40px] leading-none font-semibold tracking-[-0.035em]">{usd(credit.limit, { trim: true })}</p>
+            <p className="-mt-2 text-[15px] text-ui-muted">is your Pay later limit now.</p>
+            <DetailsList
+              size="sm"
+              items={credit.reasons.slice(-3).map((r) => ({ label: r.label, value: <span className="text-ui-up">+{r.points}</span> }))}
+            />
+          </>
+        ) : (
+          <>
+            <ListGroup label="What we look at">
+              <ListRow icon={<Clock />} title="How long it has been in use" />
+              <ListRow icon={<Globe />} title="Where its money came from" />
+              <ListRow icon={<ShieldCheck />} title="How long it has held dollars" />
+            </ListGroup>
+            {credit ? (
+              <p className="text-[14px] leading-[1.45] text-ui-muted">
+                New limits start at $200 and go up to {usd(credit.openingCap, { trim: true })}. Paying on time raises them from there.
+              </p>
+            ) : null}
+          </>
+        )}
+      </Sheet.Body>
+      <Sheet.Footer>
+        {done ? (
+          <Button variant="lime" size="lg" onClick={() => onOpenChange(false)}>
+            Done
           </Button>
-        </div>
-      ) : (
-        <div>
-          <p className="text-[14px] font-medium text-muted">What we look at</p>
-          <ul className="mt-3 flex flex-col gap-3">
-            {LOOKS_AT.map((l) => (
-              <li key={l.text} className="flex items-center gap-3 text-[15px]">
-                <span className="grid size-9 place-items-center rounded-full bg-pill">
-                  <Icon name={l.icon} size={18} />
-                </span>
-                {l.text}
-              </li>
-            ))}
-          </ul>
-          {credit ? (
-            <p className="mt-4 text-[14px] text-muted">
-              New limits start at $200 and go up to {usd(credit.openingCap, { trim: true })}. Paying on time raises them from there.
-            </p>
-          ) : null}
+        ) : (
           <Button
-            block
-            icon="wallet"
-            className="mt-6"
-            busy={state === "working"}
+            variant="lime"
+            size="lg"
+            icon={<Wallet />}
+            loading={state === "working"}
             disabled={credit?.historyLinked}
             onClick={async () => {
               setState("working");
@@ -93,15 +86,10 @@ export function BringHistorySheet({
               }
             }}
           >
-            {state === "working"
-              ? "Reading your history…"
-              : credit?.historyLinked
-                ? "History already linked"
-                : "Connect your wallet"}
+            {credit?.historyLinked ? "History already linked" : "Connect your wallet"}
           </Button>
-          <p className="mt-3 text-center text-[13px] text-muted">Your wallet only confirms it&apos;s yours. Nothing moves from it.</p>
-        </div>
-      )}
-    </Sheet>
+        )}
+      </Sheet.Footer>
+    </AdaptiveSheet>
   );
 }

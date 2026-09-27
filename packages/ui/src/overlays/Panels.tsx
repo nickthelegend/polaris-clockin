@@ -21,6 +21,8 @@ type PanelProps = {
   theme?: "dark" | "light" | "ref-e";
   /** Snap points when it becomes a BottomSheet below 768px. */
   sheetSnapPoints?: SnapPoint[];
+  /** Called once the close animation has finished and the panel has left the page. */
+  onClosed?: () => void;
   className?: string;
   children?: ReactNode;
 };
@@ -70,6 +72,7 @@ function DrawerPanel({
   dismissible = true,
   theme,
   size = "md",
+  onClosed,
   className,
   children,
 }: DrawerProps) {
@@ -84,7 +87,7 @@ function DrawerPanel({
   const labelled = Boolean(title) || !ariaLabel;
   return createPortal(
     <OverlayContext.Provider value={ctx}>
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={onClosed}>
         {open ? (
           <motion.div
             key="backdrop"
@@ -167,6 +170,7 @@ function DialogPanel({
   dismissible = true,
   theme,
   size = "md",
+  onClosed,
   className,
   children,
 }: DialogProps) {
@@ -181,7 +185,7 @@ function DialogPanel({
   const labelled = Boolean(title) || !ariaLabel;
   return createPortal(
     <OverlayContext.Provider value={ctx}>
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={onClosed}>
         {open ? (
           <motion.div
             key="backdrop"
@@ -242,6 +246,7 @@ function SheetFallback({
   dismissible = true,
   theme,
   snapPoints,
+  onClosed,
   className,
   children,
 }: PanelProps & { snapPoints: SnapPoint[] }) {
@@ -249,6 +254,7 @@ function SheetFallback({
     <BottomSheet
       open={open}
       onOpenChange={onOpenChange}
+      onClosed={onClosed}
       snapPoints={snapPoints}
       title={title}
       description={description}

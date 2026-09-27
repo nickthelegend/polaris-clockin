@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { Plans } from "./plans";
+import { PlansPage } from "@/screens/plans-page";
 
-export const metadata: Metadata = { title: "Plans" };
+export const metadata: Metadata = { title: "Pay in 4" };
 
-export default function PlansPage() {
-  return <Plans />;
+/** Pay in 4's page on a desktop; a phone keeps plans under Insights. */
+export default function Page() {
+  return <PlansPage />;
 }
