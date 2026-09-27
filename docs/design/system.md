@@ -309,9 +309,13 @@ ref E's layout and components.
   link that buyers can pay now, in 4 or monthly). Below it, outlined cards:
   customers this week, sales by mode, credit exposure with the Nansen
   reasons, Chainlink CRE collections and the Envio feed; the cards in a row
-  end together (the charts fill them). The chart's y axis is four round
-  labels spanning the line, its x labels fall on round times and the last
-  reads "Now". A merchant with no sales yet sees a dashed baseline with New
+  end together (the charts fill them). The line is one smooth curve, like
+  ref E: the running total since the chart's left edge (Gaussian-smoothed,
+  never dipping), so it starts at 0.00 and ends at "Now" on the headline
+  figure; the candles show the trailing-window total instead. The chart's y
+  axis is four round labels spanning the line (steps of 1, 1.5, 2, 2.5, 3, 4,
+  5, 6, 7.5 or 8 per power of ten, so the peak sits near the top), its x
+  labels fall on round times and the last reads "Now". A merchant with no sales yet sees a dashed baseline with New
   payment link and Preview inside the chart, and a three-step Getting
   started checklist instead of the cards.
 - **Payments, Links** (with the REQUEST widget), **Pay in 4** (the ledger,
