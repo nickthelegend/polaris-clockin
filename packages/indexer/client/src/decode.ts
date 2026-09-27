@@ -31,7 +31,7 @@ import type {
   ScoreEvent,
   Send,
   Subscription,
-} from "./types.js";
+} from "./types.ts";
 
 export const BIGINT_FIELDS = {
   Merchant: [

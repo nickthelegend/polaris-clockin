@@ -4,10 +4,10 @@
  * Polaris app. See ../README.md.
  */
 
-export { createIndexerClient, type IndexerClient, type IndexerClientOptions, type Page } from "./client.js";
-export { createTransport, IndexerError, serializeVariables, type FetchLike, type Request, type TransportOptions } from "./http.js";
-export * as documents from "./documents.js";
-export { BIGINT_FIELDS, decode, toBigInt } from "./decode.js";
+export { createIndexerClient, type IndexerClient, type IndexerClientOptions, type Page } from "./client.ts";
+export { createTransport, IndexerError, serializeVariables, type FetchLike, type Request, type TransportOptions } from "./http.ts";
+export * as documents from "./documents.ts";
+export { BIGINT_FIELDS, decode, toBigInt } from "./decode.ts";
 export {
   CHECK_TASKS_SIGNATURE,
   COLLECTION_ACTION,
@@ -19,7 +19,7 @@ export {
   REPORT_KIND_COLLECTIONS,
   type CollectionAction,
   type Task,
-} from "./cre.js";
+} from "./cre.ts";
 export {
   committed,
   failureReasonOf,
@@ -43,9 +43,9 @@ export {
   type WebhookEventDataMap,
   type WebhookEventType,
   type WebhookSession,
-} from "./webhooks.js";
-export { AUSD_DECIMALS, formatAmount, formatUsd, fromCents, toCents } from "./money.js";
-export { installmentSlice, thresholdFor } from "./loans.js";
-export { checksumAddress, keccak256Hex, sha256Hex } from "./hash.js";
-export { availableCredit, baseLimitOf, creditLimitOf, securedOnly, type CreditInputs, type CreditSettings } from "./credit.js";
-export * from "./types.js";
+} from "./webhooks.ts";
+export { AUSD_DECIMALS, formatAmount, formatUsd, fromCents, toCents } from "./money.ts";
+export { installmentSlice, thresholdFor } from "./loans.ts";
+export { checksumAddress, keccak256Hex, sha256Hex } from "./hash.ts";
+export { availableCredit, baseLimitOf, creditLimitOf, securedOnly, type CreditInputs, type CreditSettings } from "./credit.ts";
+export * from "./types.ts";

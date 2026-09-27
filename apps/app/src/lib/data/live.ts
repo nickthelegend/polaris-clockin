@@ -190,7 +190,8 @@ export const liveData: PolarisData = {
     const reasons = (status.decision?.explanation?.reasons ?? []).map((r) => ({
       label: r.text.replace(/ · [+\-−]?\d+$/, ""),
       points: r.points ?? 0,
-      source: r.provider ? (PROVIDER_NAMES[r.provider] ?? r.provider) : null,
+      // Named only when a provider supplied the fact; the chain itself carries just the facts.
+      source: r.provider ? (PROVIDER_NAMES[r.provider] ?? null) : null,
     }));
     return {
       limit,

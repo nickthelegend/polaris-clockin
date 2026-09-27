@@ -15,7 +15,7 @@
  * identical answer (consensusIdenticalAggregation).
  */
 
-import { DUE_CANDIDATES } from "./documents.js";
+import { DUE_CANDIDATES } from "./documents.ts";
 
 /** CollectionsReceiver task actions. */
 export const COLLECTION_ACTION = { COLLECT_INSTALLMENT: 1, CHARGE_SUBSCRIPTION: 2, LIQUIDATE: 3 } as const;

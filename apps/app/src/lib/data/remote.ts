@@ -81,6 +81,7 @@ export function toPaymentLink(s: PublicSession): PaymentLink {
       cancelUrl: s.cancelUrl,
       expiresAt: Date.parse(s.expiresAt),
       payLaterUnavailable: s.modes.includes("later") && !s.payIn4?.available ? (s.payIn4?.reason ?? "Pay in 4 isn't available right now.") : null,
+      preferredMode: s.modes[0] === "subscribe" ? "subscription" : (s.modes[0] ?? null),
       payment: s.payment,
     },
   };

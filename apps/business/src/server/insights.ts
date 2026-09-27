@@ -137,7 +137,8 @@ async function underwritingReasons(plans: Plan[]): Promise<Insights["underwritin
       tally.set(text, {
         text,
         points: Math.max(prev?.points ?? 0, r.points),
-        source: PROVIDER_LABEL[r.provider ?? ""] ?? "Polaris",
+        // The provider, when the explanation knows it (attributed facts); the chain carries only the facts.
+        source: PROVIDER_LABEL[r.provider ?? ""] ?? null,
         count: (prev?.count ?? 0) + 1,
       });
     }

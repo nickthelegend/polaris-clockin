@@ -483,7 +483,7 @@ function ExposurePanel({ overview, plans, sample, className }: { overview?: Over
                   <li key={r.text} className="flex items-center justify-between gap-3 text-[13.5px]">
                     <span className="min-w-0 truncate">{r.text}</span>
                     <span className="flex shrink-0 items-center gap-2">
-                      <span className="text-[12px] text-ui-muted">{r.source}</span>
+                      {r.source ? <span className="text-[12px] text-ui-muted">{r.source}</span> : null}
                       <StatusPill tone="lime" size="sm" className="ui-figure h-6 px-2 text-[12px]">
                         +{r.points}
                       </StatusPill>

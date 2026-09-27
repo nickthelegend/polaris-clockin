@@ -228,7 +228,7 @@ export type UnderwritingReason = {
   /** Points toward the score (negative lowers it). */
   points: number;
   /** Where the fact came from. */
-  source: "Nansen" | "Zerion" | "Polaris";
+  source: "Nansen" | "Zerion" | "Polaris" | null;
 };
 
 export type Underwriting = {

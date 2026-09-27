@@ -41,6 +41,18 @@ export type Paid = { mode: PayMode; receipt: RelayReceipt; at: number };
 
 export const MODE_LABEL: Record<PayMode, string> = { now: "Pay now", later: "Pay in 4", subscription: "Subscribe" };
 
+/** "Studio · Lisbon", from what is known about the merchant (a real session carries neither). */
+export function merchantLine(link: PaymentLink): string {
+  return [link.merchant.category, link.merchant.city].filter(Boolean).join(" · ");
+}
+
+/** The mode a checkout opens on: the one the merchant's page chose, when the link offers it. */
+export function initialMode(link: PaymentLink): PayMode {
+  const modes = modesOf(link);
+  const preferred = link.session?.preferredMode;
+  return preferred && modes.includes(preferred) ? preferred : (modes[0] ?? "now");
+}
+
 export function modesOf(link: PaymentLink): PayMode[] {
   const modes: PayMode[] = [];
   if (link.modes.now) modes.push("now");
@@ -58,7 +70,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
   const credit = useData(() => getCreditLine(owner), [owner]);
   const now = useNow();
   const modes = modesOf(link);
-  const [mode, setMode] = useState<PayMode>(modes[0] ?? "now");
+  const [mode, setMode] = useState<PayMode>(() => initialMode(link));
   const [confirming, setConfirming] = useState<PayMode | null>(null);
   const [paid, setPaid] = useState<Paid | null>(null);
   const [raising, setRaising] = useState(false);
@@ -154,7 +166,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
       <ScreenHeader
         variant="arrow"
         title={link.merchant.name}
-        subtitle={`${link.merchant.category} · ${link.merchant.city}`}
+        subtitle={merchantLine(link) || "Verified business"}
         onBack={close}
         action={<IconButton label="Share this link" icon={<Share2 />} tone="ink" onClick={() => void share()} />}
         className="-mt-2 shrink-0 px-5"
@@ -223,10 +235,12 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
             key={m}
             variant={m === "now" ? "lime" : "purple"}
             size="lg"
-            disabled={short(m) || (m === "later" && overLimit)}
+            disabled={short(m)}
             onClick={() => {
               setMode(m);
-              setConfirming(m);
+              // Over the limit, Pay in 4 first shows the limit and the way to raise it.
+              if (m === "later" && overLimit) setRaising(true);
+              else setConfirming(m);
             }}
           >
             {actions.length === 1 ? `${MODE_LABEL[m]} ${usd(needFor(m), { trim: true })}` : MODE_LABEL[m]}

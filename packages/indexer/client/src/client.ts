@@ -4,10 +4,10 @@
  * case; the indexer stores them lowercase.
  */
 
-import { dueCandidatesRequest, parseDueCandidates, type Task } from "./cre.js";
-import { decode, type Raw } from "./decode.js";
-import * as D from "./documents.js";
-import { createTransport, IndexerError, type Request, type TransportOptions } from "./http.js";
+import { dueCandidatesRequest, parseDueCandidates, type Task } from "./cre.ts";
+import { decode, type Raw } from "./decode.ts";
+import * as D from "./documents.ts";
+import { createTransport, IndexerError, type Request, type TransportOptions } from "./http.ts";
 import type {
   Activity,
   Buyer,
@@ -32,8 +32,8 @@ import type {
   Send,
   Subscription,
   SubscriptionStatus,
-} from "./types.js";
-import { committed } from "./webhooks.js";
+} from "./types.ts";
+import { committed } from "./webhooks.ts";
 
 export type IndexerClientOptions = TransportOptions & {
   /** The chain whose `_meta` row to read (default 10143, Monad testnet). */

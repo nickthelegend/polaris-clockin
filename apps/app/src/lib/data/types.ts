@@ -173,6 +173,8 @@ export type CheckoutSessionInfo = {
   expiresAt: number;
   /** Why Pay in 4 isn't offered, in the buyer's words, when it isn't. */
   payLaterUnavailable: string | null;
+  /** The way to pay the merchant's page chose (the session's first mode): the checkout opens on it. */
+  preferredMode: "now" | "later" | "subscription" | null;
   /** How it was paid, once the chain says so. */
   payment: {
     mode: "now" | "later" | "subscribe";

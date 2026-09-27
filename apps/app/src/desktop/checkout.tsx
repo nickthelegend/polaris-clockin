@@ -31,7 +31,7 @@ import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
 import { useNow } from "@/lib/use-now";
 import { n } from "@/lib/view";
-import { MODE_LABEL, modesOf, type Paid, Receipt } from "@/sheets/checkout";
+import { initialMode, MODE_LABEL, merchantLine, modesOf, type Paid, Receipt } from "@/sheets/checkout";
 
 /**
  * A payment link from 1024px: one centred card on the framed canvas, under
@@ -49,7 +49,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
   const now = useNow();
   const modes = modesOf(link);
   // The first mode the link offers, Pay now when it can, as on the phone.
-  const [mode, setMode] = useState<PayMode>(modes[0] ?? "now");
+  const [mode, setMode] = useState<PayMode>(() => initialMode(link));
   const [confirming, setConfirming] = useState(false);
   const [paid, setPaid] = useState<Paid | null>(null);
   const [raising, setRaising] = useState(false);
@@ -106,7 +106,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
                 <BadgeCheck aria-label="Verified business" size={20} strokeWidth={1.75} className="shrink-0 text-ui-lime-text" />
               </p>
               <p className="mt-1 truncate text-[15px] text-ui-muted">
-                {link.merchant.category} · {link.merchant.city}
+                {merchantLine(link) || "Verified business"}
               </p>
             </div>
           </div>

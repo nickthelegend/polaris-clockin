@@ -24,10 +24,10 @@
  * (Monad finality), a block is final before it is indexed.
  */
 
-import { checksumAddress, sha256Hex } from "./hash.js";
-import { installmentSlice } from "./loans.js";
-import { formatAmount } from "./money.js";
-import type { Activity, CanceledBy, InstallmentFailureReason, ReasonAction, WebhookKind } from "./types.js";
+import { checksumAddress, sha256Hex } from "./hash.ts";
+import { installmentSlice } from "./loans.ts";
+import { formatAmount } from "./money.ts";
+import type { Activity, CanceledBy, InstallmentFailureReason, ReasonAction, WebhookKind } from "./types.ts";
 
 /* ── polarispay-sdk's event types (kept equal to its events.ts by test/webhooks.test.ts) ── */
 
