@@ -106,6 +106,17 @@ export function formatUsdMicros(micros: bigint): string {
   return formatUsd(microsToCents(micros));
 }
 
+/**
+ * A figure the SDK itself formatted ("50.38", "0.00") as "$50.38". Unlike
+ * `formatUsd(toCents(…))` it accepts zero: a plan's interest or a tiny
+ * instalment can round to "0.00", and a price tag must not throw on it.
+ */
+export function formatUsdAmount(value: string): string {
+  const match = /^(\d+)\.(\d{2})$/.exec(value);
+  if (!match) throw invalidRequest("invalid_amount", `Expected a two-decimal amount like "50.38", got ${JSON.stringify(value)}.`);
+  return formatUsd(BigInt(match[1]!) * 100n + BigInt(match[2]!));
+}
+
 function normalise(input: AmountInput, param: string): string {
   if (typeof input === "number") {
     if (!Number.isFinite(input)) {
@@ -136,7 +147,9 @@ const YEAR = 365 * DAY;
 /**
  * Pay in 4 as PolarisLoanEngine prices it: simple interest at
  * `INTEREST_RATE_BPS` (10% APR), pro-rated over the plan's length, charged to
- * the buyer and never the merchant. The merchant is paid in full at checkout.
+ * the buyer and never the merchant. The merchant is paid in full at checkout;
+ * the buyer pays nothing then, and the first instalment falls due one
+ * interval later.
  */
 export const PAY_IN_4 = {
   installments: 4,
@@ -147,7 +160,7 @@ export const PAY_IN_4 = {
 } as const;
 
 export type PayIn4Options = {
-  /** Number of instalments, the first due today. Default 4. */
+  /** Number of instalments. Default 4. The first falls due one interval after checkout. */
   installments?: number;
   /** Seconds between instalments. Default one week. */
   intervalSeconds?: number;
@@ -158,11 +171,19 @@ export type PayIn4Options = {
 export type PayIn4Installment = {
   /** 1-based. */
   index: number;
-  /** "50.38", rounded half up to the cent for display. */
+  /**
+   * "50.38", for display. Each is the step between two rungs of the ladder
+   * rounded half up to the cent, so the displayed instalments always add up
+   * to the displayed `total`, and each is within a cent of `amountBaseUnits`.
+   */
   amount: string;
-  /** Exact, in AUSD base units: what the loan engine will draw. */
+  /** Exact, in AUSD base units: what the loan engine will draw (`thresholdFor(index) - thresholdFor(index - 1)`). */
   amountBaseUnits: bigint;
-  /** Seconds from checkout until it's due. The first is due today (0). */
+  /**
+   * Seconds from checkout until it's due: `index × intervalSeconds`, as
+   * `PolarisLoanEngine.installmentDueAt` dates it. Nothing is due at checkout,
+   * so the first is one interval out (a week, by default).
+   */
   dueInSeconds: number;
 };
 
@@ -171,7 +192,7 @@ export type PayIn4Quote = {
   /** Total interest over the plan, to the cent: "1.53". */
   interest: string;
   total: string;
-  /** What "4 × $X" shows: the first instalment, to the cent. */
+  /** What "4 × $X" shows: the first instalment, to the cent. Instalments differ by at most one base unit. */
   each: string;
   installments: PayIn4Installment[];
   aprBps: number;
@@ -180,12 +201,26 @@ export type PayIn4Quote = {
 };
 
 /**
+ * Cumulative amount repaid once `k` of `count` instalments are complete:
+ * `PolarisLoanEngine.thresholdFor`, rounded up, with the last rung exactly
+ * the total owed. Every instalment is the step between two rungs, so the
+ * schedule quoted here is the one the keeper collects, unit for unit.
+ */
+function thresholdFor(totalOwed: bigint, k: bigint, count: bigint): bigint {
+  if (k === 0n) return 0n;
+  if (k >= count) return totalOwed;
+  return (totalOwed * k + count - 1n) / count;
+}
+
+/**
  * Quote Pay in 4 exactly as the loan engine computes it, in base units:
  *
- *   interest = principal × aprBps × (installments × interval) / (10 000 × 365 days)
- *   each     = total / installments   (the last absorbs the remainder)
+ *   interest      = principal × aprBps × (installments × interval) / (10 000 × 365 days)
+ *   thresholdFor k = ceil(total × k / installments), and total at k = installments
+ *   instalment i  = thresholdFor(i) − thresholdFor(i − 1), due i × interval after checkout
  *
- * $200 over four weekly instalments at 10% is $1.53 of interest: 4 × $50.38.
+ * $200 over four weekly instalments at 10% is $1.53 of interest: 4 × $50.38,
+ * the first a week after checkout. Nothing is paid at checkout.
  */
 export function quotePayIn4(amount: AmountInput, options: PayIn4Options = {}): PayIn4Quote {
   const count = options.installments ?? PAY_IN_4.installments;
@@ -206,15 +241,19 @@ export function quotePayIn4(amount: AmountInput, options: PayIn4Options = {}): P
   const term = n * BigInt(interval);
   const interest = (principal * BigInt(aprBps) * term) / (10_000n * BigInt(YEAR));
   const total = principal + interest;
-  const each = total / n;
 
   const installments: PayIn4Installment[] = Array.from({ length: count }, (_, i) => {
-    const units = i === count - 1 ? total - each * (n - 1n) : each;
+    const k = BigInt(i + 1);
+    const upper = thresholdFor(total, k, n);
+    const lower = thresholdFor(total, k - 1n, n);
     return {
       index: i + 1,
-      amount: formatCents(microsToCents(units)),
-      amountBaseUnits: units,
-      dueInSeconds: i * interval,
+      // Rounding the running total, not each instalment on its own, keeps
+      // the rows summing to the total shown: $189 at 10% is 190.45, which
+      // four separately rounded 47.61s would miss by a cent.
+      amount: formatCents(microsToCents(upper) - microsToCents(lower)),
+      amountBaseUnits: upper - lower,
+      dueInSeconds: (i + 1) * interval,
     };
   });
 

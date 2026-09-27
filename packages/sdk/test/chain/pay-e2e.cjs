@@ -7,18 +7,23 @@
  * (builds the SDK, then runs this with `hardhat run` from packages/contracts,
  * on Hardhat's in-process network: no node to start, nothing public.)
  *
- * It proves three things the unit tests can only mock:
+ * It proves four things the unit tests can only mock:
  *   1. pay() from a wallet that holds gas settles the order on chain.
  *   2. pay() with a relayUrl settles it for a buyer holding ZERO native gas:
  *      the buyer only signs, a relayer account submits.
  *   3. The relayer can't redirect that signature to another merchant.
+ *   4. quotePayIn4 is the schedule PolarisLoanEngine actually opens: the same
+ *      total, the same instalment on every rung of the ladder, the same due
+ *      times, and nothing due at checkout.
+ *
+ * POLARIS_SDK_DIST points it at another build (to check an older SDK).
  */
 
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const hre = require(require.resolve("hardhat", { paths: [process.cwd()] }));
-const sdk = require(path.join(__dirname, "..", "..", "dist", "cjs", "index.js"));
+const sdk = require(process.env.POLARIS_SDK_DIST ? path.resolve(process.env.POLARIS_SDK_DIST) : path.join(__dirname, "..", "..", "dist", "cjs", "index.js"));
 
 const { ethers } = hre;
 const AUSD = (n) => ethers.parseUnits(String(n), 6);
@@ -136,7 +141,74 @@ async function main() {
   );
   console.log("  ✓ a relayer can't redirect the buyer's signature to another merchant");
 
+  // 4. Pay in 4: the SDK's quote against loans the engine really opens.
+  await payIn4MatchesTheEngine(ausd);
+
   console.log("\npolarispay-sdk e2e on a local chain: all passed");
+}
+
+/**
+ * Open real loans on PolarisLoanEngine and read their schedule back: the
+ * ladder (thresholdFor), the due times (installmentDueAt), and what is due
+ * right after origination. Every case uses its own borrower, so each starts
+ * from the $200 opening line.
+ */
+async function payIn4MatchesTheEngine(ausd) {
+  const signers = await ethers.getSigners();
+  const [owner, , merchant] = signers;
+  const scores = await (await ethers.getContractFactory("ScoreManager")).deploy(owner.address);
+  const engine = await (await ethers.getContractFactory("PolarisLoanEngine")).deploy(
+    owner.address,
+    await ausd.getAddress(),
+    await scores.getAddress(),
+    owner.address,
+    0,
+    60, // the shortest interval the engine allows, for minute-long demo plans
+  );
+  await scores.setWriter(await engine.getAddress(), true);
+  await engine.setOriginator(owner.address, true);
+  await ausd.mint(owner.address, AUSD(100_000));
+  await ausd.connect(owner).approve(await engine.getAddress(), AUSD(100_000));
+  await engine.fund(AUSD(100_000));
+
+  const DAY = 86_400;
+  const cases = [
+    { amount: "150.00" },
+    { amount: "189.00" },
+    { amount: "180.00", installments: 3, intervalSeconds: 14 * DAY },
+    { amount: "97.13", installments: 11, intervalSeconds: DAY },
+    { amount: "19.99", installments: 7, intervalSeconds: 60 },
+    { amount: "1.03", installments: 24, intervalSeconds: 3_600 },
+    { amount: "1.00", installments: 1, intervalSeconds: 365 * DAY },
+  ];
+  let borrowerIndex = 6;
+  for (const c of cases) {
+    const borrower = signers[borrowerIndex++];
+    const quote = sdk.quotePayIn4(c.amount, { installments: c.installments, intervalSeconds: c.intervalSeconds });
+    const count = quote.installments.length;
+    const label = `${c.amount} × ${count} every ${quote.intervalSeconds}s`;
+    await ausd.mint(borrower.address, AUSD(1_000));
+    await ausd.connect(borrower).approve(await engine.getAddress(), AUSD(1_000));
+
+    await (await engine.createLoan(borrower.address, merchant.address, AUSD(c.amount), count, quote.intervalSeconds)).wait();
+    const id = await engine.loanCount();
+    const loan = await engine.getLoan(id);
+
+    const quotedTotal = quote.installments.reduce((sum, i) => sum + i.amountBaseUnits, 0n);
+    assert.equal(loan.totalOwed, quotedTotal, `${label}: total owed`);
+    assert.equal(await engine.installmentAmount(id), quote.installments[0].amountBaseUnits, `${label}: first instalment`);
+    assert.equal(await engine.isInstallmentDue(id), false, `${label}: nothing is due at checkout`);
+    for (let i = 0; i < count; i++) {
+      const step = (await engine.thresholdFor(id, i + 1)) - (await engine.thresholdFor(id, i));
+      assert.equal(step, quote.installments[i].amountBaseUnits, `${label}: instalment ${i + 1} amount`);
+      const due = (await engine.installmentDueAt(id, i)) - loan.startedAt;
+      assert.equal(Number(due), quote.installments[i].dueInSeconds, `${label}: instalment ${i + 1} due time`);
+    }
+    // The rows shown to the buyer add up to the total shown.
+    const shownCents = quote.installments.reduce((sum, i) => sum + BigInt(i.amount.replace(".", "")), 0n);
+    assert.equal(shownCents, BigInt(quote.total.replace(".", "")), `${label}: displayed rows sum to the displayed total`);
+  }
+  console.log(`  ✓ quotePayIn4 matches ${cases.length} loans opened on PolarisLoanEngine: ladder, due times, nothing due at checkout`);
 }
 
 main().catch((err) => {

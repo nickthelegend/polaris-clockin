@@ -31,6 +31,12 @@ export type FakeWalletOptions = Partial<ChainState> & {
   /** Sign with this key instead of the account's (a lying wallet). */
   signWith?: BaseWallet;
   rejectSignature?: boolean;
+  /** The buyer declines the network switch (4001). */
+  rejectSwitch?: boolean;
+  /** The buyer declines adding the network (4001). */
+  rejectAddChain?: boolean;
+  /** The wallet accepts the switch but stays where it was. */
+  ignoreSwitch?: boolean;
   knownChains?: number[];
 };
 
@@ -104,10 +110,12 @@ export function createFakeWallet(tokenAddress: string, paymentsAddress: string, 
         case "wallet_switchEthereumChain": {
           const id = Number.parseInt((p[0] as { chainId: string }).chainId, 16);
           if (!knownChains.has(id)) throw Object.assign(new Error("Unrecognized chain ID"), { code: 4902 });
-          state.chainId = id;
+          if (options.rejectSwitch) throw Object.assign(new Error("User rejected the request."), { code: 4001 });
+          if (!options.ignoreSwitch) state.chainId = id;
           return null;
         }
         case "wallet_addEthereumChain": {
+          if (options.rejectAddChain) throw Object.assign(new Error("User rejected the request."), { code: 4001 });
           const id = Number.parseInt((p[0] as { chainId: string }).chainId, 16);
           knownChains.add(id);
           state.chainId = id;

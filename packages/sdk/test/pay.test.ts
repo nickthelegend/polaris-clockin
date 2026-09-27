@@ -1,7 +1,7 @@
 import { Interface, Signature, TypedDataEncoder, Wallet, getAddress, keccak256, solidityPacked, verifyTypedData } from "ethers";
 import { describe, expect, it, vi } from "vitest";
 
-import { AUSD, MONAD_TESTNET, type PolarisChain } from "../src/chains.js";
+import { AUSD, MONAD_TESTNET, SEPOLIA, type PolarisChain } from "../src/chains.js";
 import { createPolaris } from "../src/client.js";
 import { PolarisError } from "../src/errors.js";
 import {
@@ -117,6 +117,42 @@ describe("pay(): the wallet sends payWithAuthorization", () => {
         nativeCurrency: { name: "Monad", symbol: "MON", decimals: 18 },
       },
     ]);
+  });
+
+  it("asks the buyer to switch network, not 'You cancelled', when they decline the switch", async () => {
+    const fake = createFakeWallet(AUSD.monadTestnet, PAYMENTS, { chainId: 1, rejectSwitch: true });
+    const result = await client(fake.provider).pay({ merchant: MERCHANT, amount: "2.00", orderId: "o-2a" });
+    expect(result).toMatchObject({ ok: false, error: "Switch your wallet to Monad Testnet to pay." });
+    const cause = result.cause as PolarisError;
+    expect(cause).toBeInstanceOf(PolarisError);
+    expect(cause).toMatchObject({ type: "wallet_error", code: "wrong_chain" });
+    expect((cause as { cause?: { code?: number } }).cause?.code).toBe(4001);
+    expect(fake.methods()).not.toContain("eth_signTypedData_v4");
+  });
+
+  it("asks the buyer to switch network when they decline adding it", async () => {
+    const fake = createFakeWallet(AUSD.monadTestnet, PAYMENTS, { chainId: 1, knownChains: [1], rejectAddChain: true });
+    const result = await client(fake.provider).pay({ merchant: MERCHANT, amount: "2.00", orderId: "o-2b" });
+    expect(result).toMatchObject({ ok: false, error: "Switch your wallet to Monad Testnet to pay." });
+    expect((result.cause as PolarisError).code).toBe("wrong_chain");
+    expect(fake.methods()).not.toContain("eth_signTypedData_v4");
+  });
+
+  it("asks the buyer to switch network when the wallet stays on the wrong one", async () => {
+    const fake = createFakeWallet(AUSD.monadTestnet, PAYMENTS, { chainId: 1, ignoreSwitch: true });
+    const result = await client(fake.provider).pay({ merchant: MERCHANT, amount: "2.00", orderId: "o-2c" });
+    expect(result).toMatchObject({ ok: false, error: "Switch your wallet to Monad Testnet to pay." });
+    expect((result.cause as PolarisError).code).toBe("wrong_chain");
+    expect(fake.methods()).not.toContain("eth_signTypedData_v4");
+  });
+
+  it("asks for the network in the 0.2 flows too, before any approval", async () => {
+    const fake = createFakeWallet(SEPOLIA.stablecoin, SEPOLIA.payments, { chainId: 1, rejectSwitch: true });
+    const legacy = createPolaris({ chain: SEPOLIA, provider: fake.provider });
+    const result = await legacy.pay({ merchant: MERCHANT, amount: "2.00", orderId: "o-2d" }); // Sepolia: approve, then pay
+    expect(result).toMatchObject({ ok: false, error: "Switch your wallet to Sepolia to pay." });
+    expect((result.cause as PolarisError).code).toBe("wrong_chain");
+    expect(fake.sent).toHaveLength(0);
   });
 
   it("stops before any signature when the order is already paid", async () => {
