@@ -104,12 +104,19 @@ export function DataModeNotice({ empty, className }: { empty: boolean; className
       </Notice>
     );
   }
-  // Development only: compiled out of production builds.
+  // Development only: compiled out of production builds. A small pill in the
+  // corner, so the pages keep their layout in screenshots; every card still
+  // carries its Sample chip.
   if (process.env.NODE_ENV === "development" && sample.reason === "mock") {
     return (
-      <Notice tone="warn" className={cn("mb-5", className)} icon={<Sparkles />} title="Development mock session">
-        Sample data in the browser, for screenshots. Nothing here talks to the API.
-      </Notice>
+      <p
+        role="note"
+        title="Sample data in the browser, for screenshots. Nothing here talks to the API."
+        className="fixed bottom-3 left-3 z-40 flex items-center gap-1.5 rounded-full bg-ui-pill-amber/90 py-1.5 pr-3 pl-2.5 text-[12px] font-medium text-ui-pill-amber-text backdrop-blur"
+      >
+        <Sparkles aria-hidden size={13} strokeWidth={1.75} />
+        Dev mock session
+      </p>
     );
   }
   if (sample.reason === "server") {

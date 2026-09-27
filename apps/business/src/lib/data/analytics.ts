@@ -186,7 +186,7 @@ export type SalesSeries = {
   count: number;
 };
 
-/** Paid sales over a timeframe as a rolling-window line, with its total and change. */
+/** Paid sales over a timeframe as a smoothed rolling-window line, with its total and change. */
 export function salesSeries(payments: Payment[], frame: SeriesFrame, { mode, now = Date.now() }: { mode?: PayMode; now?: number } = {}): SalesSeries {
   const { span, step, window } = SERIES_FRAMES[frame];
   const end = Math.floor(now / step) * step + step;
@@ -206,15 +206,21 @@ export function salesSeries(payments: Payment[], frame: SeriesFrame, { mode, now
     } else if (e.t > start - span && e.t <= start) prev += e.cents;
   }
 
+  // Each sale rises and falls as a smooth, causal hump (a gamma kernel that
+  // peaks `tau` after the sale and integrates to `window`), so every point is
+  // the trailing-window total, smoothed: no steps, and nothing from the future.
+  const tau = window / 3;
   const n = Math.round(span / step);
   const points: { t: number; value: number }[] = [];
-  let lo = 0;
-  let hi = 0;
-  let sum = 0;
+  let first = 0;
   for (let i = 0; i <= n; i++) {
     const t = start + i * step;
-    while (hi < events.length && events[hi]!.t <= t) sum += events[hi++]!.v;
-    while (lo < hi && events[lo]!.t <= t - window) sum -= events[lo++]!.v;
+    while (first < events.length && events[first]!.t < t - 10 * tau) first++;
+    let sum = 0;
+    for (let j = first; j < events.length && events[j]!.t <= t; j++) {
+      const x = (t - events[j]!.t) / tau;
+      sum += events[j]!.v * 3 * x * Math.exp(-x);
+    }
     points.push({ t, value: Math.max(0, Math.round(sum * 100) / 100) });
   }
 
