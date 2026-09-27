@@ -308,6 +308,21 @@ describe("payouts", () => {
     expect(paid?.data).toMatchObject({ amount: "25.00", destination, automatic: false, chainId: 31337 });
   });
 
+  it("refuses a withdrawal below the relayer's minimum with a clear message, before anything is signed or sent", async () => {
+    signIn({ userId: merchant.userId, walletAddress: merchant.account.address, walletId: "wal_1" });
+    const res = await json(
+      await withdrawRoute(
+        request("POST", "/api/payouts", {
+          body: { amountCents: 5, destination: "0x5555555555555555555555555555555555555555", authorization: { validAfter: "0", validBefore: inSeconds(1800), nonce: `0x${"44".repeat(32)}`, signature: `0x${"11".repeat(65)}` } },
+        }),
+        params({}),
+      ),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({ code: "amount_too_small", message: "Withdraw at least $0.10." });
+    expect(env.chain.relayed).toHaveLength(0);
+  });
+
   it("refuses a withdrawal signed for another destination", async () => {
     const validBefore = inSeconds(1800);
     const nonce = `0x${"43".repeat(32)}` as Hex;

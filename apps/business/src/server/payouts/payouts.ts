@@ -107,6 +107,8 @@ export async function withdrawSigned(input: {
 }): Promise<PayoutRecord> {
   const chain = requireChain();
   const value = centsToUnits(input.amountCents);
+  const min = getConfig().relayerLimits.minTransferUnits;
+  if (value < min) throw new HttpError(400, "amount_too_small", `Withdraw at least $${(Number(min) / 1e6).toFixed(2)}.`);
   const validAfter = BigInt(input.authorization.validAfter);
   const validBefore = BigInt(input.authorization.validBefore);
   const nowS = BigInt(Math.floor(Date.now() / 1000));

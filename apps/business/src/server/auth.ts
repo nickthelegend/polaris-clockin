@@ -381,7 +381,7 @@ export function withCreCallback<Ctx = unknown>(handler: (req: Request, body: str
     const check = verifyCreSignature(secret, body, req.headers.get("polaris-signature"), Math.floor(Date.now() / 1000));
     if (!check.ok) throw new HttpError(401, "bad_signature", `The callback's signature didn't verify: ${check.reason}.`);
     return body;
-  }, handler);
+  }, handler, { limit: LIMITS.publicPerIp });
 }
 
 /** CORS preflight for the cross-origin routes. */
