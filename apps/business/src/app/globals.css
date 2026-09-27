@@ -5,11 +5,11 @@
 /*
   POLARIS FOR BUSINESS
   ────────────────────
-  Dark, in the mobile app's language (docs/design/system.md, "Web dashboard"):
-  the canvas and surface tokens, Satoshi, one lime for what you press, pastel
-  stat cards and the glass renders for colour. Every colour, radius and font
-  comes from @polaris/ui; this file adds only the monospace face, the page
-  ground and the landing page's reveal motion.
+  Ref E (docs/design/refs-v2/ref-e-lumatrade.png, docs/design/system.md): from
+  1280px the app is a dark rounded panel floating on a lime canvas; below it
+  the dark panel is full bleed. <html data-theme="ref-e"> sets the tokens.
+  Every colour, radius and font comes from @polaris/ui; this file adds only
+  the monospace face, the page ground and the landing page's reveal motion.
 */
 
 @theme {
@@ -27,8 +27,15 @@ body {
   min-height: 100dvh;
 }
 
+/* The lime canvas shows past the panel (and on overscroll) from 1280px. */
+@media (min-width: 1280px) {
+  html {
+    background-color: var(--ui-frame);
+  }
+}
+
 ::selection {
-  background: rgb(156 239 94 / 0.32);
+  background: rgb(176 201 86 / 0.36);
   color: #fff;
 }
 
@@ -43,7 +50,7 @@ body {
 
 /* A soft lime and violet glow behind heroes, drawn in CSS (no image). */
 .glow-lime {
-  background: radial-gradient(closest-side, rgb(156 239 94 / 0.22), transparent 70%);
+  background: radial-gradient(closest-side, rgb(176 201 86 / 0.18), transparent 70%);
 }
 .glow-violet {
   background: radial-gradient(closest-side, rgb(142 92 240 / 0.26), transparent 70%);

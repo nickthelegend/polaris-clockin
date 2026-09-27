@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge, Button, Card, EmptyState, ErrorState, Notice, cn, type CardProps } from "@polaris/ui";
+import { Button, EmptyState, ErrorState, Notice, PanelCard, StatusPill, cn, type PanelCardProps } from "@polaris/ui";
 import { RotateCcw, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
@@ -8,50 +8,25 @@ import { useEffect, useState, type ReactNode } from "react";
 import { formatAgo } from "@/lib/data/format";
 import { useSample, type QueryState } from "@/lib/session";
 
-/** The chip on every card and row that shows sample data. */
+/** The chip on every card and row that shows sample data: ref E's amber pill. */
 export function SampleBadge({ className }: { className?: string }) {
   return (
-    <Badge tone="warn" size="sm" className={cn("shrink-0", className)} title="Sample data, not your real numbers">
+    <StatusPill tone="amber" size="sm" className={cn("h-6 px-2.5 text-[12px]", className)} title="Sample data, not your real numbers">
       Sample
-    </Badge>
+    </StatusPill>
   );
 }
 
-/** A dashboard panel: the library Card with a title row (title, subtitle, sample chip, action). */
+/** A dashboard panel: ref E's outlined card with a title row (title, subtitle, sample chip, action). */
 export function Panel({
   title,
-  subtitle,
-  action,
   sample,
-  children,
-  className,
-  padding = "lg",
-  headingLevel: H = "h2",
   ...props
-}: Omit<CardProps, "title"> & {
+}: Omit<PanelCardProps, "title" | "badge"> & {
   title: ReactNode;
-  subtitle?: ReactNode;
-  action?: ReactNode;
   sample?: boolean;
-  headingLevel?: "h2" | "h3";
 }) {
-  return (
-    <Card padding={padding} className={cn("flex min-w-0 flex-col", className)} {...props}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <H className="truncate text-[20px] leading-tight font-medium tracking-[-0.02em] text-ui-text">{title}</H>
-            {sample ? <SampleBadge /> : null}
-          </div>
-          {/* Beside the action from 640px; below it, full width, on phones. */}
-          {subtitle ? <p className="mt-1 hidden text-[14px] text-ui-muted sm:block">{subtitle}</p> : null}
-        </div>
-        {action ? <div className="shrink-0">{action}</div> : null}
-      </div>
-      {subtitle ? <p className="mt-1.5 text-[14px] text-ui-muted sm:hidden">{subtitle}</p> : null}
-      {children}
-    </Card>
-  );
+  return <PanelCard title={title} badge={sample ? <SampleBadge /> : undefined} {...props} />;
 }
 
 /** "See all": a real link with a 40px target. */
@@ -59,7 +34,7 @@ export function SeeAll({ href, children = "See all" }: { href: string; children?
   return (
     <Link
       href={href}
-      className="-my-2 -mr-3 inline-flex h-10 items-center rounded-full px-3 text-[15px] text-ui-muted transition-colors hover:bg-ui-surface-2 hover:text-ui-text"
+      className="-my-2 -mr-3 inline-flex h-10 items-center rounded-full px-3 text-[15px] text-ui-muted transition-colors hover:bg-ui-surface-1 hover:text-ui-lime-active"
     >
       {children}
     </Link>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, ErrorState, Skeleton } from "@polaris/ui";
+import { AppFrame, Button, ErrorState, Skeleton } from "@polaris/ui";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 
@@ -122,31 +122,31 @@ function FullPage({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** The frame, loading: the rail and a few cards, so nothing jumps when it arrives. */
+/** The frame, loading: the panel, the nav bar, the chart and the widget, so nothing jumps when it arrives. */
 function FrameSkeleton() {
   return (
-    <div className="md:flex" aria-busy="true" aria-label="Loading your dashboard">
-      <div className="hidden h-dvh w-[88px] shrink-0 p-3 md:block xl:w-[264px]">
-        <div className="h-full rounded-ui-card bg-ui-surface-1" />
+    <AppFrame aria-busy="true" aria-label="Loading your dashboard">
+      <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:h-[104px] lg:px-10 xl:h-[112px] xl:px-14">
+        <Skeleton width={150} height={30} />
+        <Skeleton shape="pill" width={120} height={44} className="hidden lg:block" />
+        <Skeleton width={40} height={40} className="lg:hidden" />
       </div>
-      <div className="min-w-0 flex-1 px-4 pt-6 sm:px-6 xl:px-8">
-        <div className="mx-auto w-full max-w-[1320px]">
-          <Skeleton width={160} height={16} />
-          <Skeleton width={260} height={40} className="mt-3" />
-          <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} shape="card" height={176} />
-            ))}
-          </div>
-          <div className="mt-4 grid gap-4 xl:grid-cols-2">
-            <Skeleton shape="card" height={320} />
-            <Skeleton shape="card" height={320} />
-          </div>
-          <p role="status" className="sr-only">
-            Loading your dashboard
-          </p>
+      <div className="grid gap-10 px-4 sm:px-6 lg:px-10 xl:grid-cols-[minmax(0,1fr)_400px] xl:px-14">
+        <div className="grid content-start gap-5">
+          <Skeleton width={260} height={48} />
+          <Skeleton width={340} height={44} />
+          <Skeleton shape="card" height={360} />
+        </div>
+        <div className="grid content-start gap-3">
+          <Skeleton width={220} height={40} />
+          <Skeleton shape="card" height={172} />
+          <Skeleton shape="card" height={172} />
+          <Skeleton shape="pill" height={50} />
         </div>
       </div>
-    </div>
+      <p role="status" className="sr-only">
+        Loading your dashboard
+      </p>
+    </AppFrame>
   );
 }

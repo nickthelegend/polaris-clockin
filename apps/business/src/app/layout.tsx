@@ -16,18 +16,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0f1011",
+  themeColor: "#121418",
   colorScheme: "dark",
 };
 
 /**
- * The root: dark, Satoshi, the library's tokens. No sign-in here: Privy mounts
+ * The root: ref E's theme (a dark panel on a lime canvas, docs/design/system.md),
+ * Satoshi, the library's tokens. No sign-in here: Privy mounts
  * in the (privy) group (landing, /login, /dashboard), so the 404 page and the
  * gallery render without it.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark">
+    <html lang="en" data-theme="ref-e">
       <body className="ui-root">
         <Icons>{children}</Icons>
       </body>

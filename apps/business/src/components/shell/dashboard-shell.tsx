@@ -1,6 +1,20 @@
 "use client";
 
-import { Avatar, Badge, BottomNav, Card, Menu, PageHeader, SideNav, cn, toast, type PageHeaderProps } from "@polaris/ui";
+import {
+  AppFrame,
+  Avatar,
+  IconSquareButton,
+  Menu,
+  PageHeader,
+  PrimaryButton,
+  SecondaryButton,
+  StatusPill,
+  TopNav,
+  WalletPill,
+  cn,
+  toast,
+  type PageHeaderProps,
+} from "@polaris/ui";
 import {
   ArrowLeftRight,
   CalendarClock,
@@ -12,125 +26,120 @@ import {
   Landmark,
   Link2,
   LogOut,
+  Plus,
+  Settings2,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { BusinessLogo, BusinessMark } from "@/components/app/brand";
-import { registrationOf } from "@/components/dashboard/registration";
+import { BusinessLogo } from "@/components/app/brand";
 import { useAuth } from "@/lib/auth-context";
 import { shortAddress } from "@/lib/data/format";
-import type { Capabilities, Merchant } from "@/lib/data/types";
+import type { Merchant } from "@/lib/data/types";
 import { useMerchant } from "@/lib/merchant-context";
 import { useSample } from "@/lib/session";
 import { markExplicitSignOut } from "@/lib/sign-out";
 
+/** The top nav's links, in the reference's order. */
 export const NAV = [
   { key: "overview", label: "Overview", href: "/dashboard", icon: <House /> },
   { key: "payments", label: "Payments", href: "/dashboard/payments", icon: <ArrowLeftRight /> },
   { key: "links", label: "Links", href: "/dashboard/links", icon: <Link2 /> },
   { key: "plans", label: "Pay in 4", href: "/dashboard/plans", icon: <CalendarClock /> },
   { key: "payouts", label: "Payouts", href: "/dashboard/payouts", icon: <Landmark /> },
-  { key: "developers", label: "Developers", href: "/dashboard/developers", icon: <CodeXml /> },
+];
+
+/** Behind "More", like the reference's "Market" dropdown. */
+export const MORE = [
+  { key: "developers", label: "Developers", href: "/dashboard/developers", icon: <CodeXml />, description: "API keys, webhooks, the SDK" },
+  { key: "settings", label: "Settings", href: "/dashboard/settings", icon: <Settings2 />, description: "Business, payout wallet, test mode" },
 ];
 
 function activeKey(pathname: string): string {
-  const hit = NAV.slice(1).find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
+  const hit = [...NAV.slice(1), ...MORE].find((n) => pathname === n.href || pathname.startsWith(`${n.href}/`));
   return hit?.key ?? "overview";
 }
 
 /**
- * The dashboard frame: the sidebar (full from 1280px, an icon rail from
- * 768px), a top bar and the floating nav on phones, and the content column.
+ * The dashboard frame (ref E): from 1280px a dark rounded panel floating on
+ * the lime canvas, full bleed below. A top nav instead of a sidebar: the
+ * wordmark, the links with a "More" dropdown, the payout wallet pill, the
+ * lime "New link" and the account menu. Below 1024px a compact bar whose
+ * menu opens as a sheet.
  */
 export function DashboardShell({ merchant, children }: { merchant: Merchant; children: ReactNode }) {
   const pathname = usePathname() ?? "/dashboard";
+  const router = useRouter();
   const value = activeKey(pathname);
-  const sample = useSample();
-  const { capabilities } = useMerchant();
-  const registered = ["registered", "active"].includes(registrationOf(merchant));
+  const signOut = useSignOut();
 
   return (
-    <div className="md:flex">
+    <AppFrame>
       <a
         href="#content"
         className="sr-only z-[60] rounded-full bg-ui-lime px-4 py-2 font-medium text-ui-on-lime focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
       >
         Skip to content
       </a>
-
-      <SideNav
-        items={NAV}
-        value={value}
-        linkAs={Link}
+      <TopNav
         brand={<BusinessLogo height={30} />}
-        brandCompact={<BusinessMark size={30} />}
         brandHref="/dashboard"
         brandLabel="Polaris for Business, overview"
-        footer={<ModeCard sample={sample.on} capabilities={capabilities} registered={registered} />}
-        footerCompact={
-          <span
-            title={sample.on ? "Test mode on Monad testnet · sample data on" : "Test mode on Monad testnet"}
-            className="grid size-12 place-items-center rounded-full bg-ui-surface-2"
-          >
-            <span aria-hidden className={cn("size-2.5 rounded-full", sample.on ? "bg-[#f5a524]" : "bg-ui-lime")} />
-            <span className="sr-only">{sample.on ? "Test mode, sample data on" : "Test mode"}</span>
-          </span>
+        items={NAV}
+        more={{ label: "More", items: MORE }}
+        value={value}
+        linkAs={Link}
+        actions={
+          <>
+            <WalletPill
+              address={merchant.walletAddress}
+              label="payout wallet address"
+              pendingText="Setting up your wallet…"
+              className="hidden xl:inline-flex"
+            />
+            <PrimaryButton asChild size="sm" iconRight={<Plus />}>
+              <Link href="/dashboard/links?new=1">New link</Link>
+            </PrimaryButton>
+            <AccountMenu merchant={merchant} />
+          </>
+        }
+        compactActions={
+          <IconSquareButton label="New payment link" icon={<Plus />} tone="solid" active onClick={() => router.push("/dashboard/links?new=1")} />
+        }
+        sheetTitle={merchant.businessName ?? "Menu"}
+        sheetFooter={
+          <>
+            <WalletPill address={merchant.walletAddress} label="payout wallet address" maxWidth={640} className="w-full" />
+            <SecondaryButton size="md" block icon={<LogOut />} onClick={() => void signOut()}>
+              Sign out
+            </SecondaryButton>
+          </>
         }
       />
-
-      <div className="min-w-0 flex-1">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 bg-ui-canvas/85 px-4 backdrop-blur-xl md:hidden">
-          <Link href="/dashboard" aria-label="Polaris for Business, overview" className="rounded-[12px]">
-            <BusinessLogo height={26} />
-          </Link>
-          <AccountMenu merchant={merchant} />
-        </header>
-        <main id="content" tabIndex={-1} className="px-4 pt-3 pb-32 outline-none sm:px-6 md:pt-6 md:pb-14 xl:px-8">
-          <div className="mx-auto w-full max-w-[1320px]">{children}</div>
-        </main>
-      </div>
-
-      <BottomNav floating size="sm" items={NAV} value={value} linkAs={Link} className="md:hidden" />
-    </div>
+      <main id="content" tabIndex={-1} className="px-4 pt-2 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-0 xl:px-14 xl:pb-14">
+        <div className="mx-auto w-full max-w-[1480px]">{children}</div>
+      </main>
+    </AppFrame>
   );
 }
 
-function ModeCard({ sample, capabilities, registered }: { sample: boolean; capabilities: Capabilities | null; registered: boolean }) {
-  const connected = Boolean(capabilities?.chain);
-  return (
-    <Card variant="raised" radius="tile" padding="sm" className="text-[13px]">
-      <span className="flex items-center gap-2 font-medium text-ui-text">
-        <span aria-hidden className={cn("size-2 rounded-full", connected || sample ? "bg-ui-lime" : "bg-ui-muted")} />
-        Test mode
-      </span>
-      <span className="mt-1 block text-ui-muted">
-        {capabilities?.chain ? capabilities.chain.name : sample ? "Monad testnet" : "Not connected to Monad"} · AUSD
-      </span>
-      <span className="mt-2 flex flex-wrap gap-1.5">
-        {sample ? (
-          <Badge tone="warn" size="sm">
-            Sample data on
-          </Badge>
-        ) : null}
-        {registered ? (
-          <Badge tone="lime" size="sm">
-            Registered
-          </Badge>
-        ) : null}
-      </span>
-    </Card>
-  );
+function useSignOut() {
+  const { logout } = useAuth();
+  const router = useRouter();
+  return async () => {
+    markExplicitSignOut();
+    await logout();
+    router.replace("/login");
+  };
 }
 
 /* ── The signed-in merchant's menu ──────────────────────────────────────── */
 
 export function AccountMenu({ merchant }: { merchant: Merchant }) {
-  const { logout } = useAuth();
-  const router = useRouter();
   const sample = useSample();
+  const signOut = useSignOut();
   const name = merchant.businessName ?? "Your business";
 
   const copyAddress = async () => {
@@ -143,19 +152,14 @@ export function AccountMenu({ merchant }: { merchant: Merchant }) {
     }
   };
 
-  const signOut = async () => {
-    markExplicitSignOut();
-    await logout();
-    router.replace("/login");
-  };
-
   return (
     <Menu
       label="Account"
       align="end"
       width={300}
+      triggerClassName="active:scale-100"
       trigger={
-        <span className="flex items-center gap-1.5 rounded-full bg-ui-surface-1 p-1 pr-2.5">
+        <span className="flex items-center gap-1.5 rounded-full bg-ui-surface-1 p-1 pr-2.5 transition-colors hover:bg-ui-surface-2">
           <Avatar name={name} tone="honey" size="sm" decorative />
           <ChevronDown aria-hidden size={16} strokeWidth={1.75} className="text-ui-muted" />
         </span>
@@ -164,6 +168,16 @@ export function AccountMenu({ merchant }: { merchant: Merchant }) {
       <Menu.Header>
         <p className="truncate text-[16px] font-medium">{name}</p>
         {merchant.email ? <p className="truncate text-[13px] text-ui-muted">{merchant.email}</p> : null}
+        <span className="mt-2 flex flex-wrap gap-1.5">
+          <StatusPill tone="lime" size="sm">
+            Test mode
+          </StatusPill>
+          {sample.on ? (
+            <StatusPill tone="amber" size="sm">
+              Sample data
+            </StatusPill>
+          ) : null}
+        </span>
       </Menu.Header>
       <Menu.Separator />
       <Menu.Item
@@ -173,6 +187,9 @@ export function AccountMenu({ merchant }: { merchant: Merchant }) {
         description={merchant.walletAddress ? shortAddress(merchant.walletAddress, 8, 6) : "Setting up your payout account…"}
       >
         Copy payout address
+      </Menu.Item>
+      <Menu.Item icon={<Settings2 />} href="/dashboard/settings" linkAs={Link}>
+        Settings
       </Menu.Item>
       {sample.canToggle ? (
         <Menu.Item
@@ -185,9 +202,11 @@ export function AccountMenu({ merchant }: { merchant: Merchant }) {
           Preview with sample data
         </Menu.Item>
       ) : sample.on ? (
-        <Menu.Item icon={<FlaskConical />} disabled description={
-            process.env.NODE_ENV === "development" && sample.reason === "mock" ? "Development mock session" : "This server's demo data"
-          }>
+        <Menu.Item
+          icon={<FlaskConical />}
+          disabled
+          description={process.env.NODE_ENV === "development" && sample.reason === "mock" ? "Development mock session" : "This server's demo data"}
+        >
           Sample data is on
         </Menu.Item>
       ) : null}
@@ -200,21 +219,16 @@ export function AccountMenu({ merchant }: { merchant: Merchant }) {
 }
 
 /**
- * A dashboard page's header: the library's PageHeader with the page's
- * actions and, from 768px, the account menu on the right.
+ * A dashboard page's header in ref E's rhythm: the title at the pair
+ * header's weight, a muted line under it, and the page's actions on the
+ * right. (The account menu lives in the top nav.)
  */
-export function DashboardHeader(props: Omit<PageHeaderProps, "trailing">) {
-  const { merchant } = useMerchant();
+export function DashboardHeader({ className, ...props }: Omit<PageHeaderProps, "trailing">) {
   return (
     <PageHeader
       actionsAlign="title"
       {...props}
-      className={cn("mb-6 md:mb-8", props.className)}
-      trailing={
-        <span className="hidden md:inline-flex">
-          <AccountMenu merchant={merchant} />
-        </span>
-      }
+      className={cn("mb-7 pt-2 md:mb-8 [&_h1]:text-[30px] md:[&_h1]:text-[34px] [&_h1]:tracking-[-0.03em]", className)}
     />
   );
 }
