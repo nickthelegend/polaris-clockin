@@ -26,6 +26,7 @@ import { getAddress, isAddress } from "viem";
 import { useAccounts } from "@/components/accounts";
 import { PersonAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { LocalEquivalent } from "@/components/local-equivalent";
 import { QrCode } from "@/components/qr";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
@@ -152,7 +153,16 @@ export function SendSheet() {
         )}
 
         <div className="flex min-h-[112px] flex-1 items-center justify-center">
-          <AmountDisplay value={value} invalid={tooMuch} hint={<span className={tooMuch ? "text-ui-down" : undefined}>{hint}</span>} />
+          <AmountDisplay
+            value={value}
+            invalid={tooMuch}
+            hint={
+              <span className="flex flex-col items-center gap-1.5">
+                {tooMuch || wrongAccount ? null : <LocalEquivalent amount={amount} className="text-[13px]" />}
+                <span className={tooMuch ? "text-ui-down" : undefined}>{hint}</span>
+              </span>
+            }
+          />
         </div>
 
         <Button
@@ -302,7 +312,12 @@ export function LinkReady({
             ? `${usd(link.amount, { trim: true })} arrived${who ? ` with ${who}` : ""}.`
             : state === "cancelled"
               ? "The money is back in your account."
-              : `Whoever opens it gets ${usd(link.amount, { trim: true })}. Share it only with ${who ?? "the person it's for"}.`
+              : (
+                  <>
+                    Whoever opens it gets {usd(link.amount, { trim: true })}. Share it only with {who ?? "the person it's for"}.
+                    <LocalEquivalent amount={link.amount} className="mt-1.5 block text-[13px]" />
+                  </>
+                )
         }
         rows={[
           { label: "Amount", value: usd(link.amount) },

@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { LocalEquivalent } from "@/components/local-equivalent";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
 import { CheckoutDesktop, CheckoutMissing } from "@/desktop/checkout";
@@ -177,6 +178,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
           <div className="min-w-0 flex-1">
             <p className="text-[14px] text-ui-muted">Total</p>
             <Money value={n(link.amount)} dim="cents" className="mt-1 text-[36px] leading-none font-semibold tracking-[-0.03em]" />
+            <LocalEquivalent amount={link.amount} className="mt-2 block text-[13px]" />
           </div>
           {later ? <Badge tone="lime">Pay in 4</Badge> : sub ? <Badge tone="purple">Monthly</Badge> : null}
         </Card>

@@ -28,8 +28,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // No floating dev badge over the phone layout.
   devIndicators: false,
-  // The shared component library ships TypeScript source.
-  transpilePackages: ["@polaris/ui", "@polaris/brand"],
+  // The shared component library and the Chainlink rates package ship TypeScript source.
+  transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/fx"],
   // The workspace root, so a parent directory's lockfile is never mistaken for it.
   turbopack: { root: path.resolve(process.cwd(), "../..") },
   async headers() {

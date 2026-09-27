@@ -29,6 +29,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { getAddress, isAddress } from "viem";
 import { PersonAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { LocalEquivalent } from "@/components/local-equivalent";
 import { QrCode } from "@/components/qr";
 import { useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
@@ -230,6 +231,7 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
         }
         toggle={<SwapToggle label="Change who gets it" onClick={() => setPicking(true)} />}
       />
+      {tooMuch ? null : <LocalEquivalent amount={amount} className="px-1 text-[14px]" />}
       {tooMuch ? (
         <p role="status" className="px-1 text-[14px] text-ui-down">
           That&apos;s more than your balance.

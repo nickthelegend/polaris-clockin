@@ -6,6 +6,8 @@
  * sees a token name: everything is "$".
  */
 
+import { FX_CURRENCIES, hasFxFeed } from "@polaris/fx/feeds";
+
 export type Micros = bigint;
 
 export const DECIMALS = 6;
@@ -81,49 +83,12 @@ export function amountParam(micros: Micros): string {
 
 /* ── Local currency (display only) ─────────────────────────────────────────── */
 
-/**
- * Sample rates, dollars to local currency, fixed on `SAMPLE_FX_AS_OF`.
- * Display only: nothing is ever priced or settled in these, and every place
- * they show says "sample rate" (LocalEquivalent). A live feed (Chainlink
- * Data Feeds where they exist) replaces them later.
+/*
+ * The local-currency line under a dollar amount reads a live Chainlink rate
+ * (`@polaris/fx`, served by /api/fx; see components/local-equivalent.tsx).
+ * Nothing is ever priced or settled in it. There are no built-in rates: a
+ * currency without a Chainlink feed simply shows no local amount.
  */
-export const SAMPLE_FX_AS_OF = "2026-09-20";
-export const MOCK_FX: Readonly<Record<string, number>> = {
-  USD: 1,
-  ARS: 1182,
-  BRL: 5.41,
-  MXN: 18.62,
-  COP: 4046,
-  CLP: 931,
-  PEN: 3.71,
-  GBP: 0.76,
-  EUR: 0.87,
-  CHF: 0.8,
-  SEK: 9.42,
-  NOK: 10.05,
-  PLN: 3.66,
-  TRY: 41.6,
-  PHP: 57.6,
-  INR: 88.4,
-  PKR: 281,
-  IDR: 16420,
-  VND: 26310,
-  THB: 32.4,
-  MYR: 4.21,
-  SGD: 1.29,
-  JPY: 148.2,
-  KRW: 1391,
-  CNY: 7.12,
-  NGN: 1523,
-  KES: 129.2,
-  GHS: 12.1,
-  ZAR: 17.6,
-  EGP: 48.5,
-  AED: 3.6725,
-  CAD: 1.38,
-  AUD: 1.52,
-  NZD: 1.68,
-};
 
 const REGION_CURRENCY: Readonly<Record<string, string>> = {
   US: "USD", AR: "ARS", BR: "BRL", MX: "MXN", CO: "COP", CL: "CLP", PE: "PEN",
@@ -136,32 +101,34 @@ const REGION_CURRENCY: Readonly<Record<string, string>> = {
   ZA: "ZAR", EG: "EGP", AE: "AED", CA: "CAD", AU: "AUD", NZ: "NZD",
 };
 
-export const LOCAL_CURRENCIES = Object.keys(MOCK_FX).sort();
+/** What Settings offers: dollars only, or a currency Chainlink publishes a rate for. */
+export const LOCAL_CURRENCIES: readonly string[] = ["USD", ...[...FX_CURRENCIES].sort()];
 
-/** The currency a locale implies: "es-AR" → ARS, "de" → EUR (via likely subtags). */
+/**
+ * The currency a locale implies: "es-AR" → ARS, "de" → EUR (via likely
+ * subtags). It may be one with no Chainlink rate (es-CL → CLP); then no local
+ * amount shows, and Settings says why.
+ */
 export function currencyForLocale(locale: string): string {
   try {
     const region = new Intl.Locale(locale).maximize().region;
-    const code = region ? REGION_CURRENCY[region] : undefined;
-    return code && code in MOCK_FX ? code : "USD";
+    return (region && REGION_CURRENCY[region]) || "USD";
   } catch {
     return "USD";
   }
 }
 
-/** "≈ ARS 1.518.279" style text in the viewer's own number format. */
-export function formatLocal(micros: Micros, currency: string, locale: string): string | null {
-  const rate = MOCK_FX[currency];
-  if (!rate || currency === "USD") return null;
-  const value = toNumber(micros) * rate;
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency,
-      currencyDisplay: "narrowSymbol",
-      maximumFractionDigits: value >= 1000 ? 0 : 2,
-    }).format(value);
-  } catch {
-    return null;
-  }
+/** Settings' local-currency picker: Automatic, dollars only, then every currency with a rate. */
+export function localCurrencyOptions(auto: string, saved: string | null): { value: string; label: string; text: string }[] {
+  const codes = saved && !LOCAL_CURRENCIES.includes(saved) ? [...LOCAL_CURRENCIES, saved] : LOCAL_CURRENCIES;
+  return [
+    { value: "auto", label: `Automatic (${auto})`, text: "Automatic" },
+    ...codes.map((code) => ({ value: code, label: code === "USD" ? "USD (dollars only)" : code, text: code })),
+  ];
+}
+
+/** What Settings says under the picker, for the currency in effect. */
+export function localCurrencyHint(currency: string): string {
+  const base = "Shown next to dollars at the Chainlink exchange rate, for reference only. You always pay in dollars.";
+  return currency === "USD" || hasFxFeed(currency) ? base : `${base} There's no Chainlink rate for ${currency} yet, so no local amounts show.`;
 }

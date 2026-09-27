@@ -21,6 +21,7 @@ import { useEffect, useId, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { LocalEquivalent } from "@/components/local-equivalent";
 import { useCloseSheet } from "@/components/shell/sheet-host";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
@@ -116,6 +117,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
             <Money value={n(link.amount)} className="ui-figure text-[56px] leading-none font-medium tracking-[-0.04em]" />
             {later ? <DeltaChip value={null} label={`or 4 × ${each}`} /> : sub ? <DeltaChip value={null} label="Monthly" /> : null}
           </div>
+          <LocalEquivalent amount={link.amount} className="mt-3 block text-[15px]" />
 
           <DetailsList
             className="mt-8"

@@ -9,7 +9,7 @@ import { signOut } from "@/lib/account";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
 import { getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { currencyForLocale, LOCAL_CURRENCIES } from "@/lib/money";
+import { currencyForLocale, localCurrencyHint, localCurrencyOptions } from "@/lib/money";
 import { setPrefs, useLocale, usePrefs } from "@/lib/prefs";
 
 /** Settings and account actions (half, drags to full). */
@@ -40,13 +40,10 @@ export function SettingsSheet() {
         <Select
           variant="filled"
           label="Local currency"
-          hint="Shown next to dollars at sample exchange rates, for reference only. You always pay in dollars."
+          hint={localCurrencyHint(prefs.currency ?? auto)}
           value={prefs.currency ?? "auto"}
           onValueChange={(v) => setPrefs({ currency: v === "auto" ? null : v })}
-          options={[
-            { value: "auto", label: `Automatic (${auto})`, text: "Automatic" },
-            ...LOCAL_CURRENCIES.map((code) => ({ value: code, label: code === "USD" ? "USD (dollars only)" : code, text: code })),
-          ]}
+          options={localCurrencyOptions(auto, prefs.currency)}
         />
         {hasAccount ? (
           <ListGroup label="Account">
