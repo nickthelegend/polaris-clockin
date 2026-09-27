@@ -4,7 +4,7 @@
  *
  *   pnpm --filter @polaris/cre-workflows cre workflow build ./collections
  *   pnpm --filter @polaris/cre-workflows cre workflow simulate ./underwriting -T local-settings \
- *     --non-interactive --trigger-index 0 --http-payload ./underwriting/payload.example.json --broadcast
+ *     --non-interactive --trigger-index 0 --http-payload ./underwriting/payload.json --broadcast
  *
  * `cre workflow build` shells out to `bun x cre-compile`, and CRE's
  * TypeScript toolchain runs on Bun, so this puts the pinned Bun from

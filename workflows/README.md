@@ -7,7 +7,8 @@ Monad: one decides who gets credit, the other collects what is owed.
 ```
                          ┌────────────────────── Chainlink DON ──────────────────────┐
  app asks for Pay in 4 ──▶ polaris-underwrite (HTTP trigger)                          │
-                         │  verify the history wallet's signature (no network)       │
+                         │  verify the account's own consent and the history         │
+                         │  wallet's signature, both fresh (no network)              │
                          │  EVM reads: already underwritten? wallet already linked?  │
                          │            the account's AUSD balance                     │
                          │  node mode: Nansen → Zerion → Etherscan → RPC, per node,  │──▶ UnderwritingReceiver
@@ -40,8 +41,9 @@ Monad: one decides who gets credit, the other collects what is owed.
 - **The DON attests facts; the chain does the arithmetic.** No single key can
   hand out credit: the report carries Nansen/Zerion facts, `ScoreManager`
   scores them, caps the opening line and refuses evidence older than 15
-  minutes. The workflow verifies the Bring-your-history signature itself
-  before it spends a provider call.
+  minutes. The workflow verifies the account's own consent and the
+  Bring-your-history signature itself before it spends a provider call, so
+  whoever fires the trigger cannot underwrite an account that did not ask.
 
 | Bounty requirement (Chainlink CRE, plan §3) | Where it is met |
 |---|---|
@@ -90,6 +92,14 @@ pnpm --filter @polaris/cre-workflows simulate:collections local-settings
 pnpm --filter @polaris/cre-workflows simulate:underwriting local-settings
 ```
 
+`simulate:underwriting` first writes `underwriting/payload.json`
+(`payload:underwriting` does only that): the trigger input with a fresh
+consent, good for 15 minutes, signed by `POLARIS_UNDERWRITE_ACCOUNT_KEY` or,
+when that is unset, by a throwaway key. `POLARIS_UNDERWRITE_WALLET_KEY` adds a
+history wallet's link proof. Both come from the environment or
+`workflows/.env`; the script prints addresses, never keys. No static example
+payload can work, since the workflow rejects a consent older than 15 minutes.
+
 **Against Monad testnet**, after `pnpm --filter @polarispay/contracts deploy:monad`
 (with `CRE_SIMULATION_TRANSMITTER` = the address of `CRE_ETH_PRIVATE_KEY`,
 funded with testnet MON):
@@ -112,7 +122,7 @@ requests (the HTTP trigger fires at most once per 30 s):
 
 ```bash
 pnpm --filter @polaris/cre-workflows cre workflow simulate ./underwriting -T staging-settings --listen --broadcast
-# the API: triggerSimulatedUnderwriting({ user, linked }) from @polaris/cre-workflows/trigger
+# the API: triggerSimulatedUnderwriting({ user, consent, linked }) from @polaris/cre-workflows/trigger
 ```
 
 **Under simulation a reverted receiver still reads as success** (the mock
@@ -144,10 +154,10 @@ two, not staging copies.
 | `secrets.yaml`, `.env.example` | Secret ids → environment variables for simulation; the Vault DON once deployed |
 | `collections/`, `underwriting/` | `main.ts` (the WASM entry), `workflow.yaml`, `config.<target>.json`, a strict `tsconfig.json` with no Node/DOM/Bun types |
 | `src/collections/` | `workflow.ts` (the handler), `candidates.ts` (Envio query, chain window), `tasks.ts` (report encoding, batching), `outcomes.ts` (receipt → dunning events) |
-| `src/underwriting/` | `workflow.ts`, `link.ts` (the proof, verified synchronously with @noble/curves), `evidence.ts` (node mode: the recipe over CRE's HTTP client), `report.ts`, `payload.ts` |
+| `src/underwriting/` | `workflow.ts`, `consent.ts` (the account's consent), `link.ts` (the history wallet's proof; both verified synchronously with @noble/curves), `evidence.ts` (node mode: the recipe over CRE's HTTP client), `report.ts`, `payload.ts` |
 | `src/shared/` | Config schemas, EVM helpers (reads, gas, write, receipt), the signed callback |
-| `src/trigger.ts` | `triggerSimulatedUnderwriting` for the API |
-| `scripts/` | `install-cre.mjs`, `cre.mjs`, `bun.mjs`, `configure.mjs`, `local-chain.mjs`, `e2e-local.mjs`, `hardhat.cre-local.config.cjs` |
+| `src/trigger.ts` | `triggerSimulatedUnderwriting` for the API (`underwriteConsentMessage` is `@polaris/cre-workflows/consent`) |
+| `scripts/` | `install-cre.mjs`, `cre.mjs`, `bun.mjs`, `configure.mjs`, `underwriting-payload.mjs`, `local-chain.mjs`, `e2e-local.mjs`, `hardhat.cre-local.config.cjs` |
 | `test/` | Unit tests (`bun test`, `@chainlink/cre-sdk/test`) |
 | `e2e/` | The local-chain round trip |
 
@@ -204,8 +214,21 @@ candidates, and says so, rather than exceed it.
 Trigger input:
 
 ```json
-{ "user": "0x…", "linked": { "wallet": "0x…", "issuedAt": 1790000000, "nonce": "k3J9xq2LmN", "signature": "0x…" } }
+{ "user": "0x…",
+  "consent": { "issuedAt": 1790000000, "nonce": "c0nsentN0nce", "signature": "0x…" },
+  "linked": { "wallet": "0x…", "issuedAt": 1790000000, "nonce": "k3J9xq2LmN", "signature": "0x…" } }
 ```
+
+`consent` is required: the account's own EIP-191 signature over
+`underwriteConsentMessage({ account: user, wallet: linked?.wallet ?? null,
+chainId, issuedAt, nonce })` from `@polaris/cre-workflows/consent`. It names
+the history wallet (or none) and the chain, and is good for 15 minutes.
+`ScoreManager.underwrite` runs once per account, so without it whoever can
+fire the trigger (a compromised API, anyone who reaches it) could fix a
+victim's opening line for good: underwrite them alone before they bring
+their history, or link a wallet with liquidations to get them declined. The
+DON checks it before any read or paid call. The API still authenticates the
+buyer before it queues a run, but it cannot speak for them.
 
 `linked` is optional; its signature is the history wallet's EIP-191 signature
 over `linkMessage({ account: user, wallet, issuedAt, nonce })` from
@@ -229,8 +252,8 @@ Result (the handler's return value, JSON): `status` is `applied` (with
 `onChainScore`), `refused` (with ScoreManager's reason: `StaleEvidence`,
 `AlreadyHasRecord`, `WalletAlreadyLinked`), `incomplete` (evidence missing,
 no report, retry later: missing data is never attested as zero), `skipped`
-(already underwritten; no provider call spent), or `rejected` (a bad proof or
-payload; nothing read or spent).
+(already underwritten; no provider call spent), or `rejected` (no consent
+from the account, a bad proof or payload; nothing read or spent).
 
 Node mode sends each request with `cacheSettings: { store: true, maxAge }`,
 so one node's paid Nansen call serves the DON, and adds keys only there:
@@ -279,7 +302,13 @@ from `@polaris/cre-workflows/callback`; event types are in
   gas limits, the indexer and its fallback, the read quota, the simulator's
   masked revert, dunning events and their signature; facts equal to what
   the underwriting package derives for the same persona, keys only in
-  headers, every response cached, refusals before any paid call.
+  headers, every response cached, refusals before any paid call; a run
+  the account did not sign for (no consent, another key's, a consent to be
+  underwritten alone replayed with a wallet, a stale one) is rejected before
+  anything is read.
+- `test/consent.test.ts`: the consent text byte for byte, bound to the
+  account, the wallet (or none), the chain and 15 minutes, and checked the
+  way viem's own verifier checks it.
 - `e2e/local-chain.e2e.test.ts` (`e2e:local`): on real contracts, a proof
   becomes facts and ScoreManager opens a line at the mirror's score; a Pay in
   4 plan opens on it; instalment 1 is collected from indexer candidates; a

@@ -12,7 +12,7 @@
  * underwriting fixtures. So the receivers decode the exact bytes the
  * workflows encode, and ScoreManager and PolarisLoanEngine act on them.
  *
- *   1. underwriting: a Bring-your-history proof → facts → ScoreManager opens a line
+ *   1. underwriting: the account's consent + a Bring-your-history proof → facts → ScoreManager opens a line
  *   2. a Pay in 4 plan opens on that line (PlanIntent + Permit, relayed)
  *   3. collections, candidates from the indexer: instalment 1 collected, webhook posted
  *   4. the buyer revokes the allowance → installment.failed "reauthorize"
@@ -52,6 +52,7 @@ import { classifySkip } from "../src/collections/outcomes.ts";
 import { encodeCollectionsReport } from "../src/collections/tasks.ts";
 import { configSchema as collectionsSchema, type CollectionsConfig, onCron } from "../src/collections/workflow.ts";
 import { verifyCallback } from "../src/shared/callback.ts";
+import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
 import { configSchema as underwritingSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
 import { answerFromFixtures, cloneFixtures, type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
@@ -157,14 +158,40 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     for (const w of written) console.log(`  ${w.what.padEnd(34)} ${w.gasUsed.toString().padStart(8)} / ${w.gasLimit}`);
   });
 
-  test("underwriting: the history wallet's proof becomes facts, and ScoreManager opens the line on chain", async () => {
+  /** The buyer's own signature asking to be underwritten, with `wallet`'s history or alone. */
+  const consentOf = async (wallet: Address | null, issuedAt: number) => {
+    const nonce = "e2eConsent01";
+    const chainId = underwritingConfig().recipe.accountChainId;
+    const signature = await buyer.signMessage({ message: underwriteConsentMessage({ account: buyer.address, wallet, chainId, issuedAt, nonce }) });
+    return { issuedAt, nonce, signature };
+  };
+
+  test("underwriting: the account's consent and the history wallet's proof become facts, and ScoreManager opens the line on chain", async () => {
     const { record } = harness();
     const now = Math.floor(chainNowMs(RPC) / 1000);
     const nonce = "e2eLocal0001";
     const signature = await historyWallet.signMessage({
       message: linkMessage({ account: buyer.address, wallet: historyWallet.address, issuedAt: now, nonce }),
     });
-    const payload = { input: new TextEncoder().encode(JSON.stringify({ user: buyer.address, linked: { wallet: historyWallet.address, issuedAt: now, nonce, signature } })) } as unknown as HTTPPayload;
+    const input = {
+      user: buyer.address,
+      consent: await consentOf(historyWallet.address, now),
+      linked: { wallet: historyWallet.address, issuedAt: now, nonce, signature },
+    };
+
+    // Whoever fires the trigger cannot speak for the account: the same request with the
+    // consent signed by another key is rejected, and nothing reaches the chain.
+    const forged = { ...input, consent: { ...input.consent, signature: await historyWallet.signMessage({ message: "not the account" }) } };
+    const refused = JSON.parse(
+      onHttpTrigger(
+        newTestRuntime(secrets, { timeProvider: () => chainNowMs(RPC) }, underwritingConfig()),
+        { input: new TextEncoder().encode(JSON.stringify(forged)) } as unknown as HTTPPayload,
+      ),
+    );
+    expect(refused).toMatchObject({ status: "rejected", reason: expect.stringContaining("the account did not consent") });
+    expect(record.writes).toHaveLength(0);
+
+    const payload = { input: new TextEncoder().encode(JSON.stringify(input)) } as unknown as HTTPPayload;
     const out = JSON.parse(onHttpTrigger(newTestRuntime(secrets, { timeProvider: () => chainNowMs(RPC) }, underwritingConfig()), payload));
 
     expect(out.status).toBe("applied");
@@ -188,7 +215,11 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     const again = JSON.parse(
       onHttpTrigger(
         newTestRuntime(secrets, { timeProvider: () => chainNowMs(RPC) }, underwritingConfig()),
-        { input: new TextEncoder().encode(JSON.stringify({ user: buyer.address })) } as unknown as HTTPPayload,
+        {
+          input: new TextEncoder().encode(
+            JSON.stringify({ user: buyer.address, consent: await consentOf(null, Math.floor(chainNowMs(RPC) / 1000)) }),
+          ),
+        } as unknown as HTTPPayload,
       ),
     );
     expect(again.status).toBe("skipped");

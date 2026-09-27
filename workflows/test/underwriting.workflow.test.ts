@@ -6,7 +6,7 @@
  * path derives for the same persona, and the report to the receiver's ABI.
  */
 
-import { expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { cre, type HTTPPayload } from "@chainlink/cre-sdk";
 import { addContractMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import { scoreManagerAbi, underwritingReceiverAbi } from "@polarispay/contracts/abi";
@@ -23,6 +23,7 @@ import {
 } from "@polarispay/underwriting";
 import { type Address, encodeErrorResult, getAddress, type Hex, parseAbi, zeroAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
 import { configSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
 import { b64, eventLog, fakeTxHash, hexOf, receiptJson, type TestLog } from "./helpers/evm.ts";
@@ -41,9 +42,12 @@ const REGULAR_ACCOUNT = "0xacc0000000000000000000000000000000000002" as Address;
 const FRESH_ACCOUNT = "0xacc0000000000000000000000000000000000001" as Address;
 const STRONG = "0xb0b0000000000000000000000000000000000001" as Address;
 
-// Test-only keys: the history wallet must sign, and the personas have no keys.
+// Test-only keys (Hardhat's public defaults): the account and the history
+// wallet must both sign, and the personas have no keys.
 const walletKey = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
-const buyer = getAddress("0x0000000000000000000000000000000000b0e5e7");
+const buyerKey = privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a");
+const attackerKey = privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba");
+const buyer = getAddress(buyerKey.address);
 const FIXTURES = cloneFixtures([
   { from: STRONG, to: walletKey.address },
   { from: REGULAR_ACCOUNT, to: buyer },
@@ -170,6 +174,22 @@ async function proof(account: Address, issuedAt = NOW - 60, nonce = "k3J9xq2LmN"
   return { wallet: walletKey.address, issuedAt, nonce, signature };
 }
 
+/** The account's own consent: signed by `signer` (the buyer unless a test says otherwise). */
+async function consent(
+  wallet: Address | null = null,
+  over: Partial<{ account: Address; chainId: number; issuedAt: number; nonce: string; signer: typeof buyerKey }> = {},
+) {
+  const issuedAt = over.issuedAt ?? NOW - 30;
+  const nonce = over.nonce ?? "c0nsentN0nce";
+  const message = underwriteConsentMessage({ account: over.account ?? buyer, wallet, chainId: over.chainId ?? STAGING.recipe.accountChainId, issuedAt, nonce });
+  return { issuedAt, nonce, signature: await (over.signer ?? buyerKey).signMessage({ message }) };
+}
+
+/** A payload the buyer signed: the account alone, or with the history wallet's proof. */
+async function asks(linked: Awaited<ReturnType<typeof proof>> | null = null) {
+  return { user: buyer, consent: await consent(linked?.wallet ?? null), ...(linked ? { linked } : {}) };
+}
+
 /** What the package's own recipe and core derive for the same inputs: the workflow must agree. */
 function packageFacts(user: Address, wallet: Address | null, balance: number) {
   const send = (spec: { method: "GET" | "POST"; url: string; headers: Record<string, string>; body?: string }): Reply => {
@@ -182,9 +202,9 @@ function packageFacts(user: Address, wallet: Address | null, balance: number) {
   return underwrite({ user, observedAt: NOW, account: account.evidence, linked: linked?.evidence ?? null, linkVerified: true });
 }
 
-test("account alone: one report with the facts the package derives, applied at the mirror's score", () => {
+test("account alone: one report with the facts the package derives, applied at the mirror's score", async () => {
   const seen = wire();
-  const out = runWith(config(), { user: buyer });
+  const out = runWith(config(), await asks());
   expect(out.status).toBe("applied");
   expect(seen.reports).toHaveLength(1);
   const { kind, items } = decodeUnderwritingReport(seen.reports[0]!);
@@ -200,7 +220,7 @@ test("account alone: one report with the facts the package derives, applied at t
 
 test("bring your history: a fresh proof from the wallet raises the facts; keys ride in headers, never in URLs", async () => {
   const seen = wire();
-  const out = runWith(config(), { user: buyer, linked: await proof(buyer) });
+  const out = runWith(config(), await asks(await proof(buyer)));
   expect(out.status).toBe("applied");
   const { items } = decodeUnderwritingReport(seen.reports[0]!);
   const expected = packageFacts(buyer, walletKey.address, 455_000_000);
@@ -223,16 +243,16 @@ test("bring your history: a fresh proof from the wallet raises the facts; keys r
   expect(out.httpCalls).toBeLessThanOrEqual(15);
 });
 
-test("while simulating, gas is estimated for the whole delivery from the simulation transmitter", () => {
+test("while simulating, gas is estimated for the whole delivery from the simulation transmitter", async () => {
   const transmitter = "0x00000000000000000000000000000000000000a1" as Address;
   const seen = wire({ transmitter });
-  expect(runWith(config(), { user: buyer }).status).toBe("applied");
+  expect(runWith(config(), await asks()).status).toBe("applied");
   expect(seen.estimates).toEqual([{ from: transmitter, to: FORWARDER.toLowerCase() }]);
 });
 
-test("on the production forwarder, gas is estimated for onReport as the forwarder calls it", () => {
+test("on the production forwarder, gas is estimated for onReport as the forwarder calls it", async () => {
   const seen = wire();
-  runWith(config(), { user: buyer });
+  runWith(config(), await asks());
   expect(seen.estimates).toEqual([{ from: FORWARDER.toLowerCase(), to: RECEIVER.toLowerCase() }]);
 });
 
@@ -240,7 +260,7 @@ test("a proof signed by another key is refused before any read or paid call", as
   const seen = wire();
   const p = await proof(buyer);
   const forged = { ...p, wallet: STRONG };
-  const out = runWith(config(), { user: buyer, linked: forged });
+  const out = runWith(config(), { user: buyer, consent: await consent(STRONG), linked: forged });
   expect(out.status).toBe("rejected");
   expect(out.reason).toContain("not signed by the wallet");
   expect(seen.reads).toBe(0);
@@ -248,24 +268,81 @@ test("a proof signed by another key is refused before any read or paid call", as
   expect(seen.reports).toHaveLength(0);
 });
 
+describe("the account's own consent", () => {
+  test("is required: a payload without it is refused before anything is read", () => {
+    const seen = wire();
+    expect(() => runWith(config(), { user: buyer })).toThrow(/consent is required/);
+    expect(seen.reads).toBe(0);
+    expect(seen.sent).toHaveLength(0);
+  });
+
+  test("signed by anyone but the account (whoever fires the trigger) is rejected before any read or paid call", async () => {
+    const seen = wire();
+    const out = runWith(config(), { user: buyer, consent: await consent(null, { signer: attackerKey }) });
+    expect(out.status).toBe("rejected");
+    expect(out.reason).toContain("the account did not consent");
+    expect(seen.reads).toBe(0);
+    expect(seen.sent).toHaveLength(0);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("to be underwritten alone cannot be used to link a wallet the account never named", async () => {
+    // The attacker owns the wallet (say, one with liquidations) and signs its link proof for the
+    // victim, then replays the victim's consent to be underwritten alone.
+    const seen = wire();
+    const out = runWith(config(), { user: buyer, consent: await consent(null), linked: await proof(buyer) });
+    expect(out.status).toBe("rejected");
+    expect(out.reason).toContain("the account did not consent");
+    expect(seen.reads).toBe(0);
+    expect(seen.sent).toHaveLength(0);
+  });
+
+  test("naming one wallet cannot vouch for another, nor for the account alone", async () => {
+    wire();
+    const named = await consent(STRONG);
+    expect(runWith(config(), { user: buyer, consent: named, linked: await proof(buyer) }).status).toBe("rejected");
+    expect(runWith(config(), { user: buyer, consent: named }).status).toBe("rejected");
+  });
+
+  test("is good for 15 minutes, on its own chain, for its own account", async () => {
+    const seen = wire();
+    const stale = runWith(config(), { user: buyer, consent: await consent(null, { issuedAt: NOW - 16 * 60 }) });
+    expect(stale).toMatchObject({ status: "rejected", reason: expect.stringContaining("account consent older than 15 minutes") });
+    const future = runWith(config(), { user: buyer, consent: await consent(null, { issuedAt: NOW + 5 * 60 }) });
+    expect(future).toMatchObject({ status: "rejected", reason: expect.stringContaining("issued in the future") });
+    expect(runWith(config(), { user: buyer, consent: await consent(null, { chainId: 1 }) }).status).toBe("rejected");
+    const other = getAddress(attackerKey.address);
+    expect(runWith(config(), { user: other, consent: await consent(null) }).status).toBe("rejected");
+    expect(seen.sent).toHaveLength(0);
+    expect(seen.reports).toHaveLength(0);
+  });
+});
+
 test("a stale proof is refused", async () => {
   const seen = wire();
-  const out = runWith(config(), { user: buyer, linked: await proof(buyer, NOW - 16 * 60) });
+  const out = runWith(config(), await asks(await proof(buyer, NOW - 16 * 60)));
   expect(out.status).toBe("rejected");
-  expect(out.reason).toContain("older than 15 minutes");
+  expect(out.reason).toContain("link proof older than 15 minutes");
   expect(seen.sent).toHaveLength(0);
 });
 
 test("a proof for another account cannot be replayed for this one", async () => {
   const seen = wire();
-  const out = runWith(config(), { user: FRESH_ACCOUNT, linked: await proof(buyer) });
+  // The other account consents to linking the wallet, but the wallet vouched for the buyer.
+  const other = getAddress(attackerKey.address);
+  const out = runWith(config(), {
+    user: other,
+    consent: await consent(walletKey.address, { account: other, signer: attackerKey }),
+    linked: await proof(buyer),
+  });
   expect(out.status).toBe("rejected");
+  expect(out.reason).toContain("not signed by the wallet");
   expect(seen.sent).toHaveLength(0);
 });
 
-test("an account ScoreManager already underwrote costs no provider call", () => {
+test("an account ScoreManager already underwrote costs no provider call", async () => {
   const seen = wire({ profile: { initialized: true, underwritten: true, liquidations: 0 } });
-  const out = runWith(config(), { user: buyer });
+  const out = runWith(config(), await asks());
   expect(out.status).toBe("skipped");
   expect(seen.sent).toHaveLength(0);
   expect(seen.reports).toHaveLength(0);
@@ -273,7 +350,7 @@ test("an account ScoreManager already underwrote costs no provider call", () => 
 
 test("a history wallet already backing another account is refused before any provider call", async () => {
   const seen = wire({ linkedTo: FRESH_ACCOUNT });
-  const out = runWith(config(), { user: buyer, linked: await proof(buyer) });
+  const out = runWith(config(), await asks(await proof(buyer)));
   expect(out.status).toBe("rejected");
   expect(out.reason).toContain("WalletAlreadyLinked");
   expect(seen.sent).toHaveLength(0);
@@ -282,24 +359,25 @@ test("a history wallet already backing another account is refused before any pro
 test("without Nansen the history wallet's risk checks cannot run: no report, the app retries", async () => {
   const seen = wire();
   const noNansen = new Map([["main", new Map([["ZERION_API_KEY", "z"], ["ETHERSCAN_API_KEY", "e"]])]]);
-  const out = runWith(config(), { user: buyer, linked: await proof(buyer) }, noNansen);
+  const out = runWith(config(), await asks(await proof(buyer)), noNansen);
   expect(out.status).toBe("incomplete");
   expect(out.missing.some((m: string) => m.startsWith("linked."))).toBe(true);
   expect(seen.reports).toHaveLength(0);
   expect(seen.sent.some((s) => s.url.startsWith("https://api.nansen.ai"))).toBe(false);
 });
 
-test("a refusal on chain is reported with ScoreManager's reason", () => {
+test("a refusal on chain is reported with ScoreManager's reason", async () => {
   wire({ refuse: encodeErrorResult({ abi: scoreManagerAbi, errorName: "StaleEvidence" }) });
-  const out = runWith(config(), { user: buyer });
+  const out = runWith(config(), await asks());
   expect(out.status).toBe("refused");
   expect(out.reason).toBe("StaleEvidence");
 });
 
-test("malformed input fails loudly", () => {
+test("malformed input fails loudly", async () => {
   wire();
-  expect(() => runWith(config(), { user: "0x1234" })).toThrow(/user must be a 0x-prefixed 20-byte address/);
-  expect(() => runWith(config(), { user: buyer, extra: 1 })).toThrow(/underwriting payload/);
+  const c = await consent();
+  expect(() => runWith(config(), { user: "0x1234", consent: c })).toThrow(/user must be a 0x-prefixed 20-byte address/);
+  expect(() => runWith(config(), { user: buyer, consent: c, extra: 1 })).toThrow(/underwriting payload/);
 });
 
 test("the staging recipe fits CRE's 15 HTTP calls for every fixture persona pair but the worst case, which it names", () => {
@@ -335,7 +413,7 @@ test("over the call budget, the run stops without a report rather than attest wh
     seen.sent.push(s);
     return answerFromFixtures(s, noFunder);
   };
-  const out = runWith(config(), { user: buyer, linked: await proof(buyer) });
+  const out = runWith(config(), await asks(await proof(buyer)));
   expect(out.status).toBe("incomplete");
   expect(out.httpCalls).toBe(15);
   expect(seen.sent).toHaveLength(15);

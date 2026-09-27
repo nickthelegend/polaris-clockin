@@ -3,8 +3,10 @@
  *
  * Fired when a buyer asks for Pay in 4 (plan §3.3, §5.5):
  *
- *   1. DON mode, no network: parse the payload; verify the Bring-your-history
- *      proof (the wallet's own signature, fresh) before spending anything.
+ *   1. DON mode, no network: parse the payload; verify the account's own
+ *      consent (its signature, fresh, naming the history wallet or none) and
+ *      the Bring-your-history proof (the wallet's signature, fresh) before
+ *      spending anything. The trigger's caller is never taken at its word.
  *   2. EVM reads: refuse a buyer ScoreManager has already underwritten and a
  *      history wallet already backing someone else, so no Nansen credit is
  *      spent on a report the chain would refuse; read the account's dollars
@@ -48,6 +50,7 @@ import {
   submitReport,
 } from "../shared/evm.ts";
 import { optionalSecret, postSignedCallback } from "../shared/http.ts";
+import { verifyAccountConsent } from "./consent.ts";
 import { type Observation, observe, type ProviderKeys } from "./evidence.ts";
 import { verifyLinkProof } from "./link.ts";
 import { parseUnderwritingPayload } from "./payload.ts";
@@ -165,7 +168,9 @@ export function onHttpTrigger(runtime: Runtime<UnderwritingConfig>, payload: HTT
     return JSON.stringify(out);
   };
 
-  // 1. The history wallet's proof, before any read or paid call.
+  // 1. The account's consent and the history wallet's proof, before any read or paid call.
+  const consent = verifyAccountConsent({ account: user, wallet, chainId: cfg.recipe.accountChainId, ...input.consent }, now);
+  if (!consent.ok) return done({ status: "rejected", reason: consent.reason });
   if (input.linked) {
     const check = verifyLinkProof({ account: user, ...input.linked }, now);
     if (!check.ok) return done({ status: "rejected", reason: check.reason });

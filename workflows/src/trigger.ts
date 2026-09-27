@@ -12,6 +12,12 @@
  * The HTTP trigger fires at most once per 30 seconds per workflow, so the API
  * should queue requests rather than retry in a loop.
  *
+ * The API authenticates the buyer before it queues a run, and passes on the
+ * consent the buyer's account signed (`underwriteConsentMessage` from
+ * `@polaris/cre-workflows/consent`) untouched: the workflow verifies that
+ * signature itself and rejects a run the account did not ask for, so the API
+ * cannot underwrite anyone on its own, and neither can whoever reaches it.
+ *
  * A deployed workflow is fired through Chainlink's gateway with a JWT signed
  * by one of the workflow's `authorizedKeys`; that path needs Early Access and
  * is described in README.md, not implemented here.

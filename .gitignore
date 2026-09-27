@@ -34,6 +34,7 @@ cre/**/tmp/
 workflows/.tools/
 workflows/.local/
 workflows/*/config.local.json
+workflows/underwriting/payload.json
 workflows/**/*.wasm
 workflows/**/.cre/
 workflows/**/tmp/
