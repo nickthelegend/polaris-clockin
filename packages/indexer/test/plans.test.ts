@@ -57,8 +57,7 @@ function report(sim: Sim, body: (sim: Sim) => void, tasks: number, executed: num
 
 describe("Pay in 4", () => {
   it("opens with a full schedule, and pays the merchant the principal at once", async () => {
-    const sim = new Sim();
-    sim.tx({ from: RELAYER, to: A.MerchantRegistry }).log("MerchantRegistry", "MerchantRegistered", { merchant, name: "Studio Sur", payoutAddress: merchant });
+    const sim = new Sim().registerMerchant(merchant);
     const firstDueAt = open(sim, 1n, `0x${"aa".repeat(32)}`, "logo-work");
     await sim.run();
 
@@ -99,7 +98,7 @@ describe("Pay in 4", () => {
   });
 
   it("duns a short buyer along the ladder, then clears it when CRE collects", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     const firstDueAt = open(sim, 1n, `0x${"aa".repeat(32)}`, "logo-work");
     await sim.run();
 
@@ -165,7 +164,7 @@ describe("Pay in 4", () => {
   });
 
   it("counts a partial payment toward the instalment without completing it", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     open(sim, 1n, `0x${"aa".repeat(32)}`, "o");
     sim.tx({ from: RELAYER, to: A.PolarisLoanEngine }).log("PolarisLoanEngine", "InstallmentPaid", { loanId: 1n, borrower: buyer, installmentIndex: 0n, amount: USD(10), onTime: true });
     await sim.run();
@@ -175,7 +174,7 @@ describe("Pay in 4", () => {
   });
 
   it("closes a plan the buyer prepays in one payment", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     open(sim, 1n, `0x${"aa".repeat(32)}`, "o");
     sim
       .tx({ from: RELAYER, to: A.PolarisLoanEngine })
@@ -196,7 +195,7 @@ describe("Pay in 4", () => {
   });
 
   it("writes off what liquidation could not recover", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     open(sim, 7n, `0x${"bb".repeat(32)}`, "o", 60);
     sim.wait(60 + SETTINGS.graceSeconds + 2);
     const owed = principal + interestFor(principal, 4, 60);

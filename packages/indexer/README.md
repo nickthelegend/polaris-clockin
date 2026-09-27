@@ -65,7 +65,9 @@ the contracts' end-to-end flows plus `scripts/fixture-scenarios.cjs` run on
 it; then Envio's own runtime indexes that chain over RPC (dynamic merchant
 registration, the wildcard transfer filter, every handler) and the indexed
 state must equal what the contracts report. It works in a scratch copy, so
-`config.yaml` is untouched.
+`config.yaml` is untouched. `POLARIS_LIVE_RUNS=5` indexes the same chain five
+times (CI does): Envio's queries answer in a different order every run, and
+an ordering bug shows up only now and then.
 
 ## Running it locally against Monad testnet (needs Docker)
 
@@ -143,11 +145,15 @@ carry personal data.
 - **Chainlink's forwarders** (`CreForwarder`): `ReportProcessed` for our two
   receivers only (filtered by the receiver topic). `result: false` means the
   receiver reverted, which `cre workflow simulate` still reports as success.
-- **Merchant accounts** (`MerchantWallet`): every account the indexer meets as
-  a merchant (registered, paid, quoted, or publishing a plan) is registered at
-  runtime, and stablecoin `Transfer`s from or to those accounts are indexed in
-  wildcard mode, filtered at the source by topic. That gives the dashboard a
-  balance without an RPC call, and makes payouts visible.
+- **Merchant accounts** (`MerchantWallet`): an account is registered at
+  runtime when it registers with the `MerchantRegistry`, and from then on
+  stablecoin `Transfer`s from or to it are indexed in wildcard mode, filtered
+  at the source by topic. That gives the dashboard a balance without an RPC
+  call, and makes payouts visible. Nothing else registers an account: Envio
+  runs `contractRegister` as each contract's query answers, in any order, so
+  an account registered from several events (a loan seen before the
+  registration) could start being followed after its first payment; and
+  paying an arbitrary account a cent must not make the indexer follow it.
 
 | Entity | Holds | Read by |
 |---|---|---|
@@ -195,8 +201,11 @@ unix seconds; addresses are lowercase.
 - **Webhooks never fire from a handler** (handlers run twice and can be rolled
   back); they are rows in `Activity`. `block_lag: 2` (Monad's finality) means
   a row is final when it appears.
-- **Merchant balances** count every transfer since the indexer first met the
-  account, which for a Polaris merchant is registration, before any money.
+- **Merchant balances** count every stablecoin transfer since the merchant
+  registered (`registeredAt`), which for a Polaris business is before any
+  money. An account paid without ever registering is not followed: its
+  `balance` stays 0 (read `AUSD.balanceOf`), and its payments still count in
+  every volume.
 
 ## The GraphQL client
 

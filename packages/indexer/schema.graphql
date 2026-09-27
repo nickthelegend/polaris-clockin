@@ -127,9 +127,11 @@ type Merchant {
   mrr: BigInt!
 
   """
-  AUSD held, from every stablecoin transfer in or out since the indexer first
-  met this account (registration or first payment). Transfers before that
-  are not counted.
+  AUSD held, from every stablecoin transfer in or out since this account
+  registered with the MerchantRegistry (registeredAt), which for a Polaris
+  business is before any money. An account paid without registering is not
+  followed (its balance stays 0; read AUSD.balanceOf); its payments still
+  count in every volume.
   """
   balance: BigInt!
   payoutCount: Int!

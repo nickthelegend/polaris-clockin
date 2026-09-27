@@ -1,14 +1,27 @@
 /**
  * Merchant accounts: the stablecoin moving in and out of them.
  *
- * Every account the indexer meets as a merchant (registered, paid, quoted, or
- * publishing a subscription plan) is registered at runtime as a
- * `MerchantWallet`. The Transfer handler runs in wildcard mode, filtered at
- * the source (HyperSync topics) to transfers from or to those accounts, and
- * keeps only the stablecoin's.
+ * A merchant's account is registered at runtime as a `MerchantWallet` when,
+ * and only when, it registers with the MerchantRegistry. The Transfer handler
+ * runs in wildcard mode, filtered at the source (HyperSync topics) to
+ * transfers from or to those accounts, and keeps only the stablecoin's.
  *
- * That gives the dashboard a balance without an RPC call, and makes payouts
- * visible: a transfer out of a merchant account in a transaction sent to the
+ * Why only MerchantRegistered. Envio runs `contractRegister` as each
+ * contract's query answers, and those answers arrive in any order. When one
+ * account was registered from several events (the registry, a payment, a
+ * loan), whichever answer came first fixed where its transfers start: a loan
+ * at block 35 seen before the registration at block 23 dropped the first
+ * payment, at block 34, from the balance (the flaky live test). One event per
+ * account can't race itself. It also means nobody can make the indexer follow
+ * an arbitrary account (an exchange's hot wallet) by paying it a cent.
+ *
+ * So `Merchant.balance` counts every stablecoin transfer from the block the
+ * merchant registered (`registeredAt`), which for a Polaris business is
+ * before any money. An account paid without ever registering is not
+ * followed: its `registeredAt` is null and its balance stays 0 (read
+ * AUSD.balanceOf); its payments still count in every volume.
+ *
+ * Payouts: a transfer out of a merchant account in a transaction sent to the
  * stablecoin itself (the relayer carrying the merchant's signed
  * transferWithAuthorization) is a payout. Money leaving through a Polaris
  * contract (a checkout payment, a send) is not.
@@ -16,7 +29,7 @@
 
 import { indexer } from "envio";
 
-import { balanceTick, withStore } from "../lib/store.js";
+import { balanceTick, withStore, type Merchant, type Store } from "../lib/store.js";
 import { logId } from "../lib/util.js";
 
 /* ── Which accounts are merchants ───────────────────────────────────────── */
@@ -25,21 +38,11 @@ indexer.contractRegister({ contract: "MerchantRegistry", event: "MerchantRegiste
   context.chain.MerchantWallet.add(event.params.merchant);
 });
 
-indexer.contractRegister({ contract: "PolarisPayments", event: "PaymentMade" }, async ({ event, context }) => {
-  context.chain.MerchantWallet.add(event.params.merchant);
-});
-
-indexer.contractRegister({ contract: "PolarisPayments", event: "OrderQuoted" }, async ({ event, context }) => {
-  context.chain.MerchantWallet.add(event.params.merchant);
-});
-
-indexer.contractRegister({ contract: "PolarisPayments", event: "PlanCreated" }, async ({ event, context }) => {
-  context.chain.MerchantWallet.add(event.params.merchant);
-});
-
-indexer.contractRegister({ contract: "PolarisLoanEngine", event: "LoanCreated" }, async ({ event, context }) => {
-  context.chain.MerchantWallet.add(event.params.merchant);
-});
+/** The merchant row for a followed account: registered before this log. */
+async function followed(st: Store, address: string): Promise<Merchant | undefined> {
+  const m = await st.find("Merchant", address);
+  return m?.registered ? m : undefined;
+}
 
 /* ── Money in and out ───────────────────────────────────────────────────── */
 
@@ -66,12 +69,11 @@ indexer.onEvent(
           .map(([, address]) => address),
       );
 
-      let payee = await st.find("Merchant", to);
-      const payer = await st.find("Merchant", from);
-      // A payment's transfer comes before the event that introduces its
-      // merchant (PaymentMade, LoanCreated), in the same transaction: money
-      // from a Polaris contract to an unknown account is that merchant's.
-      if (!payee && !payer && polaris.has(from)) payee = await st.merchant(to);
+      // The source fetches a registered account's transfers from the block it
+      // registered; one earlier in that block (or one the source over-fetched)
+      // is not the merchant's yet.
+      const payee = await followed(st, to);
+      const payer = await followed(st, from);
 
       if (payee) {
         const day = await st.merchantDay(payee);

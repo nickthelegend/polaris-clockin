@@ -27,7 +27,7 @@ function payNow(sim: Sim, key: string, amount: bigint, orderId: string) {
 
 describe("Pay now", () => {
   it("records the payment, the order and the merchant's money", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     sim.tx({ from: merchant, to: A.PolarisPayments }).log("PolarisPayments", "OrderQuoted", { paymentId: orderKey, merchant, amount: USD(25) });
     await sim.run();
     expect((await sim.indexer.Order.getOrThrow(orderKey)).status).toBe("QUOTED");
@@ -71,8 +71,39 @@ describe("Pay now", () => {
     expect(p).toMatchObject({ paymentCount: 1, payNowVolume: USD(25), merchantCount: 1, buyerCount: 1 });
   });
 
+  it("counts a merchant's money from its registration, and every payment in its volume", async () => {
+    const sim = new Sim();
+    // Paid before registering: the payment counts, but its transfer was never
+    // fetched (the account wasn't followed yet), so it isn't simulated here.
+    const early = USD(10);
+    sim
+      .tx({ from: RELAYER, to: A.PolarisCheckout })
+      .log("PolarisPayments", "PaymentMade", { paymentId: `0x${"e1".repeat(32)}`, payer: buyer, merchant, amount: early, fee: 0n, orderId: "early" });
+    await sim.run();
+    expect(await sim.indexer.Merchant.getOrThrow(merchant)).toMatchObject({ registered: false, registeredAt: undefined, grossVolume: early, balance: 0n });
+
+    sim.registerMerchant(merchant);
+    const fee = payNow(sim, orderKey, USD(25), "order-1");
+    await sim.run();
+    const m = await sim.indexer.Merchant.getOrThrow(merchant);
+    expect(m).toMatchObject({ registered: true, grossVolume: early + USD(25), balance: USD(25) - fee });
+    expect(m.registeredAt).toBeTypeOf("number");
+  });
+
+  it("follows only accounts that registered as merchants, never one that was merely paid", async () => {
+    // Paying an account (an exchange's hot wallet, say) a cent must not make
+    // the indexer fetch every transfer it ever makes afterwards.
+    const sim = new Sim();
+    const stranger = account(0xde);
+    sim
+      .tx({ from: buyer, to: A.PolarisPayments })
+      .log("PolarisPayments", "PaymentMade", { paymentId: `0x${"de".repeat(32)}`, payer: buyer, merchant: stranger, amount: 1n, fee: 0n, orderId: "a-cent" });
+    sim.tx({ from: RELAYER, to: A.Stablecoin }).transfer(stranger, account(0x903), USD(1_000));
+    await expect(sim.run()).rejects.toThrow(/never reached a handler/);
+  });
+
   it("keeps a day candle of payment sizes and the balance through the day", async () => {
-    const sim = new Sim(1_790_031_600); // 2026-09-21 23:00 UTC
+    const sim = new Sim(1_790_031_600).registerMerchant(merchant); // 2026-09-21 23:00 UTC
     payNow(sim, `0x${"01".repeat(32)}`, USD(40), "a");
     payNow(sim, `0x${"02".repeat(32)}`, USD(10), "b");
     payNow(sim, `0x${"03".repeat(32)}`, USD(90), "c");

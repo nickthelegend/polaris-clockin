@@ -57,16 +57,13 @@ function indexed(contract: string, event: string): boolean {
 }
 
 /**
- * When each merchant account was first registered as a MerchantWallet
- * (mirrors src/handlers/merchantWallet.ts). The simulated source, like
- * HyperSync, only delivers stablecoin transfers that touch one.
+ * When each merchant account was registered as a MerchantWallet (mirrors
+ * src/handlers/merchantWallet.ts: MerchantRegistered, and nothing else). The
+ * simulated source, like HyperSync, only delivers stablecoin transfers that
+ * touch one.
  */
 const REGISTERS: Record<string, string> = {
   "MerchantRegistry.MerchantRegistered": "merchant",
-  "PolarisPayments.PaymentMade": "merchant",
-  "PolarisPayments.OrderQuoted": "merchant",
-  "PolarisPayments.PlanCreated": "merchant",
-  "PolarisLoanEngine.LoanCreated": "merchant",
 };
 const registeredAt = new Map<string, number>();
 for (const e of fixture.events) {

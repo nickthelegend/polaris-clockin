@@ -10,6 +10,11 @@
 #      the indexed state must equal what the contracts report.
 #
 #   bash scripts/wsl.sh live        (Linux or WSL; needs packages/contracts installed on Linux)
+#
+# POLARIS_LIVE_RUNS=N indexes the same chain N times (default 1). Envio fetches
+# each contract's events concurrently and their answers arrive in a different
+# order every run, so an ordering bug shows up only now and then: CI runs it
+# several times.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,4 +42,8 @@ cd "$WORK/packages/indexer"
 node scripts/record-fixture.mjs --keep-node --out "$WORK/live-chain.json"
 node scripts/generate.mjs --deployment "$CONTRACTS/deployments/monad-local.json" --rpc "http://127.0.0.1:$PORT"
 pnpm exec envio codegen
-POLARIS_LIVE_FIXTURE="$WORK/live-chain.json" ENVIO_BLOCK_LAG=0 pnpm exec vitest run test/live.test.ts --test-timeout=300000
+RUNS="${POLARIS_LIVE_RUNS:-1}"
+for run in $(seq 1 "$RUNS"); do
+  [ "$RUNS" -gt 1 ] && echo "Indexing the chain: run $run of $RUNS" >&2
+  POLARIS_LIVE_FIXTURE="$WORK/live-chain.json" ENVIO_BLOCK_LAG=0 pnpm exec vitest run test/live.test.ts --test-timeout=300000
+done

@@ -81,6 +81,15 @@ export class Sim {
     return this.log("MerchantWallet", "Transfer", { from, to, value }, token);
   }
 
+  /**
+   * A business registering with the MerchantRegistry, in its own transaction.
+   * Only from then on are its stablecoin transfers fetched (and so may be
+   * simulated): the test indexer drops any other as the source would.
+   */
+  registerMerchant(merchant: string, name = "Studio Sur", payoutAddress: string = merchant): this {
+    return this.tx({ from: RELAYER, to: A.MerchantRegistry }).log("MerchantRegistry", "MerchantRegistered", { merchant, name, payoutAddress });
+  }
+
   /** Run everything emitted since the last run through the indexer. */
   async run(): Promise<void> {
     const simulate = this.items;

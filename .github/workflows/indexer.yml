@@ -53,4 +53,8 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile --filter @polarispay/contracts
+      # Several runs over the same chain: the order in which Envio's queries
+      # answer changes every run, and an ordering bug only shows now and then.
       - run: bash packages/indexer/scripts/wsl.sh live
+        env:
+          POLARIS_LIVE_RUNS: "5"

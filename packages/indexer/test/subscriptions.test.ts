@@ -53,7 +53,7 @@ function plan(sim: Sim) {
 
 describe("Subscriptions", () => {
   it("signs up through the checkout, then renews on schedule", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     plan(sim);
     const next = subscribe(sim, 1n);
     await sim.run();
@@ -76,7 +76,7 @@ describe("Subscriptions", () => {
   });
 
   it("backs off after a failed charge, and skips to the next boundary after a missed window", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     plan(sim);
     const next = subscribe(sim, 1n);
     sim.wait(PERIOD);
@@ -103,7 +103,7 @@ describe("Subscriptions", () => {
   });
 
   it("ends on a lapse or a cancellation, and the recurring revenue goes with it", async () => {
-    const sim = new Sim();
+    const sim = new Sim().registerMerchant(merchant);
     plan(sim);
     subscribe(sim, 1n);
     subscribe(sim, 2n);

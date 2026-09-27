@@ -68,8 +68,9 @@ const INDEXED = [
   // two receivers, filtered in src/handlers/cre.ts.
   { name: "CreForwarder", abi: "MockKeystoneForwarder", events: ["ReportProcessed"] },
   // Stablecoin transfers into and out of merchant accounts. No static address:
-  // merchant accounts are registered at runtime (src/handlers/merchantWallet.ts)
-  // and the Transfer handler runs in wildcard mode, filtered to those accounts.
+  // an account is registered at runtime when it registers with the
+  // MerchantRegistry (src/handlers/merchantWallet.ts), and the Transfer
+  // handler runs in wildcard mode, filtered to those accounts.
   { name: "MerchantWallet", abi: "IAUSD", events: ["Transfer"], dynamic: true },
 ];
 
@@ -229,7 +230,7 @@ export function renderConfig(dep, rpc) {
   for (const c of INDEXED) {
     L.push(`      - name: ${c.name}`);
     if (c.dynamic) {
-      L.push("        # registered at runtime: every merchant account the indexer meets");
+      L.push("        # registered at runtime: every account that registers with the MerchantRegistry");
       continue;
     }
     if (c.name === "CreForwarder") {

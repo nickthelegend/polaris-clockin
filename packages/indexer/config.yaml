@@ -158,4 +158,4 @@ chains:
           - "0xb9f79d863261869b234c481d1f9a7af84aead192"
           - "0xf8344cfd5c43616a4366c34e3eee75af79a74482"
       - name: MerchantWallet
-        # registered at runtime: every merchant account the indexer meets
+        # registered at runtime: every account that registers with the MerchantRegistry
