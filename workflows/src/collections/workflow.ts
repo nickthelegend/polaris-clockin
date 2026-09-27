@@ -21,27 +21,32 @@
  * nothing else happened, so the API can raise it instead of the fallback
  * quietly becoming the normal path.
  *
+ * A second trigger, the instant retry (./retry.ts): an EVM log trigger on
+ * PolarisCheckout's `Reauthorized(buyer, …)`. A buyer dunned for a lost
+ * allowance re-signs; the run reads `CollectionsReceiver.dueTasksFor(buyer)`
+ * and writes the same report for just those tasks, seconds after the
+ * re-sign instead of at the next rung of the dunning ladder. Steps 3 and 4
+ * are shared (`deliver`), so both triggers write one format through one path.
+ *
  * The run returns a JSON summary; the chain events are the record.
  */
 
-import { type CronPayload, cre, consensusIdenticalAggregation, type HTTPSendRequester, type Runtime } from "@chainlink/cre-sdk";
+import { type CronPayload, cre, consensusIdenticalAggregation, type EVMLog, type HTTPSendRequester, type Runtime } from "@chainlink/cre-sdk";
 import { collectionsReceiverAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
-import { type Address, parseAbi, zeroAddress } from "viem";
+import { type Address, parseAbi } from "viem";
 import { z } from "zod";
 import { base64Utf8 } from "../shared/callback.ts";
 import { address, callbackSchema, chainSelectorName, gasSchema } from "../shared/config.ts";
 import {
   deliveredTo,
-  estimateDelivery,
-  estimateOnReport,
   type EVMClient,
   evmClientFor,
-  gasLimitFor,
   nowSeconds,
   readContract,
   readReceipt,
   signReport,
-  submitReport,
+  WRITE_SIZED_READS,
+  writeSized,
 } from "../shared/evm.ts";
 import { optionalSecret, postSignedCallback } from "../shared/http.ts";
 import { type ChainBackoff, chainBackoffSchema, instalmentDueAt, loanVerdict, subscriptionVerdict } from "./backoff.ts";
@@ -54,6 +59,7 @@ import {
   unpackCandidates,
 } from "./candidates.ts";
 import { type CollectionsEvent, eventsFor, outcomeFromReceipt, summarize } from "./outcomes.ts";
+import { decodeReauthorized, reauthorizedFilter, retrySchema } from "./retry.ts";
 import {
   ACTION,
   chainWindow,
@@ -100,6 +106,11 @@ export const configSchema = z.object({
   checkBatch: z.number().int().min(1).max(MAX_CHECK_BATCH),
   gas: gasSchema,
   callback: callbackSchema,
+  /**
+   * The instant retry (./retry.ts): PolarisCheckout's address and the log
+   * confidence for the `Reauthorized` trigger, or null for the cron alone.
+   */
+  retry: retrySchema.default(null),
 });
 export type CollectionsConfig = z.infer<typeof configSchema>;
 
@@ -110,27 +121,16 @@ const COUNTS_ABI = parseAbi([
   "function loanCount() view returns (uint256)",
   "function subscriptionCount() view returns (uint256)",
 ]);
-const TRANSMITTER_ABI = parseAbi(["function simulationTransmitter() view returns (address)"]);
-
-/**
- * The receiver's simulation-only origin check, or zero when it has none. A
- * receiver that, while it trusts Chainlink's public simulation forwarder,
- * accepts deliveries only from its `simulationTransmitter` (as
- * UnderwritingReceiver does) refuses an estimate sent from the forwarder's
- * address, so the gas is estimated for the whole delivery from that key
- * instead. A receiver without the function answers with a revert: no check.
- */
-function simulationTransmitterOf(runtime: Runtime<CollectionsConfig>, evm: EVMClient, receiver: Address): Address {
-  try {
-    return readContract(runtime, evm, { address: receiver, abi: TRANSMITTER_ABI, functionName: "simulationTransmitter" }) as Address;
-  } catch {
-    return zeroAddress;
-  }
-}
+/** What fired a run: the cron, or a buyer's `Reauthorized` log (the instant retry). */
+export type RunTrigger =
+  | { kind: "cron"; scheduledAt: number }
+  | { kind: "log"; event: "Reauthorized"; buyer: Address; txHash: string; logIndex: number };
 
 export interface CollectionsResult {
   status: "idle" | "written" | "dry-run";
-  source: "indexer" | "chain";
+  trigger: RunTrigger;
+  /** Where the tasks came from: the indexer or the chain (cron), or the buyer's event (retry). */
+  source: "indexer" | "chain" | "event";
   /** Why a configured indexer was not used this run, or null. */
   indexerError: string | null;
   note: string | null;
@@ -366,13 +366,78 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
 
   const tasks = planTasks(ready, cfg.maxTasksPerReport);
   const base: CollectionsResult = {
-    status: "idle",
-    source,
+    ...emptyResult({ kind: "cron", scheduledAt: Number(tick) }, source),
     indexerError,
     note,
     checked,
-    tasks: tasks.map((t) => ({ action: ["", "collect", "charge", "liquidate"][t.action]!, id: t.id.toString() })),
+    tasks: taskList(tasks),
     heldBack,
+  };
+  return deliver(runtime, evm, budget, tasks, base, {
+    indexerError,
+    // No transaction to key an idle run's callback on: the scheduled tick is the same on every node.
+    idleId: `collections:${tick}`,
+    idleLog: `nothing due among ${checked} checks (${source})`,
+    now,
+  });
+}
+
+/**
+ * The instant retry's handler: a buyer re-signed (`PolarisCheckout.reauthorize`
+ * emitted `Reauthorized`), so their due instalments are collected now, in one
+ * report through the same path as the cron's, instead of at the next rung of
+ * the dunning ladder. `CollectionsReceiver.dueTasksFor(buyer)` at the last
+ * finalized block says which: one collect task per plan of theirs whose
+ * instalment is due. Nothing due (they re-signed before it fell due) writes
+ * nothing; the cron collects it then. Liquidation stays the cron's: a buyer
+ * who has just re-signed is collected, not liquidated.
+ */
+export function onReauthorized(runtime: Runtime<CollectionsConfig>, log: EVMLog): string {
+  const cfg = runtime.config;
+  if (!cfg.retry) throw new Error("retry is null in this config, so the Reauthorized trigger should not be registered");
+  const ev = decodeReauthorized(log, cfg.retry.checkout);
+  const trigger: RunTrigger = { kind: "log", event: "Reauthorized", buyer: ev.buyer, txHash: ev.txHash, logIndex: ev.logIndex };
+  const base = emptyResult(trigger, "event");
+  runtime.log(`Reauthorized: ${ev.buyer} re-signed for ${ev.value} (tx ${ev.txHash}, block ${ev.blockNumber ?? "?"})`);
+  if (ev.removed) {
+    runtime.log("the log was removed by a reorg: nothing to collect on it");
+    return JSON.stringify({ ...base, note: "the Reauthorized log was removed by a reorg" });
+  }
+
+  const evm = evmClientFor(cfg.chainSelectorName);
+  const budget = new ReadBudget(EVM_READ_LIMIT);
+  budget.take();
+  const due = readContract(runtime, evm, {
+    address: cfg.receiver,
+    abi: collectionsReceiverAbi,
+    functionName: "dueTasksFor",
+    args: [ev.buyer],
+  }) as ReadonlyArray<{ action: number; id: bigint }>;
+  const collectable = due.filter((t) => t.action === ACTION.COLLECT_INSTALLMENT);
+  const tasks: Task[] = collectable.slice(0, cfg.maxTasksPerReport).map((t) => ({ action: ACTION.COLLECT_INSTALLMENT, id: t.id }));
+  let note: string | null = null;
+  if (collectable.length > tasks.length) {
+    note = `${collectable.length - tasks.length} more due instalment(s) of ${ev.buyer} wait for the cron (maxTasksPerReport)`;
+    runtime.log(note);
+  }
+  return deliver(runtime, evm, budget, tasks, { ...base, note, checked: due.length, tasks: taskList(tasks) }, {
+    indexerError: null,
+    idleId: `collections:reauthorized:${ev.txHash}:${ev.logIndex}`,
+    idleLog: `nothing due for ${ev.buyer}: the cron collects when the next instalment falls due`,
+    now: nowSeconds(runtime),
+  });
+}
+
+function emptyResult(trigger: RunTrigger, source: CollectionsResult["source"]): CollectionsResult {
+  return {
+    status: "idle",
+    trigger,
+    source,
+    indexerError: null,
+    note: null,
+    checked: 0,
+    tasks: [],
+    heldBack: [],
     txHash: null,
     gasLimit: null,
     executed: 0,
@@ -380,9 +445,30 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
     events: 0,
     callbackStatus: null,
   };
+}
+
+const taskList = (tasks: readonly Task[]) => tasks.map((t) => ({ action: ["", "collect", "charge", "liquidate"][t.action]!, id: t.id.toString() }));
+
+/**
+ * Steps 3 and 4, the same for both triggers: one signed report for `tasks`
+ * (`abi.encode(uint8 1, (uint8 action, uint256 id)[])`), gas sized from its
+ * own estimate (of `onReport` as the forwarder calls it or, behind a
+ * simulation transmitter, of the whole delivery from it), the receipt read
+ * back (simulation calls a reverted receiver a success), skip reasons turned
+ * into dunning events, and the signed callback. No tasks, no write.
+ */
+function deliver(
+  runtime: Runtime<CollectionsConfig>,
+  evm: EVMClient,
+  budget: ReadBudget,
+  tasks: Task[],
+  base: CollectionsResult,
+  ctx: { indexerError: string | null; idleId: string; idleLog: string; now: number },
+): string {
+  const cfg = runtime.config;
   /** The signed run callback: whenever a task moved or failed, and whenever the indexer failed. */
   const callBack = (result: CollectionsResult, run: { id: string; txHash: string | null; tally: CallbackTally; events: CollectionsEvent[] }) => {
-    if (!cfg.callback || (run.events.length === 0 && indexerError === null)) return;
+    if (!cfg.callback || (run.events.length === 0 && ctx.indexerError === null)) return;
     const secret = optionalSecret(runtime, cfg.callback.secretId);
     if (!secret) {
       runtime.log(`callback skipped: secret ${cfg.callback.secretId} is not set`);
@@ -394,11 +480,12 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
       payload: {
         id: run.id,
         type: "collections.run",
-        createdAt: now,
+        createdAt: ctx.now,
         chain: cfg.chainSelectorName,
         receiver: cfg.receiver,
         txHash: run.txHash,
-        candidates: { source, indexerError },
+        trigger: result.trigger,
+        candidates: { source: result.source, indexerError: ctx.indexerError },
         tally: run.tally,
         events: run.events,
       },
@@ -407,25 +494,17 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   };
 
   if (tasks.length === 0) {
-    runtime.log(`nothing due among ${checked} checks (${source})`);
-    // No transaction to key on: the scheduled tick is the same on every node.
-    callBack(base, { id: `collections:${tick}`, txHash: null, tally: { tasks: 0, executed: 0, skipped: 0 }, events: [] });
+    runtime.log(ctx.idleLog);
+    callBack(base, { id: ctx.idleId, txHash: null, tally: { tasks: 0, executed: 0, skipped: 0 }, events: [] });
     return JSON.stringify(base);
   }
 
-  // 3. One report, gas sized from an estimate: of onReport as the forwarder
-  // calls it, or, behind a simulation transmitter, of the whole delivery from it.
+  // 3. One report, gas sized from its own estimate.
   const report = signReport(runtime, encodeCollectionsReport(tasks));
-  budget.take();
-  const transmitter = simulationTransmitterOf(runtime, evm, cfg.receiver);
-  budget.take();
-  const target = { forwarder: cfg.forwarder, receiver: cfg.receiver, report };
-  const estimate =
-    transmitter === zeroAddress ? estimateOnReport(runtime, evm, target) : estimateDelivery(runtime, evm, { ...target, from: transmitter });
-  const gasLimit = gasLimitFor(estimate, cfg.gas, transmitter === zeroAddress ? "receiver" : "delivery");
-  const write = submitReport(runtime, evm, { receiver: cfg.receiver, report, gasLimit });
-  runtime.log(`wrote ${tasks.length} tasks, gas limit ${gasLimit} (estimate ${estimate}), tx ${write.txHash}`);
-  const result: CollectionsResult = { ...base, status: "written", txHash: write.txHash, gasLimit: gasLimit.toString() };
+  budget.take(WRITE_SIZED_READS);
+  const write = writeSized(runtime, evm, { forwarder: cfg.forwarder, receiver: cfg.receiver, report, gas: cfg.gas });
+  runtime.log(`wrote ${tasks.length} tasks, gas limit ${write.gasLimit} (estimate ${write.estimate}), tx ${write.txHash}`);
+  const result: CollectionsResult = { ...base, status: "written", txHash: write.txHash, gasLimit: write.gasLimit.toString() };
   if (!write.broadcast) return JSON.stringify({ ...result, status: "dry-run" });
 
   // 4. Read back what happened; simulation reports a reverted receiver as success.
@@ -450,6 +529,13 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   return JSON.stringify(result);
 }
 
-export const initWorkflow = (config: CollectionsConfig) => [
-  cre.handler(new cre.capabilities.CronCapability().trigger({ schedule: config.schedule }), onCron),
-];
+/**
+ * Trigger 0: the cron. Trigger 1, when `retry` is set: the EVM log trigger on
+ * PolarisCheckout's `Reauthorized` (`--trigger-index 1` under simulate).
+ */
+export const initWorkflow = (config: CollectionsConfig) => {
+  const cron = cre.handler(new cre.capabilities.CronCapability().trigger({ schedule: config.schedule }), onCron);
+  if (!config.retry) return [cron];
+  const retry = cre.handler(evmClientFor(config.chainSelectorName).logTrigger(reauthorizedFilter(config.retry)), onReauthorized);
+  return [cron, retry];
+};

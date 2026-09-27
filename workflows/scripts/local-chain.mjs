@@ -10,11 +10,13 @@
  *    script (MockAUSD and a local MockKeystoneForwarder), exactly as testnet.
  * 3. Plants that forwarder's code at Chainlink's simulation-forwarder address
  *    (0xB9F7…D192, which `cre workflow simulate` writes to for
- *    `monad-testnet`) and points both receivers at it. The deployer, whose
- *    key is Hardhat's first public test key, stays UnderwritingReceiver's
- *    simulation transmitter.
- * 4. Writes workflows/.local/deployment.json and both workflows'
- *    config.local.json (git-ignored).
+ *    `monad-testnet`) and points the three receivers at it. The deployer,
+ *    whose key is Hardhat's first public test key, stays their simulation
+ *    transmitter.
+ * 4. Writes workflows/.local/deployment.json and every workflow's
+ *    config.local.json (git-ignored). The guardian's reads the local chain's
+ *    MockPriceFeed ("AUSD / USD (local mock, not Chainlink)"), so a local
+ *    depeg is `setAnswer` on it; staging reads Chainlink's feed on mainnet.
  *
  * Then, from workflows/ (after `cre login`):
  *   cre workflow simulate ./collections -T local-settings --non-interactive --trigger-index 0 --broadcast
@@ -103,6 +105,8 @@ export async function startLocalChain() {
 }
 
 const RECEIVER_ADMIN = parseAbi(["function setForwarderAddress(address forwarder)"]);
+/** The three CRE receivers, each repointed at the planted simulation forwarder. */
+export const RECEIVERS = ["CollectionsReceiver", "UnderwritingReceiver", "GuardianReceiver"];
 const setForwarderData = (addr) => encodeFunctionData({ abi: RECEIVER_ADMIN, functionName: "setForwarderAddress", args: [addr] });
 
 /** Deploy, plant the simulation forwarder, write the local configs. */
@@ -120,7 +124,7 @@ export async function setUpLocalChain() {
   const code = await rpc("eth_getCode", [localForwarder, "latest"]);
   if (!code || code === "0x") throw new Error(`no forwarder code at ${localForwarder}`);
   await rpc("hardhat_setCode", [FORWARDERS.simulation, code]);
-  for (const name of ["CollectionsReceiver", "UnderwritingReceiver"]) {
+  for (const name of RECEIVERS) {
     const hash = await rpc("eth_sendTransaction", [
       { from: record.deployer, to: record.contracts[name].address, data: setForwarderData(FORWARDERS.simulation) },
     ]);
@@ -144,11 +148,11 @@ async function main() {
     ok = true;
     console.log(`\nLocal Monad stand-in on ${RPC_URL} (chain 10143), node log: ${logFile}`);
     console.log(`Simulation forwarder planted at ${FORWARDERS.simulation}; receivers repointed.`);
-    console.log(`CollectionsReceiver   ${record.contracts.CollectionsReceiver.address}`);
-    console.log(`UnderwritingReceiver  ${record.contracts.UnderwritingReceiver.address}`);
+    for (const name of RECEIVERS) console.log(`${name.padEnd(22)}${record.contracts[name].address}`);
+    if (record.contracts.MockAusdUsdFeed) console.log(`MockAusdUsdFeed       ${record.contracts.MockAusdUsdFeed.address} (local mock, not Chainlink)`);
     for (const c of configs) console.log(`Wrote ${c}`);
     console.log(`\nFor \`cre workflow simulate -T local-settings --broadcast\`, put this public Hardhat test key in workflows/.env:`);
-    console.log(`  CRE_ETH_PRIVATE_KEY=${LOCAL_TRANSMITTER_KEY.slice(2)}   # ${LOCAL_TRANSMITTER}, UnderwritingReceiver's simulation transmitter`);
+    console.log(`  CRE_ETH_PRIVATE_KEY=${LOCAL_TRANSMITTER_KEY.slice(2)}   # ${LOCAL_TRANSMITTER}, the receivers' simulation transmitter`);
     if (once) return;
     console.log("\nCtrl+C stops the node.");
     await new Promise((resolve) => node.on("exit", resolve));
