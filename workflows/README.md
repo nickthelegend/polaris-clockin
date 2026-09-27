@@ -356,6 +356,9 @@ and `credit.thin`.
   `test/underwriting.workflow.test.ts`: an account with no history (or only
   dollars) gets no report and no $200 line; it opens once a history wallet
   is brought; a declined file is still reported.
+- `test/payload-script.test.ts`: what `simulate:underwriting` writes
+  (`scripts/underwriting-payload.mjs`) is a payload the workflow accepts,
+  with and without a history wallet.
 - `test/consent.test.ts`: the consent text byte for byte, bound to the
   account, the wallet (or none), the chain and 15 minutes, and checked the
   way viem's own verifier checks it.
@@ -384,7 +387,7 @@ with against what it used:
 
 | | |
 |---|---|
-| Both workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed |
+| Both workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed (rebuilt 27 Sep 2026 with the consent and thin-file checks: 2.75 MB and 2.85 MB) |
 | Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`, `e2e:local`) |
 | `cre workflow simulate` | needs `cre login` (a CRE account): not run here. The commands are above; `local-settings` keeps `--broadcast` off public chains |
 | Monad testnet | waits for `deploy:monad` (the deployer is unfunded), then `configure staging` |
