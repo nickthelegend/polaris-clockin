@@ -27,7 +27,7 @@ import { getActivity, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { toNumber } from "@/lib/money";
 import { type HomeAccount, setPrefs } from "@/lib/prefs";
-import { balanceSeries, creditSeries, emptySeries, type Frame, FRAMES, type Series } from "@/lib/series";
+import { balanceSeries, creditSeries, emptySeries, type Frame, FRAMES, restIndex, type Series } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
 import { activityColumns, withSample } from "./bits";
 import { MoneyWidget } from "./money-widget";
@@ -176,27 +176,7 @@ function chipFor(series: Series, suffix: string): { delta: number | null; label?
   return { delta: null, label: `${change > 0 ? "+" : "−"}${dollars(Math.abs(change))} ${suffix}` };
 }
 
-/**
- * Where the bubble rests: on the latest payment that landed inside the plot
- * (between 15% and 85% of the width), like the reference's "550.24", never
- * pinned to an edge. A line that never moved rests on its last point.
- */
-function restIndex(series: Series): number | null {
-  const pts = series.points;
-  const n = pts.length;
-  if (n < 2) return null;
-  if (pts.every((p) => p.value === pts[0]!.value)) return n - 1;
-  const t0 = pts[0]!.t;
-  const span = pts[n - 1]!.t - t0 || 1;
-  const lo = Math.round((n - 1) * 0.15);
-  const hi = Math.round((n - 1) * 0.85);
-  for (let i = series.moves.length - 1; i >= 0; i--) {
-    // The first point at or after the move, so the bubble shows where it landed.
-    const k = Math.min(n - 1, Math.ceil(((series.moves[i]! - t0) / span) * (n - 1)));
-    if (k >= lo && k <= hi) return k;
-  }
-  return hi;
-}
+
 
 function BoostEmpty() {
   return (

@@ -35,10 +35,10 @@ import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { getCreditLine, getPlans, getProfile, type Instalment, type Plan } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { relativeDay, shortDate } from "@/lib/dates";
+import { inDays, relativeDay, shortDate } from "@/lib/dates";
 import { usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
-import { creditSeries, type Frame, FRAMES } from "@/lib/series";
+import { creditSeries, type Frame, FRAMES, restIndex } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
 import { n, planProgress, scoreHistory, weeklyCandles } from "@/lib/view";
 import { PageCoin, PageGrid, SectionTitle, SideNote, withSample } from "./bits";
@@ -123,6 +123,7 @@ export function CreditDesktop() {
                   formatAxis={axis}
                   formatTime={time}
                   formatBubbleNote={null}
+                  defaultIndex={restIndex(series)}
                   lastLabel={f.last}
                 />
               )}
@@ -168,7 +169,7 @@ export function CreditDesktop() {
                   render: (r) => (
                     <span className="block">
                       <span className="block">{shortDate(r.instalment.dueAt)}</span>
-                      <span className="block text-[13px] text-ui-muted">{relativeDay(r.instalment.dueAt)}</span>
+                      <span className="block text-[13px] text-ui-muted">{inDays(r.instalment.dueAt)}</span>
                     </span>
                   ),
                 },
@@ -212,10 +213,11 @@ export function CreditDesktop() {
 
 /* ── Credit score ───────────────────────────────────────────────────────── */
 
+// Lowercase like Home's and the reference's "1h 24h 1w 1m".
 const RANGES = [
-  { value: "1W", days: 7 },
-  { value: "1M", days: 30 },
-  { value: "3M", days: 90 },
+  { value: "1w", days: 7 },
+  { value: "1m", days: 30 },
+  { value: "3m", days: 90 },
   { value: "All", days: 180 },
 ] as const;
 type Range = (typeof RANGES)[number]["value"];
@@ -231,7 +233,7 @@ export function ScoreDesktop() {
   const plans = useData(() => getPlans(owner), [owner]);
   const profile = useData(() => getProfile(owner), [owner]);
   const [type, setType] = useState<ChartType>("line");
-  const [range, setRange] = useState<Range>("3M");
+  const [range, setRange] = useState<Range>("3m");
   const [why, setWhy] = useState(false);
   const [raising, setRaising] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -311,7 +313,10 @@ export function ScoreDesktop() {
                   data={candles}
                   height={360}
                   formatPrice={(v) => String(Math.round(v))}
+                  formatAxis={(v) => String(Math.round(v))}
                   formatTime={time}
+                  timeAxis
+                  lastLabel="Today"
                   className="rounded-[20px]"
                 />
               )}
@@ -364,7 +369,7 @@ export function ScoreDesktop() {
                 items={[
                   { label: "Amount", value: !c ? "…" : next ? usd(next.amount) : "None" },
                   { label: "To", value: !c ? "…" : (next?.merchant ?? "Nobody") },
-                  { label: "Due", value: !c ? "…" : next ? `${shortDate(next.dueAt)}, ${relativeDay(next.dueAt)}` : "Nothing due" },
+                  { label: "Due", value: !c ? "…" : next ? `${shortDate(next.dueAt)}, ${inDays(next.dueAt)}` : "Nothing due" },
                   { label: "Outside history", value: !c ? "…" : c.historyLinked ? "Linked" : "Not yet" },
                 ]}
               />

@@ -55,6 +55,17 @@ export function dayLabel(ts: number, now = Date.now()): string {
   return shortDate(ts);
 }
 
+/**
+ * "today", "tomorrow", "in 19 days": always relative, never a date, for a
+ * line that sits beside the date itself ("Oct 16 / in 19 days").
+ */
+export function inDays(ts: number, now = Date.now()): string {
+  const days = Math.round((ts - now) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "tomorrow";
+  return `in ${days} days`;
+}
+
 /** "in 5 days", "tomorrow", "today". */
 export function relativeDay(ts: number, now = Date.now()): string {
   const days = Math.round((ts - now) / 86_400_000);

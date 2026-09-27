@@ -30,7 +30,7 @@ import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { describeInterval, dueAt, getCreditLine, getPlans, type Plan, quotePlan, type Subscription, WEEK } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { longDate, relativeDay, shortDate } from "@/lib/dates";
+import { inDays, longDate, relativeDay, shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { dollars, type Micros, usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
@@ -150,7 +150,7 @@ export function PlansDesktop() {
                           <span className="block">
                             <span className="ui-figure block">{usd(pr.next.amount)}</span>
                             <span className="block text-[13px] text-ui-muted">
-                              {shortDate(pr.next.dueAt)}, {relativeDay(pr.next.dueAt)}
+                              {shortDate(pr.next.dueAt)}, {inDays(pr.next.dueAt)}
                             </span>
                           </span>
                         ) : (
@@ -199,7 +199,7 @@ export function PlansDesktop() {
                       key: "status",
                       header: "Status",
                       align: "right",
-                      render: (s) => (s.status === "active" ? <StatusPill tone="teal">Subscription</StatusPill> : <StatusPill tone="neutral">Cancelled</StatusPill>),
+                      render: (s) => (s.status === "active" ? <StatusPill tone="teal">Active</StatusPill> : <StatusPill tone="neutral">Cancelled</StatusPill>),
                     },
                   ]}
                 />
@@ -347,7 +347,7 @@ export function PlanDrawerContent({ id }: { id: string }) {
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px]">{longDate(inst.dueAt)}</span>
                     <span className="block text-[13px] text-ui-muted">
-                      {inst.paidAt !== null ? `Paid ${shortDate(inst.paidAt)}` : isNext ? `Next, ${relativeDay(inst.dueAt)}` : "Scheduled"}
+                      {inst.paidAt !== null ? `Paid ${shortDate(inst.paidAt)}` : isNext ? `Next, ${inDays(inst.dueAt)}` : `Due ${inDays(inst.dueAt)}`}
                     </span>
                   </span>
                   <span className="ui-figure text-[15px]">{usd(inst.amount)}</span>
@@ -361,7 +361,7 @@ export function PlanDrawerContent({ id }: { id: string }) {
                     </StatusPill>
                   ) : (
                     <StatusPill tone="neutral" size="sm">
-                      Due
+                      Scheduled
                     </StatusPill>
                   )}
                 </li>
