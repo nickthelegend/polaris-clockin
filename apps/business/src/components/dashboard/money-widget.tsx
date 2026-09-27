@@ -314,7 +314,7 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
           </span>
         }
         value={money(balance)}
-        delta={change}
+        delta={change === null ? undefined : change}
         title={change !== null ? "Change in the last 24 hours" : undefined}
         stats={[
           { label: "Network fee", value: "$0.00" },
