@@ -237,6 +237,18 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
    the facts the DON attested are read from the report in the forwarder
    transaction and explained by the gateway's `POST /v1/explain`, once.
 
+## What the Polaris app reads
+
+- `GET /api/public/sessions/{id}[?buyer=0x…]`, `POST /api/public/links/{id}/checkout`:
+  the hosted checkout (with the buyer's nonces, Pay in 4 quote and the
+  Subscribe permit value that keeps their other subscriptions funded).
+- `GET /api/public/buyers/{address}`: the buyer's plans, subscriptions and
+  payments to Polaris merchants, from chain events, with only what the chain
+  already shows (no descriptions, order ids or metadata).
+- `GET /api/public/credit/{address}` and `/messages`, `POST /api/credit/underwrite`:
+  credit (above).
+- `GET /api/public/network`: the contracts and EIP-712 domains.
+
 ## Environment
 
 See [`.env.example`](.env.example) for every variable. The essentials:
