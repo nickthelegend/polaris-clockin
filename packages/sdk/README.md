@@ -182,8 +182,16 @@ a no-op. Every event comes from an indexed chain event, never from a browser.
 | `subscription.canceled` | `subscriptionId, planId, merchant, subscriber, canceledBy, txHash, chainId` |
 | `payout.paid` | `payoutId, amount, destination, automatic, txHash, chainId` |
 
-Amounts are USD decimal strings with up to 6 decimals (AUSD's precision).
-The types are exported: `WebhookEvent<"plan.opened">`, `PlanOpenedData`, …
+Amounts are USD decimal strings with 2 to 6 decimals (AUSD's precision):
+`"25.00"`, `"50.383562"`, never base units. The types are exported:
+`WebhookEvent<"plan.opened">`, `PlanOpenedData`, …
+
+**Checking an event's shape.** `verify` proves an event came from Polaris; it
+doesn't re-check the payload. `validateWebhookEvent(event)` does: it returns
+every way an event differs from its type (`[{ path: "data.amount", message:
+"… this looks like AUSD base units" }]`), or `[]`. `assertWebhookEvent` throws
+instead. Use them in the tests of anything that builds events: a mock of
+Polaris, the API's emitter, an indexer's outbox.
 
 ---
 
@@ -264,7 +272,10 @@ It never throws for anything the buyer can cause; it returns
 `{ ok, error, transactionHash, explorerUrl, paymentId, payer, amount, relayed }`
 with `error` written for the buyer ("You cancelled the request.", "This order has
 already been paid."). Configuration mistakes (an undeployed contract, a bad
-address) do throw. `onStage` reports `connecting → signing → submitting →
+address) do throw. The original error is kept as `cause`: a wallet on another
+network that the buyer won't switch reads *"Switch your wallet to Monad Testnet
+to pay."*, with `cause.code === "wrong_chain"` so you can show a switch step.
+`onStage` reports `connecting → signing → submitting →
 confirming` for your UI, and `getPayment({ merchant, orderId })` reads the
 on-chain record so you can match `payer` and `amount` before fulfilling.
 
@@ -272,11 +283,18 @@ on-chain record so you can match `payer` and `amount` before fulfilling.
 
 ```ts
 polaris.quote("200.00"); // or quotePayIn4("200.00")
-// { each: "50.38", interest: "1.53", total: "201.53", aprBps: 1000, installments: [ … ] }
+// { each: "50.38", interest: "1.53", total: "201.53", aprBps: 1000,
+//   installments: [{ index: 1, amount: "50.38", amountBaseUnits: 50383562n, dueInSeconds: 604800 }, …] }
 ```
 
 The loan engine's arithmetic, in base units: 10% APR, pro-rated over four weekly
-instalments, charged to the buyer, never to you. `aprBps: 0` models a
+instalments, charged to the buyer, never to you. The buyer pays nothing at
+checkout: instalment *i* falls due `i × intervalSeconds` later (the first a
+week out), and its `amountBaseUnits` is the step on `PolarisLoanEngine.thresholdFor`'s
+rounded-up ladder, so the quote is what the keeper collects, unit for unit. Each
+`amount` is that step with the running total rounded to the cent, so the rows
+always add up to the `total` you show, and each is within a cent of what is
+drawn ($200 reads 50.38, 50.39, 50.38, 50.38 = 201.53). `aprBps: 0` models a
 merchant-subsidised plan and reads *interest-free*; the components never claim
 it otherwise.
 
@@ -306,8 +324,9 @@ import { PolarisProvider, PolarisMessaging, PolarisCheckoutButton, PolarisPayBut
   `onSuccess / onCancel / onResult / onError`. States: *Opening Polaris…*,
   *Finish in the Polaris window*, *Paid with Polaris*.
 - **`<PolarisMessaging amount>`**: *"or 4 payments of $50.38 with ✦ Polaris
-  Learn more"*. The popover shows the four payments, the total and the interest,
-  how it works, and the credit line's terms. It renders nothing outside
+  Learn more"*. The popover shows the four payments and when each is due (the
+  first in a week; nothing today), the total and the interest, how it works,
+  and the credit line's terms. It renders nothing outside
   `minAmount`–`maxAmount` (default $1–$5,000). `theme="dark"` for a dark popover.
 - **`<PolarisPayButton>`**: direct wallet pay with stage labels (*Confirm in
   your wallet*, *Paying…*) and a *View receipt* link.

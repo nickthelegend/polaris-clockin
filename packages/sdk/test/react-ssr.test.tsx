@@ -36,6 +36,12 @@ describe("server rendering", () => {
     expect(html).toContain(".plrs-btn{");
   });
 
+  it("never lists a legacy Pay in 4 instalment as due today: the loan engine collects nothing at checkout", () => {
+    const legacy = renderToString(<PayWithPolarisBNPL apiKey="k" amount="200.00" orderId="o-2" />).split("<!-- -->").join("");
+    expect(legacy).toContain("Nothing is taken today");
+    expect(legacy).not.toContain(">Today<");
+  });
+
   it("ships CSS that React 18 won't escape inside <style> (no quotes, brackets or ampersands)", () => {
     expect(CSS).not.toMatch(/["'<>&]/);
   });

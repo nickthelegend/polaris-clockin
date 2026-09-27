@@ -5,7 +5,7 @@ import React, { useId, useMemo, type CSSProperties, type ReactNode } from "react
 import type { CheckoutSource, OpenCheckoutOptions } from "../checkout/browser.js";
 import type { CheckoutCompleted, CheckoutResult, CheckoutSession, CheckoutTarget } from "../checkout/types.js";
 import type { PolarisError } from "../errors.js";
-import { formatUsd, quotePayIn4, toCents, type AmountInput, type PayIn4Quote } from "../money.js";
+import { formatUsdAmount, quotePayIn4, type AmountInput, type PayIn4Quote } from "../money.js";
 import type { CheckoutMode } from "../types.js";
 import type { PolarisClientProps } from "./context.js";
 import { PolarisMark } from "./PolarisMark.js";
@@ -223,7 +223,7 @@ export function PolarisCheckoutButton(props: PolarisCheckoutButtonProps) {
       {showLine && quote ? (
         <p className="plrs-caption" id={captionId}>
           <span className="plrs-dim">or {quote.installments.length} × </span>
-          <strong>{formatUsd(toCents(quote.each))}</strong>
+          <strong>{formatUsdAmount(quote.each)}</strong>
           <span className="plrs-dim">{quote.interestFree ? " interest-free" : " with Pay in 4"}</span>
         </p>
       ) : null}

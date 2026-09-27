@@ -39,8 +39,16 @@ Polaris on Monad, with Stripe's ergonomics.
   `PolarisPayButton`, `usePolarisCheckout`, `PolarisProvider` and
   `PolarisMark`. CSS-variable theming with no stylesheet to import,
   server-rendered, accessible.
-- `quotePayIn4` / `polaris.quote`: Pay in 4 priced exactly as the loan engine
-  prices it (10% APR pro-rated; $200 is 4 × $50.38).
+- `quotePayIn4` / `polaris.quote`: Pay in 4 priced and scheduled exactly as
+  the loan engine does it (10% APR pro-rated; $200 is 4 × $50.38). Instalments
+  follow `PolarisLoanEngine.thresholdFor`'s rounded-up ladder, unit for unit,
+  and fall due at `(i + 1) × interval`: nothing is paid at checkout, and the
+  first payment is a week later.
+- `validateWebhookEvent` / `assertWebhookEvent`: a runtime check that an event
+  matches its `WebhookEvent` type, envelope and every `data` field with its
+  format (amounts in dollars with 2 to 6 decimals, `USD`, `now` / `later`,
+  0x hashes and addresses, ISO times, one schedule row per instalment). For
+  the tests of anything that builds events; `verify` is unchanged.
 
 ### Changed
 
@@ -59,6 +67,23 @@ Polaris on Monad, with Stripe's ergonomics.
 - `contracts` still works as an alias of `chain`; `SEPOLIA`,
   `PayWithPolarisBNPL`, `POLARIS_SEPOLIA` and the 0.2 wallet methods
   (`subscribe`, `payLater`, `getCredit`, …) are unchanged.
+
+### Fixed
+
+- `PayWithPolarisBNPL` listed the first instalment as due "Today" while
+  saying nothing is taken today. Its schedule now starts one interval after
+  checkout, as the loan engine collects it.
+- `quotePayIn4`'s displayed instalments could miss the displayed total by a
+  cent or more ($189 at 10%: 4 × 47.61 against 190.45). They are now the steps
+  of the running total rounded to the cent, so they always add up to it.
+- A buyer on the wrong network who declined the switch (or declined adding
+  Monad) was told "You cancelled the request." `pay()` and the 0.2 flows now
+  answer "Switch your wallet to Monad Testnet to pay." with a `wrong_chain`
+  `PolarisError` as `cause`, and never ask for a signature.
+- `PolarisMessaging` and `PolarisCheckoutButton` threw while rendering when a
+  quoted figure rounded to $0.00 (a minutes-long demo plan's interest, or a
+  cart of a few cents). They show $0.00 instead, and hourly plans read
+  "In 1 hour … every hour" rather than "In 60 min".
 
 ## 0.2.1
 

@@ -5,8 +5,9 @@ import type { Address, CheckoutMode, Hex } from "./types.js";
  * from an indexed chain event (Envio), never from a client, so "paid" in a
  * webhook means paid on Monad.
  *
- * Amounts are USD decimal strings with up to 6 decimals (AUSD's precision):
- * "200.00", "1.000050".
+ * Amounts are USD decimal strings with 2 to 6 decimals (AUSD's precision):
+ * "200.00", "1.00005", never base units. `validateWebhookEvent` checks an
+ * event against these types at runtime.
  */
 
 export const WEBHOOK_EVENT_TYPES = [
