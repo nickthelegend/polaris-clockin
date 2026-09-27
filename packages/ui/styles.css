@@ -13,7 +13,9 @@
   Themes
     dark   the default (`:root`) and `[data-theme="dark"]`: the mobile app and
            every analytics panel (refs A, B, D)
-    light  `[data-theme="light"]`: the web dashboard's shell (ref C)
+    light  `[data-theme="light"]`: ref C's light screens
+    ref-e  `[data-theme="ref-e"]`: the merchant web app (ref E, LumaTrade), a
+           dark panel on a lime canvas
   Scopes nest: a dark panel inside the light shell is `data-theme="dark"` on
   the panel (use <ThemeScope> or <Card theme="dark">).
 */
@@ -133,6 +135,93 @@
   --ui-candle-axis: #8b8c99;
 }
 
+/* ── Ref E (LumaTrade): the merchant web app ────────────────────────────── */
+
+/* Ref E's own colours, sampled from docs/design/refs-v2/ref-e-lumatrade.png.
+   Constants (defined at the root), so its components also render in the
+   other themes, e.g. in the gallery. */
+:root {
+  /* The lime canvas the dark app floats on (from 1280px). */
+  --ui-frame: #e9ff9b;
+  /* The primary lime button and its near-black label. */
+  --ui-lime-button: #b0c956;
+  /* Lime text and positive deltas, on the dark lime chip. */
+  --ui-lime-text: #aabc6d;
+  /* The active tab and nav link (BUY in the reference): a paler lime. */
+  --ui-lime-active: #c9d77e;
+  --ui-lime-chip: #20231e;
+  --ui-lime-chip-strong: #2b2f24;
+  /* Chart axis labels. */
+  --ui-axis: #7c7f87;
+  /* The small outline squares (refresh, QR, settings) sit darker than the panel. */
+  --ui-square: #0e0f13;
+  /* The round swap button between the stacked cards, and its ring. */
+  --ui-swap: #0b0d0f;
+  /* Status pills: tinted grounds, pale text. */
+  --ui-pill-lime: #2b2e26;
+  --ui-pill-lime-text: #deeaba;
+  --ui-pill-purple: #291f32;
+  --ui-pill-purple-text: #ac70c6;
+  --ui-pill-teal: #1b2d30;
+  --ui-pill-teal-text: #71c8c2;
+  --ui-pill-amber: #2f2817;
+  --ui-pill-amber-text: #e2b866;
+  --ui-pill-red: #321d20;
+  --ui-pill-red-text: #e8847b;
+  --ui-pill-neutral: #25282e;
+  --ui-pill-neutral-text: #a4a7ae;
+  /* The price line: lime yellow at the top, orange lower down, a warm fill. */
+  --ui-chart-top: #e2f07c;
+  --ui-chart-mid: #e3bb5c;
+  --ui-chart-bottom: #f0903f;
+  --ui-chart-fill: #e9903f;
+  /* The dark panel's soft, big shadow on the lime canvas. */
+  --ui-shadow-frame: 0 60px 120px -40px rgb(58 74 0 / 0.5), 0 24px 48px -24px rgb(58 74 0 / 0.35);
+}
+
+/* The theme: the dark app panel, #1D2129 cards and inputs, #37393D hairlines,
+   white text and the reference's lime. Set on <html> by apps/business. */
+[data-theme="ref-e"] {
+  --ui-canvas: #121418;
+  --ui-surface-1: #1d2129;
+  --ui-surface-2: #252a33;
+  --ui-surface-3: #2e343e;
+  --ui-hairline: #2a2d33;
+  --ui-hairline-strong: #37393d;
+  --ui-text: #ffffff;
+  --ui-muted: #7e8189;
+  --ui-dim: #565961;
+
+  --ui-ink: #1d2129;
+  --ui-on-ink: #ffffff;
+  --ui-track: #2a2e36;
+  --ui-up: #aabc6d;
+  --ui-down: #e8847b;
+  --ui-warn: #e2b866;
+  --ui-info: #71c8c2;
+  --ui-purple-text: #ac70c6;
+  --ui-focus: #c8df6c;
+  --ui-scrim: rgb(8 9 11 / 0.66);
+  --ui-glass: rgb(29 33 41 / 0.8);
+
+  /* Every lime control in the library takes the reference's lime. */
+  --ui-lime: #b0c956;
+  --ui-lime-bright: #c3da63;
+  --ui-on-lime: #121418;
+
+  --ui-shadow-pop: 0 24px 60px -16px rgb(0 0 0 / 0.75), 0 0 0 1px #37393d;
+  --ui-shadow-nav: 0 16px 40px -10px rgb(0 0 0 / 0.8);
+  --ui-shadow-card: none;
+
+  /* The candle panel matches the app panel. */
+  --ui-candle-panel: #121418;
+  --ui-candle-chip: #1d2129;
+  --ui-candle-grid: rgb(255 255 255 / 0.05);
+  --ui-candle-axis: #7c7f87;
+  --ui-candle-up: #b0c956;
+  --ui-candle-down: #ee9443;
+}
+
 @theme inline {
   --color-ui-canvas: var(--ui-canvas);
   --color-ui-surface-1: var(--ui-surface-1);
@@ -185,6 +274,31 @@
   --shadow-ui-pop: var(--ui-shadow-pop);
   --shadow-ui-nav: var(--ui-shadow-nav);
   --shadow-ui-card: var(--ui-shadow-card);
+
+  --color-ui-frame: var(--ui-frame);
+  --color-ui-lime-button: var(--ui-lime-button);
+  --color-ui-lime-text: var(--ui-lime-text);
+  --color-ui-lime-active: var(--ui-lime-active);
+  --color-ui-lime-chip: var(--ui-lime-chip);
+  --color-ui-lime-chip-strong: var(--ui-lime-chip-strong);
+  --color-ui-axis: var(--ui-axis);
+  --color-ui-square: var(--ui-square);
+  --color-ui-swap: var(--ui-swap);
+  --color-ui-pill-lime: var(--ui-pill-lime);
+  --color-ui-pill-lime-text: var(--ui-pill-lime-text);
+  --color-ui-pill-purple: var(--ui-pill-purple);
+  --color-ui-pill-purple-text: var(--ui-pill-purple-text);
+  --color-ui-pill-teal: var(--ui-pill-teal);
+  --color-ui-pill-teal-text: var(--ui-pill-teal-text);
+  --color-ui-pill-amber: var(--ui-pill-amber);
+  --color-ui-pill-amber-text: var(--ui-pill-amber-text);
+  --color-ui-pill-red: var(--ui-pill-red);
+  --color-ui-pill-red-text: var(--ui-pill-red-text);
+  --color-ui-pill-neutral: var(--ui-pill-neutral);
+  --color-ui-pill-neutral-text: var(--ui-pill-neutral-text);
+  --color-ui-chart-top: var(--ui-chart-top);
+  --color-ui-chart-bottom: var(--ui-chart-bottom);
+  --shadow-ui-frame: var(--ui-shadow-frame);
 }
 
 @theme {
@@ -197,6 +311,10 @@
   --radius-ui-key: 22px;
   --radius-ui-sheet: 32px;
   --radius-ui-field: 16px;
+  /* Ref E: the floating app panel, its stacked cards, the outlined summary card. */
+  --radius-ui-frame: 32px;
+  --radius-ui-swap: 30px;
+  --radius-ui-panel: 26px;
 
   --ease-ui-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-ui-out: cubic-bezier(0.22, 1, 0.36, 1);

@@ -205,8 +205,11 @@ export function useMounted(): boolean {
  * around whatever had focus when it opened (so a sheet opened from a light
  * panel is light).
  */
-export function useInheritedTheme(open: boolean, explicit?: "dark" | "light"): "dark" | "light" | undefined {
-  const [theme, setTheme] = useState<"dark" | "light" | undefined>(explicit);
+/** The library's themes (primitives/Card re-exports it). */
+export type Theme = "dark" | "light" | "ref-e";
+
+export function useInheritedTheme(open: boolean, explicit?: Theme): Theme | undefined {
+  const [theme, setTheme] = useState<Theme | undefined>(explicit);
   useIsomorphicLayoutEffect(() => {
     if (!open) return;
     if (explicit) {
@@ -215,7 +218,7 @@ export function useInheritedTheme(open: boolean, explicit?: "dark" | "light"): "
     }
     const el = document.activeElement as HTMLElement | null;
     const found = el?.closest("[data-theme]")?.getAttribute("data-theme");
-    setTheme(found === "light" || found === "dark" ? found : undefined);
+    setTheme(found === "light" || found === "dark" || found === "ref-e" ? found : undefined);
   }, [open, explicit]);
   return explicit ?? theme;
 }

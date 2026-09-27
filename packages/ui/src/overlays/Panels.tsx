@@ -18,7 +18,7 @@ type PanelProps = {
   "aria-label"?: string;
   /** Escape and the backdrop close it. */
   dismissible?: boolean;
-  theme?: "dark" | "light";
+  theme?: "dark" | "light" | "ref-e";
   /** Snap points when it becomes a BottomSheet below 768px. */
   sheetSnapPoints?: SnapPoint[];
   className?: string;

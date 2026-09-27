@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sparkles, Sun } from "lucide-react";
 import { useState } from "react";
 
 import { IconProvider } from "../lib/icon";
@@ -12,9 +12,11 @@ import { SheetStage } from "../overlays/BottomSheet";
 import { SectionA, SectionB, SectionC, SectionD } from "./sections-refs";
 import { SectionControls, SectionFoundations, SectionPresentation } from "./sections-kit";
 import { SectionShell } from "./sections-shell";
+import { SectionTrade } from "./sections-trade";
 import { SectionWeb } from "./sections-web";
 
 const NAV = [
+  { href: "#ref-e", label: "E · LumaTrade" },
   { href: "#foundations", label: "Foundations" },
   { href: "#ref-a", label: "A · Aheadly" },
   { href: "#ref-b", label: "B · Findex" },
@@ -27,7 +29,7 @@ const NAV = [
 ];
 
 export type GalleryProps = {
-  /** Which app hosts it. Both open dark: the web dashboard is dark, like the app. */
+  /** Which app hosts it. The web app opens in ref E's theme, the app in dark. */
   app?: "business" | "app";
 };
 
@@ -37,11 +39,12 @@ export type GalleryProps = {
  * apps; it needs no session and no data.
  */
 export function Gallery({ app = "business" }: GalleryProps) {
-  const [shell, setShell] = useState<Theme>("dark");
   const web = app === "business";
+  const [shell, setShell] = useState<Theme>(web ? "ref-e" : "dark");
 
   const sections = web
     ? [
+        <SectionTrade key="trade" />,
         <SectionShell key="shell" />,
         <SectionWeb key="web" />,
         <SectionD key="d" />,
@@ -61,6 +64,7 @@ export function Gallery({ app = "business" }: GalleryProps) {
         <SectionControls key="controls" />,
         <SectionWeb key="web" />,
         <SectionShell key="shell" />,
+        <SectionTrade key="trade" />,
         <SectionFoundations key="foundations" />,
       ];
 
@@ -92,6 +96,7 @@ export function Gallery({ app = "business" }: GalleryProps) {
                   options={[
                     { value: "light", label: <span className="sr-only sm:not-sr-only">Light</span>, icon: <Sun /> },
                     { value: "dark", label: <span className="sr-only sm:not-sr-only">Dark</span>, icon: <Moon /> },
+                    { value: "ref-e", label: <span className="sr-only sm:not-sr-only">Ref E</span>, icon: <Sparkles /> },
                   ]}
                 />
               </div>
@@ -105,8 +110,8 @@ export function Gallery({ app = "business" }: GalleryProps) {
                 The Polaris component gallery
               </h1>
               <p className="mt-4 max-w-[62ch] text-[16px] leading-[1.5] text-ui-muted">
-                Every component in every variant, set out beside the reference it reproduces. The app and the web dashboard are both
-                dark; the light theme stays for ref C&apos;s light screens. Sheets, drawers and dialogs are live.
+                Every component in every variant, set out beside the reference it reproduces. The web app is ref E: a dark panel on a
+                lime canvas. The app is dark; the light theme stays for ref C&apos;s light screens. Sheets, drawers and dialogs are live.
               </p>
             </div>
             {sections}
