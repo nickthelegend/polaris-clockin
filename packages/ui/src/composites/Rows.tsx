@@ -28,7 +28,7 @@ export type QuickTransferProps = Omit<HTMLAttributes<HTMLDivElement>, "onSelect"
 export function QuickTransfer({ people, onAdd, onSelect, showNames = false, addLabel = "Send by link", className, ...props }: QuickTransferProps) {
   return (
     <div
-      className={cn("ui-no-scrollbar -mx-5 flex snap-x items-start gap-1 overflow-x-auto px-5 pb-1 font-satoshi", className)}
+      className={cn("ui-no-scrollbar -mx-5 flex snap-x scroll-px-5 items-start gap-1 overflow-x-auto px-5 pb-1 font-satoshi", className)}
       {...props}
     >
       <div className="flex shrink-0 snap-start flex-col items-center gap-1.5 pr-1">
@@ -183,11 +183,14 @@ export function FeaturedTile({ leading, title, subtitle, value, meta, progress, 
         <span className="shrink-0">{leading}</span>
         <span className="min-w-0">
           <span className="block truncate text-[16px] leading-tight font-semibold text-ui-text">{title}</span>
-          {subtitle ? <span className="block truncate text-[13px] leading-tight text-ui-muted">{subtitle}</span> : null}
+          {subtitle ? (
+            <span className={cn("block truncate text-[13px] leading-tight", tint ? "text-ui-text/70" : "text-ui-muted")}>{subtitle}</span>
+          ) : null}
         </span>
       </span>
       <span className="ui-figure mt-5 block text-[20px] leading-tight font-medium tracking-[-0.02em] text-ui-text">{value}</span>
-      {meta ? <span className="mt-1 block text-[13px] text-ui-muted">{meta}</span> : null}
+      {/* On a tinted tile the muted grey loses contrast; the text colour at 70% keeps AA. */}
+      {meta ? <span className={cn("mt-1 block text-[13px]", tint ? "text-ui-text/70" : "text-ui-muted")}>{meta}</span> : null}
       {progress ? (
         <span
           role="img"

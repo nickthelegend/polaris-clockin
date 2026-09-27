@@ -102,7 +102,7 @@ export function CardStack({
           />
           {delta !== undefined ? (
             <div className="mt-3 flex items-center justify-between gap-3 text-[14px]">
-              <span className="text-ui-muted">{deltaLabel}</span>
+              <span className="text-ui-text/65">{deltaLabel}</span>
               <DeltaBadge value={delta} size="sm" className="text-[14px]" />
             </div>
           ) : null}

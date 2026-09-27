@@ -122,7 +122,9 @@ export const Chip = forwardRef<HTMLButtonElement, ChipProps>(function Chip(
     <button
       ref={ref}
       type={type ?? "button"}
-      aria-pressed={selected}
+      // A radio or a tab says it is chosen with aria-checked / aria-selected;
+      // aria-pressed is only allowed on a plain toggle button.
+      aria-pressed={props.role === "radio" || props.role === "tab" ? undefined : selected}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-full font-satoshi leading-none font-medium whitespace-nowrap",
         pressable,
@@ -206,6 +208,7 @@ export function DeltaBadge({
     const Arrow = up ? ArrowUpRight : ArrowDownRight;
     return (
       <span
+        role="img"
         aria-label={label}
         className={cn(
           "ui-figure inline-flex h-8 items-center gap-1.5 rounded-full bg-black/12 px-3 leading-none font-medium text-current",
@@ -223,6 +226,7 @@ export function DeltaBadge({
   if (variant === "soft") {
     return (
       <span
+        role="img"
         aria-label={label}
         className={cn(
           "ui-figure inline-flex h-7 items-center gap-1 rounded-full px-2.5 leading-none font-medium",
@@ -240,6 +244,7 @@ export function DeltaBadge({
 
   return (
     <span
+      role="img"
       aria-label={label + (note ? `, ${note}` : "")}
       className={cn("ui-figure inline-flex items-center gap-1 leading-none font-medium whitespace-nowrap", text, className)}
       {...props}
@@ -252,7 +257,7 @@ export function DeltaBadge({
         {amount ? `${amount} (${pct})` : pct.replace(/^[+-]/, "")}
       </span>
       {note ? (
-        <span aria-hidden className="ml-1 font-normal opacity-60">
+        <span aria-hidden className={cn("ml-1 font-normal", tone === "current" ? "" : "opacity-60")}>
           {note}
         </span>
       ) : null}

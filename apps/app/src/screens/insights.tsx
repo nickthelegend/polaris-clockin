@@ -78,7 +78,8 @@ export function Insights() {
         <Skeleton shape="card" height={150} className="mt-2" />
       )}
 
-      <div className="mt-6 flex items-center justify-between">
+      {/* As tall as the calendar button, so the rows below stay put when it goes. */}
+      <div className="mt-6 flex min-h-[52px] items-center justify-between">
         <Tabs
           value={view}
           variant="text"

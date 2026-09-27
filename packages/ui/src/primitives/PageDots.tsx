@@ -32,7 +32,8 @@ export function PageDots({ count, index, onSelect, label = "Pages", className, .
     <div
       role={onSelect ? "group" : "img"}
       aria-label={onSelect ? label : `${label}: ${index + 1} of ${count}`}
-      className={cn("flex items-center gap-1.5", className)}
+      // As buttons each dot gets a 24px target, so they sit further apart.
+      className={cn("flex items-center", onSelect ? "-mx-[9px]" : "gap-1.5", className)}
       {...props}
     >
       {Array.from({ length: count }, (_, i) =>
@@ -43,7 +44,7 @@ export function PageDots({ count, index, onSelect, label = "Pages", className, .
             aria-label={`Page ${i + 1} of ${count}`}
             aria-current={i === index ? "step" : undefined}
             onClick={() => onSelect(i)}
-            className="-m-2 rounded-full p-2 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ui-focus"
+            className="-my-[9px] rounded-full p-[9px] focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ui-focus"
           >
             <span className={dot(i)} />
           </button>

@@ -4,6 +4,7 @@ import { CalendarDays } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -256,6 +257,9 @@ type TabsContextValue = {
   variant: "text" | "pill" | "segmented";
   size: "sm" | "md" | "lg";
   reduced: boolean;
+  /** Panels on the page right now: a tab only points at a panel that exists. */
+  panels: ReadonlySet<string>;
+  registerPanel: (value: string) => () => void;
 };
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -294,8 +298,19 @@ export function Tabs({ value, defaultValue, onValueChange, variant = "pill", siz
   const [current, select] = useControllable({ value, defaultValue: defaultValue ?? "", onChange: onValueChange });
   const baseId = useId();
   const reduced = useReducedMotion() ?? false;
+  const [panels, setPanels] = useState<ReadonlySet<string>>(() => new Set());
+  const registerPanel = useCallback((v: string) => {
+    setPanels((prev) => (prev.has(v) ? prev : new Set(prev).add(v)));
+    return () =>
+      setPanels((prev) => {
+        if (!prev.has(v)) return prev;
+        const next = new Set(prev);
+        next.delete(v);
+        return next;
+      });
+  }, []);
   return (
-    <TabsContext.Provider value={{ value: current, select, baseId, variant, size, reduced }}>
+    <TabsContext.Provider value={{ value: current, select, baseId, variant, size, reduced, panels, registerPanel }}>
       <div className={cn("font-satoshi", className)} {...props}>
         {children}
       </div>
@@ -367,7 +382,7 @@ export type TabProps = Omit<HTMLAttributes<HTMLButtonElement>, "value"> & {
 };
 
 export function Tab({ value, disabled, count, className, children, ...props }: TabProps) {
-  const { value: current, select, baseId, variant, size, reduced } = useTabs();
+  const { value: current, select, baseId, variant, size, reduced, panels } = useTabs();
   const active = current === value;
   const sizes =
     variant === "text"
@@ -387,7 +402,7 @@ export function Tab({ value, disabled, count, className, children, ...props }: T
       role="tab"
       id={`${baseId}-tab-${value}`}
       aria-selected={active}
-      aria-controls={`${baseId}-panel-${value}`}
+      aria-controls={panels.has(value) ? `${baseId}-panel-${value}` : undefined}
       tabIndex={active ? 0 : -1}
       data-value={value}
       data-roving=""
@@ -433,9 +448,11 @@ export function Tab({ value, disabled, count, className, children, ...props }: T
 export type TabPanelProps = HTMLAttributes<HTMLDivElement> & { value: string; keepMounted?: boolean };
 
 export function TabPanel({ value, keepMounted = false, className, children, ...props }: TabPanelProps) {
-  const { value: current, baseId } = useTabs();
+  const { value: current, baseId, registerPanel } = useTabs();
   const active = current === value;
-  if (!active && !keepMounted) return null;
+  const rendered = active || keepMounted;
+  useEffect(() => (rendered ? registerPanel(value) : undefined), [rendered, value, registerPanel]);
+  if (!rendered) return null;
   return (
     <div
       role="tabpanel"

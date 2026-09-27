@@ -69,7 +69,7 @@ export function MiniCardCarousel({
       role="radiogroup"
       aria-label={ariaLabel}
       onKeyDown={onKey}
-      className={cn("ui-no-scrollbar -mx-5 flex snap-x gap-2 overflow-x-auto px-5 py-1 font-satoshi", className)}
+      className={cn("ui-no-scrollbar -mx-5 flex snap-x scroll-px-5 gap-2 overflow-x-auto px-5 py-1 font-satoshi", className)}
       {...props}
     >
       {cards.map((c, i) => {

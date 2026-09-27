@@ -120,7 +120,7 @@ export function Profile() {
         </Button>
       ) : null}
 
-      <p className="mt-6 text-center text-[13px] text-ui-dim">Polaris 0.2</p>
+      <p className="mt-6 text-center text-[13px] text-ui-muted">Polaris 0.2</p>
 
       <BottomSheet open={how} onOpenChange={setHow} snapPoints={["half", "full"]} title="How Polaris works" maxWidth={440}>
         <Sheet.Body className="pt-1">
