@@ -10,11 +10,34 @@
  *      policy would deny fails here with a clear error, and the dev adapter
  *      is held to exactly the production policy.
  *
- * Every call on the list carries its owner's own signature (the buyer's
- * ERC-3009 authorisation or EIP-712 intent, the link key's claim, the
- * merchant's registration or transfer), so the relayer can carry money but
- * can't choose where it goes. And it never sends MON: every rule requires a
- * zero value, and a DENY rule refuses any value at all.
+ * Every call that moves money carries its owner's own signature (the
+ * buyer's ERC-3009 authorisation or EIP-712 intent, the link key's claim,
+ * the merchant's registration or transfer), so the relayer can carry money
+ * but can't choose where it goes. And it never sends MON: every rule
+ * requires a zero value, and a DENY rule refuses any value at all.
+ *
+ * Two calls are the exception, and are marked `signedBy: "operator"`: the
+ * relayer holds PolarisPayments' operator role and makes them in a
+ * merchant's name with no signature from that merchant.
+ *
+ *   - `quoteOrder` pins a checkout session's price on its order, so the
+ *     order can only be paid at that price. It moves nothing; the worst a
+ *     compromised server can do with it is make an order unpayable (a wrong
+ *     price is refused by every payment path, so it can't cheapen one).
+ *   - `createPlanFor` publishes a subscription plan paying the merchant it
+ *     names. It moves nothing either: money only flows once a buyer signs a
+ *     SubscribeIntent for that exact plan, price and period, and then only
+ *     to that merchant. A compromised server could publish plans in a
+ *     merchant's name (the merchant can retire them with `deactivatePlan`),
+ *     but buyers still sign the price.
+ *
+ * A merchant-signed plan intent would close the second one; it needs a
+ * contract change (plan §5.3), so it is written down here instead.
+ *
+ * `payWithAuthorization` (polarispay-sdk's direct pay) goes to
+ * PolarisPayments without PolarisCheckout's cross-mode order guard, so the
+ * relay refuses an order that belongs to a checkout session or that the
+ * checkout already settled before it signs (relayer/relay.ts).
  *
  * This module is plain, erasable TypeScript with no server-only imports, so
  * the setup scripts load it directly with Node's type stripping.
@@ -39,22 +62,29 @@ export type AllowedCall = {
   rule: string;
   /** What it's for, in the docs and the policy proof. */
   why: string;
+  /**
+   * `owner`: the call carries the signature of the account whose money or
+   * record it touches. `operator`: the relayer acts in a merchant's name on
+   * its PolarisPayments operator role, with no signature (see above).
+   */
+  signedBy: "owner" | "operator";
 };
 
 export const RELAYER_CALLS: readonly AllowedCall[] = [
-  { contract: "checkout", functionName: "pay", rule: "Pay now: PolarisCheckout.pay", why: "Buyer's ERC-3009 ReceiveWithAuthorization, nonce = order key" },
-  { contract: "checkout", functionName: "openPlan", rule: "Pay in 4: PolarisCheckout.openPlan", why: "Buyer's PlanIntent + ERC-2612 permit" },
-  { contract: "checkout", functionName: "subscribe", rule: "Subscribe: PolarisCheckout.subscribe", why: "Buyer's SubscribeIntent + ERC-2612 permit" },
-  { contract: "payments", functionName: "payWithAuthorization", rule: "Direct pay: PolarisPayments.payWithAuthorization", why: "polarispay-sdk pay(): buyer's ERC-3009 authorisation" },
-  { contract: "payments", functionName: "cancelWithSignature", rule: "Cancel subscription: cancelWithSignature", why: "Subscriber's CancelSubscription signature" },
-  { contract: "payments", functionName: "createPlanFor", rule: "Publish plan: PolarisPayments.createPlanFor", why: "A merchant's subscription terms from a checkout session" },
-  { contract: "send", functionName: "send", rule: "Send by link: PolarisSend.send", why: "Sender's ERC-3009 authorisation + the link key's Open" },
-  { contract: "send", functionName: "claim", rule: "Claim a link: PolarisSend.claim", why: "The link key's Claim naming the recipient" },
-  { contract: "send", functionName: "cancel", rule: "Cancel a link: PolarisSend.cancel", why: "Sender's Cancel signature" },
-  { contract: "loanEngine", functionName: "repayWithSig", rule: "Pay early: PolarisLoanEngine.repayWithSig", why: "Borrower's RepayIntent" },
-  { contract: "registry", functionName: "registerFor", rule: "Onboard: MerchantRegistry.registerFor", why: "Merchant's Registration signature (Privy embedded wallet)" },
-  { contract: "registry", functionName: "updatePayoutAddressWithSig", rule: "Payout address: updatePayoutAddressWithSig", why: "Merchant's PayoutUpdate signature" },
-  { contract: "stablecoin", functionName: "transferWithAuthorization", rule: "Payouts: AUSD transferWithAuthorization", why: "Owner's ERC-3009 TransferWithAuthorization (withdrawals, payouts, sends to a user)" },
+  { contract: "checkout", functionName: "pay", rule: "Pay now: PolarisCheckout.pay", why: "Buyer's ERC-3009 ReceiveWithAuthorization, nonce = order key", signedBy: "owner" },
+  { contract: "checkout", functionName: "openPlan", rule: "Pay in 4: PolarisCheckout.openPlan", why: "Buyer's PlanIntent + ERC-2612 permit", signedBy: "owner" },
+  { contract: "checkout", functionName: "subscribe", rule: "Subscribe: PolarisCheckout.subscribe", why: "Buyer's SubscribeIntent + ERC-2612 permit", signedBy: "owner" },
+  { contract: "payments", functionName: "payWithAuthorization", rule: "Direct pay: PolarisPayments.payWithAuthorization", why: "polarispay-sdk pay(): buyer's ERC-3009 authorisation", signedBy: "owner" },
+  { contract: "payments", functionName: "cancelWithSignature", rule: "Cancel subscription: cancelWithSignature", why: "Subscriber's CancelSubscription signature", signedBy: "owner" },
+  { contract: "payments", functionName: "createPlanFor", rule: "Publish plan: PolarisPayments.createPlanFor", why: "Operator: a merchant's subscription terms from a checkout session (moves nothing)", signedBy: "operator" },
+  { contract: "payments", functionName: "quoteOrder", rule: "Pin a price: PolarisPayments.quoteOrder", why: "Operator: a checkout session's price, pinned on its order (moves nothing)", signedBy: "operator" },
+  { contract: "send", functionName: "send", rule: "Send by link: PolarisSend.send", why: "Sender's ERC-3009 authorisation + the link key's Open", signedBy: "owner" },
+  { contract: "send", functionName: "claim", rule: "Claim a link: PolarisSend.claim", why: "The link key's Claim naming the recipient", signedBy: "owner" },
+  { contract: "send", functionName: "cancel", rule: "Cancel a link: PolarisSend.cancel", why: "Sender's Cancel signature", signedBy: "owner" },
+  { contract: "loanEngine", functionName: "repayWithSig", rule: "Pay early: PolarisLoanEngine.repayWithSig", why: "Borrower's RepayIntent", signedBy: "owner" },
+  { contract: "registry", functionName: "registerFor", rule: "Onboard: MerchantRegistry.registerFor", why: "Merchant's Registration signature (Privy embedded wallet)", signedBy: "owner" },
+  { contract: "registry", functionName: "updatePayoutAddressWithSig", rule: "Payout address: updatePayoutAddressWithSig", why: "Merchant's PayoutUpdate signature", signedBy: "owner" },
+  { contract: "stablecoin", functionName: "transferWithAuthorization", rule: "Payouts: AUSD transferWithAuthorization", why: "Owner's ERC-3009 TransferWithAuthorization (withdrawals, payouts, sends to a user)", signedBy: "owner" },
 ];
 
 export const CONTRACT_ABIS: Record<RelayerContract, Abi> = {

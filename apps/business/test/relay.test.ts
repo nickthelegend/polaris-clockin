@@ -40,7 +40,7 @@ describe("POST /api/relay type=pay (Pay now)", () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ type: "pay", status: "confirmed", sessionId: session.id, paymentId: orderKey(merchant.account.address, session.orderId) });
 
-    const [sent] = env.chain.sent;
+    const [sent] = env.chain.relayed;
     expect(sent?.to).toBe(ADDR.checkout);
     expect(sent?.chainId).toBe(31337);
     expect(sent?.value).toBe(0n);
@@ -74,7 +74,7 @@ describe("POST /api/relay type=pay (Pay now)", () => {
       amount: "200.00",
       fee: "1.00",
       currency: "USD",
-      txHash: env.chain.sent[0]?.hash,
+      txHash: env.chain.relayed[0]?.hash,
       chainId: 31337,
     });
   });
@@ -86,7 +86,7 @@ describe("POST /api/relay type=pay (Pay now)", () => {
     const second = await json(await relay(body));
     expect(second.status).toBe(200);
     expect(second.body.data.txHash).toBe(first.body.data.txHash);
-    expect(env.chain.sent).toHaveLength(1);
+    expect(env.chain.relayed).toHaveLength(1);
   });
 
   it("refuses a signature from someone else, and one for another amount, before spending gas", async () => {
@@ -98,7 +98,7 @@ describe("POST /api/relay type=pay (Pay now)", () => {
     const cheap = await signPayNow(buyer, merchant.account.address, session.orderId, 1_000_000n);
     const underpaid = await json(await relay({ type: "pay", sessionId: session.id, buyer: buyer.address, ...cheap }));
     expect(underpaid.body.error.code).toBe("invalid_signature");
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 
   it("refuses a signature that redirects the payment to another merchant", async () => {
@@ -107,7 +107,7 @@ describe("POST /api/relay type=pay (Pay now)", () => {
     const auth = await signPayNow(buyer, other, session.orderId, 200_000_000n);
     const res = await json(await relay({ type: "pay", sessionId: session.id, buyer: buyer.address, ...auth }));
     expect(res.body.error.code).toBe("invalid_signature");
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 
   it("refuses paid, expired and unknown sessions", async () => {
@@ -132,8 +132,8 @@ describe("POST /api/relay type=pay (Pay now)", () => {
     const res = await json(await relay(await payNowBody(session)));
     expect(res.status).toBe(409);
     expect(res.body.error).toEqual({ code: "already_paid", message: "This has already been paid." });
-    expect(env.chain.sent).toHaveLength(0);
-    const record = (await getDb().relays.find({}))[0];
+    expect(env.chain.relayed).toHaveLength(0);
+    const record = (await getDb().relays.find({})).find((r) => r.kind === "pay");
     expect(record?.state).toBe("failed");
   });
 
@@ -206,7 +206,7 @@ describe("POST /api/relay type=openPlan (Pay in 4)", () => {
     const res = await json(await relay(await planBody(session)));
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ type: "openPlan", status: "confirmed", planId: "1" });
-    const sent = env.chain.sent[0];
+    const sent = env.chain.relayed[0];
     expect(sent?.to).toBe(ADDR.checkout);
 
     const plan = await getDb().plans.get("1");
@@ -238,7 +238,7 @@ describe("POST /api/relay type=openPlan (Pay in 4)", () => {
     const nowOnly = await newSession(merchant, { modes: ["now"] });
     const res = await json(await relay(await planBody(nowOnly)));
     expect(res.body.error.code).toBe("mode_not_offered");
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 
   it("refuses a permit signed for another spender", async () => {
@@ -314,7 +314,7 @@ describe("POST /api/v1/relay/payments (polarispay-sdk pay())", () => {
     expect(body.data).toMatchObject({ status: "confirmed" });
     expect(body.data.txHash).toMatch(/^0x[0-9a-f]{64}$/);
     expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    expect(env.chain.sent[0]?.to).toBe(ADDR.payments);
+    expect(env.chain.relayed[0]?.to).toBe(ADDR.payments);
     await dispatchDue();
     expect(env.deliveries[0]?.headers["polaris-event"]).toBe("payment.succeeded");
   });
@@ -325,7 +325,7 @@ describe("POST /api/v1/relay/payments (polarispay-sdk pay())", () => {
     const other = await sdkBody({ merchant: "0x9999999999999999999999999999999999999999" });
     expect((await post(other, merchant.publishableKey)).status).toBe(403);
     expect((await (await post(await sdkBody({ nonce: `0x${"00".repeat(32)}` }), merchant.publishableKey)).json()).error.code).toBe("wrong_nonce");
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 
   it("needs a publishable key, and refuses a secret one sent from a browser", async () => {
@@ -342,6 +342,6 @@ describe("the dev adapter is held to the production policy", () => {
     expect(signer?.kind).toBe("local");
     const data = encodeFunctionData({ abi: polarisLoanEngineAbi, functionName: "withdrawLiquidity", args: [1n, getAddress(buyer.address)] });
     await expect(submitCall({ signer: signer!, role: "relayer", to: ADDR.loanEngine, data, waitMs: 0 })).rejects.toBeInstanceOf(PolicyViolation);
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 });

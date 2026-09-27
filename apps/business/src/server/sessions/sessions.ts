@@ -9,7 +9,9 @@ import { centsToUnits, formatCents, formatUnits, installmentAmounts, quotePlanLo
 import { getDb } from "../db";
 import { getConfig, type ServerConfig } from "../env";
 import { HttpError } from "../http";
+import { consume, LIMITS } from "../ratelimit";
 import { carry } from "../relayer/carry";
+import { RelayRejected, RelayUnavailable } from "../relayer/submit";
 import type { CreateSessionInput } from "./params";
 import { periodSeconds } from "./params";
 
@@ -24,8 +26,17 @@ import { periodSeconds } from "./params";
  * is the Pay-now nonce and PolarisPayments' payment id. The relayer refuses
  * any signature that doesn't match, and the contracts settle an order once.
  *
- * Status: `open` → `complete` (only from a chain event: paid, plan opened,
- * or first subscription charge) or `expired` (computed from `expiresAt`).
+ * The price is also pinned on chain before the session is handed out
+ * (`PolarisPayments.quoteOrder`, sent by the relayer as operator), because
+ * the order id is public (it is the session id, or in the hosted checkout's
+ * view of it) and an unquoted order belongs to whoever pays it first, at any
+ * amount. Once quoted, every payment path (Pay now, Pay in 4, Subscribe,
+ * PolarisPayments directly) refuses any other amount.
+ *
+ * Status: `open` → `complete` (only from a chain event that matches the
+ * session: its amount, a mode it offers, its plan) or `expired` (computed
+ * from `expiresAt`). A settlement that doesn't match is recorded on the
+ * session as a mismatch and never completes it (ingest/ingest.ts).
  */
 
 export function orderKeyOf(merchant: Address, orderId: string): Hex {
@@ -102,6 +113,8 @@ export async function createSession(
     });
   }
 
+  const quote = await pinPrice(merchant, id, orderKey, centsToUnits(input.amountCents), chainOrderId);
+
   const now = new Date();
   const record: CheckoutSessionRecord = {
     id,
@@ -122,11 +135,56 @@ export async function createSession(
     expiresAt: new Date(now.getTime() + (options.ttlSeconds ?? config.sessionTtlSeconds) * 1000).toISOString(),
     completedAt: null,
     linkId: options.linkId ?? null,
-    chain: { chainId: chain.id, merchant: merchant.walletAddress, orderId: chainOrderId, orderKey, subscriptionPlanId: null },
+    chain: { chainId: chain.id, merchant: merchant.walletAddress, orderId: chainOrderId, orderKey, subscriptionPlanId: null, quote },
     payment: null,
   };
   await db.sessions.insert(record);
   return record;
+}
+
+let warnedUnquoted = false;
+
+/**
+ * Pin the session's price on its order before the order id is handed out:
+ * `PolarisPayments.quoteOrder(merchant, orderKey, amount)`, sent by the
+ * relayer on its operator role. Takes the order key, not the id, so the
+ * quote itself reveals nothing a front-runner could pay.
+ *
+ * Without a relayer (local development with RELAYER_MODE=off) there is
+ * nothing to send it with, and no relayed payment can happen either; the
+ * session is created unquoted and ingestion still refuses any settlement
+ * that doesn't match it.
+ */
+async function pinPrice(merchant: MerchantRecord, sessionId: string, orderKey: Hex, amountUnits: bigint, chainOrderId: string): Promise<NonNullable<CheckoutSessionRecord["chain"]["quote"]> | null> {
+  const config = getConfig();
+  const chain = requireChain();
+  if (config.relayer.mode === "off") {
+    if (!warnedUnquoted) console.warn("[sessions] no relayer: checkout sessions are created without an on-chain price quote");
+    warnedUnquoted = true;
+    return null;
+  }
+  try {
+    const result = await carry({
+      kind: "quoteOrder",
+      relayId: `quote:${sessionId}`,
+      to: chain.contracts.payments,
+      data: encodeFunctionData({ abi: polarisPaymentsAbi, functionName: "quoteOrder", args: [merchant.walletAddress as Address, orderKey, amountUnits] }),
+      signer: null,
+      merchantId: merchant.id,
+      // Not the session's settlement: it must not count as a payment in flight.
+      sessionId: null,
+    });
+    return { amountUnits: amountUnits.toString(), txHash: result.txHash, at: new Date().toISOString() };
+  } catch (error) {
+    if (error instanceof RelayRejected && error.error.code === "already_paid") {
+      throw new HttpError(409, "order_already_paid", `Order ${JSON.stringify(chainOrderId)} has already been paid on chain. Use a new orderId.`, { param: "orderId" });
+    }
+    const reason = error instanceof RelayRejected || error instanceof RelayUnavailable || error instanceof HttpError ? error.message : String(error);
+    console.error(`[sessions] couldn't pin the price of ${sessionId}: ${reason}`);
+    throw new HttpError(503, "price_not_pinned", "The checkout couldn't be created right now: its price couldn't be locked on chain. Nothing was created; try again.", {
+      headers: { "Retry-After": "2" },
+    });
+  }
 }
 
 export async function retrieveSession(merchant: MerchantRecord, id: string): Promise<CheckoutSessionRecord> {
@@ -147,6 +205,10 @@ export async function openSessionForPayment(id: unknown): Promise<{ session: Che
   const session = await settleExpiry(found);
   if (session.status === "complete") throw new HttpError(409, "already_paid", "This has already been paid.");
   if (session.status === "expired") throw new HttpError(410, "session_expired", "This checkout has expired. Go back to the shop and start again.");
+  if (session.mismatches?.length) {
+    // Its order was settled on chain some other way (another amount or mode): it can't be paid again.
+    throw new HttpError(409, "order_settled_elsewhere", "This order was already settled another way. Go back to the shop and start again.");
+  }
   const merchant = await db.merchants.get(session.merchantId);
   if (!merchant) throw new HttpError(404, "not_found", "This checkout doesn't exist.");
   return { session, merchant };
@@ -418,6 +480,8 @@ export async function openLink(linkId: string): Promise<CheckoutSessionRecord> {
   }
   const merchant = await db.merchants.get(link.merchantId);
   if (!merchant) throw new HttpError(404, "not_found", "This payment link doesn't exist.");
+  // Opening a link pins a price on chain (one relayer transaction): bounded per link as well as per IP.
+  consume(LIMITS.linkOpen, link.id);
   const modes = link.modes.filter((m) => m !== "subscribe" || link.usage === "reusable");
   return createSession(
     merchant,

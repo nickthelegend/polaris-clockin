@@ -63,6 +63,20 @@ the chain sync (`ingest/sync.ts`) for everything the relayer didn't send (CRE
 collections and renewals, liquidations, a buyer paying from their own wallet).
 Each log is handled once, whichever path sees it first.
 
+A session's order id is public, so anyone can settle that order on chain some
+other way. Two things stop that from counting as paid:
+
+- every session's price is pinned on chain (`PolarisPayments.quoteOrder`, sent
+  by the relayer on its operator role) before the session is returned, so
+  every payment path reverts on any other amount;
+- ingest completes a session only when what settled its order matches it
+  (amount or principal, a mode it offers, its own plan and period). Anything
+  else is kept on the session as a `mismatch`, never completes it, never
+  counts on its payment link and sends no `payment.succeeded`.
+
+The SDK's direct-pay relay (`/api/v1/relay/payments`) refuses an order id that
+belongs to a checkout session, and one PolarisCheckout already settled.
+
 ## The relayer (plan §5.3, research §5.5)
 
 `src/server/policy/relayer.ts` is the allow-list, and both enforcers read it:
@@ -74,7 +88,8 @@ Each log is handled once, whichever path sees it first.
 | `PolarisCheckout.subscribe` | buyer: `SubscribeIntent` + `Permit` | the intent names plan, price, period |
 | `PolarisPayments.payWithAuthorization` | buyer (SDK direct pay) | as `pay` |
 | `PolarisPayments.cancelWithSignature` | subscriber | |
-| `PolarisPayments.createPlanFor` | (server: a session's subscription terms) | publishes a plan for the session's own merchant |
+| `PolarisPayments.createPlanFor` | operator (server: a session's subscription terms) | publishes a plan for the session's own merchant; moves nothing |
+| `PolarisPayments.quoteOrder` | operator (server: a session's price) | pins the session's price on its order before the order id is handed out; moves nothing |
 | `PolarisSend.send` / `claim` / `cancel` | sender + link key / link key / sender | the link key's signature names the recipient |
 | `PolarisLoanEngine.repayWithSig` | borrower: `RepayIntent` | |
 | `MerchantRegistry.registerFor` / `updatePayoutAddressWithSig` | merchant's embedded wallet | the merchant signs name and payout address |

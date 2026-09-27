@@ -159,7 +159,7 @@ describe("subscriptions", () => {
     const { GET: publicGet } = await import("@/app/api/public/sessions/[id]/route");
     const pub = (await json(await publicGet(request("GET", "/x"), params({ id: session.id })))).body.data;
     expect(pub.subscription).toMatchObject({ planId: "7", periodSeconds: 2_592_000, pricePerPeriodUnits: "9990000", periodsAuthorised: 12 });
-    expect(env.chain.sent[0]?.to).toBe(ADDR.payments); // createPlanFor, by the relayer
+    expect(env.chain.relayed[0]?.to).toBe(ADDR.payments); // createPlanFor, by the relayer
 
     const deadline = BigInt(inSeconds(600));
     const intent = { buyer: buyer.address, merchant: merchant.account.address, planId: 7n, pricePerPeriod: 9_990_000n, periodSeconds: 2_592_000n, orderId: session.orderId as string, nonce: 0n, deadline };
@@ -286,7 +286,7 @@ describe("payouts", () => {
     );
     expect(res.status).toBe(201);
     expect(res.body.data).toMatchObject({ status: "paid", amountCents: 2500, destination, signed: true });
-    expect(env.chain.sent[0]?.to).toBe(ADDR.stablecoin);
+    expect(env.chain.relayed[0]?.to).toBe(ADDR.stablecoin);
     const [paid] = await eventsOfType("payout.paid");
     expect(paid?.data).toMatchObject({ amount: "25.00", destination, automatic: false, chainId: 31337 });
   });
@@ -309,7 +309,7 @@ describe("payouts", () => {
       ),
     );
     expect(res.status).toBe(403);
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 });
 
@@ -340,11 +340,11 @@ describe("merchant onboarding on chain", () => {
     const done = await json(await registrationPost(request("POST", "/api/merchant/registration", { body: { signature, deadline: typed.message.deadline } }), params({})));
     expect(done.status).toBe(200);
     expect(done.body.data.merchant.registration).toMatchObject({ state: "active" });
-    const [registerTx, capTx, activateTx] = env.chain.sent;
+    const [registerTx, capTx, activateTx] = env.chain.relayed;
     expect(registerTx?.to).toBe(ADDR.registry);
     expect(capTx?.to).toBe(ADDR.registry);
     expect(activateTx?.to).toBe(ADDR.registry);
-    expect(env.chain.sent).toHaveLength(3);
+    expect(env.chain.relayed).toHaveLength(3);
   });
 
   it("refuses a registration signed by anyone but the merchant's wallet", async () => {
@@ -362,6 +362,6 @@ describe("merchant onboarding on chain", () => {
     });
     const res = await json(await registrationPost(request("POST", "/x", { body: { signature, deadline: typed.message.deadline } }), params({})));
     expect(res.status).toBe(403);
-    expect(env.chain.sent).toHaveLength(0);
+    expect(env.chain.relayed).toHaveLength(0);
   });
 });

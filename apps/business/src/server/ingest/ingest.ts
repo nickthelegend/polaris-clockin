@@ -2,9 +2,11 @@ import "server-only";
 
 import {
   isDuplicateKeyError,
+  type CheckoutMode,
   type CheckoutSessionRecord,
   type MerchantRecord,
   type PlanRecord,
+  type SessionMismatch,
   type SessionPayment,
   type SubscriptionRecord,
 } from "@polaris/db";
@@ -13,10 +15,11 @@ import { decodeEventLog, getAddress, type Abi, type Address, type Hex, type Log,
 import { collectionsReceiverAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { failureReasonOf } from "../chain/errors";
-import { formatUnits, installmentAmounts, thresholdFor, unitsToCents } from "../chain/money";
+import { centsToUnits, formatUnits, installmentAmounts, thresholdFor, unitsToCents } from "../chain/money";
 import { getDb } from "../db";
 import type { ChainConfig } from "../env";
 import { merchantByWallet } from "../merchants";
+import { periodSeconds } from "../sessions/params";
 import { emitEvent } from "../webhooks/events";
 
 /**
@@ -196,6 +199,42 @@ async function sessionByOrderKey(orderKey: Hex): Promise<CheckoutSessionRecord |
   return getDb().sessions.findOne({ orderKey: orderKey.toLowerCase() });
 }
 
+/** What a settlement of a session's order carried, to hold against the session. */
+type Settlement = { mode: CheckoutMode; amount: bigint; planId?: string; periodSeconds?: number };
+
+/**
+ * Why this settlement doesn't pay this session, or null when it does.
+ *
+ * The order id is public (it's the session id, or in the hosted checkout's
+ * view of the session), and anyone can settle an order on chain directly,
+ * so a matching order key proves nothing about the price. A session is
+ * complete only when what settled it is what it asked for: its amount (the
+ * payment, the plan's principal, or the subscription's price), in a mode
+ * it offers, and for "subscribe" its own plan and period. The on-chain
+ * quote (sessions.ts `pinPrice`) makes a wrong amount revert in the first
+ * place; this holds for sessions created without one.
+ */
+export function settlementMismatch(session: CheckoutSessionRecord, s: Settlement): string | null {
+  const expected = centsToUnits(session.amountCents);
+  if (!session.modes.includes(s.mode)) return `This checkout doesn't offer ${s.mode === "now" ? "paying in full" : s.mode === "later" ? "Pay in 4" : "a subscription"}.`;
+  if (s.amount !== expected) return `Paid ${formatUnits(s.amount)} for a ${formatUnits(expected)} checkout.`;
+  if (s.mode === "subscribe") {
+    if (session.chain.subscriptionPlanId && s.planId !== session.chain.subscriptionPlanId) return `Subscribed to plan ${s.planId}, not this checkout's plan ${session.chain.subscriptionPlanId}.`;
+    if (session.subscription && s.periodSeconds !== periodSeconds(session.subscription)) return "Subscribed with another billing period than this checkout's.";
+  }
+  return null;
+}
+
+/** Record a settlement that doesn't pay its session: on the session (never completing it), once per transaction. */
+async function recordMismatch(session: CheckoutSessionRecord, mismatch: SessionMismatch): Promise<void> {
+  await getDb().sessions.update(session.id, (s) => {
+    const known = s.mismatches ?? [];
+    if (known.some((m) => m.txHash === mismatch.txHash)) return s;
+    return { ...s, mismatches: [...known, mismatch] };
+  });
+  console.warn(`[ingest] ${mismatch.txHash} settled the order of session ${session.id} without paying it: ${mismatch.reason}`);
+}
+
 /** Mark a session paid, once, and count it on its payment link. */
 async function completeSession(session: CheckoutSessionRecord, payment: SessionPayment, at: string, amountCents: number): Promise<void> {
   const db = getDb();
@@ -233,13 +272,14 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
   const fee = big(a.fee);
   const payer = getAddress(a.payer as string);
   const chainOrderId = String(a.orderId);
+  const mismatch = session ? settlementMismatch(session, { mode: "now", amount }) : null;
 
   await getDb().payments.upsert({
     id: paymentId,
     merchantId: merchant.id,
     kind: "now",
     sessionId: session?.id ?? null,
-    linkId: session?.linkId ?? null,
+    linkId: mismatch ? null : (session?.linkId ?? null),
     orderId: session?.orderId ?? chainOrderId,
     description: session?.description ?? "Payment",
     payer,
@@ -248,7 +288,13 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
     txHash: log.txHash,
     blockNumber: log.blockNumber,
     createdAt: at,
+    mismatch,
   });
+  if (session && mismatch) {
+    await recordMismatch(session, { mode: "now", payer, txHash: log.txHash, reason: mismatch, expectedUnits: centsToUnits(session.amountCents).toString(), gotUnits: amount.toString(), at });
+    // The order is not paid: no payment.succeeded, which a merchant would fulfil on.
+    return 0;
+  }
   if (session) {
     await completeSession(
       session,
@@ -304,12 +350,13 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
   const startedAt = Number(a.firstDueAt) - interval;
   const borrower = getAddress(a.buyer as string);
   const chainOrderId = String(a.orderId);
+  const mismatch = session ? settlementMismatch(session, { mode: "later", amount: principal }) : null;
 
   const existing = await db.plans.get(loanId);
   const plan: PlanRecord = existing ?? {
     id: loanId,
     merchantId: merchant.id,
-    sessionId: session?.id ?? null,
+    sessionId: mismatch ? null : (session?.id ?? null),
     orderId: session?.orderId ?? chainOrderId,
     description: session?.description ?? "Pay in 4",
     borrower,
@@ -333,7 +380,7 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
     merchantId: merchant.id,
     kind: "later",
     sessionId: session?.id ?? null,
-    linkId: session?.linkId ?? null,
+    linkId: mismatch ? null : (session?.linkId ?? null),
     orderId: plan.orderId,
     description: plan.description,
     payer: borrower,
@@ -342,7 +389,12 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
     txHash: log.txHash,
     blockNumber: log.blockNumber,
     createdAt: at,
+    mismatch,
   });
+  if (session && mismatch) {
+    await recordMismatch(session, { mode: "later", payer: borrower, txHash: log.txHash, reason: mismatch, expectedUnits: centsToUnits(session.amountCents).toString(), gotUnits: principal.toString(), at });
+    return 0;
+  }
   if (session) {
     await completeSession(
       session,
@@ -592,23 +644,30 @@ async function onSubscriptionStarted(log: Decoded, ctx: Ctx): Promise<number> {
   const session = await sessionByOrderKey(a.orderKey as Hex);
   const at = await blockTime(ctx, log.blockNumber);
   const subId = str(a.subId);
+  const price = big(a.pricePerPeriod);
+  const buyer = getAddress(a.buyer as string);
+  const mismatch = session ? settlementMismatch(session, { mode: "subscribe", amount: price, planId: str(a.planId), periodSeconds: Number(a.periodSeconds) }) : null;
   const db = getDb();
   const existing = await db.subscriptions.get(subId);
   await db.subscriptions.upsert({
     id: subId,
     merchantId: merchant.id,
     planId: str(a.planId),
-    subscriber: getAddress(a.buyer as string),
-    priceUnits: str(a.pricePerPeriod),
+    subscriber: buyer,
+    priceUnits: price.toString(),
     periodSeconds: Number(a.periodSeconds),
     periodsCharged: existing?.periodsCharged ?? 0,
     nextChargeAt: Number(a.nextChargeAt),
     status: existing?.status ?? "active",
     orderId: session?.orderId ?? String(a.orderId),
-    sessionId: session?.id ?? null,
+    sessionId: mismatch ? null : (session?.id ?? null),
     createdAt: existing?.createdAt ?? at,
     updatedAt: at,
   });
+  if (session && mismatch) {
+    await recordMismatch(session, { mode: "subscribe", payer: buyer, txHash: log.txHash, reason: mismatch, expectedUnits: centsToUnits(session.amountCents).toString(), gotUnits: price.toString(), at });
+    return 0;
+  }
   if (session) {
     await completeSession(
       session,

@@ -629,6 +629,18 @@ export async function handleSdkRelay(merchant: MerchantRecord, body: Record<stri
   if (body.nonce !== undefined && bytes32(body, "nonce") !== nonce.toLowerCase()) {
     throw new HttpError(400, "wrong_nonce", "nonce must be keccak256(abi.encodePacked(merchant, orderId)).", { param: "nonce" });
   }
+  // A checkout session's order is paid through that checkout, at the session's price, never here:
+  // its id is public, and this path takes any amount the payer signs.
+  if (await getDb().sessions.findOne({ orderKey: nonce.toLowerCase() })) {
+    throw new HttpError(409, "order_is_a_checkout", "This order belongs to a Polaris checkout session: pay it through that checkout.", { param: "orderId" });
+  }
+  // PolarisPayments can't see an order PolarisCheckout settled as Pay in 4 or a subscription (the checkout's
+  // cross-mode guard only runs on its own entry points), so check it here rather than charge a buyer twice.
+  const settled = (await publicClient().readContract({ address: chain.contracts.checkout, abi: polarisCheckoutAbi, functionName: "orders", args: [nonce] })) as
+    | readonly [number, bigint, Address, bigint, bigint]
+    | { kind: number };
+  const kind = Array.isArray(settled) ? Number(settled[0]) : Number((settled as { kind: number }).kind);
+  if (kind !== 0) throw new HttpError(409, "already_paid", "This has already been paid.", { param: "orderId" });
   await assertSigner(
     payer,
     recoverTypedDataAddress({

@@ -128,6 +128,24 @@ export type SessionPayment = {
   subscriptionId: string | null;
 };
 
+/**
+ * A settlement of a session's order that didn't match what the session asked
+ * for: another amount, a mode it doesn't offer, another subscription plan.
+ * It is recorded, it never completes the session, and it sends no success
+ * webhook, so a merchant trusting `paymentStatus` never ships for less.
+ */
+export type SessionMismatch = {
+  mode: CheckoutMode;
+  payer: Address;
+  txHash: Hex;
+  /** What was wrong, for the dashboard. */
+  reason: string;
+  /** What the session asked for and what arrived, in AUSD base units. */
+  expectedUnits: string;
+  gotUnits: string;
+  at: IsoDate;
+};
+
 export type CheckoutSessionRecord = {
   /** `cs_test_…`. */
   id: string;
@@ -160,8 +178,17 @@ export type CheckoutSessionRecord = {
     orderKey: Hex;
     /** PolarisPayments plan for "subscribe", created by the relayer. */
     subscriptionPlanId: string | null;
+    /**
+     * The price pinned on chain with `PolarisPayments.quoteOrder` before the
+     * session (and so its order id) was handed out, so the order can only be
+     * paid at exactly this price, by any path, relayed or not. Null when no
+     * relayer was configured to pin it (development only).
+     */
+    quote?: { amountUnits: string; txHash: Hex | null; at: IsoDate } | null;
   };
   payment: SessionPayment | null;
+  /** Settlements of this order that didn't match the session. */
+  mismatches?: SessionMismatch[];
 };
 
 /* ── Idempotency ────────────────────────────────────────────────────────── */
@@ -195,6 +222,7 @@ export type RelayKind =
   | "registerMerchant"
   | "activateMerchant"
   | "createSubscriptionPlan"
+  | "quoteOrder"
   | "payout";
 
 export type RelayRecord = {
@@ -237,6 +265,12 @@ export type PaymentRecord = {
   txHash: Hex;
   blockNumber: number;
   createdAt: IsoDate;
+  /**
+   * Why this payment didn't settle the session whose order it paid (see
+   * `SessionMismatch`). The money is the merchant's either way; the order
+   * is not paid.
+   */
+  mismatch?: string | null;
   sample?: boolean;
 };
 

@@ -95,6 +95,9 @@ export function setupServer(env: Record<string, string> = {}): TestEnv {
     canOriginate: () => true,
     nonces: () => 0n,
     balanceOf: () => 1_000_000_000n,
+    allowance: () => 0n,
+    // PolarisCheckout.orders(orderKey): (kind, settledAt, buyer, amount, ref); kind 0 = never settled.
+    orders: () => [0, 0n, "0x0000000000000000000000000000000000000000", 0n, 0n],
   };
   setPublicClientForTests(chain.client());
 

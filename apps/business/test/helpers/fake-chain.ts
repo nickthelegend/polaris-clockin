@@ -20,7 +20,7 @@ import {
  * lets each test decide what a call returns, reverts with, or emits.
  */
 
-export type SentTx = { hash: Hex; to: Address; data: Hex; gas: bigint; nonce: number; chainId: number; value: bigint };
+export type SentTx = { hash: Hex; to: Address; data: Hex; gas: bigint; nonce: number; chainId: number; value: bigint; functionName: string; args: readonly unknown[] };
 
 export type LogSpec = { address: Address; abi: Abi; eventName: string; args: Record<string, unknown> };
 
@@ -64,6 +64,19 @@ export class FakeChain {
     this.abis = abis;
   }
 
+  /** What was relayed for someone, without the operator's price quotes (one per checkout session). */
+  get relayed(): SentTx[] {
+    return this.sent.filter((t) => t.functionName !== "quoteOrder");
+  }
+
+  /** The price quotes the relayer pinned, as (merchant, orderKey, amount). */
+  get quotes(): Array<{ merchant: Address; orderKey: Hex; amount: bigint }> {
+    return this.sent.filter((t) => t.functionName === "quoteOrder").map((t) => {
+      const [merchant, orderKey, amount] = t.args as [Address, Hex, bigint];
+      return { merchant, orderKey, amount };
+    });
+  }
+
   private decode(data: Hex): { functionName: string; args: readonly unknown[] } {
     for (const abi of this.abis) {
       try {
@@ -96,6 +109,7 @@ export class FakeChain {
       sendRawTransaction: async ({ serializedTransaction }: { serializedTransaction: Hex }) => {
         const tx = parseTransaction(serializedTransaction);
         const hash = keccak256(serializedTransaction);
+        const fn = this.decode(tx.data as Hex);
         const sent: SentTx = {
           hash,
           to: getAddress(tx.to as Address),
@@ -104,10 +118,12 @@ export class FakeChain {
           nonce: tx.nonce as number,
           chainId: tx.chainId as number,
           value: tx.value ?? 0n,
+          functionName: fn.functionName,
+          args: fn.args,
         };
         this.sent.push(sent);
         this.blockNumber += 1n;
-        const specs = this.onSend(sent, this.decode(sent.data));
+        const specs = this.onSend(sent, fn);
         const logs = specs.map((spec, i) => makeLog(spec, { txHash: hash, logIndex: i, blockNumber: this.blockNumber }));
         this.logs.push(...logs);
         this.receipts.set(hash, {
