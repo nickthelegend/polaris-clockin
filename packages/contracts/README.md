@@ -190,7 +190,7 @@ linked as another's history. While `simulationTransmitter` is set (simulation), 
 deliver, so it must be a dedicated CRE key, never the deployer.
 
 **Forwarders on Monad testnet**: simulation `0xB9F79d863261869B234c481D1f9A7af84AeAd192` (default),
-production `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`. To move to production once deploy access is granted:
+production `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`. To move to production after deploy access:
 `setForwarderAddress(0xF834…4482)` on both receivers, `setSimulationTransmitter(0)`, then
 `setExpectedAuthor(<workflow owner>)` and `setExpectedWorkflowName(...)`. Under `cre workflow simulate`
 a reverted `onReport` still reads as success, so judge runs by the events above.
