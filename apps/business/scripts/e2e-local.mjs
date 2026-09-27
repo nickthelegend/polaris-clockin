@@ -14,11 +14,15 @@
 //  4. with polarispay-sdk/server: creates a checkout session (and replays it
 //     with the same Idempotency-Key), reads it as the hosted checkout does,
 //     signs as a fresh buyer who holds no MON, and relays Pay now through
-//     /api/relay; then a Pay in 4 session: a CRE underwriting report opens the
+//     /api/relay; then a Pay in 4 session: a report through the mock forwarder
+//     with hand-built facts (no CRE workflow, DON or Nansen runs here) opens the
 //     buyer's credit line, the buyer signs PlanIntent + Permit, /api/relay opens
 //     the plan; then the SDK's direct pay through /api/v1/relay/payments;
-//  5. moves the clock a week, delivers a CRE collections report, and waits for
-//     the chain sync to turn it into `installment.collected`;
+//  5. moves the clock a week, delivers a hand-built collections report through
+//     the mock forwarder, and waits for the chain sync to turn it into
+//     `installment.collected`.
+//     The CRE evidence is elsewhere: workflows' e2e:local runs the real
+//     workflow handlers, and `cre workflow simulate` runs them in the CLI;
 //  6. checks every webhook arrived, verified, with the documented fields, that
 //     the sessions read back as complete, and that the buyer sent nothing.
 //
@@ -318,7 +322,7 @@ async function main() {
     return r;
   };
   await report(C.UnderwritingReceiver, underwriting, WORKFLOW_NAMES.UNDERWRITING);
-  pass("CRE underwriting report opened the buyer's credit line");
+  pass("mock forwarder report (hand-built facts, no CRE workflow) opened the buyer's credit line");
 
   const orderPlan = `e2e-plan-${Date.now()}`;
   const s2 = await polaris.checkout.sessions.create(
@@ -426,7 +430,7 @@ async function main() {
   await waitFor("payment.succeeded", (e) => e.data.orderId === orderDirect);
   pass("SDK direct pay through /api/v1/relay/payments (pk_test_ key), payment.succeeded delivered");
 
-  // ── 9. CRE collects instalment 1; the chain sync sends the webhook ───────
+  // ── 9. a hand-built collections report collects instalment 1; the chain sync sends the webhook ──
   await client.request({ method: "evm_increaseTime", params: [Number(interval) + 1] });
   await client.request({ method: "evm_mine", params: [] });
   const tasks = [{ action: ACTION.COLLECT_INSTALLMENT, id: loanId }];
@@ -437,7 +441,7 @@ async function main() {
   assert(collected.event.data.installment === 1 && collected.event.data.amount === "50.383562", "instalment 1 of 4, $50.38");
   const loan = await client.readContract({ address: C.PolarisLoanEngine, abi: polarisLoanEngineAbi, functionName: "getLoan", args: [loanId] });
   assert(loan.installmentsPaid === 1, "the loan engine agrees");
-  pass("CRE collected instalment 1; installment.collected arrived from the chain sync", `(remaining $${collected.event.data.remaining})`);
+  pass("mock forwarder collections report (hand-built task) collected instalment 1; installment.collected arrived from the chain sync", `(remaining $${collected.event.data.remaining})`);
 
   // ── 10. checks ───────────────────────────────────────────────────────────
   const bad = received.filter((r) => r.error);
