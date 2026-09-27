@@ -21,16 +21,18 @@ The backend:
 The plan is [`docs/plan.md`](../../docs/plan.md) §3.2, §5.3, §5.7 and §5.8;
 the Privy details are in [`docs/research/privy.md`](../../docs/research/privy.md).
 
-## One command
+## Run it
 
 ```bash
 pnpm install
-pnpm --filter @polaris/business e2e:local
+pnpm --filter @polaris/business dev                       # http://localhost:3100
+POLARIS_DEV_MOCK_SESSION=1 pnpm --filter @polaris/business dev   # the dashboard as a mock merchant, for screenshots
+pnpm --filter @polaris/business e2e:local                 # the whole backend on a local chain (below)
 ```
 
 Without `NEXT_PUBLIC_PRIVY_APP_ID`, /login and /dashboard show a setup screen
 (in development it says what to configure; in production it only says sign-in
-is unavailable) and every API route answers 503. The landing page and
+is unavailable) and every dashboard route answers 503. The landing page and
 `pnpm --filter @polaris/business build` work either way.
 
 ## Pages
@@ -38,27 +40,30 @@ is unavailable) and every API route answers 503. The landing page and
 | Path | What |
 |---|---|
 | `/` | The merchant landing, "Polaris for Business". Signed-in merchants see **Open dashboard** in its nav. |
-| `/login` | Sign in: one **Continue** that opens Privy's modal, then (first time only) the business name. |
-| `/dashboard` | Overview: sales, customers this week, sales by mode, payment volume candles, recent sales, credit exposure with Nansen reasons, the Chainlink CRE collections run, the Envio event feed |
-| `/dashboard/payments` | Every payment; rows open a detail drawer |
-| `/dashboard/links` | Payment links: create (dialog), turn off |
-| `/dashboard/plans` | The Pay in 4 ledger with instalment ticks; rows open a plan drawer |
-| `/dashboard/payouts` | Balance, one-tap withdraw (with a confirm step), automatic daily payouts, history |
-| `/dashboard/developers` | API keys (revoke), webhooks (add, edit, pause, remove, test event, delivery log), the SDK snippet, the demo shop |
-| `/gallery` | Every `@polaris/ui` component, beside the reference it reproduces |
+| `/login` | Sign in: one **Continue** that opens Privy's modal; the first time, the business name, then its registration on Monad. |
+| `/dashboard` | Overview: sales with a sparkline and delta, customers this week, sales by mode, daily payment volume candles, recent sales, credit exposure with Nansen-backed reasons, the Chainlink CRE collections run, the Envio event feed, and the registration banner until the business is active. |
+| `/dashboard/payments` | Every payment; rows open a detail drawer. |
+| `/dashboard/links` | Payment links: create (dialog), share with a QR code, turn off. |
+| `/dashboard/plans` | The Pay in 4 ledger with instalment ticks; rows open a plan drawer. |
+| `/dashboard/payouts` | The balance card, one-tap withdraw (review, confirm, receipt), automatic daily payouts with **Pay out now**, history. |
+| `/dashboard/developers` | The integration (merchant ID, `baseUrl`, registration), API keys, webhooks with a test event and the delivery log (attempts, **Retry now**), the SDK snippet, the demo shop. |
+| `/gallery` | Every `@polaris/ui` component, beside the reference it reproduces. |
 
 The dashboard used to live at the top level: `/payments`, `/links`, `/plans`,
 `/payouts` and `/developers` (and anything under them) redirect to
 `/dashboard/…` (`next.config.ts`). Detail views open in a right-hand drawer and
-create/edit flows in a dialog; below 768px both are bottom sheets.
+create flows in a dialog; below 768px both are bottom sheets.
+
+"See the demo shop" opens Halcyon (`apps/shop`, a store on polarispay-sdk) at
+`NEXT_PUBLIC_DEMO_SHOP_URL`, `http://localhost:3600` by default.
 
 ## Privy: sign-in and the payout wallet
 
-The dashboard never draws a sign-in button of its own for any method. The
+The web app never draws a sign-in button of its own for any method. The
 sign-in page's **Continue** calls Privy's `login()`, and Privy's modal lists
 exactly the methods turned on for the app in the Privy dashboard.
 
-As configured today (checked against the Privy app):
+As configured today (checked against the Privy app, not changed here):
 
 - **Email** is on, and **external wallets** are on.
 - **Google is off.** To offer it, turn it on in the Privy dashboard (Login
@@ -66,12 +71,12 @@ As configured today (checked against the Privy app):
   code change.
 - **Allowed domains is empty**, which lets every origin use the app id. Before
   launch, add `http://localhost:3100` and the production domain under
-  App settings > Domains, so no other site can start sign-in with it.
-- The dashboard's own "create embedded wallet on login" is off; the client
-  config asks for it instead (`embeddedWallets.ethereum.createOnLogin:
-  "all-users"` in `src/components/auth/privy-auth.tsx`), so every merchant,
-  including one who signs in with an external wallet, gets a self-custodial
-  payout wallet. Until Privy reports it, the dashboard polls `/api/me`.
+  App settings > Domains.
+- The client asks Privy for an embedded wallet for every merchant
+  (`embeddedWallets.ethereum.createOnLogin: "all-users"` in
+  `src/components/auth/privy-auth.tsx`), including one who signs in with an
+  external wallet: the server only pays out from, and registers, the embedded
+  wallet. Until Privy reports it, the dashboard polls `/api/me`.
 
 The Privy modal carries the team's wordmark (`packages/brand/assets/wordmark.png`)
 and our surface and lime colours. If Privy can't be reached for 8 seconds
@@ -80,158 +85,61 @@ and our surface and lime colours. If Privy can't be reached for 8 seconds
 `NEXT_PUBLIC_PRIVY_ANDROID_CLIENT_ID` belongs to the consumer app's Android
 build. Never pass it as this web app's `clientId`.
 
-## Environment
+## What the dashboard shows, and when
 
-| Variable | Where | Required | What it does |
-|---|---|---|---|
-| `NEXT_PUBLIC_PRIVY_APP_ID` | client + server | **yes** | The Privy app. Unset: the setup screen. Read at build time. |
-| `PRIVY_APP_SECRET` | server | **yes** | Lets the server verify access tokens and look up the merchant's embedded wallet. |
-| `PRIVY_APP_ID` | server | no | Overrides `NEXT_PUBLIC_PRIVY_APP_ID` on the server. |
-| `PRIVY_VERIFICATION_KEY` | server | no, but set it in production | The app's JWT verification key (Dashboard > App settings). Skips the JWKS fetch after every cold start. |
-| `NEXT_PUBLIC_PRIVY_CLIENT_ID` | client | no | A Privy "app client" for this web origin (not the Android one). |
-| `NEXT_PUBLIC_MONAD_TESTNET_RPC` | client | no | Our own Monad testnet RPC for the embedded wallet instead of the public one. |
-| `NEXT_PUBLIC_AUSD_ADDRESS` | client + server | no | AUSD on Monad testnet, for ERC-3009 withdrawal signatures. |
-| `NEXT_PUBLIC_AUSD_EIP712_NAME`, `NEXT_PUBLIC_AUSD_EIP712_VERSION` | client + server | no | AUSD's EIP-712 domain. Default `AUSD` / `1`; check them against the deployed token. |
-| `NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID` | client + server | no | The payout signer's key quorum ID, added to a merchant's wallet for automatic payouts. |
-| `PRIVY_ADMIN_QUORUM_ID` | server | no | Owner of each payout policy, so the app secret alone can't widen it. |
-| `POLARIS_KEY_PEPPER` | server | no, but set it in production | HMAC pepper for stored secret-key hashes. |
-| `NEXT_PUBLIC_CONSUMER_APP_URL` | client + server | no | The Polaris app's origin. Payment links are `<this>/pay/<id>`. Default `http://localhost:3000`. |
-| `NEXT_PUBLIC_PAY_BASE_URL` | client + server | no | Overrides the link base entirely. |
-| `NEXT_PUBLIC_DEMO_SHOP_URL` | client | no | The deployed demo storefront. Unset: "See the demo shop" opens a built-in demo checkout. |
-| `POLARIS_WEBHOOK_ALLOW_PRIVATE` | server | no | Outside production only: lets webhook URLs point at localhost and private networks, for local testing. |
+Pages read `DashboardData` (`src/lib/data/source.ts`) and nothing else; in a
+real session it is implemented over this server's routes (`http.ts`).
 
-**Switches for what is live.** A control whose service isn't running is
-disabled, with the reason beside it; it is never left to fail, and nothing
-claims money moved when it didn't (`src/lib/features.ts`,
-`src/lib/data/links.ts`). Set each to `1` once the piece exists:
+- **What works is decided by the server.** `GET /api/health` says whether a
+  chain, the relayer and the payout signer are connected; `useReadiness()`
+  (`src/lib/features.ts`) turns that into a reason per control. Withdraw,
+  automatic payouts, link sharing and registration are disabled with that
+  reason beside them until they can work; nothing is left to fail, and nothing
+  claims money moved when it didn't.
+- **Sample data is always labelled.** A server with no chain gives new
+  merchants a sample book (`MerchantRecord.sample`, surfaced as
+  `Merchant.sample`); a merchant can also choose **Preview with sample data**
+  (account menu, this browser only, nothing can be paid out). Either way every
+  card and row that shows it carries a **Sample** chip.
+- **The sponsor panels** read typed functions in `src/lib/data/insights.ts`:
+  `getCollectionsRun` shows the Chainlink CRE workflow's real heartbeat
+  (`Overview.collector`) once it reports; `getIndexedEvents` (Envio) and
+  `getUnderwritingReasons` (Nansen) show "not connected" for a live merchant
+  and clearly named `placeholder*` data when sample data is on.
+- **Sessions end cleanly.** A 401 from any request signs out, says "Your
+  session ended. Sign in again." and goes to `/login?next=<the page>`; a
+  refresh that fails while older data is on screen shows its age and Retry;
+  **Sign out** goes to `/login` with no `next`.
 
-| Variable | Turns on |
-|---|---|
-| `NEXT_PUBLIC_PAY_LINKS_LIVE` | Sharing, copying and QR codes for links (once the consumer checkout reads links from this store) |
-| `NEXT_PUBLIC_PAYOUT_RELAYER_LIVE` | Withdraw (also needs `NEXT_PUBLIC_AUSD_ADDRESS`) |
-| `NEXT_PUBLIC_PAYOUT_SWEEP_LIVE` | Automatic payouts (also needs withdrawals and the payout signer) |
-| `NEXT_PUBLIC_CHECKOUT_API_LIVE` | Creating API keys, and the copy button on the SDK snippet |
-| `NEXT_PUBLIC_POLARIS_DEMO_DATA` | A labelled sample book for every new merchant (demos only; off by default) |
+**The development mock session** (`POLARIS_DEV_MOCK_SESSION=1`, or `=empty` for
+a merchant who has just signed up) serves every read and write from sample data
+in the browser and simulates the signing flows, for screenshots. It never calls
+the API. It exists only when `NODE_ENV` is `development`: `next.config.ts`
+blanks the variable in every other build and every check also tests
+`NODE_ENV`, so the production bundles don't contain it.
 
-**Development only:** `POLARIS_DEV_MOCK_SESSION=1 pnpm --filter
-@polaris/business dev` opens the dashboard as an invented merchant with a
-labelled sample book, served from the browser, for screenshots;
-`POLARIS_DEV_MOCK_SESSION=empty` is the same merchant just after signing up
-(nothing paid, nothing connected). It never talks to the API. It exists only
-when `NODE_ENV` is `development`: `next.config.ts` blanks the variable in every
-other build and the code checks `NODE_ENV` too, so a production build compiled
-with the variable set still requires Privy.
-
-## How it fits together
+## Web app code map
 
 ```
-src/app/(privy)/page.tsx          the landing (components/landing)
-src/app/(privy)/login             sign in, then name the business
+src/app/(privy)/page.tsx          the landing (components/landing, components/motion)
+src/app/(privy)/login             sign in, name the business, register it on Monad
 src/app/(privy)/dashboard/*       the pages, behind the gate in dashboard/layout.tsx
 src/app/(privy)/layout.tsx        Privy (AuthProvider) and the data source: only this group mounts them
 src/app/gallery, not-found.tsx    no Privy
-src/app/api/*                     route handlers; every one is exported through withMerchant()
 src/components/auth               Privy, the unconfigured state and the dev-only mock, behind one AuthContext
 src/components/shell              the sidebar, top bar, floating nav and the header's account menu
-src/lib/data                      the DashboardData interface, types, formatting, sample data,
-                                  and the sponsor-backed panels' typed functions (insights.ts)
-src/server/auth.ts                verifies the Privy access token; returns user ID + embedded wallet
-src/server/store.ts               MerchantStore interface + the in-memory implementation
-src/server/services.ts            what each route does once the caller is known
+src/components/dashboard          panels, badges, the registration banner
+src/lib/data                      DashboardData, types, formatting, sample data, insights.ts
+src/lib/payouts.ts                useWithdraw, useAutoPayouts, useRegisterMerchant
+src/lib/features.ts               readiness: which money controls work, and why not
 ```
 
-### Authentication
+## The local end-to-end run
 
-`src/server/auth.ts` reads the Privy access token from `Authorization: Bearer`
-or the `privy-token` cookie, verifies it with `@privy-io/node`
-(`privy.utils().auth().verifyAccessToken`, using `PRIVY_APP_SECRET`), and looks
-the merchant's embedded wallet up from Privy by user ID. Nothing the client
-sends can name the merchant or their wallet.
-
-- Every handler under `src/app/api` is `export const GET = withMerchant(...)`.
-  `pnpm lint` runs `scripts/check-api-auth.mjs`, which fails on any handler that
-  isn't. Unknown `/api/*` paths and unsupported methods answer JSON 404 and 405.
-- A cookie-authenticated write must come from the same origin, and writes are
-  rate-limited per merchant.
-- Missing Privy config answers 503 `auth_not_configured`; a user Privy no longer
-  has answers 401 `invalid_token`.
-- In the browser, a 401 (`unauthenticated` or `invalid_token`) from any request
-  signs out, says "Your session ended. Sign in again." and goes to
-  `/login?next=<the page>`. A refresh that fails while older data is on screen
-  shows a banner with the data's age and Retry. Pressing **Sign out** goes to
-  `/login` with no `next`.
-
-### Data
-
-Pages use `DashboardData` (`src/lib/data/source.ts`) and nothing else. Today it
-is implemented over our API routes (`http.ts`), which read `MerchantStore`
-(`src/server/store.ts`).
-
-**The store is in memory, per server instance.** A restart clears the business
-name, links, keys and webhooks, and on serverless each instance has its own
-copy. The dashboard says so where it matters (links, keys, webhooks). To move
-to a database, implement `MerchantStore` keyed by the Privy user ID and return
-it from `getStore()`; no page changes.
-
-A new merchant starts with an empty book: zero balance, empty states, and the
-indexer, CRE and Nansen panels showing "not connected". Sample data appears only
-when the merchant chooses **Preview with sample data** (account menu, this
-browser only), on a server with `NEXT_PUBLIC_POLARIS_DEMO_DATA=1`, or in the dev
-mock session, and then every card and row that shows it carries a **Sample**
-chip.
-
-The Overview's sponsor-backed panels read typed functions in
-`src/lib/data/insights.ts` (`getCollectionsRun` for Chainlink CRE,
-`getIndexedEvents` for Envio, `getUnderwritingReasons` for Nansen). Each returns
-`{ source: "not_connected" }` today, or clearly named `placeholder*` data when
-sample data is on; wiring a service means returning `{ source: "live" }` from it.
-
-### API routes
-
-All authenticated. Responses are `{ data }` or
-`{ error: { code, message, field? } }`, where `message` is written for a person
-and `field` names the request field a validation error is about.
-
-| Route | Does |
-|---|---|
-| `GET /api/me`, `POST /api/me` | The merchant; set the business name (onboarding) |
-| `GET /api/overview` | Balance, today's payments, Pay in 4 exposure, collector, automatic payouts |
-| `GET /api/links`, `POST /api/links` | List; create (amount, description, modes, single-use or reusable, expiry). At most 500 per merchant. |
-| `PATCH /api/links/:id` | `{ active: false }` turns a link off. Links are never deleted. |
-| `GET /api/payments` | Payments, newest first |
-| `GET /api/plans` | The Pay in 4 ledger |
-| `GET /api/payouts`, `POST /api/payouts` | Balance, settings, history; withdraw to an address |
-| `POST /api/payouts/automatic` | Turn automatic daily payouts on or off (off never needs the wallet) |
-| `GET /api/keys`, `POST /api/keys` | API keys; `POST` returns the secret key once and stores only its hash |
-| `DELETE /api/keys/:id` | Revoke a key |
-| `GET /api/webhooks`, `POST /api/webhooks` | Endpoints and delivery log; `POST` returns the signing secret once |
-| `PATCH /api/webhooks/:id`, `DELETE /api/webhooks/:id` | Edit an endpoint (URL, events, on/off), or remove it |
-| `POST /api/webhooks/:id/test` | Sign and log a test `payment.succeeded` event |
-
-Webhook URLs must be `https` on port 443 and must not resolve to loopback,
-private, link-local or CGNAT addresses (`src/server/net-guard.ts`); the check
-runs at registration and again before a test event, after DNS resolution.
-Payout addresses in mixed case must match their EIP-55 checksum.
-
-### Payouts and Privy
-
-- **Withdraw.** With AUSD configured, the embedded wallet signs
-  `TransferWithAuthorization` (`useSignTypedData`) after a confirm dialog
-  (amount, destination, no fee), and the server rebuilds the typed data and
-  checks the signature recovers to the merchant's wallet before queueing it for
-  the relayer. The receipt shows the real status: Queued until the relayer
-  sends it.
-- **Automatic daily payouts.** The server creates a per-merchant Privy policy
-  (`src/server/payout-policy.ts`) that allows only `eth_signTypedData_v4` AUSD
-  transfers from the merchant's wallet to their payout address on Monad
-  testnet. The browser then adds our payout signer with that policy
-  (`useSigners().addSigners`); turning it off removes it.
-
-## The backend
-
-That starts a Hardhat node (`:8610`), deploys every contract with the testnet
-deploy script, starts this server (`:3530`) with the dev relayer adapter,
-seeds a merchant, and then, with the real `polarispay-sdk`: creates a checkout
+`pnpm --filter @polaris/business e2e:local` starts a Hardhat node (`:8610`),
+deploys every contract with the testnet deploy script, starts this server
+(`:3530`) with the dev relayer adapter, seeds a merchant, and then, with the
+real `polarispay-sdk`: creates a checkout
 session (and replays it with its Idempotency-Key), pays it now through
 `/api/relay` as a buyer with no MON, opens a Pay in 4 plan after a CRE
 underwriting report, pays through the SDK's direct-pay relay, collects
@@ -243,7 +151,7 @@ Other commands (`pnpm --filter @polaris/business <cmd>`):
 
 | Command | What it does |
 |---|---|
-| `dev` | The dashboard and API on http://localhost:3100 |
+| `dev` | The landing, dashboard and API on http://localhost:3100 |
 | `test` | 104 unit and route tests (vitest, on SQLite in memory): validation, auth, idempotency, the relayer's policy and signature checks, chain ingestion, webhook signing and retries, payouts, onboarding |
 | `lint` | ESLint, then `scripts/check-api-auth.mjs`: every route must be exported through the authentication its path requires |
 | `typecheck`, `build` | `tsc --noEmit`; `next build` |
@@ -370,7 +278,13 @@ Dashboard routes: `GET/POST /api/webhooks`, `DELETE /api/webhooks/{id}`,
 
 - **Authentication**: every dashboard route verifies the Privy access token
   server-side (`@privy-io/node`) and reads the merchant's embedded wallet from
-  Privy; nothing a client sends can name the merchant or their wallet.
+  Privy; nothing a client sends can name the merchant or their wallet. A user
+  Privy no longer has is a 401 `invalid_token`; a refused app secret is a 503
+  `auth_not_configured`. Dashboard writes are rate limited per merchant, and
+  unknown `/api` paths and unsupported methods answer JSON 404 and 405.
+- **Links**: `GET/POST /api/links` (at most 500 active per merchant) and
+  `PATCH /api/links/{id}` with `{ "active": false }` to turn one off; an
+  inactive link opens no checkout (410 `link_inactive`).
 - **Onboarding**: `GET /api/merchant/registration` returns the
   `Registration` typed data for the embedded wallet to sign;
   `POST` verifies it and relays `registerFor`, then (with `REGISTRY_ACTIVATOR`)
@@ -394,6 +308,9 @@ See [`.env.example`](.env.example) for every variable. The essentials:
 | Variable | |
 |---|---|
 | `NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Sign-in; the dashboard routes answer 503 without them |
+| `NEXT_PUBLIC_PRIVY_PAYOUT_SIGNER_ID` | The payout signer the browser adds for automatic payouts |
+| `NEXT_PUBLIC_DEMO_SHOP_URL` | "See the demo shop" (default `http://localhost:3600`) |
+| `POLARIS_DEV_MOCK_SESSION` | `next dev` only: the mock merchant for screenshots |
 | `POLARIS_DEPLOYMENT` / `POLARIS_DEPLOYMENT_FILE`, `POLARIS_RPC_URL` | Which contracts, which RPC |
 | `RELAYER_MODE` (+ `PRIVY_RELAYER_*`) | `privy` in production, `local` on a Hardhat node, `off` |
 | `POLARIS_KEY_PEPPER` | Required in production |
