@@ -6,7 +6,7 @@ import { newId, type UnderwritingRequestRecord } from "@polaris/db";
 import { getAddress, recoverMessageAddress, type Address, type Hex } from "viem";
 
 import { afterResponse } from "../background";
-import { scoreManagerAbi } from "../chain/abis";
+import { polarisLoanEngineAbi, scoreManagerAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { formatUnits } from "../chain/money";
 import { getDb } from "../db";
@@ -99,7 +99,7 @@ async function signerOf(message: string, sig: Hex): Promise<Address | null> {
 async function onChainProfile(account: Address) {
   const chain = requireChain();
   const client = publicClient();
-  const [profile, creditLimit] = await Promise.all([
+  const [profile, creditLimit, activeDebt] = await Promise.all([
     client.readContract({ address: chain.contracts.scoreManager, abi: scoreManagerAbi, functionName: "profileOf", args: [account] }) as Promise<{
       score: number;
       initialized: boolean;
@@ -107,8 +107,9 @@ async function onChainProfile(account: Address) {
       underwritten: boolean;
     }>,
     client.readContract({ address: chain.contracts.scoreManager, abi: scoreManagerAbi, functionName: "creditLimitOf", args: [account] }) as Promise<bigint>,
+    (client.readContract({ address: chain.contracts.loanEngine, abi: polarisLoanEngineAbi, functionName: "activeDebtOf", args: [account] }) as Promise<bigint>).catch(() => 0n),
   ]);
-  return { profile, creditLimit };
+  return { profile, creditLimit, activeDebt };
 }
 
 function toPublic(r: UnderwritingRequestRecord) {
@@ -278,6 +279,8 @@ export async function creditStatus(account: Address) {
           score: Number(chainState.profile.score),
           creditLimit: formatUnits(chainState.creditLimit),
           creditLimitUnits: chainState.creditLimit.toString(),
+          /** What the account owes on open plans (PolarisLoanEngine.activeDebtOf). */
+          activeDebtUnits: chainState.activeDebt.toString(),
         }
       : null,
     request: request ? toPublic(request) : null,

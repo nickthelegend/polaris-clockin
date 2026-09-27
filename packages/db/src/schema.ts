@@ -578,6 +578,7 @@ export const COLLECTIONS = {
     indexes: {
       merchantId: (d: PaymentRecord) => d.merchantId,
       sessionId: (d: PaymentRecord) => d.sessionId,
+      payer: (d: PaymentRecord) => d.payer.toLowerCase(),
       createdAt: (d: PaymentRecord) => d.createdAt,
     },
   } satisfies CollectionSpec<PaymentRecord>,
@@ -587,6 +588,7 @@ export const COLLECTIONS = {
     indexes: {
       merchantId: (d: PlanRecord) => d.merchantId,
       state: (d: PlanRecord) => d.state,
+      borrower: (d: PlanRecord) => d.borrower.toLowerCase(),
       createdAt: (d: PlanRecord) => d.createdAt,
     },
   } satisfies CollectionSpec<PlanRecord>,
@@ -595,6 +597,7 @@ export const COLLECTIONS = {
     id: (d: SubscriptionRecord) => d.id,
     indexes: {
       merchantId: (d: SubscriptionRecord) => d.merchantId,
+      subscriber: (d: SubscriptionRecord) => d.subscriber.toLowerCase(),
       createdAt: (d: SubscriptionRecord) => d.createdAt,
     },
   } satisfies CollectionSpec<SubscriptionRecord>,
