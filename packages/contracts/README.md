@@ -71,9 +71,12 @@ unset, and never the deployer, which the script refuses), `CRE_WORKFLOW_OWNER`,
 (3600).
 
 **Gas.** Monad bills the gas *limit*. Every script sends through `lib/tx.js`:
-`eth_estimateGas` plus 15%, never a blanket limit. Measured locally (gas used):
-Pay now 271k, open a plan 422k, a collections report 153k, subscribe 335k, send
-167k, claim 63k, an underwriting report 142k.
+`eth_estimateGas` plus 15%, never a blanket limit. Measured locally (gas used,
+`e2e:local`): Pay now 271k, open a plan 521k (the first plan on a fresh
+deployment, which writes the pool totals and the borrower's loan list for the
+first time; 436k for a later one), a collections report 162k, subscribe 335k,
+send 167k, claim 63k, an underwriting report 142k, a guardian attestation 121k
+(247k for the first), `reauthorize` 77k.
 
 ## Contracts
 
