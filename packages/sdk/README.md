@@ -182,8 +182,16 @@ a no-op. Every event comes from an indexed chain event, never from a browser.
 | `subscription.canceled` | `subscriptionId, planId, merchant, subscriber, canceledBy, txHash, chainId` |
 | `payout.paid` | `payoutId, amount, destination, automatic, txHash, chainId` |
 
-Amounts are USD decimal strings with up to 6 decimals (AUSD's precision).
-The types are exported: `WebhookEvent<"plan.opened">`, `PlanOpenedData`, …
+Amounts are USD decimal strings with 2 to 6 decimals (AUSD's precision):
+`"25.00"`, `"50.383562"`, never base units. The types are exported:
+`WebhookEvent<"plan.opened">`, `PlanOpenedData`, …
+
+**Checking an event's shape.** `verify` proves an event came from Polaris; it
+doesn't re-check the payload. `validateWebhookEvent(event)` does: it returns
+every way an event differs from its type (`[{ path: "data.amount", message:
+"… this looks like AUSD base units" }]`), or `[]`. `assertWebhookEvent` throws
+instead. Use them in the tests of anything that builds events: a mock of
+Polaris, the API's emitter, an indexer's outbox.
 
 ---
 

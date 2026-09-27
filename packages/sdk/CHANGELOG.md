@@ -44,6 +44,11 @@ Polaris on Monad, with Stripe's ergonomics.
   follow `PolarisLoanEngine.thresholdFor`'s rounded-up ladder, unit for unit,
   and fall due at `(i + 1) × interval`: nothing is paid at checkout, and the
   first payment is a week later.
+- `validateWebhookEvent` / `assertWebhookEvent`: a runtime check that an event
+  matches its `WebhookEvent` type, envelope and every `data` field with its
+  format (amounts in dollars with 2 to 6 decimals, `USD`, `now` / `later`,
+  0x hashes and addresses, ISO times, one schedule row per instalment). For
+  the tests of anything that builds events; `verify` is unchanged.
 
 ### Changed
 

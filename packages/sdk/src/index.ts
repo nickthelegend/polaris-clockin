@@ -61,6 +61,8 @@ export type {
 
 export { WEBHOOK_EVENT_TYPES, isWebhookEventType } from "./events.js";
 export type * from "./events.js";
+export { assertWebhookEvent, validateWebhookEvent } from "./event-shape.js";
+export type { WebhookEventProblem } from "./event-shape.js";
 
 export { PAY_IN_4, formatUsd, normaliseAmount, quotePayIn4 } from "./money.js";
 export type { AmountInput, PayIn4Installment, PayIn4Options, PayIn4Quote } from "./money.js";
