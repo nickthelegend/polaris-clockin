@@ -210,6 +210,8 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
             caption="You send"
             value={value}
             onValueChange={(v) => setValue(cleanAmount(v))}
+            // "12.5" reads "12.50" once you leave the field, like the card under it.
+            inputProps={{ onBlur: () => setValue((v) => (v && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : v)) }}
             inputLabel="Amount to send, in dollars"
             invalid={tooMuch}
             metaLabel="Balance"
