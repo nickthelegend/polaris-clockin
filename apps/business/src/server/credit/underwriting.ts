@@ -250,7 +250,7 @@ export async function runUnderwritingQueue(nowMs = Date.now()): Promise<Underwri
 export async function explainDecision(accountLower: string): Promise<void> {
   const db = getDb();
   const decision = await db.creditDecisions.get(accountLower);
-  if (!decision || decision.explanation !== undefined || !decision.txHash || !getConfig().underwriting.gatewayUrl) return;
+  if (!decision || decision.explanation !== undefined || !decision.txHash) return;
   let explanation = null;
   try {
     explanation = await explainUnderwriting(getAddress(accountLower), decision.txHash, decision.linkedWallet !== null);

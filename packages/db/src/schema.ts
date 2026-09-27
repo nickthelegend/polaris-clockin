@@ -508,13 +508,13 @@ export type CreditDecisionRecord = {
    * The buyer's reasons for this decision, explained by the underwriting
    * gateway from the facts the DON attested (each line with its points and
    * the provider behind it, e.g. Nansen). Undefined until tried; null when
-   * there is no gateway or no report to explain.
+   * there is no report to explain. `source`: the gateway, or the underwriting package in process.
    */
   explanation?: {
     score: number | null;
     limitUnits: string | null;
     reasons: Array<{ text: string; points: number | null; kind: string | null; provider: string | null }>;
-    source: "gateway";
+    source: "gateway" | "package";
   } | null;
 };
 
