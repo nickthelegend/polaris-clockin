@@ -1,0 +1,244 @@
+/**
+ * Deploy the whole Polaris contract layer to Monad testnet (chain 10143), or to
+ * a local Hardhat node for the end-to-end run, and write the deployment record.
+ *
+ *   pnpm --filter @polarispay/contracts deploy:monad     # Monad testnet
+ *   pnpm --filter @polarispay/contracts deploy:local     # node on :8600 (see e2e:local)
+ *
+ * Writes deployments/monad-testnet.json (or monad-local.json): every address
+ * with its block number and transaction, the ABI path for each, the EIP-712
+ * domains and struct types clients sign, the roles granted, the CRE wiring and
+ * the demo merchant.
+ *
+ * Order: stablecoin, ScoreManager, PolarisLoanEngine, PolarisPayments,
+ * MerchantRegistry, CollateralVault, BatchSettlement, PolarisSend,
+ * PolarisCheckout, (MockKeystoneForwarder, local only), CollectionsReceiver,
+ * UnderwritingReceiver; then roles; then the demo merchant (registered by its
+ * own signature) and two subscription plans; then the credit pool.
+ *
+ * Environment (all optional; the repo-root .env is read by hardhat.config.js):
+ *   DEPLOYER_PRIVATE_KEY        testnet deployer (scripts/deployer.js creates one)
+ *   AUSD_MODE                   "ausd" (testnet default: Agora AUSD, domain checked
+ *                               on deploy) or "mock" (local default: a MockAUSD)
+ *   TREASURY                    fee and interest recipient (default: deployer)
+ *   GRACE_SECONDS               LoanEngine grace (testnet 3600, local 120)
+ *   MIN_INTERVAL_SECONDS        shortest instalment interval (default 60: a whole
+ *                               plan plays out on camera; weekly plans still work)
+ *   MIN_PERIOD_SECONDS          shortest subscription period (default 60)
+ *   CRE_FORWARDER               "simulation" (testnet default: Chainlink's
+ *                               MockKeystoneForwarder, for `cre workflow simulate
+ *                               --broadcast`) or "production" (KeystoneForwarder,
+ *                               once Early Access lands)
+ *   CRE_SIMULATION_TRANSMITTER  the address of CRE_ETH_PRIVATE_KEY, the key
+ *                               `cre workflow simulate --broadcast` signs with: the
+ *                               only origin UnderwritingReceiver accepts while on
+ *                               the mock forwarder. Required for "simulation"
+ *                               (read from CRE_ETH_PRIVATE_KEY in the environment
+ *                               or .env when unset) and never the deployer. A
+ *                               local node defaults to the deployer. Ignored for
+ *                               "production".
+ *   CRE_WORKFLOW_OWNER          production only: the receivers then accept only
+ *                               this workflow owner and the Polaris workflow names
+ *   RELAYER_ADDRESS             the Privy server wallet that relays; gets operator
+ *                               roles (or later: scripts/grant-relayer.js)
+ *   DEMO_MERCHANT_PRIVATE_KEY   testnet demo merchant (created in .env if missing)
+ *   POOL_SEED_AUSD              credit pool target in dollars (testnet 10000,
+ *                               local 100000); testnet seeds what the deployer holds
+ */
+
+"use strict";
+
+const { writeFileSync, mkdirSync } = require("node:fs");
+const { join } = require("node:path");
+const hre = require("hardhat");
+const { Wallet, ZeroAddress, getAddress, formatEther, parseUnits } = require("ethers");
+
+const { deployPolaris, MONAD_TESTNET } = require("../lib/deploy");
+const { ensureEnvKey, readEnvValue } = require("./lib/env");
+
+const LOCAL_NETWORKS = new Set(["hardhat", "localhost", "monadLocal"]);
+
+function deploymentFile(networkName) {
+  if (networkName === "monadTestnet") return "monad-testnet.json";
+  if (LOCAL_NETWORKS.has(networkName)) return "monad-local.json";
+  return `${networkName}.json`;
+}
+
+/** Contract sizes, for a rough cost preflight before spending anything. */
+async function roughDeploymentGas() {
+  const names = [
+    "ScoreManager", "PolarisLoanEngine", "PolarisPayments", "MerchantRegistry", "CollateralVault",
+    "BatchSettlement", "PolarisSend", "PolarisCheckout", "CollectionsReceiver", "UnderwritingReceiver",
+  ];
+  let gas = 0n;
+  for (const n of names) {
+    const a = await hre.artifacts.readArtifact(n);
+    const code = BigInt((a.deployedBytecode.length - 2) / 2);
+    const init = BigInt((a.bytecode.length - 2) / 2);
+    gas += 53_000n + 200n * code + 16n * init + 200_000n; // creation + code deposit + calldata + constructor storage
+  }
+  // About 30 wiring and demo transactions.
+  return gas + 30n * 150_000n;
+}
+
+/**
+ * The only transaction origin UnderwritingReceiver accepts reports from while
+ * it sits behind a simulation forwarder.
+ *
+ * Chainlink's MockKeystoneForwarder is a public contract anyone can call, so
+ * under it the receiver's one guard is `tx.origin == simulationTransmitter`.
+ * Whatever contract the transmitter's key calls can therefore deliver a
+ * forged underwriting report. The deployer's key calls a great deal, so on a
+ * public network the transmitter must be a key kept for `cre workflow
+ * simulate --broadcast` alone: CRE_SIMULATION_TRANSMITTER, or the address of
+ * CRE_ETH_PRIVATE_KEY. A local node, where nothing is at stake, defaults to
+ * the deployer (the CRE package's local chain relies on that). The
+ * production forwarder checks DON signatures, so it needs no transmitter.
+ */
+function simulationTransmitterFor(forwarderKind, deployer, env = process.env, readKey = readEnvValue) {
+  if (forwarderKind === "production") return ZeroAddress;
+  if (env.CRE_SIMULATION_TRANSMITTER) {
+    const transmitter = getAddress(env.CRE_SIMULATION_TRANSMITTER);
+    if (forwarderKind !== "local") refuseDeployerAsTransmitter(transmitter, deployer);
+    return transmitter;
+  }
+  if (forwarderKind === "local") return deployer.address;
+  const key = readKey("CRE_ETH_PRIVATE_KEY");
+  if (!key) {
+    throw new Error(
+      "The simulation forwarder needs a dedicated CRE transmitter. Set CRE_SIMULATION_TRANSMITTER to the " +
+        "address of the key `cre workflow simulate --broadcast` signs with (CRE_ETH_PRIVATE_KEY in " +
+        "workflows/.env), a key used for nothing else and funded with a little testnet MON."
+    );
+  }
+  const transmitter = new Wallet(key.startsWith("0x") ? key : `0x${key}`).address;
+  refuseDeployerAsTransmitter(transmitter, deployer);
+  return transmitter;
+}
+
+function refuseDeployerAsTransmitter(transmitter, deployer) {
+  if (transmitter === getAddress(deployer.address)) {
+    throw new Error(
+      "The CRE simulation transmitter must not be the deployer: while the simulation forwarder is in use, " +
+        "any contract the transmitter's key calls could deliver underwriting facts. Use a dedicated " +
+        "CRE_ETH_PRIVATE_KEY and set CRE_SIMULATION_TRANSMITTER to its address."
+    );
+  }
+}
+
+async function buildConfig(networkName, deployer) {
+  const local = LOCAL_NETWORKS.has(networkName);
+  const env = process.env;
+  const num = (v, d) => (v === undefined || v === "" ? d : Number(v));
+
+  const tokenMode = env.AUSD_MODE || (local ? "mock" : "ausd");
+  if (!["ausd", "mock"].includes(tokenMode)) throw new Error(`AUSD_MODE must be "ausd" or "mock"`);
+  if (local && tokenMode === "ausd") throw new Error("A local node has no AUSD; use AUSD_MODE=mock");
+
+  const forwarderKind = local ? "local" : env.CRE_FORWARDER || "simulation";
+  if (!["local", "simulation", "production"].includes(forwarderKind)) {
+    throw new Error(`CRE_FORWARDER must be "simulation" or "production"`);
+  }
+  const forwarderAddress =
+    forwarderKind === "simulation"
+      ? MONAD_TESTNET.CRE_MOCK_FORWARDER
+      : forwarderKind === "production"
+        ? MONAD_TESTNET.CRE_KEYSTONE_FORWARDER
+        : undefined;
+
+  const simulationTransmitter = simulationTransmitterFor(forwarderKind, deployer, env);
+
+  let demoMerchant;
+  if (local) {
+    demoMerchant = Wallet.createRandom();
+  } else {
+    const key = ensureEnvKey("DEMO_MERCHANT_PRIVATE_KEY", "Polaris demo merchant (testnet only)");
+    demoMerchant = new Wallet(key);
+  }
+
+  return {
+    tokenMode,
+    tokenAddress: tokenMode === "ausd" ? MONAD_TESTNET.AUSD : undefined,
+    treasury: env.TREASURY ? getAddress(env.TREASURY) : deployer.address,
+    graceSeconds: num(env.GRACE_SECONDS, local ? 120 : 3600),
+    minInterval: num(env.MIN_INTERVAL_SECONDS, 60),
+    minPeriod: num(env.MIN_PERIOD_SECONDS, 60),
+    forwarderKind,
+    forwarderAddress,
+    simulationTransmitter,
+    workflowOwner: env.CRE_WORKFLOW_OWNER ? getAddress(env.CRE_WORKFLOW_OWNER) : undefined,
+    relayer: env.RELAYER_ADDRESS ? getAddress(env.RELAYER_ADDRESS) : undefined,
+    demoMerchant,
+    poolSeed: parseUnits(String(num(env.POOL_SEED_AUSD, local ? 100_000 : 10_000)), 6),
+    mintToDeployer: local ? parseUnits("1000000", 6) : 0n,
+  };
+}
+
+async function main() {
+  const networkName = hre.network.name;
+  const { chainId } = await hre.ethers.provider.getNetwork();
+  if (chainId === 143n) {
+    throw new Error("Refusing Monad mainnet: credit stays on testnet (plan section 6, WON'T).");
+  }
+  const signers = await hre.ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error("No deployer key. Run `pnpm --filter @polarispay/contracts deployer` first.");
+  }
+  const [deployer] = signers;
+  const balance = await hre.ethers.provider.getBalance(deployer.address);
+  const local = LOCAL_NETWORKS.has(networkName);
+
+  console.log(`Network   ${networkName} (chain ${chainId})`);
+  console.log(`Deployer  ${deployer.address}`);
+  console.log(`Balance   ${formatEther(balance)} MON`);
+
+  if (!local) {
+    // Monad charges min(base + tip, maxFee) per unit of gas LIMIT; eth_gasPrice
+    // is base + tip. maxFeePerGas (2 x base + tip) would double the estimate.
+    const { gasPrice, maxFeePerGas } = await hre.ethers.provider.getFeeData();
+    const price = gasPrice ?? maxFeePerGas;
+    const need = ((await roughDeploymentGas()) * price * 115n) / 100n;
+    console.log(`Needs     about ${formatEther(need)} MON at ${hre.ethers.formatUnits(price, "gwei")} gwei (rough)`);
+    if (balance < need) {
+      throw new Error(
+        `The deployer holds ${formatEther(balance)} MON, about ${formatEther(need)} is needed. ` +
+          `Fund ${deployer.address} from the Monad testnet faucet (https://testnet.monad.xyz), then rerun.`
+      );
+    }
+  }
+
+  const cfg = await buildConfig(networkName, deployer);
+  console.log(`Token     ${cfg.tokenMode === "ausd" ? `AUSD ${cfg.tokenAddress}` : "MockAUSD (new)"}`);
+  console.log(`CRE       ${cfg.forwarderKind} forwarder ${cfg.forwarderAddress ?? "(deployed locally)"}`);
+  if (cfg.simulationTransmitter !== ZeroAddress) console.log(`CRE sim   transmitter ${cfg.simulationTransmitter}`);
+  console.log("");
+
+  const record = await deployPolaris(hre, cfg, (line) => console.log(line));
+  record.abiDir = "packages/contracts/abi";
+  record.explorer = local ? null : MONAD_TESTNET.EXPLORER;
+  if (local) record.demo.merchantPrivateKey = cfg.demoMerchant.privateKey; // local test key only
+
+  const dir = join(__dirname, "..", "deployments");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, deploymentFile(networkName));
+  writeFileSync(file, `${JSON.stringify(record, (_, v) => (typeof v === "bigint" ? v.toString() : v), 2)}\n`);
+
+  const spent = balance - (await hre.ethers.provider.getBalance(deployer.address));
+  console.log(`\nSpent     ${formatEther(spent)} MON`);
+  console.log(`Wrote     ${file}`);
+  if (BigInt(record.demo.poolSeeded) === 0n) {
+    console.log(
+      "\nThe credit pool is empty. Send AUSD to the deployer and run " +
+        "`pnpm --filter @polarispay/contracts fund-pool:monad`, or redeploy with AUSD_MODE=mock."
+    );
+  }
+}
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e.shortMessage ?? e.message ?? e);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { buildConfig, deploymentFile, simulationTransmitterFor, LOCAL_NETWORKS };

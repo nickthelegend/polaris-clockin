@@ -16,6 +16,13 @@ import {IERC3009} from "./interfaces/IERC3009.sol";
  *      AUSD, whose EIP-712 domain must be read from the token at runtime
  *      rather than assumed from this mock. Typehashes match Circle's
  *      FiatToken, which is what AUSD follows.
+ *
+ *      The EIP-712 domain name and version are real AUSD's, "Agora Dollar" and
+ *      "1" (docs/research/ausd.md section 4.2), so client code signs the same
+ *      domain here as on Monad, differing only in chainId and
+ *      verifyingContract. The ERC-20 name stays "Mock AUSD", so nobody
+ *      mistakes this token for the real one. Like AUSD, `name()` is therefore
+ *      not the EIP-712 name: read the domain with `eip712Domain()`.
  */
 contract MockAUSD is ERC20Permit, IERC3009 {
     bytes32 public constant TRANSFER_WITH_AUTHORIZATION_TYPEHASH = keccak256(
@@ -42,7 +49,7 @@ contract MockAUSD is ERC20Permit, IERC3009 {
     error CallerMustBePayee();
     error FaucetCooldown();
 
-    constructor() ERC20("Mock AUSD", "AUSD") ERC20Permit("Mock AUSD") {}
+    constructor() ERC20("Mock AUSD", "AUSD") ERC20Permit("Agora Dollar") {}
 
     function decimals() public pure override returns (uint8) {
         return 6;
