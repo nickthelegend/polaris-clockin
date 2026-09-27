@@ -10,9 +10,10 @@
  * `cre workflow simulate --broadcast` does through Chainlink's.
  *
  * No CRE workflow, DON or data provider (Nansen included) runs here. The
- * reports are built by this script: the underwriting facts are literals and
- * the collection actions are chosen by hand, so what this proves is the
- * receivers and contracts, not the workflows. For the workflows, cite
+ * reports are built by this script: the underwriting facts are literals, the
+ * collection actions are chosen by hand, and the guardian's price comes from a
+ * local stand-in feed (MockPriceFeed), not Chainlink's AUSD/USD, so what this
+ * proves is the receivers and contracts, not the workflows. For the workflows, cite
  * workflows' own e2e:local (the real handlers against this same stack) or
  * `cre workflow simulate` output.
  *
@@ -21,10 +22,19 @@
  *   3. Pay in 4:   PlanIntent + Permit -> PolarisCheckout.openPlan (merchant paid in full)
  *   4. Collect:    a hand-built collections report (mock forwarder) collects instalment 1 when due
  *   5. Pay early:  RepayIntent -> PolarisLoanEngine.repayWithSig closes the plan
- *   6. Subscribe:  SubscribeIntent + Permit -> PolarisCheckout.subscribe
- *   7. Renew:      a hand-built collections report (mock forwarder) charges period 2
- *   8. Send:       ReceiveWithAuthorization + link-key Open -> PolarisSend.send
- *   9. Claim:      link-key Claim -> PolarisSend.claim to a fresh wallet
+ *   6. Guard:      hand-built guardian attestations (mock forwarder) from the local stand-in
+ *                  AUSD/USD feed and the pool: healthy, then a depeg pauses Pay in 4
+ *                  (openPlan refused with CreditPausedByGuardian(1)) while Pay now still
+ *                  works, then a healthy one resumes it
+ *   7. Pay in 4:   a second plan opens once credit resumed
+ *   8. Re-sign:    the buyer's allowance is lost, collection is skipped (InsufficientAllowance),
+ *                  the buyer signs a fresh permit -> PolarisCheckout.reauthorize emits
+ *                  Reauthorized, and a report built from CollectionsReceiver.dueTasksFor(buyer)
+ *                  collects the instalment (what the collections workflow's log trigger does)
+ *   9. Subscribe:  SubscribeIntent + Permit -> PolarisCheckout.subscribe
+ *  10. Renew:      a hand-built collections report (mock forwarder) charges period 2
+ *  11. Send:       ReceiveWithAuthorization + link-key Open -> PolarisSend.send
+ *  12. Claim:      link-key Claim -> PolarisSend.claim to a fresh wallet
  *
  * It prints each transaction's gas used against the estimated limit it was
  * sent with, the balances that moved, and checks that no user spent any MON.
@@ -93,6 +103,19 @@ async function record(step, what, receipt) {
   console.log(`  ${step}. ${what}  (gas ${receipt.gasUsed} of ${sent.gasLimit})`);
 }
 
+/** Sign an AUSD permit to `spender`, as the buyer's app does. */
+async function signPermit(token, owner, spender, value, deadline) {
+  return Signature.from(
+    await owner.signTypedData(await readDomain(token), { Permit: TYPES.Stablecoin.Permit }, {
+      owner: owner.address,
+      spender,
+      value,
+      nonce: await token.nonces(owner.address),
+      deadline,
+    })
+  );
+}
+
 async function main() {
   if (d.chainId === 10143) throw new Error("This run time-travels; it is for a local node only.");
   const [cre_don, relayer] = await ethers.getSigners(); // account 0 deployed and is the simulation transmitter
@@ -106,6 +129,8 @@ async function main() {
   const scores = await at("ScoreManager");
   const collections = await at("CollectionsReceiver");
   const underwriting = await at("UnderwritingReceiver");
+  const guardian = await at("GuardianReceiver");
+  const feed = (await ethers.getContractAt("MockPriceFeed", d.contracts.MockAusdUsdFeed.address)).connect(cre_don);
   const forwarder = (await at("MockKeystoneForwarder")).connect(cre_don);
   const merchant = d.demo.merchant;
 
@@ -277,7 +302,113 @@ async function main() {
   console.log(`     plan ${closed ? "paid off" : "STILL OPEN"}; score now ${await scores.scoreOf(buyer.address)}\n`);
   if (!closed) throw new Error("the plan did not close");
 
-  // 6. Subscribe -------------------------------------------------------
+  // 6. The credit guard ------------------------------------------------
+  console.log("Credit guard (mock forwarder attestations, hand-built from a local stand-in AUSD/USD feed; no CRE workflow)");
+  const thresholds = await guardian.thresholds();
+  const attest = async (price) => {
+    await tx.send(feed, "setAnswer", [price]);
+    const [roundId, answer, , updatedAt] = await feed.latestRoundData();
+    const a = cre.buildAttestation(
+      { price: answer, priceRoundId: roundId, priceUpdatedAt: updatedAt, pool: await engine.poolState(), observedAt: await now() },
+      thresholds
+    );
+    const receipt = await report(guardian.target, cre.encodeGuardianReport(a), cre.WORKFLOW_NAMES.GUARDIAN);
+    const [updated] = events(receipt, guardian, "CreditGuardUpdated");
+    if (!updated) throw new Error(`the guardian refused the attestation: ${JSON.stringify(events(receipt, guardian, "AttestationRefused").map((e) => e.args.reason))}`);
+    return { a, receipt };
+  };
+  const healthy = await attest(99_980_000n);
+  await record(6, "mock forwarder attestation (AUSD $0.9998, pool healthy) -> GuardianReceiver", healthy.receipt);
+  if ((await checkout.creditPaused())[0]) throw new Error("credit paused on a healthy attestation");
+  const [, feedAnswer] = await guardian.latestRoundData();
+  console.log(`     pool health feed: ${await guardian.description()}, $${(Number(feedAnswer) / 1e8).toFixed(2)} lendable`);
+
+  const depeg = await attest(99_000_000n);
+  await record(6, "mock forwarder attestation (AUSD $0.9900: depeg) -> credit paused", depeg.receipt);
+  const [paused, reasons] = await checkout.creditPaused();
+  if (!paused || Number(reasons) !== cre.GUARDIAN_REASON.DEPEG) throw new Error(`expected a depeg pause, got ${paused} ${reasons}`);
+  t = await now();
+  const pausedValue = (await checkout.quotePlan(buyer.address, USD(100), 4, interval)).permitValue;
+  const pausedPermit = await signPermit(token, buyer, engine.target, pausedValue, t + 1800n);
+  const pausedIntent = {
+    buyer: buyer.address,
+    merchant,
+    principal: USD(100),
+    installments: 4,
+    interval,
+    orderId: `order-paused-${hexlify(randomBytes(6))}`,
+    nonce: await checkout.nonces(buyer.address),
+    deadline: t + 600n,
+  };
+  const pausedSig = await buyer.signTypedData(checkoutDomain, { PlanIntent: TYPES.PolarisCheckout.PlanIntent }, pausedIntent);
+  const refusedPlan = await checkout.openPlan
+    .staticCall(pausedIntent, pausedSig, { value: pausedValue, deadline: t + 1800n, v: pausedPermit.v, r: pausedPermit.r, s: pausedPermit.s })
+    .then(() => "accepted", (e) => revertName(checkout, e));
+  if (refusedPlan !== "CreditPausedByGuardian") throw new Error(`Pay in 4 was not paused: ${refusedPlan}`);
+  console.log("     Pay in 4 refused: CreditPausedByGuardian(1 = depeg)");
+  const pausedOrder = `order-now-paused-${hexlify(randomBytes(6))}`;
+  const pausedAuth = Signature.from(
+    await buyer.signTypedData(tokenDomain, { ReceiveWithAuthorization: TYPES.Stablecoin.ReceiveWithAuthorization }, {
+      from: buyer.address,
+      to: payments.target,
+      value: USD(5),
+      validAfter: 0,
+      validBefore: t + 1800n,
+      nonce: await checkout.orderKeyOf(merchant, pausedOrder),
+    })
+  );
+  const pausedPay = await tx.send(checkout, "pay", [buyer.address, merchant, USD(5), pausedOrder, 0, t + 1800n, pausedAuth.v, pausedAuth.r, pausedAuth.s]);
+  await record(6, "PolarisCheckout.pay $5.00 while credit is paused (never blocked)", pausedPay);
+
+  const resumed = await attest(99_980_000n);
+  await record(6, "mock forwarder attestation (AUSD $0.9998 again) -> credit resumed", resumed.receipt);
+  if ((await checkout.creditPaused())[0]) throw new Error("credit did not resume");
+  console.log("     Pay in 4 open again\n");
+
+  // 7. A second plan, once credit resumed -------------------------------
+  console.log("Pay in 4 again");
+  t = await now();
+  const quote2 = await checkout.quotePlan(buyer.address, USD(100), 4, interval);
+  const permit2 = await signPermit(token, buyer, engine.target, quote2.permitValue, t + 1800n);
+  const intent2 = { ...pausedIntent, orderId: `order-plan2-${hexlify(randomBytes(6))}`, nonce: await checkout.nonces(buyer.address), deadline: t + 600n };
+  const intent2Sig = await buyer.signTypedData(checkoutDomain, { PlanIntent: TYPES.PolarisCheckout.PlanIntent }, intent2);
+  const plan2Receipt = await tx.send(checkout, "openPlan", [
+    intent2,
+    intent2Sig,
+    { value: quote2.permitValue, deadline: t + 1800n, v: permit2.v, r: permit2.r, s: permit2.s },
+  ]);
+  await record(7, `PolarisCheckout.openPlan ${$(USD(100))} in 4 (credit resumed)`, plan2Receipt);
+  const loan2 = events(plan2Receipt, checkout, "PlanOpened")[0].args.loanId;
+  console.log(`     loan #${loan2}\n`);
+
+  // 8. Lost allowance, re-signed, collected at once ---------------------
+  console.log("Re-sign and collect (what the collections workflow's log trigger does; the report is hand-built)");
+  // The buyer's allowance is lost: here the buyer's own signed permit for 0,
+  // relayed to the token (in the wild: a revoke in another wallet app).
+  t = await now();
+  const revoke = await signPermit(token, buyer, engine.target, 0n, t + 600n);
+  await tx.send(token.connect(relayer), "permit", [buyer.address, engine.target, 0n, t + 600n, revoke.v, revoke.r, revoke.s]);
+  await travel(interval + 1n);
+  const skippedReceipt = await report(collections.target, cre.encodeCollectionsReport([{ action: cre.ACTION.COLLECT_INSTALLMENT, id: loan2 }]), cre.WORKFLOW_NAMES.COLLECTIONS);
+  const [skipped] = events(skippedReceipt, collections, "TaskSkipped");
+  const skipReason = skipped ? engine.interface.parseError(skipped.args.reason)?.name : "none";
+  if (skipReason !== "InsufficientAllowance") throw new Error(`expected the collection to be skipped for the allowance, got ${skipReason}`);
+  await record(8, "mock forwarder report -> collectInstallment skipped: InsufficientAllowance (dunned: sign again)", skippedReceipt);
+  const owed = await engine.activeDebtOf(buyer.address);
+  t = await now();
+  const fresh = await signPermit(token, buyer, engine.target, owed, t + 1800n);
+  const reauthReceipt = await tx.send(checkout, "reauthorize", [buyer.address, { value: owed, deadline: t + 1800n, v: fresh.v, r: fresh.r, s: fresh.s }]);
+  await record(8, `PolarisCheckout.reauthorize (buyer's permit for ${$(owed)}) -> Reauthorized`, reauthReceipt);
+  const [reauth] = events(reauthReceipt, checkout, "Reauthorized");
+  const dueNow = (await collections.dueTasksFor(reauth.args.buyer)).map((task) => ({ action: Number(task.action), id: task.id }));
+  if (dueNow.length !== 1 || dueNow[0].id !== loan2) throw new Error(`dueTasksFor returned ${JSON.stringify(dueNow, (_, v) => (typeof v === "bigint" ? v.toString() : v))}`);
+  const retryReceipt = await report(collections.target, cre.encodeCollectionsReport(dueNow), cre.WORKFLOW_NAMES.COLLECTIONS);
+  const [retried] = events(retryReceipt, collections, "TaskExecuted");
+  if (!retried) throw new Error("the retry did not collect");
+  await record(8, "mock forwarder report (dueTasksFor(buyer)) -> collectInstallment", retryReceipt);
+  console.log(`     instalment 1 of loan #${loan2} collected after re-signing: ${$(retried.args.amount)}\n`);
+
+  // 9. Subscribe -------------------------------------------------------
   console.log("Subscribe");
   const plan = d.demo.subscriptionPlans[1];
   const price = BigInt(plan.pricePerPeriod);
@@ -307,21 +438,21 @@ async function main() {
     subSig,
     { value: price * 12n, deadline: t + 1800n, v: subPermit.v, r: subPermit.r, s: subPermit.s },
   ]);
-  await record(6, `PolarisCheckout.subscribe "${plan.name}" ${$(price)}`, subReceipt);
+  await record(9, `PolarisCheckout.subscribe "${plan.name}" ${$(price)}`, subReceipt);
   const [started] = events(subReceipt, checkout, "SubscriptionStarted");
   const subId = started.args.subId;
   console.log(`     subscription #${subId}, period 1 charged, renews every ${plan.periodSeconds}s\n`);
 
-  // 7. A collections report charges period 2 ---------------------------
+  // 10. A collections report charges period 2 --------------------------
   console.log("Renewal (mock forwarder report, hand-built)");
   await travel(BigInt(plan.periodSeconds) + 1n);
   const renewal = [{ action: cre.ACTION.CHARGE_SUBSCRIPTION, id: subId }];
   if (!(await collections.checkTasks(renewal))[0]) throw new Error("subscription not due");
   const renewReceipt = await report(collections.target, cre.encodeCollectionsReport(renewal), cre.WORKFLOW_NAMES.COLLECTIONS);
-  await record(7, "mock forwarder report (hand-built) -> chargeDue", renewReceipt);
+  await record(10, "mock forwarder report (hand-built) -> chargeDue", renewReceipt);
   console.log(`     periods charged: ${(await payments.getSubscription(subId)).periodsCharged}\n`);
 
-  // 8. Send by link ----------------------------------------------------
+  // 11. Send by link ---------------------------------------------------
   console.log("Send by link");
   const linkKey = Wallet.createRandom();
   const sendAmount = USD(50);
@@ -345,17 +476,17 @@ async function main() {
     studio.address, linkKey.address, sendAmount, expiresAt, 0, t + 1800n,
     sendAuth.v, sendAuth.r, sendAuth.s, open.v, open.r, open.s,
   ]);
-  await record(8, `PolarisSend.send ${$(sendAmount)} as a link`, sendReceipt);
+  await record(11, `PolarisSend.send ${$(sendAmount)} as a link`, sendReceipt);
   console.log(`     link https://pay.polarispay.app/claim#k=<throwaway key> (key address ${linkKey.address})\n`);
 
-  // 9. Claim -----------------------------------------------------------
+  // 12. Claim ----------------------------------------------------------
   console.log("Claim");
   t = await now();
   const claim = Signature.from(
     await linkKey.signTypedData(sendDomain, { Claim: TYPES.PolarisSend.Claim }, { to: freelancer.address, deadline: t + 600n })
   );
   const claimReceipt = await tx.send(send, "claim", [linkKey.address, freelancer.address, t + 600n, claim.v, claim.r, claim.s]);
-  await record(9, "PolarisSend.claim to a fresh account", claimReceipt);
+  await record(12, "PolarisSend.claim to a fresh account", claimReceipt);
   console.log(`     freelancer holds ${$(await token.balanceOf(freelancer.address))}\n`);
 
   // Summary ------------------------------------------------------------
@@ -376,7 +507,7 @@ async function main() {
   console.log(`  freelancer ${$(await token.balanceOf(freelancer.address))} AUSD, 0 MON, 0 transactions sent`);
   console.log(`  merchant   ${$(await token.balanceOf(merchant))} AUSD`);
   console.log(`  pool       ${$(await token.balanceOf(engine.target))} AUSD in PolarisLoanEngine`);
-  console.log("\nAll nine flows passed. Every user action was a signature; the relayer and the DON paid all gas.");
+  console.log("\nAll twelve flows passed. Every user action was a signature; the relayer and the DON paid all gas.");
 }
 
 main().catch((e) => {

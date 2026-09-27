@@ -43,6 +43,15 @@ describe("the relayer's allow-list (checkRelayerCall)", () => {
     expect(checkRelayerCall({ to: addresses.stablecoin, data: twa, chainId: 10143 }, expected).functionName).toBe("transferWithAuthorization");
   });
 
+  it("allows a buyer's re-signed permit through PolarisCheckout.reauthorize, but never a bare AUSD permit", () => {
+    const permit = { value: 201_530_000n, deadline: 2_000_000_000n, v: 27, r: zeroHash, s: zeroHash };
+    const reauthorize = encodeFunctionData({ abi: polarisCheckoutAbi, functionName: "reauthorize", args: [someone, permit] });
+    expect(checkRelayerCall({ to: addresses.checkout, data: reauthorize, chainId: 10143 }, expected)).toMatchObject({ contract: "checkout", functionName: "reauthorize" });
+    expect(buildRelayerPolicy(expected).rules.some((r) => r.name === "Re-sign: PolarisCheckout.reauthorize")).toBe(true);
+    const bare = encodeFunctionData({ abi: iausdAbi, functionName: "permit", args: [someone, merchant, 1n, 2n, 27, zeroHash, zeroHash] });
+    expect(() => checkRelayerCall({ to: addresses.stablecoin, data: bare, chainId: 10143 }, expected)).toThrow(/allow-list/);
+  });
+
   it("refuses a relayer that tries to send MON", () => {
     expect(() => checkRelayerCall({ to: addresses.checkout, data: payData, value: 1n, chainId: 10143 }, expected)).toThrow(PolicyViolation);
   });

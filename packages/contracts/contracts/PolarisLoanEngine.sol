@@ -144,12 +144,46 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     uint256 public loanCount;
     uint256 public protocolFeesAccrued;
     /// Unrecovered value from liquidations. The protocol's own loss ledger.
+    /// Liquidation is the only write-off: whatever it cannot recover from the
+    /// borrower's allowance or collateral lands here, and nothing lowers it.
     uint256 public badDebt;
+
+    /**
+     * @notice What every active loan still owes, in total: the sum of
+     *         `outstandingOf(id)` over the loans whose status is Active, which
+     *         is also the sum of `activeDebtOf` over every borrower.
+     * @dev A running counter, moved in the same statements as `activeDebtOf`:
+     *      up by a plan's `totalOwed` when it opens, down by what each payment
+     *      delivers (`collectInstallment`, `repay`, `repayWithSig`), and down
+     *      by the whole outstanding balance when a loan is liquidated, whatever
+     *      that recovers (the shortfall moves to `badDebt`). Not to be confused
+     *      with a Loan's own `totalOwed`, which is the plan's original total
+     *      and never falls. The CRE guardian attests it (GuardianReceiver).
+     */
+    uint256 public totalOwed;
+
+    /// @notice The sum of every plan's `totalOwed` at origination, ever: the
+    ///         denominator of the lifetime loss rate the guardian checks
+    ///         (`badDebt / totalOriginated`). It only ever grows.
+    uint256 public totalOriginated;
+
+    /// Every loan id a borrower has had, in the order they opened.
+    mapping(address => uint256[]) private _loanIdsOf;
 
     /// Optional. When set, liquidation seizes collateral toward the shortfall.
     ICollateralSeize public collateralVault;
     /// Optional. When set, origination enforces merchant activation and caps.
     IMerchantChecks public merchantRegistry;
+
+    /// What the CRE guardian reads from the pool in one call (`poolState`).
+    struct PoolState {
+        /// The pool's stablecoin balance less accrued protocol fees: what can
+        /// pay merchants now, and what `withdrawLiquidity` may take.
+        uint256 freeCash;
+        uint256 totalOwed;
+        uint256 badDebt;
+        uint256 totalOriginated;
+    }
 
     event LoanCreated(
         uint256 indexed loanId,
@@ -273,9 +307,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
      */
     function withdrawLiquidity(uint256 amount, address to) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
-        uint256 balance = stablecoin.balanceOf(address(this));
-        uint256 free = balance > protocolFeesAccrued ? balance - protocolFeesAccrued : 0;
-        if (amount > free) revert InsufficientLiquidity();
+        if (amount > freeCash()) revert InsufficientLiquidity();
         stablecoin.safeTransfer(to, amount);
         emit LiquidityWithdrawn(to, amount);
     }
@@ -314,9 +346,9 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
 
         uint256 term = uint256(installmentCount) * uint256(intervalSeconds);
         uint256 interest = (principal * INTEREST_RATE_BPS * term) / (10_000 * 365 days);
-        uint256 totalOwed = principal + interest;
+        uint256 owed = principal + interest;
 
-        if (activeDebtOf[borrower] + totalOwed > scoreManager.creditLimitOf(borrower)) {
+        if (activeDebtOf[borrower] + owed > scoreManager.creditLimitOf(borrower)) {
             revert ExceedsCreditLimit();
         }
 
@@ -333,7 +365,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
         // capped at an allowance of zero, so the full balance landed in badDebt
         // while the borrower still held the money. Exactly the total loss the
         // check above exists to prevent.
-        uint256 required = activeDebtOf[borrower] + totalOwed;
+        uint256 required = activeDebtOf[borrower] + owed;
         uint256 allowed = stablecoin.allowance(borrower, address(this));
         if (allowed < required) revert InsufficientAllowance(allowed, required);
 
@@ -342,7 +374,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
             borrower: borrower,
             merchant: merchant,
             principal: uint128(principal),
-            totalOwed: uint128(totalOwed),
+            totalOwed: uint128(owed),
             totalRepaid: 0,
             installmentCount: installmentCount,
             installmentsPaid: 0,
@@ -350,12 +382,15 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
             intervalSeconds: intervalSeconds,
             status: LoanStatus.Active
         });
-        activeDebtOf[borrower] += totalOwed;
+        activeDebtOf[borrower] += owed;
+        totalOwed += owed;
+        totalOriginated += owed;
+        _loanIdsOf[borrower].push(loanId);
 
         // Merchant is paid now, in full. That is the product.
         stablecoin.safeTransfer(merchant, principal);
 
-        emit LoanCreated(loanId, borrower, merchant, principal, totalOwed, installmentCount);
+        emit LoanCreated(loanId, borrower, merchant, principal, owed, installmentCount);
     }
 
     // -----------------------------------------------------------------
@@ -591,6 +626,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
 
         l.totalRepaid += uint128(amount);
         activeDebtOf[l.borrower] -= amount;
+        totalOwed -= amount;
 
         /*
          * Derive instalments-paid from money actually received, never by
@@ -715,6 +751,7 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
 
         l.status = LoanStatus.Liquidated;
         activeDebtOf[l.borrower] -= outstanding;
+        totalOwed -= outstanding;
 
         uint256 recovered = _recoverFromAllowance(l.borrower, outstanding);
 
@@ -763,6 +800,30 @@ contract PolarisLoanEngine is Ownable, ReentrancyGuard, EIP712, Nonces {
     function outstandingOf(uint256 loanId) external view returns (uint256) {
         Loan storage l = loans[loanId];
         return uint256(l.totalOwed) - uint256(l.totalRepaid);
+    }
+
+    /// @notice Every loan id `borrower` has had, oldest first, whatever its
+    ///         status. The collections workflow's instant retry reads it (via
+    ///         `CollectionsReceiver.dueTasksFor`) when a borrower re-signs.
+    function loanIdsOf(address borrower) external view returns (uint256[] memory) {
+        return _loanIdsOf[borrower];
+    }
+
+    /// @notice The pool's stablecoin balance less accrued protocol fees: what
+    ///         can pay merchants now.
+    function freeCash() public view returns (uint256) {
+        uint256 balance = stablecoin.balanceOf(address(this));
+        return balance > protocolFeesAccrued ? balance - protocolFeesAccrued : 0;
+    }
+
+    /// @notice The pool figures the CRE guardian attests, in one read.
+    function poolState() external view returns (PoolState memory) {
+        return PoolState({
+            freeCash: freeCash(),
+            totalOwed: totalOwed,
+            badDebt: badDebt,
+            totalOriginated: totalOriginated
+        });
     }
 
     function sweepFees() external onlyOwner {
