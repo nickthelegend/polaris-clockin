@@ -1,9 +1,7 @@
 "use client";
 
 import {
-  Badge,
   Button,
-  Card,
   Chip,
   CodeBlock,
   CopyButton,
@@ -11,21 +9,27 @@ import {
   Dialog,
   Drawer,
   EmptyState,
+  IconSquareButton,
   Input,
   Menu,
   Notice,
+  PanelCard,
+  PolarisCoin,
+  PrimaryButton,
+  SecondaryButton,
   Skeleton,
+  StatusPill,
   toast,
-  type BadgeTone,
+  type StatusPillTone,
 } from "@polaris/ui";
-import { Check, KeyRound, MoreHorizontal, Plus, RotateCcw, Send, ShoppingBag, Store, Trash2, TriangleAlert, Webhook } from "lucide-react";
+import { Check, CodeXml, KeyRound, MoreHorizontal, Plus, RotateCcw, Send, ShoppingBag, Store, Trash2, TriangleAlert, Webhook } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
 
 import { LoadError, Panel, SampleBadge, StaleNotice, useNow } from "@/components/dashboard/common";
 import { RegistrationBadge, registrationOf, useRegisterAction } from "@/components/dashboard/registration";
 import { developers as sdk } from "@/components/landing/content";
 import { DemoShopButton } from "@/components/landing/demo-shop";
-import { DashboardHeader } from "@/components/shell/dashboard-shell";
+import { PageCoin, PageHead } from "@/components/dashboard/page-head";
 import { DataError, errorMessage, WEBHOOK_EVENTS, type ApiKey, type WebhookDelivery, type WebhookEndpoint, type WebhookEventType } from "@/lib/data";
 import { formatAgo, formatDate, formatDateTime, formatIn } from "@/lib/data/format";
 import { DEMO_SHOP_URL } from "@/lib/features";
@@ -48,19 +52,35 @@ export function DevelopersView() {
   const sample = reason === "mock" || reason === "server";
   return (
     <>
-      <DashboardHeader
+      <PageHead
         title="Developers"
+        coins={[
+          <PageCoin key="c" tone="blue">
+            <CodeXml />
+          </PageCoin>,
+          <PolarisCoin key="p" size={50} />,
+        ]}
         description="Take payments from your own site or app: create a checkout session on your server, send the buyer to it, and fulfil from a signed webhook. Everything is test mode on Monad testnet."
-        actions={<DemoShopButton label="See the demo shop" icon={<Store />} variant="outline" size="md" />}
+        actions={
+          <IconSquareButton
+            label="Open the demo shop (a new tab)"
+            icon={<Store />}
+            onClick={() => window.open(DEMO_SHOP_URL, "_blank", "noopener,noreferrer")}
+          />
+        }
       />
-      <div className="grid gap-4">
-        <IntegrationPanel sample={sample} />
-        <ApiKeysPanel sample={sample} />
-        <WebhooksPanel sample={sample} />
-        <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-11 gap-y-4 lg:grid-cols-[minmax(0,1fr)_356px] xl:grid-cols-[minmax(0,1fr)_404px]">
+        <div className="grid min-w-0 content-start gap-4">
+          <ApiKeysPanel sample={sample} />
+          <WebhooksPanel sample={sample} />
+        </div>
+        <div className="grid min-w-0 content-start gap-4">
+          <IntegrationPanel sample={sample} />
+          <DemoShopPanel />
+        </div>
+        <Panel title="Ten lines of code" subtitle="The whole integration, with polarispay-sdk 0.3.0" className="lg:col-span-2">
           <CodeBlock className="mt-5" aria-label="SDK example" note={sdk.note} copyable defaultKey="node" samples={sdk.samples.map((s) => ({ ...s }))} />
         </Panel>
-        <DemoShopPanel />
       </div>
     </>
   );
@@ -78,9 +98,10 @@ function IntegrationPanel({ sample }: { sample: boolean }) {
 
   return (
     <Panel title="Your integration" sample={sample} subtitle="What your server needs, and where your business stands on Monad">
-      <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="mt-5 grid grid-cols-1 gap-3">
         <DetailsList
           size="sm"
+          variant="surface"
           items={[
             {
               label: "Merchant ID",
@@ -110,13 +131,14 @@ function IntegrationPanel({ sample }: { sample: boolean }) {
         <div className="grid content-start gap-3">
           <DetailsList
             size="sm"
+            variant="surface"
             items={[
               { label: "Network", value: capabilities?.chain ? `${capabilities.chain.name} (${capabilities.chain.id})` : "Not connected" },
               { label: "MerchantRegistry", value: <RegistrationBadge merchant={merchant} /> },
             ]}
           />
           {canRegister ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] bg-ui-surface-1 px-4 py-3">
               <p className="text-[13px] text-ui-muted">{error ?? "One confirmation with your payout account. Polaris pays the fee."}</p>
               <Button variant="lime" size="sm" loading={busy} onClick={() => void run()}>
                 Register
@@ -140,26 +162,26 @@ const SHOP_POINTS = [
 
 function DemoShopPanel() {
   return (
-    <Card padding="lg" className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
-      <span className="grid size-14 place-items-center rounded-full bg-ui-lime text-ui-on-lime">
-        <ShoppingBag aria-hidden size={24} strokeWidth={1.75} />
+    <PanelCard variant="filled" className="grid content-start gap-5">
+      <span className="grid size-12 place-items-center rounded-full bg-ui-lime-button text-[#121418]">
+        <ShoppingBag aria-hidden size={22} strokeWidth={1.75} />
       </span>
       <div className="min-w-0">
-        <h2 className="text-[20px] leading-tight font-medium tracking-[-0.02em]">See it in a shop</h2>
+        <h2 className="text-[18px] leading-tight font-medium tracking-[-0.015em]">See it in a shop</h2>
         <p className="mt-1 text-[14px] text-ui-muted">
           Halcyon, a demo store on polarispay-sdk, at <code className="font-mono text-[13px] text-ui-text">{DEMO_SHOP_URL}</code>
         </p>
-        <ul className="mt-4 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        <ul className="mt-4 grid gap-y-2">
           {SHOP_POINTS.map((point) => (
             <li key={point} className="flex items-start gap-2.5 text-[14px]">
-              <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime" />
+              <Check aria-hidden size={16} strokeWidth={2.25} className="mt-0.5 shrink-0 text-ui-lime-text" />
               {point}
             </li>
           ))}
         </ul>
       </div>
-      <DemoShopButton label="Open the demo shop" variant="lime" size="md" className="justify-self-start" />
-    </Card>
+      <DemoShopButton label="Open the demo shop" variant="lime" size="md" className="w-full bg-ui-lime-button font-semibold text-[#121418]" />
+    </PanelCard>
   );
 }
 
@@ -169,11 +191,11 @@ function RevealOnce({ title, secret, children }: { title: string; secret: string
   return (
     <div className="grid gap-3">
       <p className="flex items-center gap-2 text-[15px] font-medium">
-        <TriangleAlert aria-hidden size={17} strokeWidth={1.75} className="text-ui-warn" />
+        <TriangleAlert aria-hidden size={17} strokeWidth={1.75} className="text-ui-pill-amber-text" />
         {title}
       </p>
       <p className="text-[14px] leading-relaxed text-ui-muted">{children}</p>
-      <div className="flex min-w-0 items-center gap-2 rounded-ui-field bg-ui-surface-2 p-1.5 pl-4">
+      <div className="flex min-w-0 items-center gap-2 rounded-ui-field bg-ui-surface-1 p-1.5 pl-4">
         <code className="min-w-0 flex-1 truncate font-mono text-[13px]" title={secret}>
           {secret}
         </code>
@@ -197,9 +219,9 @@ function ApiKeysPanel({ sample }: { sample: boolean }) {
       sample={sample}
       subtitle="pk_test_… is safe in a browser. sk_test_… stays on your server; we show it once and keep only a hash."
       action={
-        <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setCreating(true)}>
+        <PrimaryButton size="sm" icon={<Plus />} onClick={() => setCreating(true)} className="h-10">
           Create key
-        </Button>
+        </PrimaryButton>
       }
     >
       <StaleNotice queries={[keys as QueryState<unknown>]} />
@@ -224,11 +246,11 @@ function ApiKeysPanel({ sample }: { sample: boolean }) {
           {list.map((k) => (
             <li
               key={k.id}
-              className="grid gap-3 rounded-ui-row bg-ui-surface-2 p-4 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.4fr)_minmax(0,1fr)_auto] md:items-center md:px-5"
+              className="grid gap-3 rounded-[20px] bg-ui-surface-1 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto_auto] md:items-center md:px-5 lg:grid-cols-[minmax(0,1fr)_auto] xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_auto_auto]"
             >
               <div className="min-w-0">
-                <p className="flex items-center gap-2 truncate text-[15px] font-medium">
-                  {k.name}
+                <p className="flex min-w-0 items-center gap-2 text-[15px] font-medium">
+                  <span className="truncate">{k.name}</span>
                   {sample ? <SampleBadge /> : null}
                 </p>
                 <p className="text-[13px] text-ui-muted">Created {formatDate(k.createdAt, true)}</p>
@@ -243,9 +265,9 @@ function ApiKeysPanel({ sample }: { sample: boolean }) {
                 <code className="font-mono">{k.secretHint}</code>
                 <p className="text-ui-muted">{k.lastUsedAt ? `Used ${formatDate(k.lastUsedAt)}` : "Never used"}</p>
               </div>
-              <Button variant="outline" size="sm" icon={<Trash2 />} onClick={() => setRevoking(k)} className="justify-self-start">
+              <SecondaryButton size="sm" icon={<Trash2 />} onClick={() => setRevoking(k)} className="h-10 justify-self-start bg-ui-surface-2 hover:bg-ui-surface-3">
                 Revoke
-              </Button>
+              </SecondaryButton>
             </li>
           ))}
         </ul>
@@ -384,15 +406,15 @@ function RevokeDialog({ apiKey, onClose, onDone }: { apiKey: ApiKey | null; onCl
 /* ── Webhooks ───────────────────────────────────────────────────────────── */
 
 /** A delivery's result, in a word or two, with its tone. */
-function deliveryResult(d: WebhookDelivery, now: number): { tone: BadgeTone; text: string } {
-  if (d.simulated) return { tone: "info", text: "Signed, not sent" };
-  if (d.state === "delivering") return { tone: "info", text: "Sending" };
+function deliveryResult(d: WebhookDelivery, now: number): { tone: StatusPillTone; text: string } {
+  if (d.simulated) return { tone: "teal", text: "Signed, not sent" };
+  if (d.state === "delivering") return { tone: "teal", text: "Sending" };
   if (d.state === "pending") {
-    return { tone: "warn", text: d.nextAttemptAt ? `Retrying ${formatIn(d.nextAttemptAt, now)}` : "Queued" };
+    return { tone: "amber", text: d.nextAttemptAt ? `Retrying ${formatIn(d.nextAttemptAt, now)}` : "Queued" };
   }
-  if (d.status && d.status < 300) return { tone: "up", text: `HTTP ${d.status}` };
-  if (d.state === "failed") return { tone: "down", text: d.status ? `Failed · HTTP ${d.status}` : "Failed" };
-  return { tone: "down", text: d.status ? `HTTP ${d.status}` : "No response" };
+  if (d.status && d.status < 300) return { tone: "lime", text: `HTTP ${d.status}` };
+  if (d.state === "failed") return { tone: "red", text: d.status ? `Failed · HTTP ${d.status}` : "Failed" };
+  return { tone: "red", text: d.status ? `HTTP ${d.status}` : "No response" };
 }
 
 function WebhooksPanel({ sample }: { sample: boolean }) {
@@ -432,9 +454,9 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
       sample={sample}
       subtitle="Every delivery is signed (Polaris-Signature: t=…, v1=…) with the endpoint's own secret"
       action={
-        <Button variant="lime" size="sm" icon={<Plus />} onClick={() => setAdding(true)}>
+        <PrimaryButton size="sm" icon={<Plus />} onClick={() => setAdding(true)} className="h-10">
           Add endpoint
-        </Button>
+        </PrimaryButton>
       }
     >
       <StaleNotice queries={[hooks as QueryState<unknown>]} />
@@ -457,7 +479,7 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
       ) : (
         <ul className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-2">
           {state.endpoints.map((e) => (
-            <li key={e.id} className="flex flex-col gap-3 rounded-ui-row bg-ui-surface-2 p-4 md:flex-row md:items-center md:px-5">
+            <li key={e.id} className="flex flex-col gap-3 rounded-[20px] bg-ui-surface-1 p-4 md:flex-row md:items-center md:px-5">
               <div className="min-w-0 flex-1">
                 <p className="flex min-w-0 items-center gap-2">
                   <code className="truncate font-mono text-[14px]">{e.url}</code>
@@ -468,15 +490,15 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" icon={<Send />} loading={testing === e.id} onClick={() => void sendTest(e)}>
+                <SecondaryButton size="sm" className="h-10 bg-ui-surface-2 hover:bg-ui-surface-3" icon={<Send />} loading={testing === e.id} onClick={() => void sendTest(e)}>
                   Send test event
-                </Button>
+                </SecondaryButton>
                 <Menu
                   label={`More for ${e.url}`}
                   align="end"
                   width={220}
                   trigger={
-                    <span className="grid size-10 place-items-center rounded-full bg-ui-surface-3">
+                    <span className="grid size-10 place-items-center rounded-[12px] border border-ui-hairline-strong bg-ui-square text-[#a7a9ad] transition-colors hover:text-ui-text">
                       <MoreHorizontal aria-hidden size={18} strokeWidth={1.75} />
                     </span>
                   }
@@ -505,26 +527,26 @@ function WebhooksPanel({ sample }: { sample: boolean }) {
                   <button
                     type="button"
                     onClick={() => setDelivery(d)}
-                    className="flex w-full items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-3 text-left transition-colors hover:bg-ui-surface-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus"
+                    className="flex w-full items-center gap-3 rounded-[20px] bg-ui-surface-1 px-4 py-3 text-left transition-colors hover:bg-ui-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ui-focus"
                   >
-                    <Badge tone={r.tone} className="hidden shrink-0 sm:inline-flex">
+                    <StatusPill tone={r.tone} size="sm" className="hidden shrink-0 sm:inline-flex">
                       {r.text}
-                    </Badge>
+                    </StatusPill>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-2">
                         <span className="truncate font-mono text-[13px]">{d.event}</span>
                         {d.test ? (
-                          <Badge tone="neutral" size="sm">
+                          <StatusPill tone="neutral" size="sm" className="h-6 px-2.5 text-[12px]">
                             Test
-                          </Badge>
+                          </StatusPill>
                         ) : null}
                         {sample ? <SampleBadge /> : null}
                       </span>
                       <span className="block truncate text-[12px] text-ui-muted">{d.url}</span>
                       <span className="mt-1.5 flex items-center gap-2 sm:hidden">
-                        <Badge tone={r.tone} size="sm">
+                        <StatusPill tone={r.tone} size="sm">
                           {r.text}
-                        </Badge>
+                        </StatusPill>
                         <span className="text-[12px] text-ui-muted">{formatAgo(d.createdAt, now)}</span>
                       </span>
                     </span>
@@ -639,7 +661,7 @@ function AddEndpointDialog({ open, onClose, onSaved }: { open: boolean; onClose:
               <legend className="mb-2 text-[14px] font-medium">Events</legend>
               <div className="flex flex-wrap gap-2">
                 {WEBHOOK_EVENTS.map((ev) => (
-                  <Chip key={ev} size="sm" variant="solid" selected={events.includes(ev)} onClick={() => toggle(ev)} className="font-mono text-[12px]">
+                  <Chip key={ev} size="sm" variant="pill" selected={events.includes(ev)} onClick={() => toggle(ev)} className="font-mono text-[12px]">
                     {ev}
                   </Chip>
                 ))}
@@ -761,12 +783,13 @@ function DeliveryDrawer({
         <>
           <Drawer.Body className="grid grid-cols-[minmax(0,1fr)] content-start gap-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={result.tone}>{result.text}</Badge>
-              {d.test ? <Badge tone="neutral">Test event</Badge> : null}
+              <StatusPill tone={result.tone}>{result.text}</StatusPill>
+              {d.test ? <StatusPill tone="neutral">Test event</StatusPill> : null}
               {sample ? <SampleBadge /> : null}
             </div>
             <DetailsList
               size="sm"
+              variant="surface"
               items={[
                 { label: "Event", value: <code className="font-mono text-[13px]">{d.event}</code> },
                 { label: "Event ID", value: <code className="font-mono text-[13px]">{d.eventId}</code> },
@@ -780,11 +803,11 @@ function DeliveryDrawer({
                 <h3 className="mb-2 text-[15px] font-medium">Attempts</h3>
                 <ol className="grid gap-1.5">
                   {d.attempts.map((a, i) => (
-                    <li key={`${a.at}-${i}`} className="flex items-center gap-3 rounded-ui-row bg-ui-surface-2 px-4 py-2.5 text-[13px]">
+                    <li key={`${a.at}-${i}`} className="flex items-center gap-3 rounded-[20px] bg-ui-surface-1 px-4 py-2.5 text-[13px]">
                       <span className="w-6 text-ui-muted">{i + 1}</span>
-                      <Badge tone={a.status && a.status < 300 ? "up" : "down"} size="sm">
+                      <StatusPill tone={a.status && a.status < 300 ? "lime" : "red"} size="sm">
                         {a.status ? `HTTP ${a.status}` : "No response"}
-                      </Badge>
+                      </StatusPill>
                       <span className="min-w-0 flex-1 truncate text-ui-muted">{a.error ?? `${a.durationMs} ms`}</span>
                       <span className="shrink-0 text-ui-muted">{formatAgo(a.at, now)}</span>
                     </li>
