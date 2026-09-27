@@ -82,6 +82,7 @@ export const RELAYER_CALLS: readonly AllowedCall[] = [
   { contract: "checkout", functionName: "pay", rule: "Pay now: PolarisCheckout.pay", why: "Buyer's ERC-3009 ReceiveWithAuthorization, nonce = order key", signedBy: "owner" },
   { contract: "checkout", functionName: "openPlan", rule: "Pay in 4: PolarisCheckout.openPlan", why: "Buyer's PlanIntent + ERC-2612 permit", signedBy: "owner" },
   { contract: "checkout", functionName: "subscribe", rule: "Subscribe: PolarisCheckout.subscribe", why: "Buyer's SubscribeIntent + ERC-2612 permit", signedBy: "owner" },
+  { contract: "checkout", functionName: "reauthorize", rule: "Re-sign: PolarisCheckout.reauthorize", why: "Buyer's ERC-2612 permit to the loan engine, restoring a lost allowance (the CRE retry collects on its event)", signedBy: "owner" },
   { contract: "payments", functionName: "payWithAuthorization", rule: "Direct pay: PolarisPayments.payWithAuthorization", why: "polarispay-sdk pay(): buyer's ERC-3009 authorisation", signedBy: "owner" },
   { contract: "payments", functionName: "cancelWithSignature", rule: "Cancel subscription: cancelWithSignature", why: "Subscriber's CancelSubscription signature", signedBy: "owner" },
   { contract: "payments", functionName: "createPlanFor", rule: "Publish plan: PolarisPayments.createPlanFor", why: "Operator: a merchant's subscription terms from a checkout session (moves nothing)", signedBy: "operator" },

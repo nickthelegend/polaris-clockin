@@ -52,6 +52,10 @@ const TYPES = {
   Stablecoin: {
     ReceiveWithAuthorization: AUTHORIZATION_FIELDS,
     TransferWithAuthorization: AUTHORIZATION_FIELDS,
+    // ERC-2612. Signed for PolarisCheckout.openPlan and .reauthorize (spender:
+    // PolarisLoanEngine, value: everything the buyer owes it) and .subscribe
+    // (spender: PolarisPayments). reauthorize checks it against the token's
+    // DOMAIN_SEPARATOR itself; no Polaris-domain message is involved.
     Permit: [
       { name: "owner", type: "address" },
       { name: "spender", type: "address" },

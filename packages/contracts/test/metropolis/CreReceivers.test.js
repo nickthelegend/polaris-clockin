@@ -1,7 +1,7 @@
 /**
  * The Chainlink CRE receivers: CollectionsReceiver (the `polaris-collections`
  * cron workflow) and UnderwritingReceiver (the `polaris-underwrite` HTTP
- * workflow). Reports arrive through a MockKeystoneForwarder with the same raw
+ * workflow). GuardianReceiver has its own suite (Guardian.test.js). Reports arrive through a MockKeystoneForwarder with the same raw
  * layout as Chainlink's forwarders: a 109-byte header (workflow id, name,
  * owner, report id) and the body. Tests are named for what each refuses.
  */
@@ -30,7 +30,7 @@ async function deployStack() {
   const payments = await (await ethers.getContractFactory("PolarisPayments")).deploy(owner.address, ausd, treasury.address, 60);
   const checkout = await (await ethers.getContractFactory("PolarisCheckout")).deploy(owner.address, engine, payments, scores);
   const forwarder = await (await ethers.getContractFactory("MockKeystoneForwarder")).deploy();
-  const collections = await (await ethers.getContractFactory("CollectionsReceiver")).deploy(forwarder, engine, payments);
+  const collections = await (await ethers.getContractFactory("CollectionsReceiver")).deploy(forwarder, engine, payments, don.address);
   const underwriting = await (await ethers.getContractFactory("UnderwritingReceiver")).deploy(forwarder, scores, don.address);
 
   await scores.setWriter(engine, true);
@@ -183,14 +183,23 @@ describe("Chainlink CRE receivers", () => {
         await expect(r.connect(s.stranger).setExpectedWorkflowName("x")).to.be.revertedWithCustomError(r, "OwnableUnauthorizedAccount");
         await expect(r.connect(s.stranger).setExpectedWorkflowId(ethers.ZeroHash)).to.be.revertedWithCustomError(r, "OwnableUnauthorizedAccount");
       }
-      await expect(s.underwriting.connect(s.stranger).setSimulationTransmitter(s.stranger.address)).to.be.revertedWithCustomError(s.underwriting, "OwnableUnauthorizedAccount");
+      for (const r of [s.collections, s.underwriting]) {
+        await expect(r.connect(s.stranger).setSimulationTransmitter(s.stranger.address)).to.be.revertedWithCustomError(r, "OwnableUnauthorizedAccount");
+      }
     });
 
-    it("refuses a report of the other receiver's kind", async () => {
+    it("refuses a report of another receiver's kind, naming the kind, even one that would not decode", async () => {
       const r1 = await deliver(s.collections, cre.encodeUnderwritingReport([]));
-      expect(decodeError(s.collections, r1.revert)?.name).to.equal("UnknownReportKind");
+      expect(decodeError(s.collections, r1.revert)?.args[0]).to.equal(2n);
       const r2 = await deliver(s.underwriting, cre.encodeCollectionsReport([]));
       expect(decodeError(s.underwriting, r2.revert)?.name).to.equal("UnknownReportKind");
+      const guardianBody = cre.encodeGuardianReport(cre.buildAttestation({ price: 1e8, priceUpdatedAt: 1, pool: {}, observedAt: 1 }));
+      for (const r of [s.collections, s.underwriting]) {
+        const res = await deliver(r, guardianBody);
+        expect(decodeError(r, res.revert)?.name).to.equal("UnknownReportKind");
+        expect(decodeError(r, res.revert)?.args[0]).to.equal(3n);
+        expect(decodeError(r, (await deliver(r, "0x")).revert)?.args[0]).to.equal(0n);
+      }
     });
   });
 
@@ -214,7 +223,20 @@ describe("Chainlink CRE receivers", () => {
       expect((await s.engine.getLoan(b.loanId)).installmentsPaid).to.equal(1);
     });
 
+    it("while on the simulation forwarder, only the simulator's transmitter writes the collections record", async () => {
+      const a = await buyerWithPlan();
+      await time.increase(WEEK);
+      const r = await deliver(s.collections, cre.encodeCollectionsReport([collect(a.loanId)]), { from: s.stranger });
+      expect(r.ok).to.equal(false);
+      const err = s.collections.interface.parseError(r.revert);
+      expect([err.name, err.args[0]]).to.deep.equal(["NotSimulationTransmitter", s.stranger.address]);
+      expect((await s.engine.getLoan(a.loanId)).installmentsPaid).to.equal(0);
+      // Collecting stays permissionless on the engine itself: nothing here is the only way to collect.
+      await expect(s.engine.connect(s.stranger).collectInstallment(a.loanId)).to.emit(s.engine, "InstallmentCollected");
+    });
+
     it("a stranger cannot collect more than is due, even by listing a plan twice", async () => {
+      await s.collections.setSimulationTransmitter(ethers.ZeroAddress); // as behind the production forwarder
       const a = await buyerWithPlan();
       await time.increase(WEEK);
       const due = await s.engine.installmentAmount(a.loanId);
@@ -333,7 +355,7 @@ describe("Chainlink CRE receivers", () => {
 
     it("a report that runs out of gas is refused whole, so the forwarder can retry it, instead of skipping the buyer", async () => {
       const guzzler = await (await ethers.getContractFactory("GasGuzzler")).deploy();
-      const receiver = await (await ethers.getContractFactory("CollectionsReceiver")).deploy(s.forwarder, guzzler, guzzler);
+      const receiver = await (await ethers.getContractFactory("CollectionsReceiver")).deploy(s.forwarder, guzzler, guzzler, s.don.address);
       const r = await deliver(receiver, cre.encodeCollectionsReport([collect(1n)]), { gasLimit: 3_000_000 });
       expect(r.ok).to.equal(false);
       const err = receiver.interface.parseError(r.revert);
@@ -343,8 +365,8 @@ describe("Chainlink CRE receivers", () => {
 
     it("refuses construction without an engine or payments", async () => {
       const F = await ethers.getContractFactory("CollectionsReceiver");
-      await expect(F.deploy(s.forwarder, ethers.ZeroAddress, s.payments)).to.be.revertedWithCustomError(F, "ZeroAddress");
-      await expect(F.deploy(ethers.ZeroAddress, s.engine, s.payments)).to.be.revertedWithCustomError(F, "InvalidForwarderAddress");
+      await expect(F.deploy(s.forwarder, ethers.ZeroAddress, s.payments, s.don.address)).to.be.revertedWithCustomError(F, "ZeroAddress");
+      await expect(F.deploy(ethers.ZeroAddress, s.engine, s.payments, s.don.address)).to.be.revertedWithCustomError(F, "InvalidForwarderAddress");
     });
   });
 
@@ -568,6 +590,51 @@ describe("Chainlink CRE receivers", () => {
       expect(items[0].user).to.equal(s.stranger.address);
       expect(items[0].facts.stableBalance).to.equal(f.stableBalance);
       expect(items[0].facts.observedAt).to.equal(123n);
+    });
+  });
+  // ---------------------------------------------------------------------
+  describe("lib/cre.js: one report format per workflow, encoded and decoded", () => {
+    it("round-trips a collections report, including the instant retry's", () => {
+      const tasks = [collect(7n), { action: cre.ACTION.CHARGE_SUBSCRIPTION, id: 2n }, { action: cre.ACTION.LIQUIDATE, id: 2n ** 200n }];
+      const body = cre.encodeCollectionsReport(tasks);
+      expect(cre.reportKind(body)).to.equal(cre.REPORT_KIND.COLLECTIONS);
+      expect(cre.decodeCollectionsReport(body)).to.deep.equal({ kind: 1, tasks });
+      expect(cre.decodeCollectionsReport(cre.encodeCollectionsReport([]))).to.deep.equal({ kind: 1, tasks: [] });
+    });
+
+    it("round-trips an underwriting report", () => {
+      const f = { ...facts({ observedAt: 99n }), stableBalance: AUSD(12) };
+      const items = [{ user: s.stranger.address, linkedWallet: s.don.address, facts: f }];
+      const decoded = cre.decodeUnderwritingReport(cre.encodeUnderwritingReport(items));
+      expect(decoded.kind).to.equal(2);
+      expect(decoded.items[0].user).to.equal(s.stranger.address);
+      expect(decoded.items[0].linkedWallet).to.equal(s.don.address);
+      expect(decoded.items[0].facts).to.deep.equal(f);
+    });
+
+    it("round-trips a guardian attestation, negative prices and all", () => {
+      const a = {
+        priceRoundId: 18446744073709562345n,
+        price: -1n,
+        priceUpdatedAt: 1_700_000_000n,
+        freeCash: AUSD(49_990),
+        totalOwed: AUSD(201.53),
+        badDebt: 0n,
+        totalOriginated: AUSD(403.06),
+        observedAt: 1_700_000_100n,
+        creditPaused: true,
+        reasons: cre.GUARDIAN_REASON.DEPEG,
+      };
+      const body = cre.encodeGuardianReport(a);
+      expect(cre.reportKind(body)).to.equal(cre.REPORT_KIND.GUARDIAN);
+      expect(cre.decodeGuardianReport(body)).to.deep.equal({ kind: 3, attestation: a });
+      // A static tuple: the kind and ten words, no offsets.
+      expect(ethers.dataLength(body)).to.equal(11 * 32);
+    });
+
+    it("names every workflow as the forwarder carries it", () => {
+      expect(cre.workflowNameBytes10(cre.WORKFLOW_NAMES.GUARDIAN)).to.match(/^0x[0-9a-f]{20}$/);
+      expect(Object.values(cre.WORKFLOW_NAMES)).to.deep.equal(["polaris-collections", "polaris-underwrite", "polaris-guardian"]);
     });
   });
 });
