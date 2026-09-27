@@ -53,6 +53,19 @@ a local Hardhat node also set `NEXT_PUBLIC_CHAIN_ID=31337` and
 `NEXT_PUBLIC_RPC_URL=http://127.0.0.1:<node port>`: the app refuses to sign
 for a network other than the one it was built for.
 
+With the API set, nothing on screen is sample data (`src/lib/data/live.ts`):
+the balance is `AUSD.balanceOf` read from the chain; plans, subscriptions and
+activity come from `/api/public/buyers/{address}` (the API's records of chain
+events); the credit line, score and reasons from `/api/public/credit/{address}`
+(ScoreManager and the CRE workflow's explained decision); a send link's state
+from `PolarisSend`. *Raise your limit* signs the account's consent (Face ID)
+and the history wallet's link proof (its own prompt), and the API fires the
+CRE underwriting workflow (`src/lib/underwriting.ts`).
+
+Without it, the app is the offline demo and says so on every screen
+("Demo mode · sample data, nothing is on chain"): the stub relayer's receipts
+are marked `simulated` and never link a made-up hash to the explorer.
+
 ## Face ID accounts
 
 [Mera](https://mera.category.xyz) is the entire account layer: no seed phrase,
@@ -133,7 +146,8 @@ because it is for people who already have one.
 | `src/lib/network.ts`, `src/lib/api.ts` | The network (contracts and EIP-712 domains) from Polaris for Business; the fetch helper |
 | `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
 | `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
-| `src/lib/data/` | The data interface every screen reads; `mock.ts` is placeholder data behind it |
+| `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data) without |
+| `src/lib/underwriting.ts` | Pay in 4 credit: consent and link-proof signatures, the CRE underwriting request, waiting for the decision |
 | `src/components/` | The design system: buttons, cards, sheets, keypad, QR, tab bar |
 | `public/assets/` | Generated images, picked up as soon as they exist (see below) |
 
@@ -149,12 +163,14 @@ stand-in, so dropping the files in needs no code change:
 
 ## Not built yet
 
-- Balances, plans and activity are still placeholder data
-  (`src/lib/data/mock.ts`) until the Envio indexer lands; checkout links and
-  the relayer are real when `NEXT_PUBLIC_POLARIS_API_URL` is set.
+- Contacts: there is no address book yet, so with the API set the contact
+  list is empty (the demo's sample people have made-up addresses).
+- Send-by-link activity: the API doesn't record sends yet (the Envio
+  indexer's `send(linkKey)` would); a link's own state is read from the chain.
 - The `/pay/[id]` screen doesn't yet call `src/lib/checkout-return.ts`, so a
   popup checkout doesn't post its result to the merchant page.
-- *Raise your limit* simulates the WalletConnect signature and the
-  underwriting call.
+- *Raise your limit* connects the history wallet through the browser's own
+  provider (an extension, or a wallet app's browser); WalletConnect for a
+  wallet on another device is not wired yet.
 - Receipts only you can read (plan §3.5) and the opt-in recovery key.
 - Local-currency rates are placeholders.

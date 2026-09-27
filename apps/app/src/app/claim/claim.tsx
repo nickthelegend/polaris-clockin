@@ -215,15 +215,17 @@ function Arrived({ receipt, amount, name }: { receipt: RelayReceipt; amount: Mic
         </p>
       </div>
       <div className="mt-auto flex flex-col gap-[13.5px] pt-8">
-        <a
-          href={receipt.explorerUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] tracking-[-0.03em] shadow-surface"
-        >
-          View receipt
-          <Icon name="external" size={18} />
-        </a>
+        {receipt.explorerUrl ? (
+          <a
+            href={receipt.explorerUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="press flex h-[54px] items-center justify-center gap-2 rounded-full bg-surface text-[16px] tracking-[-0.03em] shadow-surface"
+          >
+            View receipt
+            <Icon name="external" size={18} />
+          </a>
+        ) : null}
         <Button onClick={() => router.push("/")}>Go to your account</Button>
       </div>
     </main>

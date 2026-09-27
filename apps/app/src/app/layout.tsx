@@ -5,6 +5,7 @@ import "./globals.css";
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { DesktopAside, DevSignerBadge } from "@/components/chrome";
+import { DemoModeBadge } from "@/components/demo-badge";
 
 const description = "Pay in full, in four or every month, and send dollars anywhere with a link. Just Face ID.";
 
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <DesktopAside />
         <div className="app-column">
           <DevSignerBadge />
+          <DemoModeBadge />
           {children}
         </div>
       </body>

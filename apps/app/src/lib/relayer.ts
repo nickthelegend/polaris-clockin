@@ -1,6 +1,7 @@
 import { type Address, type Hex, isHex, type TypedDataDomain } from "viem";
 import { ApiError, api, apiConfigured } from "./api";
 import { receiptUrl } from "./chain";
+import { notifyDataChanged } from "./data/changes";
 import { mockLedger } from "./data/mock";
 import type { PaymentLink, Person } from "./data/types";
 import type { Micros } from "./money";
@@ -27,8 +28,13 @@ export type RelayReceipt = {
   /** When the relayer submitted and when the block was final. */
   submittedAt: number;
   finalizedAt: number;
-  /** The explorer page; the only way the buyer ever reaches it is "View receipt". */
-  explorerUrl: string;
+  /**
+   * The explorer page; the only way the buyer ever reaches it is "View
+   * receipt". Null for the offline demo's stub, whose hash is made up.
+   */
+  explorerUrl: string | null;
+  /** True when nothing reached a chain: the offline demo's stub relayer. */
+  simulated?: boolean;
   /** From the transaction's events, when the relayer saw them. */
   paymentId?: string;
   planId?: string;
@@ -141,6 +147,7 @@ async function relay(body: Record<string, unknown>): Promise<RelayReceipt> {
     if (error instanceof ApiError) throw new RelayError(REASONS[error.code] ?? "unavailable", error.message, error.code);
     throw error;
   }
+  notifyDataChanged();
   return {
     txHash: out.txHash,
     submittedAt: out.submittedAt,
@@ -259,7 +266,8 @@ async function settle(effect: (txHash: Hex) => void): Promise<RelayReceipt> {
   await new Promise((resolve) => setTimeout(resolve, FINALITY_MS));
   const txHash = fakeTxHash();
   effect(txHash);
-  return { txHash, submittedAt, finalizedAt: Date.now(), explorerUrl: receiptUrl(txHash) };
+  // A made-up hash: no explorer link, and marked as simulated for the screens to say so.
+  return { txHash, submittedAt, finalizedAt: Date.now(), explorerUrl: null, simulated: true };
 }
 
 function needBalance(amount: Micros): void {

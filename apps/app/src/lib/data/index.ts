@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 import { apiConfigured } from "../api";
+import { liveData } from "./live";
 import { mockData } from "./mock";
 import { getRemotePaymentLink, isRemoteLinkId } from "./remote";
 import type { PolarisData } from "./types";
@@ -8,11 +9,12 @@ export type * from "./types";
 export { DAY, describeDuration, describeInterval, quotePlan, WEEK } from "./quote";
 
 /**
- * The one data source every screen reads through. Today it is placeholder
- * data (`mock.ts`); a later step points it at chain reads and the Envio
- * indexer, keeping this interface, so no screen changes.
+ * The one data source every screen reads through. With Polaris for Business
+ * configured it is the real one (`live.ts`: the chain, and the API's records
+ * of chain events); without it, the offline demo's sample data (`mock.ts`),
+ * which the app labels as a demo (`DEMO_MODE`).
  */
-export const data: PolarisData = mockData;
+export const data: PolarisData = apiConfigured() ? liveData : mockData;
 
 /** Sample payment links for the Pay screen. Empty once real links exist. */
 export { DEMO_LINK_IDS as SAMPLE_LINK_IDS } from "./mock";

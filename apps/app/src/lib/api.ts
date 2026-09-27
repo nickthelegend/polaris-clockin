@@ -21,6 +21,14 @@ export function apiConfigured(): boolean {
   return Boolean(env.apiUrl);
 }
 
+/**
+ * The offline demo: no Polaris API, so balances, plans and activity are
+ * sample data and the relayer is a local stub whose "transactions" never
+ * reach a chain. Screens must say so, and never link a made-up hash to the
+ * explorer.
+ */
+export const DEMO_MODE = !env.apiUrl;
+
 export async function api<T>(path: string, init: { method?: "GET" | "POST"; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
   if (!env.apiUrl) throw new ApiError(0, "not_configured", "Polaris isn't reachable from this build. Try again later.");
   let res: Response;
