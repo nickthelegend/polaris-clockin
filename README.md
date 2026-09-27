@@ -103,15 +103,19 @@ the API. Each app's README lists its environment.
 | `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 146 passing; ESM and CJS builds |
 | Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 261 passing |
 | Gateway | `pnpm --filter @polarispay/gateway test` | 7 passing |
-| `@polaris/db` | `pnpm --filter @polaris/db test` | passing |
+| `@polaris/db` | `pnpm --filter @polaris/db test` | 29 passing |
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check` | config and schema in sync (codegen and its tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
-| CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM) | 101 passing; both workflows compile |
+| CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 101 passing; both workflows compile to WASM |
 | Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 206 passing; the API auth check covers every route |
 | The Polaris app | `pnpm --filter @polaris/app typecheck`, `lint`, `check:signatures`, `build` | 43 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 84 passing; the build proves no dev mock ships |
-| Landing | `pnpm --filter @polaris/landing typecheck`, `build` | |
-| End to end | `pnpm demo:local` + `pnpm demo:e2e`; `pnpm --filter @polaris/business e2e:local`; `pnpm --filter @polarispay/contracts e2e:local`; `pnpm --filter @polaris/cre-workflows e2e:local` | see [`docs/demo`](docs/demo) |
+| Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
+| End to end | `pnpm demo:local` + `pnpm demo:e2e` | 12 of 12 steps; [`docs/demo`](docs/demo) |
+| | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
+| | `pnpm --filter @polarispay/contracts e2e:local` | all nine flows; the buyer, sender and freelancer never hold MON |
+| | `pnpm --filter @polaris/cre-workflows e2e:local` | 7 passing (both workflows against real contracts on a local node) |
+| Lockfile | `pnpm install --frozen-lockfile` | passes |
 
 ---
 
