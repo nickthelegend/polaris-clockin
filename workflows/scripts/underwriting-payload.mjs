@@ -9,8 +9,10 @@
  * good for 15 minutes, so no static example payload can work.
  *
  * The account's key comes from POLARIS_UNDERWRITE_ACCOUNT_KEY; without it a
- * throwaway key is generated, which underwrites a brand-new account with no
- * history. To bring a history wallet, set POLARIS_UNDERWRITE_WALLET_KEY too.
+ * throwaway key is generated: a brand-new account with no history, which the
+ * workflow finds thin and does not report (src/underwriting/thin.ts). To see
+ * a report land, bring a history wallet with POLARIS_UNDERWRITE_WALLET_KEY,
+ * or use an account with a history of its own.
  * Both are read from the environment or workflows/.env (git-ignored). Use
  * test keys only: this signs with them locally and prints the addresses,
  * never the keys.
@@ -73,6 +75,7 @@ async function main() {
   writeFileSync(out, `${JSON.stringify(payload, null, 2)}\n`);
   console.log(`Underwriting payload for ${payload.user}${generated ? " (a new throwaway account)" : ""}, chain ${chainId}`);
   if (payload.linked) console.log(`  bringing the history of ${payload.linked.wallet}`);
+  else if (generated) console.log("  no history wallet: expect status \"thin\" and no report (set POLARIS_UNDERWRITE_WALLET_KEY)");
   console.log(`  consent good for 15 minutes: ${out}`);
 }
 

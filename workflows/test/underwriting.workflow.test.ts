@@ -23,6 +23,7 @@ import {
 } from "@polarispay/underwriting";
 import { type Address, encodeErrorResult, getAddress, type Hex, parseAbi, zeroAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { verifyCallback } from "../src/shared/callback.ts";
 import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
 import { configSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
@@ -47,10 +48,14 @@ const STRONG = "0xb0b0000000000000000000000000000000000001" as Address;
 const walletKey = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 const buyerKey = privateKeyToAccount("0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a");
 const attackerKey = privateKeyToAccount("0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba");
+// A brand-new Polaris account: the fresh-account persona (three days old, a claim link, $37.60).
+const newcomerKey = privateKeyToAccount("0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356");
 const buyer = getAddress(buyerKey.address);
+const newcomer = getAddress(newcomerKey.address);
 const FIXTURES = cloneFixtures([
   { from: STRONG, to: walletKey.address },
   { from: REGULAR_ACCOUNT, to: buyer },
+  { from: FRESH_ACCOUNT, to: newcomer },
 ]);
 
 const STAGING = JSON.parse(fs.readFileSync(join(import.meta.dir, "..", "underwriting", "config.staging.json"), "utf8"));
@@ -315,6 +320,68 @@ describe("the account's own consent", () => {
     expect(runWith(config(), { user: other, consent: await consent(null) }).status).toBe("rejected");
     expect(seen.sent).toHaveLength(0);
     expect(seen.reports).toHaveLength(0);
+  });
+});
+
+describe("a thin file", () => {
+  const newcomerAsks = async (linked: Awaited<ReturnType<typeof proof>> | null = null) => ({
+    user: newcomer,
+    consent: await consent(linked?.wallet ?? null, { account: newcomer, signer: newcomerKey }),
+    ...(linked ? { linked } : {}),
+  });
+
+  test("a brand-new account alone gets no report, so no free $200 line", async () => {
+    const seen = wire();
+    const out = runWith(config(), await newcomerAsks());
+    expect(out.status).toBe("thin");
+    expect(out.reason).toContain("thin file");
+    // What the chain would have done with it: the floor plus the balance, the $200 tier.
+    expect(out.expectedScore).toBeGreaterThanOrEqual(520);
+    expect(out.expectedScore).toBeLessThan(580);
+    expect(seen.reports).toHaveLength(0);
+    expect(out.txHash).toBeNull();
+  });
+
+  test("says so to the API, signed, keyed on the request's nonce", async () => {
+    wire();
+    const secrets = new Map([["main", new Map([...KEYS.get("main")!, ["POLARIS_CALLBACK_SECRET", "cb-secret"]])]]);
+    const callbackUrl = "https://api.polaris.test/v1/cre/underwriting";
+    const posted: SentRequest[] = [];
+    const http = HttpActionsMock.testInstance();
+    http.sendRequest = (input) => {
+      const s = toSent(input as unknown as CreRequestLike);
+      if (s.url === callbackUrl) {
+        posted.push(s);
+        return { statusCode: 204 };
+      }
+      return answerFromFixtures(s, FIXTURES);
+    };
+    const asked = await newcomerAsks();
+    const out = runWith(config({ callback: { url: callbackUrl, secretId: "POLARIS_CALLBACK_SECRET" } }), asked, secrets);
+    expect(out.status).toBe("thin");
+    expect(posted).toHaveLength(1);
+    expect(verifyCallback("cb-secret", posted[0]!.body!, posted[0]!.headers["polaris-signature"], NOW).ok).toBe(true);
+    expect(JSON.parse(posted[0]!.body!)).toMatchObject({
+      id: `thin:${newcomer.toLowerCase()}:${asked.consent.nonce}`,
+      type: "credit.thin",
+      user: newcomer,
+      txHash: null,
+      reason: expect.stringContaining("thin file"),
+    });
+  });
+
+  test("opens once the buyer brings a history wallet", async () => {
+    const seen = wire();
+    const out = runWith(config(), await newcomerAsks(await proof(newcomer)));
+    expect(out.status).toBe("applied");
+    expect(seen.reports).toHaveLength(1);
+    expect(out.onChainScore).toBeGreaterThan(520);
+  });
+
+  test("an account with a history of its own is not thin", async () => {
+    // The regular persona: four months, 120 transfers.
+    wire();
+    expect(runWith(config(), await asks()).status).toBe("applied");
   });
 });
 

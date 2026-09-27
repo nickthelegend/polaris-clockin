@@ -14,7 +14,8 @@ Monad: one decides who gets credit, the other collects what is owed.
                          │  node mode: Nansen → Zerion → Etherscan → RPC, per node,  │──▶ UnderwritingReceiver
                          │             facts derived by @polarispay/underwriting     │      └▶ ScoreManager.underwrite
                          │  consensus: counts by median, verdicts by identical       │         (score computed on chain,
-                         │  report = facts, never a score                            │          line capped at $1,000)
+                         │  report = facts, never a score; a thin file (nothing      │          line capped at $1,000)
+                         │    a new account could not show) gets none                │
                          │                                                           │
  every minute (demo) ────▶ polaris-collections (cron trigger)                        │
  daily (production)      │  candidates: Envio GraphQL, else the chain's own counts   │
@@ -38,6 +39,14 @@ Monad: one decides who gets credit, the other collects what is owed.
   liquidations happen when a `polaris-collections` report is delivered to
   `CollectionsReceiver`. The dunning ladder hears about failures from the
   same run.
+- **No history, no report.** `ScoreManager` opens any underwritten account
+  at the $200 floor, and an account with no history costs nothing to make.
+  So the workflow attests only facts with at least one point from time or
+  identity (30 days of age, 25 sends, 30 days of DeFi, or exchange funding;
+  dollars do not count, they can be passed from account to account). A thin
+  file gets no report: no unsecured line, collateral still works, and the
+  buyer can come back with a history wallet. A declined file is always
+  reported.
 - **The DON attests facts; the chain does the arithmetic.** No single key can
   hand out credit: the report carries Nansen/Zerion facts, `ScoreManager`
   scores them, caps the opening line and refuses evidence older than 15
@@ -154,7 +163,7 @@ two, not staging copies.
 | `secrets.yaml`, `.env.example` | Secret ids → environment variables for simulation; the Vault DON once deployed |
 | `collections/`, `underwriting/` | `main.ts` (the WASM entry), `workflow.yaml`, `config.<target>.json`, a strict `tsconfig.json` with no Node/DOM/Bun types |
 | `src/collections/` | `workflow.ts` (the handler), `candidates.ts` (Envio query, chain window), `tasks.ts` (report encoding, batching), `outcomes.ts` (receipt → dunning events) |
-| `src/underwriting/` | `workflow.ts`, `consent.ts` (the account's consent), `link.ts` (the history wallet's proof; both verified synchronously with @noble/curves), `evidence.ts` (node mode: the recipe over CRE's HTTP client), `report.ts`, `payload.ts` |
+| `src/underwriting/` | `workflow.ts`, `consent.ts` (the account's consent), `thin.ts` (facts it will not attest), `link.ts` (the history wallet's proof; both verified synchronously with @noble/curves), `evidence.ts` (node mode: the recipe over CRE's HTTP client), `report.ts`, `payload.ts` |
 | `src/shared/` | Config schemas, EVM helpers (reads, gas, write, receipt), the signed callback |
 | `src/trigger.ts` | `triggerSimulatedUnderwriting` for the API (`underwriteConsentMessage` is `@polaris/cre-workflows/consent`) |
 | `scripts/` | `install-cre.mjs`, `cre.mjs`, `bun.mjs`, `configure.mjs`, `underwriting-payload.mjs`, `local-chain.mjs`, `e2e-local.mjs`, `hardhat.cre-local.config.cjs` |
@@ -251,7 +260,9 @@ The Facts words are the package's.
 Result (the handler's return value, JSON): `status` is `applied` (with
 `onChainScore`), `refused` (with ScoreManager's reason: `StaleEvidence`,
 `AlreadyHasRecord`, `WalletAlreadyLinked`), `incomplete` (evidence missing,
-no report, retry later: missing data is never attested as zero), `skipped`
+no report, retry later: missing data is never attested as zero), `thin`
+(final, but nothing a new account could not show: no report, and a signed
+`credit.thin` callback, see `src/underwriting/thin.ts`), `skipped`
 (already underwritten; no provider call spent), or `rejected` (no consent
 from the account, a bad proof or payload; nothing read or spent).
 
@@ -306,6 +317,10 @@ from `@polaris/cre-workflows/callback`; event types are in
   the account did not sign for (no consent, another key's, a consent to be
   underwritten alone replayed with a wallet, a stale one) is rejected before
   anything is read.
+- `test/thin.test.ts` and the thin-file cases in
+  `test/underwriting.workflow.test.ts`: an account with no history (or only
+  dollars) gets no report and no $200 line; it opens once a history wallet
+  is brought; a declined file is still reported.
 - `test/consent.test.ts`: the consent text byte for byte, bound to the
   account, the wallet (or none), the chain and 15 minutes, and checked the
   way viem's own verifier checks it.

@@ -15,9 +15,12 @@
  *      CRE's HTTP client (Nansen first, Zerion as the fallback, Etherscan and
  *      RPC for the rest), derives the Facts with its pure core, and the DON
  *      agrees field by field: counts by median, verdicts by identical.
- *   4. Only a final set of facts is reported. The report carries facts, never
- *      a score: ScoreManager computes the score on chain, caps the opening
- *      line at $1,000 and refuses evidence older than 15 minutes.
+ *   4. Only a final set of facts is reported, and never a thin file (./thin.ts):
+ *      facts that show nothing a brand-new account could not show get no
+ *      report, so free accounts cannot farm the $200 floor line. The report
+ *      carries facts, never a score: ScoreManager computes the score on
+ *      chain, caps the opening line at $1,000 and refuses evidence older than
+ *      15 minutes.
  *   5. The receipt says whether ScoreManager applied it (`UnderwritingApplied`
  *      with the score) or refused it, and why.
  */
@@ -55,6 +58,7 @@ import { type Observation, observe, type ProviderKeys } from "./evidence.ts";
 import { verifyLinkProof } from "./link.ts";
 import { parseUnderwritingPayload } from "./payload.ts";
 import { encodeUnderwritingReport } from "./report.ts";
+import { thinFileReason } from "./thin.ts";
 
 export const configSchema = z.object({
   chainSelectorName,
@@ -120,7 +124,7 @@ const REFUSAL_ERRORS = parseAbi([
 ]);
 
 export interface UnderwritingResult {
-  status: "applied" | "refused" | "incomplete" | "skipped" | "rejected" | "dry-run";
+  status: "applied" | "refused" | "incomplete" | "thin" | "skipped" | "rejected" | "dry-run";
   user: Address;
   linkedWallet: Address | null;
   reason: string | null;
@@ -276,6 +280,33 @@ export function onHttpTrigger(runtime: Runtime<UnderwritingConfig>, payload: HTT
   if (!observation.final) {
     // Missing data is never attested as zero: no report, the app retries.
     return done({ ...partial, status: "incomplete", reason: `not final: ${observation.missing}` });
+  }
+  const thin = thinFileReason(facts);
+  if (thin) {
+    // No report: the account keeps no unsecured line, and can come back with more.
+    const out = { ...partial, status: "thin" as const, reason: thin };
+    if (cfg.callback) {
+      const secret = optionalSecret(runtime, cfg.callback.secretId);
+      if (secret) {
+        postSignedCallback(runtime, {
+          url: cfg.callback.url,
+          secret,
+          payload: {
+            // No transaction to key on: the consent's nonce is unique to this request.
+            id: `thin:${user.toLowerCase()}:${input.consent.nonce}`,
+            type: "credit.thin",
+            createdAt: now,
+            chain: cfg.chainSelectorName,
+            user,
+            linkedWallet: wallet,
+            score: null,
+            reason: thin,
+            txHash: null,
+          },
+        });
+      }
+    }
+    return done(out);
   }
 
   // 4. Facts, never a score, signed by the DON and written through the forwarder.
