@@ -140,7 +140,7 @@ export function TestCheckout({
     mode === "later" && plan
       ? [
           { label: "Pay in 4", value: `${formatUsd(plan.each)} × 4` },
-          { label: "Interest", value: plan.interestFree ? formatUsd(0) : `${formatUsd(plan.interest)} · ${aprLabel(plan.aprBps)}` },
+          { label: "Interest", value: `${formatUsd(plan.interest)} · ${aprLabel(plan.aprBps)}` },
           { label: "First payment", value: firstDate },
           { label: "Due today", value: formatUsd(0) },
         ]

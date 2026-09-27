@@ -183,13 +183,13 @@ from instead of the request's `Host`); with any missing, checkout shows
 *Payments are switched off* instead of guessing. Behind a proxy that sets
 `X-Forwarded-Host`, set `TRUST_PROXY=1`; otherwise those headers are ignored.
 
-`POLARIS_PAY_IN_4_APR_BPS` sets the Pay in 4 price the store advertises. The
-default, 1000 (10% APR), is `PolarisLoanEngine.INTEREST_RATE_BPS`, so the
-badge, checkout and receipt quote exactly what the loan engine charges: $349
-is 4 × $87.92 ($2.68 of interest, $351.68 in total), and $200 is 4 × $50.38.
-Nothing is paid at checkout; the first instalment falls due a week later,
-as `installmentDueAt` dates it. Set 0 only for a merchant-funded,
-interest-free plan; the copy follows it.
+The store quotes Pay in 4 at `PolarisLoanEngine.INTEREST_RATE_BPS`, 10% APR,
+the only rate the loan engine charges, so the badge, checkout and receipt
+quote exactly what the buyer pays: $349 is 4 × $87.92 ($2.68 of interest,
+$351.68 in total), and $200 is 4 × $50.38. Nothing is paid at checkout; the
+first instalment falls due a week later, as `installmentDueAt` dates it.
+There is no interest-free plan; `POLARIS_PAY_IN_4_APR_BPS` set to anything
+else is ignored with a warning.
 
 ## Checks
 

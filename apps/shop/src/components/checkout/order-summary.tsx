@@ -65,7 +65,7 @@ function Body({ lines, subtotal, shipping, total, mode, aprBps }: Omit<Props, "c
       {plan ? (
         <p className="num mt-3 rounded-lg bg-sand px-3.5 py-2.5 text-[0.9rem] text-ink-2">
           With Pay in 4: nothing today, then 4 weekly payments of {formatUsd(plan.each)} (
-          {plan.interestFree ? `${formatUsd(plan.total)}, no interest` : `${formatUsd(plan.total)} including ${formatUsd(plan.interest)} interest`}).
+          {`${formatUsd(plan.total)} including ${formatUsd(plan.interest)} interest`}).
         </p>
       ) : null}
       {subscription ? <p className="mt-3 text-[0.9rem] text-muted">Then {formatUsd(total)} every month. Skip or cancel any time.</p> : null}

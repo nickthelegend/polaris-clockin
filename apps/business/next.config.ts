@@ -23,6 +23,7 @@ const config: NextConfig = {
     // `pnpm demo:local`'s signed-in dashboard on a local chain; never in a production build.
     NEXT_PUBLIC_POLARIS_LOCAL_SESSION: development ? (process.env.NEXT_PUBLIC_POLARIS_LOCAL_SESSION ?? "") : "",
     NEXT_PUBLIC_POLARIS_LOCAL_SESSION_WALLET: development ? (process.env.NEXT_PUBLIC_POLARIS_LOCAL_SESSION_WALLET ?? "") : "",
+    NEXT_PUBLIC_POLARIS_LOCAL_SESSION_KEY: development ? (process.env.NEXT_PUBLIC_POLARIS_LOCAL_SESSION_KEY ?? "") : "",
   },
   images: {
     formats: ["image/avif", "image/webp"],

@@ -12,9 +12,7 @@ import { PolarisMark } from "@/lib/polaris-client";
 export function PayOverTimeBand({ aprBps, example }: { aprBps: number; example: Product }) {
   const plan = payIn4(example.price, aprBps)!;
   const facts = [
-    plan.interestFree
-      ? { title: "4 interest-free payments", body: "No interest on this example, shown before you confirm." }
-      : { title: `4 payments, ${aprLabel(plan.aprBps)}`, body: `${formatUsd(plan.interest)} of interest on this example, shown before you confirm.` },
+    { title: `4 payments, ${aprLabel(plan.aprBps)}`, body: `${formatUsd(plan.interest)} of interest on this example, shown before you confirm.` },
     { title: "An instant decision", body: "Polaris answers at checkout, with the reasons for your limit." },
     { title: "Paid automatically", body: "Each payment is collected weekly. Miss one and your limit and collateral are at stake." },
   ];
@@ -74,9 +72,7 @@ export function PayOverTimeBand({ aprBps, example }: { aprBps: number; example: 
               ))}
             </ol>
             <figcaption className="mt-8 border-t border-white/10 pt-5 text-[0.86rem] leading-relaxed text-white/60">
-              {plan.interestFree
-                ? `${formatUsd(plan.total)} in total, no interest. `
-                : `${formatUsd(plan.total)} in total, including ${formatUsd(plan.interest)} interest at ${aprLabel(plan.aprBps)}. `}
+              {`${formatUsd(plan.total)} in total, including ${formatUsd(plan.interest)} interest at ${aprLabel(plan.aprBps)}. `}
               <Link href={`/products/${example.slug}`} className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
                 {example.id === "halcyon-one" ? "See the headphones" : `See the ${example.name}`}
               </Link>

@@ -164,7 +164,11 @@ export type PayIn4Options = {
   installments?: number;
   /** Seconds between instalments. Default one week. */
   intervalSeconds?: number;
-  /** Buyer APR in basis points. Default 1000 (10%), the loan engine's rate; 0 is interest-free. */
+  /**
+   * Buyer APR in basis points. Default 1000 (10%): PolarisLoanEngine.INTEREST_RATE_BPS,
+   * what every Polaris plan charges. Other values are for tests; a checkout never
+   * quotes them.
+   */
   aprBps?: number;
 };
 

@@ -15,7 +15,7 @@ describe("Pay in 4 pricing the store advertises", () => {
 
   it("quotes Halcyon One as 4 × $87.92: $2.68 of interest, $351.68 in total, nothing due today", () => {
     const plan = payIn4(34900, payInFourApr({}))!;
-    expect(plan).toMatchObject({ each: 8792, interest: 268, total: 35168, interestFree: false });
+    expect(plan).toMatchObject({ each: 8792, interest: 268, total: 35168, aprBps: 1000 });
     expect(plan.installments.map((i) => i.amount)).toEqual([8792, 8792, 8792, 8792]);
     // PolarisLoanEngine.installmentDueAt(i) = startedAt + (i + 1) x interval.
     expect(plan.installments.map((i) => i.dueInSeconds)).toEqual([1, 2, 3, 4].map((w) => w * 604_800));
@@ -29,10 +29,11 @@ describe("Pay in 4 pricing the store advertises", () => {
     expect(plan.installments.reduce((n, i) => n + i.amount, 0)).toBe(plan.total);
   });
 
-  it("can be set to 0 for a merchant-funded, interest-free plan", () => {
+  it("never quotes an interest-free plan: the loan engine has one rate", () => {
     const quote = quotePayIn4("349.00", { aprBps: payInFourApr({ POLARIS_PAY_IN_4_APR_BPS: "0" }) });
-    expect(quote.each).toBe("87.25");
-    expect(quote.interestFree).toBe(true);
+    expect(quote.aprBps).toBe(1000);
+    expect(quote.each).toBe("87.92");
+    expect(quote.interest).toBe("2.68");
   });
 
   it("falls back to the loan engine's rate on a nonsense setting", () => {

@@ -28,7 +28,7 @@ export type PolarisCheckoutButtonProps = PolarisClientProps &
     amount?: AmountInput;
     /** Show the Pay in 4 line. Default: when the amount is known and the session offers "later". */
     installments?: boolean;
-    /** Buyer APR for the Pay in 4 line, in basis points. Default 1000 (10%, the loan engine's rate); 0 reads "interest-free". */
+    /** Buyer APR for the Pay in 4 line, in basis points. Default 1000 (10%): PolarisLoanEngine.INTEREST_RATE_BPS, what every Polaris plan charges. */
     aprBps?: number;
     /** Button text after the mark. Default "Pay with Polaris". */
     label?: ReactNode;
@@ -224,7 +224,7 @@ export function PolarisCheckoutButton(props: PolarisCheckoutButtonProps) {
         <p className="plrs-caption" id={captionId}>
           <span className="plrs-dim">or {quote.installments.length} × </span>
           <strong>{formatUsdAmount(quote.each)}</strong>
-          <span className="plrs-dim">{quote.interestFree ? " interest-free" : " with Pay in 4"}</span>
+          <span className="plrs-dim"> with Pay in 4</span>
         </p>
       ) : null}
       {errorText ? (

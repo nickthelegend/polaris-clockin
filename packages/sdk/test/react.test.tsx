@@ -61,9 +61,11 @@ describe("PolarisCheckoutButton", () => {
     expect(button().getAttribute("aria-describedby")).toBe(caption.id);
   });
 
-  it("says interest-free only when it is", () => {
+  it("never calls a plan interest-free: every Polaris plan is 10% APR", () => {
+    render(<PolarisCheckoutButton polaris={fakeClient()} session="cs_test_1" amount="200.00" />);
+    expect(container.querySelector(".plrs-caption")!.textContent).toBe("or 4 × $50.38 with Pay in 4");
     render(<PolarisCheckoutButton polaris={fakeClient()} session="cs_test_1" amount="200.00" aprBps={0} />);
-    expect(container.querySelector(".plrs-caption")!.textContent).toBe("or 4 × $50.00 interest-free");
+    expect(container.textContent).not.toMatch(/interest-free|no interest/i);
   });
 
   it("hides the Pay in 4 line when the session doesn't offer it", () => {

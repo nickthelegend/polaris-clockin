@@ -183,17 +183,23 @@ export function browserConfig(): BrowserPolarisConfig {
 }
 
 /**
- * Pay in 4 pricing shown on the store, in basis points of APR. The default,
- * 1000 (10% APR), is PolarisLoanEngine.INTEREST_RATE_BPS: what the buyer is
- * actually charged. Set 0 only for merchant-funded, interest-free plans.
+ * Pay in 4 pricing shown on the store, in basis points of APR: always
+ * PolarisLoanEngine.INTEREST_RATE_BPS (1000, 10% APR), what the buyer is
+ * actually charged. The engine has no other rate, so the store never quotes
+ * one (and never an interest-free plan): POLARIS_PAY_IN_4_APR_BPS is read only
+ * to warn when it disagrees.
  */
 export const LOAN_ENGINE_APR_BPS = 1000;
 
 export function payInFourApr(env: Env = process.env): number {
   const raw = env.POLARIS_PAY_IN_4_APR_BPS?.trim();
-  const value = Number(raw || LOAN_ENGINE_APR_BPS);
-  return Number.isInteger(value) && value >= 0 && value <= 10_000 ? value : LOAN_ENGINE_APR_BPS;
+  if (raw && Number(raw) !== LOAN_ENGINE_APR_BPS && !warnedApr) {
+    warnedApr = true;
+    console.warn(`POLARIS_PAY_IN_4_APR_BPS=${raw} is ignored: Polaris Pay in 4 is ${LOAN_ENGINE_APR_BPS / 100}% APR (PolarisLoanEngine).`);
+  }
+  return LOAN_ENGINE_APR_BPS;
 }
+let warnedApr = false;
 
 let cached: { key: string; server: PolarisServer } | null = null;
 

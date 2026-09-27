@@ -221,6 +221,22 @@ async function main() {
   const chain = viem.defineChain({ id: deployment.chainId, name: "Local Hardhat", nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 }, rpcUrls: { default: { http: [RPC] } } });
   const owner = viem.createWalletClient({ account: accounts.privateKeyToAccount(HARDHAT_KEYS.owner), chain, transport: viem.http(RPC) });
   const reader = viem.createPublicClient({ chain, transport: viem.http(RPC) });
+  async function registerMerchant(account) {
+    const auth = { authorization: `Bearer ${secrets.session}`, "content-type": "application/json", origin: BUSINESS_URL };
+    const get = await fetch(`${BUSINESS_URL}/api/merchant/registration`, { headers: auth });
+    const step = (await get.json()).data;
+    if (!step?.typedData) return step?.merchant?.registration?.state ?? "unknown";
+    const t = step.typedData;
+    const fields = t.types[t.primaryType];
+    const message = Object.fromEntries(Object.entries(t.message).map(([k, v]) => [k, /^u?int\d*$/.test(fields.find((f) => f.name === k)?.type ?? "") ? BigInt(v) : v]));
+    const { EIP712Domain: _unused, ...types } = t.types;
+    const signature = await account.signTypedData({ domain: t.domain, types, primaryType: t.primaryType, message });
+    const post = await fetch(`${BUSINESS_URL}/api/merchant/registration`, { method: "POST", headers: auth, body: JSON.stringify({ signature, deadline: String(t.message.deadline) }) });
+    const body = await post.json();
+    if (!post.ok) throw new Error(`registration failed: ${JSON.stringify(body.error ?? body)}`);
+    return body.data.merchant.registration.state;
+  }
+
   const mint = async (address) => {
     const hash = await owner.writeContract({ address: at("Stablecoin"), abi: mockAUSDAbi, functionName: "mint", args: [address, 500_000_000n] });
     await reader.waitForTransactionReceipt({ hash });
@@ -236,15 +252,20 @@ async function main() {
   };
   const dbUrl = `sqlite:${join(DEMO, "polaris.db")}`;
   const { seedMerchant } = await import(fileUrl(join(BUSINESS, "scripts", "lib", "seed.mjs")));
+  // Halcyon's own merchant: a fresh payout wallet (a throwaway key for this
+  // run), not yet on chain. It registers below through the dashboard's API.
+  const merchantKey = accounts.generatePrivateKey();
+  const merchant = accounts.privateKeyToAccount(merchantKey);
+  const MERCHANT_NAME = "Halcyon";
   const seeded = await seedMerchant({
     dbUrl,
     pepper: secrets.pepper,
-    wallet: deployment.demo.merchant,
-    name: deployment.demo.merchantName,
+    wallet: merchant.address,
+    name: MERCHANT_NAME,
     webhookUrl: `${SHOP_URL}/api/webhooks/polaris`,
-    registration: "active",
+    registration: "none",
   });
-  log(`seeded ${deployment.demo.merchantName} (${seeded.merchant.publicId}) with test API keys and a webhook to the shop`);
+  log(`seeded ${MERCHANT_NAME} (${seeded.merchant.publicId}, payout wallet ${merchant.address}) with test API keys and a webhook to the shop`);
 
   const businessEnv = {
     ...process.env,
@@ -270,9 +291,11 @@ async function main() {
     CRE_TRIGGER_MIN_INTERVAL_MS: "2000",
     POLARIS_CRE_CALLBACK_SECRET: secrets.callback,
     POLARIS_LOCAL_SESSION_TOKEN: secrets.session,
-    POLARIS_LOCAL_SESSION_WALLET: deployment.demo.merchant,
+    POLARIS_LOCAL_SESSION_WALLET: merchant.address,
     NEXT_PUBLIC_POLARIS_LOCAL_SESSION: secrets.session,
-    NEXT_PUBLIC_POLARIS_LOCAL_SESSION_WALLET: deployment.demo.merchant,
+    NEXT_PUBLIC_POLARIS_LOCAL_SESSION_WALLET: merchant.address,
+    // This run's throwaway payout key, so the dashboard can sign as Privy's embedded wallet would (local chain only).
+    NEXT_PUBLIC_POLARIS_LOCAL_SESSION_KEY: merchantKey,
     NEXT_PUBLIC_DEMO_SHOP_URL: SHOP_URL,
     NEXT_PUBLIC_PRIVY_APP_ID: "",
   };
@@ -326,7 +349,7 @@ async function main() {
     POLARIS_WEBHOOK_SECRET: seeded.webhookSecret,
     NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY: seeded.publishableKey,
     NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN: APP_URL,
-    POLARIS_MERCHANT_ADDRESS: deployment.demo.merchant,
+    POLARIS_MERCHANT_ADDRESS: merchant.address,
     SHOP_URL,
     SHOP_DATA_DIR: join(DEMO, "shop"),
   };
@@ -342,6 +365,12 @@ async function main() {
     const body = await res.json();
     return res.ok && body.data?.ok === true;
   }, 300_000);
+  // Register Halcyon on chain the way the dashboard does after a business is named
+  // (useRegisterMerchant): the payout wallet signs the Registration the server
+  // prepares, the relayer sends registerFor, and the local registry admin
+  // activates it for Pay in 4.
+  const registered = await registerMerchant(merchant);
+  log(`registered ${MERCHANT_NAME} on MerchantRegistry through /api/merchant/registration: ${registered}`);
   await until("the Polaris app", async () => (await fetch(`${APP_URL}/`)).ok, 300_000);
   await until("the demo shop", async () => (await fetch(`${SHOP_URL}/`)).ok, 300_000);
 
@@ -353,7 +382,7 @@ async function main() {
         urls: { business: BUSINESS_URL, dashboard: `${BUSINESS_URL}/dashboard`, app: APP_URL, shop: SHOP_URL, faucet: `${FAUCET_URL}/mint`, rpc: RPC },
         chainId: deployment.chainId,
         contracts: Object.fromEntries(Object.entries(deployment.contracts).map(([k, v]) => [k, v.address])),
-        merchant: { address: deployment.demo.merchant, name: deployment.demo.merchantName, publicId: seeded.merchant.publicId },
+        merchant: { address: merchant.address, name: MERCHANT_NAME, publicId: seeded.merchant.publicId, registration: registered },
       },
       null,
       2,
@@ -365,7 +394,7 @@ Polaris is running locally (chain ${deployment.chainId}; nothing is live, no Pri
 
   Demo shop      ${SHOP_URL}             add to the bag, check out with Polaris
   Polaris app    ${APP_URL}              the checkout sheet (dev signer, not Face ID)
-  Dashboard      ${BUSINESS_URL}/dashboard   ${deployment.demo.merchantName}, signed in locally
+  Dashboard      ${BUSINESS_URL}/dashboard   ${MERCHANT_NAME}, signed in locally (registered on chain: ${registered})
   Faucet         POST ${FAUCET_URL}/mint {"address": "0x…"}   (or Add money in the app)
   Chain          ${RPC}
 

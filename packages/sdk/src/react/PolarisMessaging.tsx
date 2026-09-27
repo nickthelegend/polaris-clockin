@@ -9,7 +9,7 @@ import { PolarisStyles } from "./styles.js";
 export type PolarisMessagingProps = {
   /** The product or cart price: "201.50". */
   amount: AmountInput;
-  /** Buyer APR in basis points. Default 1000 (10%, the loan engine's rate). 0 reads "interest-free". */
+  /** Buyer APR in basis points. Default 1000 (10%): PolarisLoanEngine.INTEREST_RATE_BPS, what every Polaris plan charges. */
   aprBps?: number;
   /** Seconds between instalments. Default one week. */
   intervalSeconds?: number;
@@ -149,7 +149,7 @@ export function PolarisMessaging({
     <div ref={rootRef} className={className ? `plrs-root plrs-msg ${className}` : "plrs-root plrs-msg"} data-theme={theme} style={style}>
       <PolarisStyles />
       <span>
-        or {count} {quote.interestFree ? "interest-free payments" : "payments"} of <strong>{each}</strong> with{" "}
+        or {count} payments of <strong>{each}</strong> with{" "}
         <span className="plrs-brand">
           <PolarisMark />
           Polaris
@@ -194,9 +194,7 @@ export function PolarisMessaging({
             {count} × <Money value={quote.each} />
           </p>
           <p className="plrs-sub">
-            {quote.interestFree
-              ? `${formatUsdAmount(quote.total)} in total, no interest.`
-              : `${formatUsdAmount(quote.total)} in total, including ${formatUsdAmount(quote.interest)} interest (${quote.aprBps / 100}% APR).`}
+            {`${formatUsdAmount(quote.total)} in total, including ${formatUsdAmount(quote.interest)} interest (${quote.aprBps / 100}% APR).`}
           </p>
 
           <ol className="plrs-sched" style={{ ["--plrs-n" as string]: String(Math.min(count, 6)) }} aria-label="Payment schedule">

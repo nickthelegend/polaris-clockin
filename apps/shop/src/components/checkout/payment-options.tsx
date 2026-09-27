@@ -97,7 +97,7 @@ export function PaymentOptions({
           <Radio checked={method === "polaris"} />
           <span className="flex flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <PolarisLockup className="text-[1.08rem]" />
-            <span className="text-[0.9rem] text-muted">{kind === "subscription" ? "Monthly, cancel any time" : plan?.interestFree ? "Pay now, or in 4 interest-free payments" : `Pay now, or in 4 payments at ${aprLabel(aprBps)}`}</span>
+            <span className="text-[0.9rem] text-muted">{kind === "subscription" ? "Monthly, cancel any time" : `Pay now, or in 4 payments at ${aprLabel(aprBps)}`}</span>
           </span>
         </label>
         <Expand open={method === "polaris"}>
@@ -134,9 +134,7 @@ export function PaymentOptions({
                   ))}
                 </ol>
                 <p className="num mt-4 text-[0.9rem] leading-relaxed text-muted">
-                  {plan.interestFree
-                    ? `No interest, ${formatUsd(plan.total)} in total. `
-                    : `${formatUsd(plan.interest)} interest (${aprLabel(plan.aprBps)}), ${formatUsd(plan.total)} in total. `}
+                  {`${formatUsd(plan.interest)} interest (${aprLabel(plan.aprBps)}), ${formatUsd(plan.total)} in total. `}
                   Halcyon is paid in full today. {opens}
                 </p>
               </div>

@@ -294,9 +294,10 @@ week out), and its `amountBaseUnits` is the step on `PolarisLoanEngine.threshold
 rounded-up ladder, so the quote is what the keeper collects, unit for unit. Each
 `amount` is that step with the running total rounded to the cent, so the rows
 always add up to the `total` you show, and each is within a cent of what is
-drawn ($200 reads 50.38, 50.39, 50.38, 50.38 = 201.53). `aprBps: 0` models a
-merchant-subsidised plan and reads *interest-free*; the components never claim
-it otherwise.
+drawn ($200 reads 50.38, 50.39, 50.38, 50.38 = 201.53). Every Polaris plan is
+10% APR (the engine has no other rate), so the components always show the
+interest and the APR and never call a plan interest-free; `aprBps` other than
+1000 exists for tests.
 
 ### 0.2 methods
 

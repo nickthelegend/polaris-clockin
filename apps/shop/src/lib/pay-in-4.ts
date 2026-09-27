@@ -15,7 +15,6 @@ export type PayIn4View = {
   interest: number;
   total: number;
   aprBps: number;
-  interestFree: boolean;
   intervalSeconds: number;
   installments: { index: number; amount: number; dueInSeconds: number }[];
 };
@@ -29,7 +28,6 @@ export function payIn4(totalCents: number, aprBps: number): PayIn4View | null {
     interest: cents(quote.interest),
     total: cents(quote.total),
     aprBps: quote.aprBps,
-    interestFree: quote.interestFree,
     intervalSeconds: quote.intervalSeconds,
     installments: quote.installments.map((inst) => ({ index: inst.index, amount: cents(inst.amount), dueInSeconds: inst.dueInSeconds })),
   };
