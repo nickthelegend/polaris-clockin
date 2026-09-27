@@ -5,7 +5,7 @@ import type { CheckoutSession, WebhookEvent as PolarisEvent } from "polarispay-s
 import { canRead, newAccessToken } from "./access";
 import { fingerprint, type PricedCheckout } from "./checkout-request";
 import { orderStore, type OrderStore } from "./store";
-import { applyEvent, orderIdForEvent, type ApplyOutcome } from "./transitions";
+import { applyEvent, isOrderEvent, orderIdForEvent, type ApplyOptions, type ApplyOutcome } from "./transitions";
 import type { Order, SdkCall } from "./types";
 
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
@@ -221,14 +221,17 @@ export type WebhookOutcome = ApplyOutcome | "ignored";
 
 /**
  * Apply one verified event. The status code is what the webhook route
- * answers: 2xx for anything Polaris shouldn't send again (including repeats
- * and events about unknown orders), 409 for an event that arrived before the
- * one it depends on, so Polaris retries it.
+ * answers: 2xx for anything Polaris shouldn't send again (repeats, and
+ * merchant-level events like payouts), 409 for an event that arrived before
+ * the one it depends on, and 404 for an order event that matches no order
+ * here. Neither of the last two is remembered, so Polaris redelivers them: a
+ * payment is never dropped because the store hadn't stored its order yet.
  */
 export function recordEvent(
   event: PolarisEvent,
   store: OrderStore = orderStore(),
   now: Date = new Date(),
+  options: ApplyOptions = {},
 ): Promise<{ status: number; outcome: WebhookOutcome; orderId: string | null; reason?: string }> {
   return store.update((data) => {
     if (data.events[event.id]) {
@@ -237,7 +240,7 @@ export function recordEvent(
     const remember = (orderId: string | null) => {
       data.events[event.id] = { type: event.type, receivedAt: now.toISOString(), orderId };
     };
-    if (event.type === "payout.paid") {
+    if (!isOrderEvent(event)) {
       remember(null);
       return { status: 200, outcome: "ignored" as const, orderId: null };
     }
@@ -258,11 +261,10 @@ export function recordEvent(
     }
     const order = orderId ? data.orders[orderId] : undefined;
     if (!order) {
-      remember(null);
-      return { status: 200, outcome: "ignored" as const, orderId: null, reason: "No order matches this event." };
+      return { status: 404, outcome: "ignored" as const, orderId: null, reason: "No order matches this event." };
     }
 
-    const result = applyEvent(order, event, now);
+    const result = applyEvent(order, event, now, options);
     if (result.outcome === "retry") return { status: 409, outcome: "retry" as const, orderId: order.id, reason: result.reason };
     data.orders[order.id] = result.order;
     remember(order.id);

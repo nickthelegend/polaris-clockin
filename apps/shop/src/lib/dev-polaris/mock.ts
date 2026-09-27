@@ -6,6 +6,7 @@ import { MONAD_TESTNET, quotePayIn4, type CheckoutMode, type CheckoutSession, ty
 import { signWebhookPayload } from "polarispay-sdk/server";
 import { encodePacked, keccak256, recoverTypedDataAddress, type Hex } from "viem";
 
+import { micros } from "@/lib/orders/transitions";
 import { DEV_MOCK_MERCHANT, DEV_MOCK_PATH, DEV_MOCK_PUBLISHABLE_KEY, payInFourApr } from "@/lib/polaris";
 
 import { devMockSecrets } from "./guard";
@@ -127,7 +128,7 @@ function formatCents(cents: bigint): string {
   return `${cents / 100n}.${(cents % 100n).toString().padStart(2, "0")}`;
 }
 
-/** AUSD base units (6 decimals) as the API writes amounts: "349.00", "1.745". */
+/** AUSD base units (6 decimals) as the API writes amounts: "349.00", "1.745", "50.383562". */
 function formatUnits(units: bigint): string {
   let fraction = (units % 1_000_000n).toString().padStart(6, "0").replace(/0+$/, "");
   if (fraction.length < 2) fraction = fraction.padEnd(2, "0");
@@ -376,14 +377,19 @@ export function completeSession(id: string, mode: CheckoutMode, now: Date = new 
   let payment: CheckoutSession["payment"];
 
   if (mode === "later") {
+    // Exactly PolarisLoanEngine's terms, as the real API reports them: simple
+    // interest at the loan engine's rate, instalments in AUSD's six decimals,
+    // the first due one interval after opening, and nothing collected now.
     const quote = quotePayIn4(session.amount, { aprBps: payInFourApr() });
     const planId = `${BigInt(`0x${randomBytes(4).toString("hex")}`)}`;
+    const principalUnits = cents * 10_000n;
+    const totalUnits = quote.installments.reduce((n, inst) => n + inst.amountBaseUnits, 0n);
     const schedule = quote.installments.map((inst) => ({
       index: inst.index,
-      amount: inst.amount,
+      amount: formatUnits(inst.amountBaseUnits),
       dueAt: new Date(now.getTime() + inst.dueInSeconds * 1000).toISOString(),
     }));
-    session.plan = { planId, collected: 1, total: schedule.length, schedule, totalAmount: quote.total };
+    session.plan = { planId, collected: 0, total: schedule.length, schedule, totalAmount: formatUnits(totalUnits) };
     events.push(
       eventOf(
         "plan.opened",
@@ -395,9 +401,9 @@ export function completeSession(id: string, mode: CheckoutMode, now: Date = new 
           mode: "later",
           merchant,
           borrower: buyer,
-          principal: quote.principal,
-          interest: quote.interest,
-          total: quote.total,
+          principal: session.amount,
+          interest: formatUnits(totalUnits - principalUnits),
+          total: formatUnits(totalUnits),
           installments: schedule.length,
           intervalSeconds: quote.intervalSeconds,
           schedule,
@@ -500,8 +506,8 @@ export function advanceSession(
     if (plan.collected >= plan.total) return { ok: false, message: "Every instalment is already collected." };
     plan.collected += 1;
     const inst = plan.schedule[plan.collected - 1]!;
-    const paidSoFar = plan.schedule.slice(0, plan.collected).reduce((n, s) => n + toCents(s.amount)!, 0n);
-    const remaining = toCents(plan.totalAmount)! - paidSoFar;
+    const paidSoFar = plan.schedule.slice(0, plan.collected).reduce((n, s) => n + (micros(s.amount) ?? 0n), 0n);
+    const remaining = (micros(plan.totalAmount) ?? 0n) - paidSoFar;
     const events = [
       eventOf(
         "installment.collected",
@@ -513,7 +519,7 @@ export function advanceSession(
           installment: inst.index,
           installments: plan.total,
           amount: inst.amount,
-          remaining: formatCents(remaining > 0n ? remaining : 0n),
+          remaining: formatUnits(remaining > 0n ? remaining : 0n),
         },
         now,
       ),
@@ -614,6 +620,8 @@ export async function relayPayment(
     return fail(400, "invalid_request", "payer, merchant, amount, orderId, validBefore, nonce, signature and contract are required.");
   }
   if (signedChain !== chainId) return fail(400, "wrong_chain", `Signed for chain ${signedChain}, not Monad testnet.`);
+  // Polaris relays payments to the merchant that holds the publishable key, and to no one else.
+  if (merchant.toLowerCase() !== mockKeys().merchant.toLowerCase()) return fail(400, "unknown_merchant", "This key can't pay that address.");
   if (contract.toLowerCase() !== MOCK_PAYMENTS.toLowerCase()) return fail(400, "wrong_contract", "The relayer only submits to PolarisPayments.");
   if (!/^\d+$/.test(amount) || BigInt(amount) === 0n) return fail(400, "invalid_amount", "amount must be AUSD base units.");
   if (BigInt(validBefore) <= BigInt(Math.floor(now.getTime() / 1000))) return fail(400, "authorization_expired", "The authorization has expired.");

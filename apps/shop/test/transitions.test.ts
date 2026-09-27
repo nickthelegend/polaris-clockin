@@ -41,7 +41,7 @@ function planOpened(principal = "349.00", createdAt = new Date().toISOString()) 
       total: principal,
       installments: 4,
       intervalSeconds: 604800,
-      schedule: [1, 2, 3, 4].map((index) => ({ index, amount: "87.25", dueAt: new Date(opened + (index - 1) * 604_800_000).toISOString() })),
+      schedule: [1, 2, 3, 4].map((index) => ({ index, amount: "87.25", dueAt: new Date(opened + index * 604_800_000).toISOString() })),
       currency: "USD",
     },
     createdAt,
@@ -100,13 +100,72 @@ describe("order status transitions", () => {
     expect(r.order.status).toBe("paid");
   });
 
-  it("Pay in 4: plan.opened pays the store and records the schedule, with the first payment taken today", () => {
+  it("Pay in 4: plan.opened pays the store and records the schedule, with nothing collected at opening", () => {
     const r = applyEvent(baseOrder(), planOpened());
     expect(r.order.status).toBe("paid");
     expect(r.order.payment.mode).toBe("later");
     expect(r.order.plan?.installments.map((i) => i.amount)).toEqual([8725, 8725, 8725, 8725]);
-    expect(r.order.plan?.installments.map((i) => i.status)).toEqual(["paid", "upcoming", "upcoming", "upcoming"]);
+    // PolarisLoanEngine collects nothing at checkout: every instalment waits for installment.collected.
+    expect(r.order.plan?.installments.map((i) => i.status)).toEqual(["upcoming", "upcoming", "upcoming", "upcoming"]);
     expect(r.order.plan?.status).toBe("active");
+  });
+
+  it("reads the real API's plan.opened, whose amounts carry six decimals (metropolis/api ingest.ts)", () => {
+    // $200 at the loan engine's 10% APR over four weekly instalments.
+    const order = baseOrder({ total: 20000, subtotal: 20000 });
+    const e = planOpened("200.00");
+    Object.assign(e.data, {
+      interest: "1.534246",
+      total: "201.534246",
+      schedule: ["50.383562", "50.383561", "50.383562", "50.383561"].map((amount, i) => ({ index: i + 1, amount, dueAt: new Date(Date.now() + (i + 1) * 604_800_000).toISOString() })),
+    });
+    const r = applyEvent(order, e);
+    expect(r.order.status).toBe("paid");
+    // Never 4 x $0.00: each row is a step between rounded running totals, and they add up to the plan's total.
+    const rows = r.order.plan!.installments.map((i) => i.amount);
+    expect(rows).toEqual([5038, 5039, 5038, 5038]);
+    expect(rows.reduce((a, b) => a + b, 0)).toBe(20153);
+    expect(r.order.plan).toMatchObject({ principal: 20000, interest: 153, total: 20153 });
+    expect(r.order.events[0]!.summary).toMatch(/4 payments of \$50\.38/);
+  });
+
+  it("flags a second, different payment for an order that's already paid, for a refund", () => {
+    const opened = applyEvent(baseOrder(), planOpened()).order;
+    const other = paid();
+    Object.assign(other.data, { paymentId: `0x${"cd".repeat(32)}`, txHash: `0x${"ef".repeat(32)}`, sessionId: "cs_test_2" });
+    const r = applyEvent(opened, other);
+    expect(r.outcome).toBe("flagged");
+    expect(r.order.status).toBe("paid");
+    expect(r.order.payment.refundDue).toBe(true);
+    expect(r.order.events.at(-1)!.summary).toMatch(/second payment of \$349\.00.*Refund it/);
+  });
+
+  it("flags a charge whose kind doesn't fit the order", () => {
+    const charge = event("subscription.charged", {
+      ...chain,
+      subscriptionId: "7",
+      planId: "1",
+      merchant: ADDR,
+      subscriber: ADDR,
+      amount: "349.00",
+      fee: "1.745",
+      period: 1,
+      nextChargeAt: new Date().toISOString(),
+      orderId: ORDER,
+      sessionId: "cs_test_1",
+    });
+    const r = applyEvent(baseOrder(), charge);
+    expect(r.outcome).toBe("flagged");
+    expect(r.order.status).toBe("needs_review");
+    const sub = baseOrder({ kind: "subscription" });
+    expect(applyEvent(sub, planOpened()).order.status).toBe("needs_review");
+  });
+
+  it("flags a payment to an address that isn't the store's", () => {
+    const r = applyEvent(baseOrder(), paid(), new Date(), { merchant: "0x1111111111111111111111111111111111111111" });
+    expect(r.outcome).toBe("flagged");
+    expect(r.order.status).toBe("needs_review");
+    expect(applyEvent(baseOrder(), paid(), new Date(), { merchant: ADDR.toUpperCase().replace("0X", "0x") }).order.status).toBe("paid");
   });
 
   it("walks a Pay in 4 plan to completion", () => {

@@ -40,7 +40,7 @@ export interface Contact {
 
 export interface PlanInstallmentRecord {
   index: number;
-  /** Cents. */
+  /** Cents, as shown: the step between two rounded running totals, so the rows add up to the plan total. */
   amount: number;
   dueAt: string;
   status: InstallmentStatus;
@@ -51,6 +51,10 @@ export interface OrderPlan {
   planId: string;
   intervalSeconds: number;
   status: "active" | "past_due" | "completed" | "liquidated";
+  /** Cents: what Halcyon was paid at opening, the buyer's interest, and what the buyer repays. Absent on plans stored before they were kept. */
+  principal?: number;
+  interest?: number;
+  total?: number;
   installments: PlanInstallmentRecord[];
 }
 
@@ -132,6 +136,9 @@ export interface Order {
     payer?: string;
     txHash?: string;
     paymentId?: string;
+    /** A second payment arrived for this order after it was paid: the store owes it back. */
+    refundDue?: boolean;
+    refundReason?: string;
   };
   plan?: OrderPlan;
   subscription?: OrderSubscription;

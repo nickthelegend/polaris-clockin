@@ -1,6 +1,6 @@
 import type { WebhookEvent } from "polarispay-sdk";
 
-import { decimalToCents, formatUsd } from "@/lib/money";
+import { formatUsd } from "@/lib/money";
 
 import type { Order, OrderPlan, ReceivedEvent } from "./types";
 
@@ -12,7 +12,9 @@ import type { Order, OrderPlan, ReceivedEvent } from "./types";
  * - payment.succeeded   Pay now, or a direct wallet payment
  * - plan.opened         Pay in 4: the store is paid the principal in full at opening
  * - subscription.charged, period 1: the first month of a subscription
- * Each must match the order (amount, currency) or the order goes to review.
+ * Each must match the order (amount, currency, kind, the store's payout
+ * address) or the order goes to review. A second, different payment for an
+ * order that's already paid is flagged for a refund.
  *
  * - "applied":   the order changed, or the event was recorded as history.
  * - "duplicate": this event id was already applied; at-least-once delivery
@@ -27,17 +29,44 @@ export type ApplyOutcome = "applied" | "duplicate" | "flagged" | "retry";
 
 export type ApplyResult = { outcome: ApplyOutcome; order: Order; reason?: string };
 
-/** Amounts arrive with up to 6 decimals (AUSD's precision); orders are in cents. */
-function cents(amount: unknown): number | null {
+export type ApplyOptions = {
+  /** The store's payout address. Payments to any other address are flagged. */
+  merchant?: string | null;
+};
+
+/**
+ * Webhook amounts are decimal dollars with 2 to 6 decimals (AUSD's
+ * precision): "349.00", "50.383562". Parsed exactly, as micro-dollars.
+ */
+export function micros(amount: unknown): bigint | null {
   if (typeof amount !== "string") return null;
-  const exact = decimalToCents(amount);
-  if (exact !== null) return exact;
-  const m = /^(\d+)\.(\d{2})(\d{1,4})$/.exec(amount);
+  const m = /^(\d+)(?:\.(\d{1,6}))?$/.exec(amount.trim());
   if (!m) return null;
-  return Number(m[3]!.replace(/0+$/, "")) === 0 ? Number(m[1]) * 100 + Number(m[2]) : null;
+  return BigInt(m[1]!) * 1_000_000n + BigInt((m[2] ?? "").padEnd(6, "0"));
 }
 
-export function applyEvent(order: Order, event: WebhookEvent, now: Date = new Date()): ApplyResult {
+/** Micro-dollars rounded half up to the cent, as the SDK shows them. */
+function roundToCents(value: bigint): number {
+  return Number((value + 5_000n) / 10_000n);
+}
+
+/** Whole cents, for amounts that must equal an order's total exactly: null if there's anything past the cent. */
+function exactCents(amount: unknown): number | null {
+  const value = micros(amount);
+  return value !== null && value % 10_000n === 0n ? Number(value / 10_000n) : null;
+}
+
+/** Dollars for a message: "$349.00", or the amount as sent when it isn't one. */
+function show(amount: unknown): string {
+  const value = micros(amount);
+  return value === null ? String(amount) : formatUsd(roundToCents(value));
+}
+
+function sameAddress(a: unknown, b: string | null | undefined): boolean {
+  return typeof a === "string" && typeof b === "string" && a.toLowerCase() === b.toLowerCase();
+}
+
+export function applyEvent(order: Order, event: WebhookEvent, now: Date = new Date(), options: ApplyOptions = {}): ApplyResult {
   if (order.events.some((e) => e.id === event.id)) return { outcome: "duplicate", order };
 
   const next: Order = structuredClone(order);
@@ -54,15 +83,28 @@ export function applyEvent(order: Order, event: WebhookEvent, now: Date = new Da
     }
     return { ...record(reason, "flagged"), reason };
   };
+  /** Money arrived for an order that already has its money: the store owes it back. */
+  const refund = (reason: string): ApplyResult => {
+    next.payment.refundDue = true;
+    next.payment.refundReason = reason;
+    return flag(`${reason} Refund it.`);
+  };
   const retry = (reason: string): ApplyResult => ({ outcome: "retry", order, reason });
+  /** A payment that isn't the one already recorded for this paid order. */
+  const another = (ref: string | null | undefined, recorded: (string | null | undefined)[]) =>
+    order.status === "paid" && !!ref && !recorded.some((r) => r && r.toLowerCase() === ref.toLowerCase());
 
   switch (event.type) {
     case "payment.succeeded": {
       const data = event.data;
-      const amount = cents(data.amount);
+      if (options.merchant && !sameAddress(data.merchant, options.merchant)) return flag(`A payment to ${String(data.merchant)}, not this store's address.`);
+      if (another(data.paymentId ?? data.txHash, [order.payment.paymentId, order.payment.txHash])) {
+        return refund(`A second payment of ${show(data.amount)} arrived for an order that was already paid.`);
+      }
+      const amount = exactCents(data.amount);
       if (data.currency !== "USD") return flag(`Payment arrived in ${String(data.currency)}, not USD.`);
       if (amount !== order.total) {
-        return flag(`Payment of ${amount === null ? data.amount : formatUsd(amount)} doesn't match the order total of ${formatUsd(order.total)}.`);
+        return flag(`Payment of ${show(data.amount)} doesn't match the order total of ${formatUsd(order.total)}.`);
       }
       // A session payment carries its session; a direct wallet payment has none.
       const direct = order.payment.method === "wallet" || !data.sessionId;
@@ -72,30 +114,40 @@ export function applyEvent(order: Order, event: WebhookEvent, now: Date = new Da
 
     case "plan.opened": {
       const data = event.data;
-      const principal = cents(data.principal);
+      if (order.kind === "subscription") return flag("A Pay in 4 plan arrived for a subscription.");
+      if (options.merchant && !sameAddress(data.merchant, options.merchant)) return flag(`A plan paying ${String(data.merchant)}, not this store's address.`);
+      if (another(data.planId, [order.plan?.planId])) return refund(`A second Pay in 4 plan of ${show(data.principal)} arrived for an order that was already paid.`);
+      const principal = exactCents(data.principal);
       if (data.currency !== "USD") return flag(`A plan in ${String(data.currency)}, not USD.`);
       if (principal !== order.total) {
-        return flag(`A plan for ${data.principal} doesn't match the order total of ${formatUsd(order.total)}.`);
+        return flag(`A plan for ${show(data.principal)} doesn't match the order total of ${formatUsd(order.total)}.`);
       }
-      const opened = new Date(event.createdAt).getTime();
+      // Instalment amounts arrive in AUSD's six decimals ("50.383562"). Each
+      // is shown as the step between two rounded running totals, so the rows
+      // always add up to the plan's rounded total, as the SDK quotes them.
+      const rows = [...data.schedule].sort((a, b) => a.index - b.index);
+      let running = 0n;
+      const installments = rows.map((inst) => {
+        const before = roundToCents(running);
+        running += micros(inst.amount) ?? 0n;
+        // Nothing is collected at opening: PolarisLoanEngine dates instalment i
+        // at startedAt + i × interval. Each is paid when installment.collected says so.
+        return { index: inst.index, amount: roundToCents(running) - before, dueAt: inst.dueAt, status: "upcoming" as const, paidAt: null };
+      });
+      const total = micros(data.total) ?? running;
       next.plan = {
         planId: data.planId,
         intervalSeconds: data.intervalSeconds,
         status: "active",
-        installments: data.schedule.map((inst) => {
-          // The first payment is taken at checkout, when the plan opens.
-          const takenAtCheckout = inst.index === 1 && new Date(inst.dueAt).getTime() <= opened + 60_000;
-          return {
-            index: inst.index,
-            amount: cents(inst.amount) ?? 0,
-            dueAt: inst.dueAt,
-            status: takenAtCheckout ? "paid" : "upcoming",
-            paidAt: takenAtCheckout ? event.createdAt : null,
-          };
-        }),
+        principal,
+        interest: roundToCents(micros(data.interest) ?? total - (micros(data.principal) ?? total)),
+        total: roundToCents(total),
+        installments,
       };
       markPaid(next, at, "later", { payer: data.borrower, txHash: data.txHash });
-      return record(`Pay in 4 plan opened · ${formatUsd(principal)} paid to Halcyon · ${data.installments} payments of ${formatUsd(next.plan.installments[0]?.amount ?? 0)}`);
+      return record(
+        `Pay in 4 plan opened · ${formatUsd(principal)} paid to Halcyon · ${installments.length} payments of ${formatUsd(installments[0]?.amount ?? 0)}, the first due ${new Date(installments[0]?.dueAt ?? at).toISOString().slice(0, 10)}`,
+      );
     }
 
     case "installment.collected":
@@ -131,9 +183,14 @@ export function applyEvent(order: Order, event: WebhookEvent, now: Date = new Da
 
     case "subscription.charged": {
       const data = event.data;
-      const amount = cents(data.amount);
+      if (order.kind !== "subscription") return flag("A subscription charge arrived for a one-time order.");
+      if (options.merchant && !sameAddress(data.merchant, options.merchant)) return flag(`A subscription paying ${String(data.merchant)}, not this store's address.`);
+      if (data.period === 1 && another(data.subscriptionId, [order.subscription?.subscriptionId])) {
+        return refund(`A second subscription of ${show(data.amount)} a month started for an order that was already paid.`);
+      }
+      const amount = exactCents(data.amount);
       if (amount !== order.total) {
-        return flag(`A subscription charge of ${data.amount} doesn't match ${formatUsd(order.total)} a period.`);
+        return flag(`A subscription charge of ${show(data.amount)} doesn't match ${formatUsd(order.total)} a period.`);
       }
       next.subscription = {
         subscriptionId: data.subscriptionId,
@@ -189,7 +246,12 @@ function closePlan(plan: OrderPlan, at: string) {
   }
 }
 
-/** The order an event is about: the orderId the shop gave the session or pay(), then metadata. */
+/** Events about an order, as opposed to the merchant's account (payouts). */
+export function isOrderEvent(event: WebhookEvent): boolean {
+  return event.type !== "payout.paid";
+}
+
+/** The order an event is about: the orderId the shop gave the session or pay() (its payRef), then metadata. */
 export function orderIdForEvent(event: WebhookEvent): string | null {
   const data = event.data as { orderId?: unknown; metadata?: Record<string, unknown> };
   if (typeof data.orderId === "string" && data.orderId) return data.orderId;

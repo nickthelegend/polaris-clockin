@@ -53,8 +53,18 @@ const event = polaris.webhooks.verify(
   req.headers.get("polaris-signature"),
   process.env.POLARIS_WEBHOOK_SECRET,
 );
-if (event.type === "plan.opened") markPaid(event.data.orderId);
-if (event.type === "payment.succeeded") markPaid(event.data.orderId);`;
+// Delivery is at least once.
+if (await seen(event.id)) return ok();
+
+const order = await byPayRef(event.data.orderId);
+if (event.type === "payment.succeeded") {
+  const { amount, currency } = event.data;
+  if (cents(amount) !== order.total ||
+      currency !== "USD") {
+    return flagForReview(order);
+  }
+  await markPaid(order);
+}`;
 
 function Json({ value }: { value: unknown }) {
   return (

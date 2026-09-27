@@ -1,12 +1,12 @@
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER } from "next/constants";
-import { MONAD_TESTNET } from "polarispay-sdk";
+import { MONAD_TESTNET, validateWebhookEvent, type PlanOpenedData } from "polarispay-sdk";
 import { encodePacked, keccak256 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import nextConfig from "../next.config";
 import { devMockEnabled, devMockSecrets } from "@/lib/dev-polaris/guard";
-import { MOCK_DOMAIN, MOCK_PAYMENTS, completeSession, createSession, mockKeys, relayPayment, resetMockState, type RelayRequest } from "@/lib/dev-polaris/mock";
+import { MOCK_DOMAIN, MOCK_PAYMENTS, advanceSession, completeSession, createSession, mockKeys, relayPayment, resetMockState, type RelayRequest } from "@/lib/dev-polaris/mock";
 import { browserConfig, resolvePolarisConfig } from "@/lib/polaris";
 
 const buyer = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
@@ -133,6 +133,31 @@ describe("dev mock sessions speak the real API", () => {
     expect(done.session).toMatchObject({ status: "complete", paymentStatus: "paid" });
     expect(completeSession(created.id, "later")).toMatchObject({ ok: false, status: 409 });
   });
+
+  it("opens Pay in 4 on the loan engine's terms: interest, six decimals, the first payment one week out", () => {
+    vi.stubEnv("POLARIS_PAY_IN_4_APR_BPS", "1000");
+    const now = new Date("2026-10-01T12:00:00.000Z");
+    const created = createSession(body, null, "http://127.0.0.1:3600", now).body as { id: string };
+    const done = completeSession(created.id, "later", now);
+    if (!done.ok) throw new Error(done.message);
+    const data = done.events[0]!.data as PlanOpenedData;
+    // $349 at 10% APR for 28 days: 2677260 base units of interest, as PolarisLoanEngine computes it.
+    expect(data).toMatchObject({ principal: "349.00", interest: "2.67726", total: "351.67726", installments: 4, intervalSeconds: 604800 });
+    expect(data.schedule.map((s) => s.amount)).toEqual(["87.919315", "87.919315", "87.919315", "87.919315"]);
+    // installmentDueAt(i) = startedAt + (i + 1) x interval: nothing is due at opening.
+    expect(data.schedule.map((s) => s.dueAt)).toEqual([
+      "2026-10-08T12:00:00.000Z",
+      "2026-10-15T12:00:00.000Z",
+      "2026-10-22T12:00:00.000Z",
+      "2026-10-29T12:00:00.000Z",
+    ]);
+    // Every event the mock sends has the SDK's exact shape.
+    expect(validateWebhookEvent(done.events[0])).toEqual([]);
+    const first = advanceSession(created.id, "next", now);
+    if (!first.ok) throw new Error(first.message);
+    expect(first.events[0]!.data).toMatchObject({ installment: 1, amount: "87.919315", remaining: "263.757945" });
+    expect(validateWebhookEvent(first.events[0])).toEqual([]);
+  });
 });
 
 describe("dev mock relayer (polarispay-sdk's RelayPayRequest)", () => {
@@ -185,6 +210,11 @@ describe("dev mock relayer (polarispay-sdk's RelayPayRequest)", () => {
   it("rejects an authorization moved to another order", async () => {
     const auth = await request("hc_direct_3");
     expect(await relayPayment({ ...auth, orderId: "hc_direct_other" })).toMatchObject({ ok: false, code: "nonce_mismatch" });
+  });
+
+  it("relays only to the store's own payout address", async () => {
+    const auth = await request("hc_direct_5");
+    expect(await relayPayment({ ...auth, merchant: buyer.address })).toMatchObject({ ok: false, code: "unknown_merchant" });
   });
 
   it("refuses any contract but PolarisPayments, and a second payment of the same order", async () => {

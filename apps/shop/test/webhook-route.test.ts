@@ -40,6 +40,8 @@ beforeEach(async () => {
 
 afterEach(() => vi.unstubAllEnvs());
 
+const MERCHANT = "0x1111111111111111111111111111111111111111" as const;
+
 const paidEvent = (overrides: { orderId?: string; sessionId?: string | null; amount?: string } = {}) =>
   event("payment.succeeded", {
     txHash: TX,
@@ -49,7 +51,7 @@ const paidEvent = (overrides: { orderId?: string; sessionId?: string | null; amo
     metadata: {},
     paymentId: TX,
     mode: "now",
-    merchant: ADDR,
+    merchant: MERCHANT,
     payer: ADDR,
     amount: overrides.amount ?? "349.00",
     fee: "1.745",
@@ -124,12 +126,32 @@ describe("POST /api/webhooks/polaris", () => {
     expect(await status()).toBe("paid");
   });
 
-  it("acknowledges events about other orders, and payouts, without touching this one", async () => {
-    const other = paidEvent({ orderId: "hc_unknown", sessionId: null, amount: "1.00" });
-    expect(await (await deliver(other)).json()).toMatchObject({ outcome: "ignored" });
+  it("acknowledges payouts, which aren't about an order", async () => {
     const payout = event("payout.paid", { txHash: TX, chainId: 10143, payoutId: "po_1", amount: "100.00", destination: ADDR, automatic: true });
-    expect(await (await deliver(payout)).json()).toMatchObject({ outcome: "ignored" });
+    const res = await deliver(payout);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ outcome: "ignored" });
     expect(await status()).toBe("awaiting_payment");
+  });
+
+  it("answers 404 to a payment for an order it doesn't have, and takes it once the order exists", async () => {
+    const early = paidEvent({ orderId: "hcp_notstoredyet", sessionId: null });
+    const res = await deliver(early);
+    expect(res.status).toBe(404);
+    // Not remembered: Polaris will deliver it again.
+    expect((await orderStore().read()).events[early.id]).toBeUndefined();
+    await orderStore().update((d) => {
+      d.orders[orderId]!.payRef = "hcp_notstoredyet";
+    });
+    expect((await deliver(early)).status).toBe(200);
+    expect(await status()).toBe("paid");
+  });
+
+  it("flags a payment made to another address", async () => {
+    const e = paid();
+    (e.data as { merchant: string }).merchant = "0x2222222222222222222222222222222222222222";
+    expect(await (await deliver(e)).json()).toMatchObject({ outcome: "flagged" });
+    expect(await status()).toBe("needs_review");
   });
 
   it("a client can't mark an order paid: the order API has no write path", async () => {
