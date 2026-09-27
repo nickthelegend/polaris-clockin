@@ -286,8 +286,8 @@ export function onHttpTrigger(runtime: Runtime<UnderwritingConfig>, payload: HTT
   if (backs !== zeroAddress) {
     return refused(`UserIsLinkedHistory(${user}, ${backs}): this account already backs ${backs} as its history wallet`);
   }
-  // A wallet linked to itself is the account scored alone, as on chain.
-  if (wallet && wallet.toLowerCase() !== user.toLowerCase()) {
+  // (A wallet linked to itself never gets here: link.ts rejects it.)
+  if (wallet) {
     const holder = linkedUserOf(wallet);
     if (holder !== zeroAddress && holder.toLowerCase() !== user.toLowerCase()) {
       return refused(`WalletAlreadyLinked(${wallet}, ${holder}): this history wallet already backs ${holder}`);

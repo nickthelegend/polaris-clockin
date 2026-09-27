@@ -145,7 +145,8 @@ function wire(setup: Setup = {}) {
   const profiles = byAddress(setup.profiles);
   const linkedOf = byAddress(setup.linkedOf);
   const scores = addContractMock(evm, { address: SCORES, abi: scoreManagerAbi });
-  scores.profileOf = (who: Address) => {
+  scores.profileOf = (...args) => {
+    const who = args[0] as Address;
     seen.reads++;
     const p = profiles.get(who.toLowerCase()) ?? setup.profile ?? { initialized: false, underwritten: false, liquidations: 0 };
     return { score: 600, onTimePayments: 0, latePayments: 0, liquidations: p.liquidations, firstSeenAt: 0n, initialized: p.initialized, declined: false, underwritten: p.underwritten };
@@ -155,7 +156,8 @@ function wire(setup: Setup = {}) {
     return setup.requireUnderwriting ?? true;
   };
   const receiver = addContractMock(evm, { address: RECEIVER, abi: underwritingReceiverAbi });
-  receiver.linkedUserOf = (who: Address) => {
+  receiver.linkedUserOf = (...args) => {
+    const who = args[0] as Address;
     seen.reads++;
     return linkedOf.get(who.toLowerCase()) ?? zeroAddress;
   };
@@ -454,7 +456,7 @@ describe("what the chain would refuse is refused before any provider call", () =
     const seen = wire({ linkedOf: { [walletKey.address]: FRESH_ACCOUNT } });
     const out = runWith(config(), await asks(await proof(buyer)));
     expect(out.status).toBe("refused");
-    expect(out.reason).toContain(`WalletAlreadyLinked(${walletKey.address}, ${FRESH_ACCOUNT})`);
+    expect(out.reason).toContain(`WalletAlreadyLinked(${walletKey.address}, ${getAddress(FRESH_ACCOUNT)})`);
     expect(seen.sent).toHaveLength(0);
     expect(seen.reports).toHaveLength(0);
   });
@@ -463,7 +465,7 @@ describe("what the chain would refuse is refused before any provider call", () =
     const seen = wire({ linkedOf: { [buyer]: FRESH_ACCOUNT } });
     const out = runWith(config(), await asks());
     expect(out.status).toBe("refused");
-    expect(out.reason).toContain(`UserIsLinkedHistory(${buyer}, ${FRESH_ACCOUNT})`);
+    expect(out.reason).toContain(`UserIsLinkedHistory(${buyer}, ${getAddress(FRESH_ACCOUNT)})`);
     expect(seen.sent).toHaveLength(0);
     expect(seen.reports).toHaveLength(0);
   });
@@ -484,8 +486,7 @@ describe("what the chain would refuse is refused before any provider call", () =
     expect(seen.sent).toHaveLength(0);
   });
 
-  test("a wallet linked to itself is the account alone, as on chain: no wallet checks", async () => {
-    // The history wallet's own key signs the consent and the proof for itself.
+  test("a wallet linked to itself is rejected before any read, so the wallet checks never see it", async () => {
     const self = getAddress(walletKey.address);
     const seen = wire();
     const issuedAt = NOW - 30;
@@ -494,9 +495,8 @@ describe("what the chain would refuse is refused before any provider call", () =
       message: underwriteConsentMessage({ account: self, wallet: self, chainId: STAGING.recipe.accountChainId, issuedAt, nonce }),
     });
     const out = runWith(config(), { user: self, consent: { issuedAt, nonce, signature }, linked: await proof(self) });
-    expect(["applied", "thin", "incomplete"]).toContain(out.status);
-    // profileOf(self), linkedUserOf(self) and the balance: the "wallet" is not checked a second time.
-    expect(seen.reads).toBe(3);
+    expect(out).toMatchObject({ status: "rejected", reason: "a wallet cannot link to itself" });
+    expect(seen.reads).toBe(0);
   });
 
   test("the refusal reaches the API as a signed credit.refused, keyed on the request's nonce", async () => {

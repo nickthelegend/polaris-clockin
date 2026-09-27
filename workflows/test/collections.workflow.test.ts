@@ -84,7 +84,8 @@ function fakeChain(chain: Chain) {
     seen.countReads++;
     return chain.loanCount;
   };
-  engine.getLoan = (id: bigint) => {
+  engine.getLoan = (...args) => {
+    const id = args[0] as bigint;
     seen.dueReads.push(`loan:${id}`);
     const l = chain.loans?.[id.toString()];
     if (!l) throw new Error(`no loan ${id} in this fake chain`);
@@ -95,7 +96,8 @@ function fakeChain(chain: Chain) {
     seen.countReads++;
     return chain.subscriptionCount;
   };
-  payments.getSubscription = (id: bigint) => {
+  payments.getSubscription = (...args) => {
+    const id = args[0] as bigint;
     seen.dueReads.push(`sub:${id}`);
     const next = chain.nextChargeAt?.[id.toString()];
     if (next === undefined) throw new Error(`no subscription ${id} in this fake chain`);

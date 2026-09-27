@@ -405,6 +405,14 @@ the plain HTTP client, agreed by identical consensus.
   key's first run is the proof that it reads the rest the same way.
 - A request that already contains `{{` is refused rather than templated, so
   no input can name a secret. The same 15-call budget covers both clients.
+- **Under simulation there is no enclave.** `cre workflow simulate` stands in
+  for it (chainlink's `DirectConfidentialHTTPAction`): it fills the
+  placeholders from `secrets.yaml` and your environment and sends the request
+  from your machine. What a simulated run shows is the workflow's side: the
+  request shapes, one call per provider, and that the workflow never reads a
+  key. The enclave's guarantee (keys decrypted only inside it) holds only for
+  a deployed workflow, and whether Monad's DON serves the capability is
+  unknown until one runs; production keeps the switch off until then.
 
 #### Reading Monad mainnet
 
