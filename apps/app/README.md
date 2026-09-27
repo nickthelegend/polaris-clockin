@@ -225,7 +225,8 @@ the reference's. The stub relayer's writes are kept in the tab's
 Under a dollar amount the app prints what it is in the viewer's currency, at
 the live Chainlink rate: **"≈ ARS 161.241 · Chainlink rate, 3 min ago ·
 indicative"**. It shows on the claim screen, Send (phone keypad and the
-desktop form), the "Link ready." sheet, and payment details. The currency is
+desktop form), the "Link ready." sheet, the checkout total (so a Halcyon buyer
+sees it too), and payment details. The currency is
 the one the browser's language implies (es-AR → ARS), or the one picked in
 Settings. Nothing is ever priced or paid in it.
 
