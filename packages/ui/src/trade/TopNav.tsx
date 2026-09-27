@@ -117,8 +117,17 @@ export type WalletPillProps = {
   label?: string;
   /** The small round icon; the Polaris mark by default. */
   icon?: ReactNode;
-  /** While there is no address yet. */
-  pendingText?: string;
+  /** While there is no address yet (give `pendingLabel` too when this isn't plain text). */
+  pendingText?: ReactNode;
+  /**
+   * How the copied value reads in the toast, the tooltip and the button's
+   * name, when the value itself isn't fit to show (a long link).
+   */
+  displayAddress?: string;
+  /** Pressed while there is no address (to make one, say); without it the pill is disabled until then. */
+  onPendingClick?: () => void;
+  /** The button's name while pending, when `onPendingClick` does something ("Create your account"). */
+  pendingLabel?: string;
   /** Longest the pill gets before the address truncates. */
   maxWidth?: number;
   className?: string;
@@ -132,23 +141,38 @@ export type WalletPillProps = {
  * <WalletPill address={merchant.walletAddress} label="payout wallet" />
  * ```
  */
-export function WalletPill({ address, text, label = "wallet address", icon, pendingText = "Setting up…", maxWidth = 260, className }: WalletPillProps) {
+export function WalletPill({
+  address,
+  text,
+  label = "wallet address",
+  icon,
+  pendingText = "Setting up…",
+  displayAddress,
+  onPendingClick,
+  pendingLabel,
+  maxWidth = 260,
+  className,
+}: WalletPillProps) {
+  const shown = displayAddress ?? address;
   const copy = async () => {
-    if (!address) return;
+    if (!address) {
+      onPendingClick?.();
+      return;
+    }
     try {
       await navigator.clipboard.writeText(address);
-      toast({ title: `Copied the ${label}`, description: address, tone: "success", duration: 2400 });
+      toast({ title: `Copied the ${label}`, description: shown ?? undefined, tone: "success", duration: 2400 });
     } catch {
-      toast({ title: `We couldn't copy the ${label}`, description: address, tone: "error" });
+      toast({ title: `We couldn't copy the ${label}`, description: shown ?? undefined, tone: "error" });
     }
   };
   return (
     <button
       type="button"
       onClick={copy}
-      disabled={!address}
-      aria-label={address ? `Copy the ${label}, ${address}` : `The ${label}: ${pendingText}`}
-      title={address ?? undefined}
+      disabled={!address && !onPendingClick}
+      aria-label={address ? `Copy the ${label}, ${shown}` : (pendingLabel ?? `The ${label}: ${typeof pendingText === "string" ? pendingText : "not set up yet"}`)}
+      title={address ? (shown ?? undefined) : pendingLabel}
       className={cn(
         "inline-flex h-11 min-w-0 items-center gap-2.5 rounded-full bg-ui-surface-1 pr-5 pl-3.5 font-satoshi text-[15px] font-medium text-ui-text",
         pressable,

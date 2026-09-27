@@ -14,6 +14,8 @@ export type FigureRowProps = {
   /** Replaces the chip's figure ("New", "+$90.58 this week"). */
   deltaLabel?: ReactNode;
   deltaTitle?: string;
+  /** Which way the chip reads as good news: `down` for spending (a rise turns amber). */
+  deltaGoodWhen?: "up" | "down";
   /** Another chip after the delta (a Sample label). */
   badge?: ReactNode;
   /** A muted line over the figure ("Spent, last 7 days"). */
@@ -33,7 +35,7 @@ export type FigureRowProps = {
  * <FigureRow value={<Money value={1284.5} />} delta={4.5} deltaSuffix="this week" right={<TimeframeChips … />} />
  * ```
  */
-export function FigureRow({ value, delta, deltaSuffix, deltaLabel, deltaTitle, badge, caption, right, valueTitle, className }: FigureRowProps) {
+export function FigureRow({ value, delta, deltaSuffix, deltaLabel, deltaTitle, deltaGoodWhen, badge, caption, right, valueTitle, className }: FigureRowProps) {
   return (
     <div className={cn("flex flex-wrap items-end justify-between gap-x-4 gap-y-3 font-satoshi", className)}>
       <div className="min-w-0">
@@ -52,6 +54,7 @@ export function FigureRow({ value, delta, deltaSuffix, deltaLabel, deltaTitle, b
                   suffix={delta === null || delta === undefined ? undefined : deltaSuffix}
                   label={deltaLabel}
                   title={deltaTitle}
+                  goodWhen={deltaGoodWhen}
                 />
               ) : null}
               {badge}

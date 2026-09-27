@@ -20,29 +20,43 @@ export type DeltaChipProps = HTMLAttributes<HTMLSpanElement> & {
   variant?: "soft" | "strong";
   size?: "sm" | "md";
   decimals?: number;
+  /**
+   * Which way is good news. `up` (the default): gains lime, losses coral.
+   * `down`, for money going out (spending): a fall is lime and a rise amber.
+   */
+  goodWhen?: "up" | "down";
 };
 
 /**
  * The reference's delta chip: "+3,27% today" in lime on a dark lime pill
- * beside the big figure, "+7.45%" in the balance card. Losses turn coral.
+ * beside the big figure, "+7.45%" in the balance card. Losses turn coral; no
+ * change at all (0.00%) is a quiet grey.
  *
  * ```tsx
  * <DeltaChip value={3.27} suffix="today" />
  * <DeltaChip value={7.45} variant="strong" />
+ * <DeltaChip value={10.15} suffix="vs last week" goodWhen="down" />
  * ```
  */
-export function DeltaChip({ value, suffix, label, variant = "soft", size = "md", decimals = 2, className, ...props }: DeltaChipProps) {
-  const down = value !== null && value < 0;
+export function DeltaChip({ value, suffix, label, variant = "soft", size = "md", decimals = 2, goodWhen = "up", className, ...props }: DeltaChipProps) {
+  // Rounded as shown: "0.00%" is no change, whatever the sign underneath.
+  const shown = value === null ? null : Number(value.toFixed(decimals));
+  const tone =
+    shown === null ? "good" : shown === 0 ? "flat" : (shown > 0) === (goodWhen === "up") ? "good" : goodWhen === "up" ? "bad" : "watch";
   const figure =
-    label ?? (value === null ? "—" : `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(decimals)}%`);
+    label ?? (shown === null ? "—" : `${shown > 0 ? "+" : shown < 0 ? "−" : ""}${Math.abs(shown).toFixed(decimals)}%`);
   return (
     <span
       className={cn(
         "ui-figure inline-flex shrink-0 items-center gap-1 rounded-full font-satoshi font-medium whitespace-nowrap",
         size === "md" ? "h-9 px-3.5 text-[14px]" : "h-7 px-2.5 text-[12.5px]",
-        down
+        tone === "bad"
           ? "bg-ui-pill-red text-ui-pill-red-text"
-          : cn(variant === "strong" ? "bg-ui-lime-chip-strong" : "bg-ui-lime-chip", "text-ui-lime-text"),
+          : tone === "watch"
+            ? "bg-ui-pill-amber text-ui-pill-amber-text"
+            : tone === "flat"
+              ? "bg-ui-pill-neutral text-ui-pill-neutral-text"
+              : cn(variant === "strong" ? "bg-ui-lime-chip-strong" : "bg-ui-lime-chip", "text-ui-lime-text"),
         className,
       )}
       {...props}

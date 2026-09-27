@@ -36,6 +36,10 @@ export type CardStackProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & 
   balanceLabel?: string;
   /** Dollars. */
   balance: number;
+  /** The balance's decimals: ref D's whole dollars ("$ 24,575") by default; 2 to match the cents shown elsewhere. */
+  decimals?: number;
+  /** Ref D's space after the "$"; off beside figures written "$1,284.50". */
+  spaced?: boolean;
   deltaLabel?: string;
   /** Percent. */
   delta?: number;
@@ -60,6 +64,8 @@ export function CardStack({
   meta,
   balanceLabel = "Balance",
   balance,
+  decimals = 0,
+  spaced = decimals === 0,
   deltaLabel = "This week",
   delta,
   actions = [],
@@ -98,11 +104,14 @@ export function CardStack({
           <div className="text-[15px]">{balanceLabel}</div>
           <Money
             value={balance}
-            decimals={0}
-            spaced
-            dim="none"
+            decimals={decimals}
+            spaced={spaced}
+            dim={decimals > 0 ? "cents" : "none"}
             // Shrinks with the card so the figure never clips beside the squares.
-            className="mt-1.5 text-[34px] leading-none font-bold tracking-[-0.03em] @[250px]:text-[44px]"
+            className={cn(
+              "mt-1.5 leading-none font-bold tracking-[-0.03em]",
+              decimals > 0 ? "text-[30px] @[250px]:text-[38px]" : "text-[34px] @[250px]:text-[44px]",
+            )}
           />
           {delta !== undefined ? (
             <div className="mt-3 flex items-center justify-between gap-3 text-[14px]">
