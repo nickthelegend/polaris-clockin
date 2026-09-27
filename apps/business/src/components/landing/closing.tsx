@@ -20,6 +20,7 @@ export function Closing() {
           <Glass
             art="card-lime"
             size={420}
+            eager
             className="float-slow absolute -right-16 -bottom-24 -z-10 w-[260px] rotate-[-12deg] opacity-95 sm:w-[340px] lg:top-1/2 lg:right-4 lg:bottom-auto lg:w-[420px] lg:-translate-y-1/2"
           />
           <BlurWords
