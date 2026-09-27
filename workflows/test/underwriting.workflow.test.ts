@@ -8,7 +8,7 @@
 
 import { test as bunTest, describe, expect } from "bun:test";
 import { cre, type HTTPPayload } from "@chainlink/cre-sdk";
-import { addContractMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
+import { addContractMock, ConfidentialHttpMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import { scoreManagerAbi, underwritingReceiverAbi } from "@polarispay/contracts/abi";
 import { join } from "node:path";
 import {
@@ -17,6 +17,7 @@ import {
   linkedRecipe,
   linkMessage,
   type Reply,
+  type RequestSpec,
   runSync,
   scoreFromFacts,
   underwrite,
@@ -25,11 +26,22 @@ import { type Address, encodeErrorResult, getAddress, type Hex, parseAbi, zeroAd
 import { privateKeyToAccount } from "viem/accounts";
 import { verifyCallback } from "../src/shared/callback.ts";
 import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
+import { confidentialRequest } from "../src/underwriting/evidence.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
-import { configSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
+import { configSchema, decodeRefusal, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
 import { b64, eventLog, fakeTxHash, hexOf, receiptJson, type TestLog } from "./helpers/evm.ts";
 import { fs } from "./helpers/host.ts";
-import { answerFromFixtures, cloneFixtures, type CreRequestLike, type SentRequest, toSent } from "./helpers/fixtures-http.ts";
+import {
+  answerConfidentialFromFixtures,
+  answerFromFixtures,
+  cloneFixtures,
+  type ConfidentialRequestLike,
+  type ConfidentialSent,
+  type CreRequestLike,
+  type SentRequest,
+  toSent,
+  toSentConfidential,
+} from "./helpers/fixtures-http.ts";
 
 const RECEIVER = "0x0000000000000000000000000000000000000c0d" as Address;
 const SCORES = "0x0000000000000000000000000000000000005c03" as Address;
@@ -85,7 +97,8 @@ const config = (over: Partial<UnderwritingConfig> = {}): UnderwritingConfig =>
     forwarder: FORWARDER,
     stablecoins: [AUSD],
     authorizedKeys: [],
-    secrets: { nansen: "NANSEN_API_KEY", zerion: "ZERION_API_KEY", etherscan: "ETHERSCAN_API_KEY" },
+    secrets: { nansen: "NANSEN_API_KEY", zerion: "ZERION_API_KEY", zerionBasicAuth: "ZERION_BASIC_AUTH", etherscan: "ETHERSCAN_API_KEY" },
+    confidentialHttp: false,
     // The staging recipe, so these tests hold the committed config to CRE's quotas.
     recipe: STAGING.recipe,
     httpBudget: 15,
@@ -103,9 +116,12 @@ const EVENTS = parseAbi([
 ]);
 
 interface Setup {
+  /** ScoreManager.profileOf(account); `profiles` overrides it per address. */
   profile?: { initialized: boolean; underwritten: boolean; liquidations: number };
+  profiles?: Record<string, { initialized: boolean; underwritten: boolean; liquidations: number }>;
   requireUnderwriting?: boolean;
-  linkedTo?: Address;
+  /** UnderwritingReceiver.linkedUserOf, per address. */
+  linkedOf?: Record<string, Address>;
   balance?: bigint;
   /** What the receiver does with the report; default: apply the mirror's score. */
   refuse?: Hex;
@@ -113,13 +129,25 @@ interface Setup {
   transmitter?: Address;
 }
 
+/** What the Vault DON holds for the enclave in these tests (the fixture transport ignores values). */
+const ENCLAVE_SECRETS = { NANSEN_API_KEY: "enclave-nansen-key", ZERION_BASIC_AUTH: "ZW5jbGF2ZS16ZXJpb24ta2V5Og==", ETHERSCAN_API_KEY: "enclave-etherscan-key" };
+
 function wire(setup: Setup = {}) {
   const evm = EvmMock.testInstance(SELECTOR);
-  const seen = { reads: 0, reports: [] as Hex[], sent: [] as SentRequest[], estimates: [] as Array<{ from: string; to: string }> };
+  const seen = {
+    reads: 0,
+    reports: [] as Hex[],
+    sent: [] as SentRequest[],
+    confidential: [] as ConfidentialSent[],
+    estimates: [] as Array<{ from: string; to: string }>,
+  };
+  const byAddress = <T>(m?: Record<string, T>) => new Map(Object.entries(m ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
+  const profiles = byAddress(setup.profiles);
+  const linkedOf = byAddress(setup.linkedOf);
   const scores = addContractMock(evm, { address: SCORES, abi: scoreManagerAbi });
-  scores.profileOf = () => {
+  scores.profileOf = (who: Address) => {
     seen.reads++;
-    const p = setup.profile ?? { initialized: false, underwritten: false, liquidations: 0 };
+    const p = profiles.get(who.toLowerCase()) ?? setup.profile ?? { initialized: false, underwritten: false, liquidations: 0 };
     return { score: 600, onTimePayments: 0, latePayments: 0, liquidations: p.liquidations, firstSeenAt: 0n, initialized: p.initialized, declined: false, underwritten: p.underwritten };
   };
   scores.requireUnderwriting = () => {
@@ -127,9 +155,9 @@ function wire(setup: Setup = {}) {
     return setup.requireUnderwriting ?? true;
   };
   const receiver = addContractMock(evm, { address: RECEIVER, abi: underwritingReceiverAbi });
-  receiver.linkedUserOf = () => {
+  receiver.linkedUserOf = (who: Address) => {
     seen.reads++;
-    return setup.linkedTo ?? zeroAddress;
+    return linkedOf.get(who.toLowerCase()) ?? zeroAddress;
   };
   receiver.simulationTransmitter = () => setup.transmitter ?? zeroAddress;
   const token = addContractMock(evm, { address: AUSD, abi: parseAbi(["function balanceOf(address) view returns (uint256)"]) });
@@ -162,6 +190,12 @@ function wire(setup: Setup = {}) {
     const s = toSent(input as unknown as CreRequestLike);
     seen.sent.push(s);
     return answerFromFixtures(s, FIXTURES);
+  };
+  const enclave = ConfidentialHttpMock.testInstance();
+  enclave.sendRequest = (input) => {
+    const c = toSentConfidential(input as unknown as ConfidentialRequestLike, ENCLAVE_SECRETS);
+    seen.confidential.push(c);
+    return answerConfidentialFromFixtures(c, FIXTURES);
   };
   return seen;
 }
@@ -415,12 +449,82 @@ test("an account ScoreManager already underwrote costs no provider call", async 
   expect(seen.reports).toHaveLength(0);
 });
 
-test("a history wallet already backing another account is refused before any provider call", async () => {
-  const seen = wire({ linkedTo: FRESH_ACCOUNT });
-  const out = runWith(config(), await asks(await proof(buyer)));
-  expect(out.status).toBe("rejected");
-  expect(out.reason).toContain("WalletAlreadyLinked");
-  expect(seen.sent).toHaveLength(0);
+describe("what the chain would refuse is refused before any provider call", () => {
+  test("a history wallet already backing another account (WalletAlreadyLinked)", async () => {
+    const seen = wire({ linkedOf: { [walletKey.address]: FRESH_ACCOUNT } });
+    const out = runWith(config(), await asks(await proof(buyer)));
+    expect(out.status).toBe("refused");
+    expect(out.reason).toContain(`WalletAlreadyLinked(${walletKey.address}, ${FRESH_ACCOUNT})`);
+    expect(seen.sent).toHaveLength(0);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("an account that already lent its history to another (UserIsLinkedHistory)", async () => {
+    const seen = wire({ linkedOf: { [buyer]: FRESH_ACCOUNT } });
+    const out = runWith(config(), await asks());
+    expect(out.status).toBe("refused");
+    expect(out.reason).toContain(`UserIsLinkedHistory(${buyer}, ${FRESH_ACCOUNT})`);
+    expect(seen.sent).toHaveLength(0);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("a history wallet that holds a line of its own (WalletAlreadyUnderwritten)", async () => {
+    const seen = wire({ profiles: { [walletKey.address]: { initialized: true, underwritten: true, liquidations: 0 } } });
+    const out = runWith(config(), await asks(await proof(buyer)));
+    expect(out.status).toBe("refused");
+    expect(out.reason).toContain(`WalletAlreadyUnderwritten(${walletKey.address})`);
+    expect(seen.sent).toHaveLength(0);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("none of them under Confidential HTTP either: no enclave call is spent", async () => {
+    const seen = wire({ linkedOf: { [buyer]: FRESH_ACCOUNT } });
+    expect(runWith(config({ confidentialHttp: true }), await asks()).status).toBe("refused");
+    expect(seen.confidential).toHaveLength(0);
+    expect(seen.sent).toHaveLength(0);
+  });
+
+  test("a wallet linked to itself is the account alone, as on chain: no wallet checks", async () => {
+    // The history wallet's own key signs the consent and the proof for itself.
+    const self = getAddress(walletKey.address);
+    const seen = wire();
+    const issuedAt = NOW - 30;
+    const nonce = "s3lfConsent";
+    const signature = await walletKey.signMessage({
+      message: underwriteConsentMessage({ account: self, wallet: self, chainId: STAGING.recipe.accountChainId, issuedAt, nonce }),
+    });
+    const out = runWith(config(), { user: self, consent: { issuedAt, nonce, signature }, linked: await proof(self) });
+    expect(["applied", "thin", "incomplete"]).toContain(out.status);
+    // profileOf(self), linkedUserOf(self) and the balance: the "wallet" is not checked a second time.
+    expect(seen.reads).toBe(3);
+  });
+
+  test("the refusal reaches the API as a signed credit.refused, keyed on the request's nonce", async () => {
+    const seen = wire({ linkedOf: { [buyer]: FRESH_ACCOUNT } });
+    const secrets = new Map([["main", new Map([...KEYS.get("main")!, ["POLARIS_CALLBACK_SECRET", "cb-secret"]])]]);
+    const callbackUrl = "https://api.polaris.test/api/cre/callback";
+    const posted: SentRequest[] = [];
+    const http = HttpActionsMock.testInstance();
+    http.sendRequest = (input) => {
+      const s = toSent(input as unknown as CreRequestLike);
+      if (s.url === callbackUrl) posted.push(s);
+      else seen.sent.push(s);
+      return { statusCode: 204 };
+    };
+    const asked = await asks();
+    const out = runWith(config({ callback: { url: callbackUrl, secretId: "POLARIS_CALLBACK_SECRET" } }), asked, secrets);
+    expect(out.status).toBe("refused");
+    expect(seen.sent).toHaveLength(0);
+    expect(posted).toHaveLength(1);
+    expect(verifyCallback("cb-secret", posted[0]!.body!, posted[0]!.headers["polaris-signature"], NOW).ok).toBe(true);
+    expect(JSON.parse(posted[0]!.body!)).toMatchObject({
+      id: `refused:${buyer.toLowerCase()}:${asked.consent.nonce}`,
+      type: "credit.refused",
+      user: buyer,
+      txHash: null,
+      reason: expect.stringContaining("UserIsLinkedHistory"),
+    });
+  });
 });
 
 test("without Nansen the history wallet's risk checks cannot run: no report, the app retries", async () => {
@@ -438,6 +542,26 @@ test("a refusal on chain is reported with ScoreManager's reason", async () => {
   const out = runWith(config(), await asks());
   expect(out.status).toBe("refused");
   expect(out.reason).toBe("StaleEvidence");
+});
+
+test("every refusal the receiver or ScoreManager can record is named, with its arguments", async () => {
+  const a = getAddress("0x00000000000000000000000000000000000000aa");
+  const b = getAddress("0x00000000000000000000000000000000000000bb");
+  const cases: Array<[Hex, string]> = [
+    [encodeErrorResult({ abi: scoreManagerAbi, errorName: "ThinFile", args: [12, 3] }), "ThinFile(12, 3)"],
+    [encodeErrorResult({ abi: scoreManagerAbi, errorName: "AlreadyHasRecord" }), "AlreadyHasRecord"],
+    [encodeErrorResult({ abi: scoreManagerAbi, errorName: "NotUnderwriter" }), "NotUnderwriter"],
+    [encodeErrorResult({ abi: underwritingReceiverAbi, errorName: "UserIsLinkedHistory", args: [a, b] }), `UserIsLinkedHistory(${a}, ${b})`],
+    [encodeErrorResult({ abi: underwritingReceiverAbi, errorName: "WalletAlreadyUnderwritten", args: [a] }), `WalletAlreadyUnderwritten(${a})`],
+    [encodeErrorResult({ abi: underwritingReceiverAbi, errorName: "WalletAlreadyLinked", args: [a, b] }), `WalletAlreadyLinked(${a}, ${b})`],
+    [encodeErrorResult({ abi: underwritingReceiverAbi, errorName: "InvalidUser", args: [zeroAddress] }), `InvalidUser(${zeroAddress})`],
+  ];
+  for (const [data, name] of cases) expect(decodeRefusal(data)).toBe(name);
+  expect(decodeRefusal("0xdeadbeef")).toBe("unknown(0xdeadbeef)");
+
+  // And from a receipt: the chain's ThinFile refusal is what the run reports.
+  wire({ refuse: encodeErrorResult({ abi: scoreManagerAbi, errorName: "ThinFile", args: [40, 9] }) });
+  expect(runWith(config(), await asks())).toMatchObject({ status: "refused", reason: "ThinFile(40, 9)" });
 });
 
 test("malformed input fails loudly", async () => {
@@ -488,4 +612,135 @@ test("over the call budget, the run stops without a report rather than attest wh
   expect(seen.sent).toHaveLength(15);
   expect(out.missing.length).toBeGreaterThan(0);
   expect(seen.reports).toHaveLength(0);
+});
+
+describe("Confidential HTTP (confidentialHttp: true, as staging simulates)", () => {
+  const confidential = () => config({ confidentialHttp: true });
+  const PAID = /^https:\/\/api\.(nansen\.ai|zerion\.io|etherscan\.io)\//;
+  /** No provider key in the runtime's secrets: the workflow must never need one. */
+  const NO_PROVIDER_KEYS = new Map([["main", new Map<string, string>()]]);
+
+  test("the same facts as every node calling the providers itself, from one call per request", async () => {
+    const plain = wire();
+    runWith(config(), await asks(await proof(buyer)));
+    const viaEnclave = wire();
+    const out = runWith(confidential(), await asks(await proof(buyer)), NO_PROVIDER_KEYS);
+    expect(out.status).toBe("applied");
+    expect(viaEnclave.reports).toEqual(plain.reports);
+    // Every paid call went through the enclave, once; only public RPCs used the plain client.
+    const paidPlain = plain.sent.filter((s) => PAID.test(s.url)).length;
+    expect(viaEnclave.confidential).toHaveLength(paidPlain);
+    expect(viaEnclave.sent.every((s) => !PAID.test(s.url))).toBe(true);
+    expect(viaEnclave.sent.every((s) => s.cached)).toBe(true);
+    expect(out.httpCalls).toBe(viaEnclave.confidential.length + viaEnclave.sent.length);
+    expect(out.httpCalls).toBeLessThanOrEqual(15);
+  });
+
+  test("keys never leave the enclave: the workflow sends placeholders, one listed secret each", async () => {
+    const seen = wire();
+    runWith(confidential(), await asks(await proof(buyer)), NO_PROVIDER_KEYS);
+    expect(seen.confidential.length).toBeGreaterThan(0);
+    const values = Object.values(ENCLAVE_SECRETS);
+    for (const c of seen.confidential) {
+      const built = JSON.stringify(c.built);
+      for (const v of values) expect(built).not.toContain(v);
+      expect(c.secretKeys).toHaveLength(1);
+      expect(built).toContain(`{{.${c.secretKeys[0]}}}`);
+    }
+    const by = (host: string) => seen.confidential.filter((c) => c.built.url.startsWith(host));
+    expect(by("https://api.nansen.ai").every((c) => c.built.headers.apikey === "{{.NANSEN_API_KEY}}")).toBe(true);
+    expect(by("https://api.zerion.io").every((c) => c.built.headers.authorization === "Basic {{.ZERION_BASIC_AUTH}}")).toBe(true);
+    const etherscan = by("https://api.etherscan.io");
+    expect(etherscan.length).toBeGreaterThan(0);
+    for (const c of etherscan) {
+      // The enclave templates headers and a POST body, not the URL: the key rides in a form body.
+      expect(c.built).toMatchObject({ method: "POST", body: "apikey={{.ETHERSCAN_API_KEY}}" });
+      expect(c.built.headers["content-type"]).toBe("application/x-www-form-urlencoded");
+      expect(c.built.url).not.toContain("apikey");
+    }
+    // And what the enclave sends carries the real key, where each provider reads it.
+    expect(by("https://api.nansen.ai")[0]!.resolved.headers.apikey).toBe(ENCLAVE_SECRETS.NANSEN_API_KEY);
+    expect(etherscan[0]!.resolved.body).toBe(`apikey=${ENCLAVE_SECRETS.ETHERSCAN_API_KEY}`);
+  });
+
+  test("a provider with no secret id is left out, and missing evidence is never attested", async () => {
+    const seen = wire();
+    const cfg = config({ confidentialHttp: true, secrets: { nansen: null, zerion: "ZERION_API_KEY", zerionBasicAuth: "ZERION_BASIC_AUTH", etherscan: "ETHERSCAN_API_KEY" } });
+    const out = runWith(cfg, await asks(await proof(buyer)), NO_PROVIDER_KEYS);
+    expect(out.status).toBe("incomplete");
+    expect(seen.confidential.some((c) => c.built.url.startsWith("https://api.nansen.ai"))).toBe(false);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("the thin-file gate and the call budget hold the same way", async () => {
+    const seen = wire();
+    const newcomerConsent = await consent(null, { account: newcomer, signer: newcomerKey });
+    expect(runWith(confidential(), { user: newcomer, consent: newcomerConsent }, NO_PROVIDER_KEYS).status).toBe("thin");
+    expect(seen.reports).toHaveLength(0);
+
+    const noFunder = cloneFixtures([
+      { from: "0xb0b0000000000000000000000000000000000006", to: walletKey.address },
+      { from: REGULAR_ACCOUNT, to: buyer },
+    ]);
+    const busy = wire();
+    const enclave = ConfidentialHttpMock.testInstance();
+    enclave.sendRequest = (input) => {
+      const c = toSentConfidential(input as unknown as ConfidentialRequestLike, ENCLAVE_SECRETS);
+      busy.confidential.push(c);
+      return answerConfidentialFromFixtures(c, noFunder);
+    };
+    const http = HttpActionsMock.testInstance();
+    http.sendRequest = (input) => {
+      const s = toSent(input as unknown as CreRequestLike);
+      busy.sent.push(s);
+      return answerFromFixtures(s, noFunder);
+    };
+    const out = runWith(confidential(), await asks(await proof(buyer)), NO_PROVIDER_KEYS);
+    expect(out.status).toBe("incomplete");
+    expect(out.httpCalls).toBe(15);
+    expect(busy.confidential.length + busy.sent.length).toBe(15);
+    expect(busy.reports).toHaveLength(0);
+  });
+});
+
+describe("confidentialRequest", () => {
+  const spec = (over: Partial<RequestSpec> = {}): RequestSpec => ({
+    provider: "nansen",
+    endpoint: "first-funder",
+    method: "POST",
+    url: "https://api.nansen.ai/api/v1/profiler/address/related-wallets",
+    headers: { accept: "application/json" },
+    body: '{"address":"0xabc","chain":"ethereum"}',
+    ...over,
+  });
+
+  test("puts only a placeholder where each provider reads its key", () => {
+    expect(confidentialRequest(spec(), "NANSEN_API_KEY")).toEqual({
+      vaultDonSecrets: [{ key: "NANSEN_API_KEY" }],
+      request: {
+        url: spec().url,
+        method: "POST",
+        multiHeaders: {
+          accept: { values: ["application/json"] },
+          apikey: { values: ["{{.NANSEN_API_KEY}}"] },
+          "content-type": { values: ["application/json"] },
+        },
+        bodyString: spec().body,
+        timeout: "10s",
+        encryptOutput: false,
+      },
+    });
+    const es = confidentialRequest(spec({ provider: "etherscan", method: "GET", url: "https://api.etherscan.io/v2/api?chainid=1&module=logs", body: undefined }), "ETHERSCAN_API_KEY");
+    expect(es.request).toMatchObject({ method: "POST", url: "https://api.etherscan.io/v2/api?chainid=1&module=logs", bodyString: "apikey={{.ETHERSCAN_API_KEY}}" });
+  });
+
+  test("refuses a request that already holds a placeholder, so no input can name a secret", () => {
+    expect(() => confidentialRequest(spec({ body: '{"address":"{{.ZERION_BASIC_AUTH}}"}' }), "NANSEN_API_KEY")).toThrow(/already contains/);
+    expect(() => confidentialRequest(spec({ url: "https://api.nansen.ai/{{.X}}" }), "NANSEN_API_KEY")).toThrow(/already contains/);
+    expect(() => confidentialRequest(spec(), "not a {{ name")).toThrow(/placeholder/);
+  });
+
+  test("public RPC calls never go through the enclave", () => {
+    expect(() => confidentialRequest(spec({ provider: "rpc" }), "X")).toThrow(/public/);
+  });
 });

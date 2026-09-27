@@ -9,7 +9,8 @@
  *
  * - EVM: the local node (e2e/helpers/local-evm.ts), reports delivered through
  *   the deployment's MockKeystoneForwarder by its simulation transmitter;
- * - HTTP: Nansen, Zerion, Etherscan and the history RPCs answered from
+ * - HTTP and Confidential HTTP (staging's `confidentialHttp`): Nansen,
+ *   Zerion, Etherscan and the history RPCs answered from
  *   @polarispay/underwriting's synthesized fixtures, with the account given
  *   one persona's history and the linked wallet another's (no keys, no
  *   network: this is the local stand-in, and says so in its result);
@@ -22,12 +23,21 @@
 import { expect } from "bun:test";
 import type { HTTPPayload } from "@chainlink/cre-sdk";
 import { cre } from "@chainlink/cre-sdk";
-import { EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
+import { ConfidentialHttpMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import { join } from "node:path";
 import type { Address } from "viem";
 import { bridgeEvm } from "../e2e/helpers/local-evm.ts";
 import { configSchema, onHttpTrigger } from "../src/underwriting/workflow.ts";
-import { answerFromFixtures, cloneFixtures, type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
+import {
+  answerConfidentialFromFixtures,
+  answerFromFixtures,
+  cloneFixtures,
+  type ConfidentialRequestLike,
+  type CreRequestLike,
+  type SentRequest,
+  toSent,
+  toSentConfidential,
+} from "../test/helpers/fixtures-http.ts";
 import { fs } from "../test/helpers/host.ts";
 
 type Job = {
@@ -86,6 +96,10 @@ test("local underwriting trigger", async () => {
     }
     return answerFromFixtures(sent, fixtures);
   };
+  // Staging turns on Confidential HTTP for the paid providers: answer those from the same fixtures.
+  const enclave = ConfidentialHttpMock.testInstance();
+  const enclaveSecrets = { NANSEN_API_KEY: "local-fixtures", ZERION_BASIC_AUTH: "bG9jYWwtZml4dHVyZXM6", ETHERSCAN_API_KEY: "local-fixtures" };
+  enclave.sendRequest = (input) => answerConfidentialFromFixtures(toSentConfidential(input as unknown as ConfidentialRequestLike, enclaveSecrets), fixtures);
 
   const secrets = new Map([
     [
