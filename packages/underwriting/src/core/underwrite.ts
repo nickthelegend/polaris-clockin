@@ -133,7 +133,8 @@ export function explainOnChainFacts(
   opts: { activeDebt?: bigint; purchase?: bigint | null; hasLinked?: boolean } = {},
 ): { breakdown: ScoreBreakdown; decision: CreditDecision } {
   const breakdown = scoreBreakdown(facts);
-  const reasons = explainFacts(facts, breakdown, {});
+  // A linked account's history counted: say so (its age, balances across both), without naming its address.
+  const reasons = explainFacts(facts, breakdown, opts.hasLinked ? { linked: { address: "", used: true, excludedFor: null, riskLabel: null } } : {});
   const decision = decide({
     score: breakdown.score,
     declined: breakdown.declined,

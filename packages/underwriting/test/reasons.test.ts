@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decide } from "../src/core/decision.ts";
-import { explainFacts, poweredBy, PROVIDER_NAMES } from "../src/core/reasons.ts";
+import { explainFacts, merchantVoice, poweredBy, PROVIDER_NAMES } from "../src/core/reasons.ts";
 import { scoreBreakdown } from "../src/core/score.ts";
 import type { CreditDecision, Facts } from "../src/core/types.ts";
 import { explainOnChainFacts } from "../src/core/underwrite.ts";
@@ -54,6 +54,34 @@ describe("reasons in the buyer's words", () => {
     assert.equal(exact[0]?.provider, "nansen");
     assert.equal(probed[0]?.text, "You've used your linked account for over a year · +24");
     assert.equal(probed[0]?.provider, "zerion");
+  });
+
+  it("explains on-chain facts with a linked account as that account's age and balances across both", () => {
+    const facts = f({ walletAgeDays: 1100, txCount: 40, stableBalance: 4_851_000_000n, exchangeFunded: true });
+    const labels = explainOnChainFacts(facts, { hasLinked: true }).decision.reasons.map((r) => r.label);
+    assert.ok(labels.includes("You've used your linked account for 3 years"), labels.join(" | "));
+    assert.ok(labels.includes("You keep $4,851 on hand across your accounts"), labels.join(" | "));
+    const alone = explainOnChainFacts(facts).decision.reasons.map((r) => r.label);
+    assert.ok(alone.includes("You've used this account for 3 years"), alone.join(" | "));
+  });
+
+  it("has a merchant's voice for every line that speaks to the buyer", () => {
+    assert.equal(merchantVoice("You've used your linked account for 3 years"), "Buyer's linked account in use for 3 years");
+    assert.equal(merchantVoice("You've used this account for over a year"), "Buyer's account in use for over a year");
+    assert.equal(merchantVoice("You keep $4,851 on hand across your accounts"), "Buyer keeps $4,851 across their accounts");
+    assert.equal(merchantVoice("You keep $900 on hand"), "Buyer keeps $900 on hand");
+    assert.equal(merchantVoice("Less than $100 on hand"), "Buyer keeps less than $100 on hand");
+    assert.equal(merchantVoice("You've made 40 payments and transfers"), "Buyer made 40 payments and transfers");
+    assert.equal(merchantVoice("First topped up from a major exchange"), "First topped up from a major exchange");
+    // Across a sweep, no merchant line still talks to "you".
+    for (let years = 0; years < 6; years++) {
+      const facts = f({ walletAgeDays: 40 + years * 365, txCount: years * 20, stableBalance: BigInt(years) * 700_000_000n, defiTenureDays: years * 200, exchangeFunded: years % 2 === 0, relatedWallets: years });
+      for (const linked of [true, false]) {
+        for (const r of explainOnChainFacts(facts, { hasLinked: linked }).decision.reasons) {
+          assert.doesNotMatch(merchantVoice(r.label), /\b(you|your|you've)\b/i, r.label);
+        }
+      }
+    }
   });
 
   it("names the exchange and the points it earned", () => {

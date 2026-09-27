@@ -150,6 +150,7 @@ describe("why buyers got credit", () => {
           { text: "First funded from Coinbase · +10", points: 10, kind: "exchange", provider: "nansen" },
           { text: "Wallet first used 3 years ago", points: 60, kind: "age", provider: "zerion" },
           { text: "No history of liquidations", points: 0, kind: "liquidations", provider: null },
+          { text: "You keep $4,851 on hand across your accounts · +48", points: 48, kind: "plus", provider: "rpc" },
         ],
       },
     });
@@ -161,6 +162,8 @@ describe("why buyers got credit", () => {
     expect(reasons.data.averageLineCents).toBe(500_00);
     expect(reasons.data.reasons).toEqual([
       { text: "Wallet first used 3 years ago", points: 60, source: "Zerion" },
+      // The buyer's own words are told to the merchant in the third person.
+      { text: "Buyer keeps $4,851 across their accounts", points: 48, source: null },
       { text: "First funded from Coinbase", points: 10, source: "Nansen" },
     ]);
   });

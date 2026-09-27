@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createIndexerClient, type Activity, type IndexerClient } from "@polarispay/indexer-client";
+import { merchantVoice } from "@polarispay/underwriting/core";
 import type { Address } from "viem";
 
 import type { IndexedEvent, UnderwritingReason } from "@/lib/data/insights";
@@ -123,8 +124,8 @@ async function underwritingReasons(plans: Plan[]): Promise<Insights["underwritin
   const tally = new Map<string, UnderwritingReason & { count: number }>();
   let decided = 0;
   let lineCents = 0;
-  for (const buyer of buyers) {
-    const decision = await db.creditDecisions.get(buyer);
+  const decisions = await Promise.all(buyers.map((buyer) => db.creditDecisions.get(buyer)));
+  for (const decision of decisions) {
     const reasons = decision?.status === "applied" ? (decision.explanation?.reasons ?? []) : [];
     if (reasons.length === 0) continue;
     decided++;
@@ -132,7 +133,8 @@ async function underwritingReasons(plans: Plan[]): Promise<Insights["underwritin
     if (limit && /^\d+$/.test(limit)) lineCents += cents(BigInt(limit));
     for (const r of reasons) {
       if (r.points === null || r.points <= 0) continue;
-      const text = r.text.replace(/ · [+\-−]?\d+$/, "");
+      // The buyer's line, told to the merchant: "Buyer's linked account in use for 3 years".
+      const text = merchantVoice(r.text.replace(/ · [+\-−]?\d+$/, ""));
       const prev = tally.get(text);
       tally.set(text, {
         text,

@@ -57,7 +57,9 @@ export function explainFacts(facts: Facts, b: ScoreBreakdown, ctx: ExplainContex
   {
     const a = at("walletAgeDays");
     const over = a?.lowerBound ? "over " : "";
-    const whose = a?.subject === "linked" ? "your linked account" : "this account";
+    // Explained from the chain alone there is no attribution; with a linked account the age is that
+    // account's (a Polaris account is new), so the line never tells a minutes-old account it is years old.
+    const whose = a?.subject === "linked" || (!a && linkedUsed) ? "your linked account" : "this account";
     const label =
       facts.walletAgeDays >= 30
         ? `You've used ${whose} for ${over}${formatDuration(facts.walletAgeDays)}`
@@ -147,6 +149,32 @@ export function explainFacts(facts: Facts, b: ScoreBreakdown, ctx: ExplainContex
       return m !== 0 ? m : x.i - y.i;
     })
     .map(({ l }) => l);
+}
+
+/**
+ * A reason line in the merchant's words, for a dashboard that shows why its
+ * buyers got credit: "You've used your linked account for 3 years" becomes
+ * "Buyer's linked account in use for 3 years". Lines with no "you" in them
+ * ("First topped up from a major exchange") read the same for both.
+ */
+export function merchantVoice(label: string): string {
+  const rules: Array<[RegExp, string]> = [
+    [/^You've used your linked account for /, "Buyer's linked account in use for "],
+    [/^You've used this account for /, "Buyer's account in use for "],
+    [/^Your accounts are less than a month old/, "Buyer's accounts are less than a month old"],
+    [/^This account is less than a month old/, "Buyer's account is less than a month old"],
+    [/^You've made /, "Buyer made "],
+    [/^You keep (.+) on hand across your accounts/, "Buyer keeps $1 across their accounts"],
+    [/^You keep (.+) on hand/, "Buyer keeps $1 on hand"],
+    [/^Less than \$100 on hand across your accounts/, "Buyer keeps less than $$100 across their accounts"],
+    [/^Less than \$100 on hand/, "Buyer keeps less than $$100 on hand"],
+    [/^You've used savings and trading apps for /, "Buyer has used savings and trading apps for "],
+    [/^We couldn't count your linked account/, "We couldn't count the buyer's linked account"],
+    [/^We couldn't finish checking your linked account/, "We couldn't finish checking the buyer's linked account"],
+    [/^We couldn't read all of this account's history/, "We couldn't read all of the buyer's history"],
+  ];
+  for (const [pattern, replacement] of rules) if (pattern.test(label)) return label.replace(pattern, replacement);
+  return label;
 }
 
 /** The data providers' names, for a credit next to the lines they back. */
