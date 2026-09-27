@@ -19,10 +19,12 @@ import type {
 /**
  * Placeholder data: one realistic account, a Berlin buyer three months in.
  *
- * Everything is relative to when the page loaded, so the demo never goes
+ * Everything is relative to when the tab first loaded, so the demo never goes
  * stale. The stub relayer writes to the ledger below, so paying, sending and
- * claiming show up across screens for the rest of the session. A later step
- * replaces this file with chain reads and the Envio indexer.
+ * claiming show up across screens; the ledger is kept in the tab's
+ * sessionStorage, so a reload (or a tab opened from this one) keeps what the
+ * buyer just did. A later step replaces this file with chain reads and the
+ * Envio indexer.
  */
 
 const MS_DAY = DAY * 1000;
@@ -188,7 +190,36 @@ export const DEMO_LINK_IDS = Object.keys(links);
 
 /* ── The session ledger ─────────────────────────────────────────────────── */
 
-const loadedAt = Date.now();
+/** Where the tab keeps its ledger (the dev signer's account lives beside it). */
+const STORE = "polaris:sample-ledger:v1";
+
+type Saved = {
+  loadedAt: number;
+  ledger: Omit<Ledger, "sendLinks"> & { sendLinks: [Address, SendLinkStatus][] };
+  sendActivity: [Address, string][];
+};
+
+/** The tab's ledger from an earlier load, if any (bigints travel as `{ $big }`). */
+function restore(): { loadedAt: number; ledger: Ledger; sendActivity: Map<Address, string> } | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(STORE);
+    if (!raw) return null;
+    const saved = JSON.parse(raw, (_key, v: unknown) =>
+      v && typeof v === "object" && typeof (v as { $big?: unknown }).$big === "string" ? BigInt((v as { $big: string }).$big) : v,
+    ) as Saved;
+    return {
+      loadedAt: saved.loadedAt,
+      ledger: { ...saved.ledger, sendLinks: new Map(saved.ledger.sendLinks) },
+      sendActivity: new Map(saved.sendActivity),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const saved = restore();
+let loadedAt = saved?.loadedAt ?? Date.now();
 
 function planFrom(
   id: string,
@@ -361,12 +392,24 @@ function seed(): Ledger {
   };
 }
 
-let ledger = seed();
+let ledger = saved?.ledger ?? seed();
 const listeners = new Set<() => void>();
 /** Send link → its "Waiting to be claimed" activity row, to update on claim. */
-const sendActivity = new Map<Address, string>();
+const sendActivity = saved?.sendActivity ?? new Map<Address, string>();
+
+/** Keeps the ledger for this tab's next load. Private windows and full storage just don't keep it. */
+function persist(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const out: Saved = { loadedAt, ledger: { ...ledger, sendLinks: [...ledger.sendLinks] }, sendActivity: [...sendActivity] };
+    window.sessionStorage.setItem(STORE, JSON.stringify(out, (_key, v: unknown) => (typeof v === "bigint" ? { $big: v.toString() } : v)));
+  } catch {
+    /* not kept */
+  }
+}
 
 function changed(): void {
+  persist();
   for (const listener of listeners) listener();
 }
 
@@ -701,7 +744,9 @@ export const mockLedger = {
 
   /** Back to the seeded state (tests, "Reset demo"). */
   reset() {
+    loadedAt = Date.now();
     ledger = seed();
+    sendActivity.clear();
     changed();
   },
 };
