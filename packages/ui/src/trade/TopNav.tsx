@@ -219,6 +219,10 @@ export function TopNav({
 }: TopNavProps) {
   const [open, setOpen] = useState(false);
   const all = [...items, ...(more?.items ?? [])];
+  // Open the phone sheet tall enough for every link and the footer: the
+  // header and handle (~84), 62 per link, and the footer's wallet and sign
+  // out (~170). The sheet caps a numeric snap at full height.
+  const fit = 84 + all.length * 62 + (sheetFooter ? 170 : 16);
   return (
     <header className={cn("relative z-30 font-satoshi", className)}>
       {/* From 1024px: the reference's bar. */}
@@ -253,7 +257,7 @@ export function TopNav({
         {compactActions}
         <IconSquareButton label="Menu" icon={<MenuIcon />} aria-expanded={open} aria-haspopup="dialog" onClick={() => setOpen(true)} />
       </div>
-      <BottomSheet open={open} onOpenChange={setOpen} snapPoints={["half", "full"]} title={sheetTitle}>
+      <BottomSheet open={open} onOpenChange={setOpen} snapPoints={[fit]} title={sheetTitle}>
         <Sheet.Body className="pb-4">
           <nav aria-label="Main">
             <ul className="grid gap-1.5">

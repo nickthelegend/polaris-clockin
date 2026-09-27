@@ -84,12 +84,12 @@ export type CoinPairProps = {
   className?: string;
 };
 
-/** Two (or more) coins overlapping, the later one on top: the reference's ETH / $ pair. */
+/** Two (or more) coins overlapping, the first one in front: the reference's ETH over $. */
 export function CoinPair({ coins, overlap = 8, className }: CoinPairProps) {
   return (
     <span aria-hidden className={cn("inline-flex shrink-0 items-center", className)}>
       {coins.map((c, i) => (
-        <span key={i} className="relative inline-flex" style={{ marginLeft: i ? -overlap : 0, zIndex: i }}>
+        <span key={i} className="relative inline-flex" style={{ marginLeft: i ? -overlap : 0, zIndex: coins.length - i }}>
           {c}
         </span>
       ))}

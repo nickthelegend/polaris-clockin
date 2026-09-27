@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { useEffect, useId, useRef, useState, type HTMLAttributes, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
-import { niceTicks, smoothPath, useSize, type Pt } from "../charts/geometry";
+import { smoothPath, useSize, type Pt } from "../charts/geometry";
 import { cn } from "../lib/cn";
 import { useReducedMotionSafe } from "../lib/hooks";
 
@@ -25,11 +25,21 @@ export type GradientLineChartProps = Omit<HTMLAttributes<HTMLDivElement>, "child
   formatTime?: (t: GradientPoint["t"]) => string;
   /** A second, muted line in the bubble (defaults to `formatTime`); `null` hides it. */
   formatBubbleNote?: ((p: GradientPoint) => string) | null;
-  /** How many x labels (the reference shows six). */
+  /** At most how many x labels (the reference shows six). */
   xTicks?: number;
   /** The y axis gutter, in px. */
   axisWidth?: number;
-  /** Shown over the plot when every value is zero. */
+  /**
+   * Below this width (the chart's own, in px) the chart goes compact: a
+   * narrower y axis (`compactAxisWidth`) with short labels (`formatAxisCompact`).
+   */
+  compactBelow?: number;
+  compactAxisWidth?: number;
+  /** Short y axis labels for the compact chart ("2.5k"). */
+  formatAxisCompact?: (v: number) => string;
+  /** A label at the right end, for the latest point ("Now"). */
+  lastLabel?: string;
+  /** Shown over the plot when every value is zero; it can hold buttons. */
   empty?: ReactNode;
   /** What the chart shows, for screen readers. */
   label: string;
@@ -38,6 +48,55 @@ export type GradientLineChartProps = Omit<HTMLAttributes<HTMLDivElement>, "child
 
 const X_AXIS = 36;
 const TOP = 44; // room for the bubble over the highest point
+
+const MIN = 60_000;
+const HR = 60 * MIN;
+const DY = 24 * HR;
+/** Round steps for time labels, smallest first. */
+const TIME_STEPS = [5 * MIN, 10 * MIN, 15 * MIN, 30 * MIN, HR, 2 * HR, 3 * HR, 4 * HR, 6 * HR, 12 * HR, DY, 2 * DY, 7 * DY, 14 * DY];
+
+/**
+ * Exactly `count` evenly spaced round labels whose top sits at or above the
+ * highest value: the scale spans the whole line, like the reference.
+ */
+export function spanTicks(min: number, max: number, count = 4): { lo: number; hi: number; ticks: number[] } {
+  if (min === max) {
+    if (min === 0) max = 1;
+    else {
+      const pad = Math.abs(min) * 0.2;
+      min = Math.max(0, min - pad);
+      max = max + pad;
+    }
+  }
+  const steps = Math.max(1, count - 1);
+  const rough = (max - min) / steps;
+  const pow = 10 ** Math.floor(Math.log10(rough));
+  for (const m of [1, 2, 2.5, 5, 10, 20, 25, 50]) {
+    const step = m * pow;
+    let lo = Math.floor(min / step) * step;
+    if (min >= 0 && lo < 0) lo = 0;
+    const hi = lo + steps * step;
+    if (hi >= max - step * 1e-9) {
+      return { lo, hi, ticks: Array.from({ length: count }, (_, i) => Number((lo + i * step).toFixed(10))) };
+    }
+  }
+  return { lo: min, hi: max, ticks: [min, max] };
+}
+
+/** "2.5k", "400", "1.2M": a y label that fits a narrow axis. */
+export function compactNumber(v: number): string {
+  const a = Math.abs(v);
+  const trim = (x: number) => (Math.round(x * 10) / 10).toString();
+  if (a >= 1e6) return `${trim(v / 1e6)}M`;
+  if (a >= 1e3) return `${trim(v / 1e3)}k`;
+  return Math.round(v).toString();
+}
+
+/** A timestamp in ms when `t` is a time; null otherwise. */
+function timeOf(t: GradientPoint["t"]): number | null {
+  const ms = typeof t === "number" ? t : Date.parse(t);
+  return Number.isFinite(ms) ? ms : null;
+}
 
 function defaultTime(t: GradientPoint["t"]): string {
   const d = typeof t === "number" ? new Date(t) : new Date(t);
@@ -64,7 +123,11 @@ export function GradientLineChart({
   formatTime = defaultTime,
   formatBubbleNote,
   xTicks = 6,
-  axisWidth = 72,
+  axisWidth: axisWidthWide = 72,
+  compactBelow = 480,
+  compactAxisWidth = 48,
+  formatAxisCompact = compactNumber,
+  lastLabel,
   empty,
   label,
   animate = true,
@@ -82,25 +145,15 @@ export function GradientLineChart({
   const values = data.map((d) => d.value);
   const allZero = values.every((v) => v === 0);
   const W = size.width;
+  const compact = W > 0 && W < compactBelow;
+  const axisWidth = compact ? compactAxisWidth : axisWidthWide;
   const plotW = Math.max(0, W - axisWidth - 8);
   const plotH = Math.max(0, height - X_AXIS);
   const bottomPad = 10;
 
-  const { lo, hi, ticks } = (() => {
-    if (!n) return { lo: 0, hi: 1, ticks: [] as number[] };
-    let min = Math.min(...values);
-    let max = Math.max(...values);
-    if (min === max) {
-      min = min - (min === 0 ? 0 : Math.abs(min) * 0.1);
-      max = max + (max === 0 ? 1 : Math.abs(max) * 0.1);
-    }
-    const span = max - min;
-    const lo0 = Math.max(0, min - span * 0.12);
-    const hi0 = max + span * 0.08;
-    // Four labels, like the reference, inside the range.
-    const t = niceTicks(lo0, hi0, 4).filter((v) => v >= lo0 && v <= hi0);
-    return { lo: lo0, hi: hi0, ticks: t };
-  })();
+  // Four labels, like the reference, from the first round value at or under
+  // the lowest point to the first at or over the highest.
+  const { lo, hi, ticks } = n ? spanTicks(Math.min(...values), Math.max(...values), 4) : { lo: 0, hi: 1, ticks: [] as number[] };
 
   const x = (i: number) => axisWidth + 8 + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const y = (v: number) => TOP + (plotH - TOP - bottomPad) * (1 - (v - lo) / (hi - lo || 1));
@@ -153,11 +206,40 @@ export function GradientLineChart({
   }, [measured]);
   const reveal = animate && !reduced && !drawn.current;
 
-  // As many time labels as fit (about 84px each), up to `xTicks`.
+  // Time labels: as many as fit (about 84px each), up to `xTicks`. When the
+  // points are times, the labels sit on round times (2:00 AM, 6:00 AM…, or
+  // midnights), placed where that time falls; otherwise on every Nth point.
   const fit = Math.max(2, Math.min(xTicks, Math.floor(plotW / 84) + 1));
-  const every = Math.max(1, Math.round((n - 1) / Math.max(1, fit - 1)));
-  const xLabels = n ? data.map((d, i) => ({ i, d })).filter(({ i }) => i % every === 0) : [];
-  const axisFmt = formatAxis ?? formatValue;
+  const xLabels: { key: string; px: number; text: string }[] = (() => {
+    if (n < 2) return [];
+    const endPx = x(n - 1);
+    const t0 = timeOf(data[0]!.t);
+    const t1 = timeOf(data[n - 1]!.t);
+    if (t0 !== null && t1 !== null && t1 > t0) {
+      const spanMs = t1 - t0;
+      const room = lastLabel ? fit - 1 : fit;
+      const step = TIME_STEPS.find((s) => Math.floor(spanMs / s) <= room) ?? TIME_STEPS[TIME_STEPS.length - 1]!;
+      // Align to local time: whole hours, and local midnight for days.
+      const offset = new Date(t0).getTimezoneOffset() * MIN;
+      const first = Math.ceil((t0 - offset) / step) * step + offset;
+      const out: { key: string; px: number; text: string }[] = [];
+      for (let t = first; t <= t1; t += step) {
+        const px = x(((t - t0) / spanMs) * (n - 1));
+        if (lastLabel && endPx - px < 72) continue;
+        out.push({ key: String(t), px, text: formatTime(t) });
+      }
+      if (lastLabel) out.push({ key: "last", px: endPx, text: lastLabel });
+      return out;
+    }
+    const every = Math.max(1, Math.round((n - 1) / Math.max(1, fit - 1)));
+    const out = data.map((d, i) => ({ key: String(i), px: x(i), text: formatTime(d.t) })).filter((_, i) => i % every === 0);
+    if (lastLabel) {
+      while (out.length && endPx - out[out.length - 1]!.px < 72) out.pop();
+      out.push({ key: "last", px: endPx, text: lastLabel });
+    }
+    return out;
+  })();
+  const axisFmt = compact ? formatAxisCompact : (formatAxis ?? formatValue);
   const note = formatBubbleNote === null ? null : (formatBubbleNote ?? ((p: GradientPoint) => formatTime(p.t)));
   const last = n ? data[n - 1]! : null;
 
@@ -228,24 +310,38 @@ export function GradientLineChart({
               </text>
             ))}
 
-            <g clipPath={`url(#${id}-clip)`}>
-              {n > 1 ? <path d={area} fill={`url(#${id}-fill)`} /> : null}
-              {n > 1 ? (
-                <path d={line} fill="none" stroke={`url(#${id}-stroke)`} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" />
-              ) : null}
-            </g>
+            {allZero ? (
+              // Nothing sold: a quiet dashed baseline, not a flat orange line.
+              <line
+                x1={axisWidth + 8}
+                x2={axisWidth + 8 + plotW}
+                y1={plotH - bottomPad}
+                y2={plotH - bottomPad}
+                stroke="var(--ui-axis)"
+                strokeOpacity={0.7}
+                strokeWidth={1}
+                strokeDasharray="3 6"
+              />
+            ) : (
+              <g clipPath={`url(#${id}-clip)`}>
+                {n > 1 ? <path d={area} fill={`url(#${id}-fill)`} /> : null}
+                {n > 1 ? (
+                  <path d={line} fill="none" stroke={`url(#${id}-stroke)`} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" />
+                ) : null}
+              </g>
+            )}
 
             {/* x axis */}
-            {xLabels.map(({ i, d }) => (
+            {xLabels.map(({ key, px, text }) => (
               <text
-                key={i}
-                x={x(i)}
+                key={key}
+                x={px}
                 y={height - 10}
-                textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"}
+                textAnchor={px - (axisWidth + 8) < 36 ? "start" : axisWidth + 8 + plotW - px < 36 ? "end" : "middle"}
                 fill="var(--ui-axis)"
                 style={{ fontSize: 13, fontWeight: 500 }}
               >
-                {formatTime(d.t)}
+                {text}
               </text>
             ))}
 
@@ -281,12 +377,16 @@ export function GradientLineChart({
           </div>
         ) : null}
 
-        {allZero && empty ? (
-          <div className="pointer-events-none absolute inset-x-0 top-[38%] text-center text-[14px] text-ui-muted" style={{ paddingLeft: axisWidth }}>
-            {empty}
-          </div>
-        ) : null}
       </div>
+      {/* Outside the chart's image role, so it can hold buttons. */}
+      {allZero && empty ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 top-0 grid place-items-center px-4 text-center text-[14px] text-ui-muted"
+          style={{ bottom: X_AXIS + 12, paddingLeft: axisWidth + 8 }}
+        >
+          <div className="pointer-events-auto">{empty}</div>
+        </div>
+      ) : null}
       {/* The hovered value, for screen readers. */}
       <p className="sr-only" aria-live="polite">
         {hover !== null && data[hover] ? `${formatTime(data[hover]!.t)}: ${formatValue(data[hover]!.value)}` : ""}

@@ -161,7 +161,7 @@
   --ui-pill-lime: #2b2e26;
   --ui-pill-lime-text: #deeaba;
   --ui-pill-purple: #291f32;
-  --ui-pill-purple-text: #ac70c6;
+  --ui-pill-purple-text: #b77fd2;
   --ui-pill-teal: #1b2d30;
   --ui-pill-teal-text: #71c8c2;
   --ui-pill-amber: #2f2817;
@@ -189,7 +189,7 @@
   --ui-hairline: #2a2d33;
   --ui-hairline-strong: #37393d;
   --ui-text: #ffffff;
-  --ui-muted: #7e8189;
+  --ui-muted: #8e9199;
   --ui-dim: #565961;
 
   --ui-ink: #1d2129;
@@ -199,7 +199,7 @@
   --ui-down: #e8847b;
   --ui-warn: #e2b866;
   --ui-info: #71c8c2;
-  --ui-purple-text: #ac70c6;
+  --ui-purple-text: #b77fd2;
   --ui-focus: #c8df6c;
   --ui-scrim: rgb(8 9 11 / 0.66);
   --ui-glass: rgb(29 33 41 / 0.8);

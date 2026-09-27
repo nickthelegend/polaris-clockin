@@ -105,7 +105,7 @@ export { DeltaChip, StatusPill, TimeframeChips, ChartTypeToggle, TextTabs } from
 export type { DeltaChipProps, StatusPillProps, StatusPillTone, TimeframeChipsProps, ChartType, ChartTypeToggleProps, TextTabsProps } from "./trade/Chips";
 export { PairHeader, Coin, CoinPair, PolarisCoin, DollarCoin } from "./trade/PairHeader";
 export type { PairHeaderProps, PairOption, CoinProps, CoinTone, CoinPairProps } from "./trade/PairHeader";
-export { GradientLineChart } from "./trade/GradientLineChart";
+export { GradientLineChart, compactNumber, spanTicks } from "./trade/GradientLineChart";
 export type { GradientLineChartProps, GradientPoint } from "./trade/GradientLineChart";
 export { DataTable, TableName } from "./trade/DataTable";
 export type { DataTableProps } from "./trade/DataTable";
