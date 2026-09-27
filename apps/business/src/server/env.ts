@@ -101,6 +101,13 @@ export type ServerConfig = {
    */
   adminQuorumId: string | null;
   privyDisabled: boolean;
+  /**
+   * `pnpm demo:local` only: a signed-in dashboard for the demo merchant
+   * without Privy. Set only outside production, on a local chain, with Privy
+   * off, from POLARIS_LOCAL_SESSION_TOKEN (32+ random characters, which the
+   * dashboard presents as its Bearer token) and POLARIS_LOCAL_SESSION_WALLET.
+   */
+  localSession: { token: string; wallet: Address } | null;
   keyPepper: string | undefined;
   dbUrl: string;
   /**
@@ -374,6 +381,7 @@ function build(): ServerConfig {
     payoutSigner: signerId && signerKey ? { signerId, authorizationKey: signerKey } : null,
     adminQuorumId: env("PRIVY_ADMIN_QUORUM_ID") ?? null,
     privyDisabled: flag("POLARIS_DISABLE_PRIVY"),
+    localSession: localSessionFrom(production, chain),
     keyPepper: env("POLARIS_KEY_PEPPER"),
     dbUrl: env("POLARIS_DB_URL") ?? `sqlite:${join(/*turbopackIgnore: true*/ process.cwd(), ".data", "polaris.db")}`,
     checkoutOrigin,
@@ -405,6 +413,20 @@ function build(): ServerConfig {
     // POLARIS_TRUST_PROXY=1 (the older setting) means one proxy.
     trustedProxies: Math.max(0, int("POLARIS_TRUSTED_PROXIES", flag("POLARIS_TRUST_PROXY") ? 1 : 0)),
   };
+}
+
+function localSessionFrom(production: boolean, chain: ChainConfig | null): ServerConfig["localSession"] {
+  const token = env("POLARIS_LOCAL_SESSION_TOKEN");
+  const wallet = env("POLARIS_LOCAL_SESSION_WALLET");
+  if (!token && !wallet) return null;
+  if (production || !chain?.local || !flag("POLARIS_DISABLE_PRIVY")) {
+    throw new Error("POLARIS_LOCAL_SESSION_* is for `pnpm demo:local` only: a local chain, NODE_ENV=development and POLARIS_DISABLE_PRIVY=1.");
+  }
+  if (!token || token.length < 32 || !/^[A-Za-z0-9_-]+$/.test(token)) {
+    throw new Error("POLARIS_LOCAL_SESSION_TOKEN must be at least 32 random letters, digits, - or _.");
+  }
+  if (!wallet || !isAddress(wallet)) throw new Error("POLARIS_LOCAL_SESSION_WALLET must be the demo merchant's address.");
+  return { token, wallet: getAddress(wallet) };
 }
 
 let cached: ServerConfig | null = null;

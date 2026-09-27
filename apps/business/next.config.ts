@@ -20,6 +20,9 @@ const config: NextConfig = {
     // development the variable is blanked here, and the code checks NODE_ENV
     // too (see src/lib/auth-context.tsx), so a production build can't turn it on.
     POLARIS_DEV_MOCK_SESSION: development ? (process.env.POLARIS_DEV_MOCK_SESSION ?? "") : "",
+    // `pnpm demo:local`'s signed-in dashboard on a local chain; never in a production build.
+    NEXT_PUBLIC_POLARIS_LOCAL_SESSION: development ? (process.env.NEXT_PUBLIC_POLARIS_LOCAL_SESSION ?? "") : "",
+    NEXT_PUBLIC_POLARIS_LOCAL_SESSION_WALLET: development ? (process.env.NEXT_PUBLIC_POLARIS_LOCAL_SESSION_WALLET ?? "") : "",
   },
   images: {
     formats: ["image/avif", "image/webp"],

@@ -79,5 +79,14 @@ export const DEV_MOCK_SESSION =
   process.env.NODE_ENV === "development" &&
   (process.env.POLARIS_DEV_MOCK_SESSION === "1" || process.env.POLARIS_DEV_MOCK_SESSION === "empty");
 
+/**
+ * `pnpm demo:local`'s signed-in dashboard: the demo merchant's real book on
+ * a local chain, without Privy. The token is random per run and the server
+ * accepts it only on a local chain in development (server/auth.ts
+ * `localSession`); like the mock, it is the literal "" in a production build.
+ */
+export const LOCAL_SESSION_TOKEN =
+  process.env.NODE_ENV === "development" ? (process.env.NEXT_PUBLIC_POLARIS_LOCAL_SESSION ?? "") : "";
+
 /** The mock session shows the sample book (labelled "Sample" everywhere), not an empty one. */
 export const DEV_MOCK_SAMPLE = DEV_MOCK_SESSION && process.env.POLARIS_DEV_MOCK_SESSION !== "empty";

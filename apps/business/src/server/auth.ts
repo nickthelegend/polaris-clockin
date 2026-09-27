@@ -189,12 +189,32 @@ export function setMerchantVerifierForTests(verifier: MerchantVerifier | null): 
 }
 
 /**
+ * `pnpm demo:local`'s signed-in dashboard: the demo merchant, for the
+ * configured random token presented as a Bearer token. `getConfig()` only
+ * sets `localSession` outside production, on a local chain, with Privy off,
+ * so no deployed server has this door. The merchant record is the one
+ * `scripts/lib/seed.mjs` creates (`dev:<wallet>`).
+ */
+function localSession(req: Request): AuthedMerchant | null {
+  const local = getConfig().localSession;
+  if (!local) return null;
+  const presented = bearer(req);
+  if (!presented) return null;
+  const a = Buffer.from(presented);
+  const b = Buffer.from(local.token);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  return { userId: `dev:${local.wallet.toLowerCase()}`, walletAddress: local.wallet, walletId: null, email: null, sessionId: "local" };
+}
+
+/**
  * Verify the request's Privy access token (`Authorization: Bearer` or the
  * `privy-token` cookie) and return the merchant it belongs to. Throws an
  * `HttpError` (401, 403, 502 or 503) otherwise.
  */
 export async function authenticate(req: Request): Promise<AuthedMerchant> {
   if (verifierOverride) return verifierOverride(req);
+  const local = localSession(req);
+  if (local) return local;
   const privy = getPrivy();
   if (!privy) throw new HttpError(503, "auth_not_configured", "Sign-in isn't configured on this server.");
 
