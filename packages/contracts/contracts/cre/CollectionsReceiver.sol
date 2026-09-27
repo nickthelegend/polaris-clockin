@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ReceiverTemplate} from "./ReceiverTemplate.sol";
+import {PolarisReceiver} from "./PolarisReceiver.sol";
 
 /// The loan engine calls this receiver makes. All are permissionless there.
 interface ICollectableLoans {
@@ -9,6 +9,7 @@ interface ICollectableLoans {
     function liquidate(uint256 loanId) external;
     function isInstallmentDue(uint256 loanId) external view returns (bool);
     function checkLiquidatable(uint256 loanId) external view returns (bool);
+    function loanIdsOf(address borrower) external view returns (uint256[] memory);
 }
 
 /// The PolarisPayments calls this receiver makes. Both are permissionless there.
@@ -24,12 +25,21 @@ interface IChargeableSubscriptions {
  *         charge the subscriptions that renewed, liquidate the plans past
  *         grace. The indexer proposes, the chain disposes.
  *
- * @dev The workflow runs on a cron (every minute). It reads candidate ids from
- *      the Envio indexer, asks `checkTasks` which of them are actionable at the
- *      last finalized block, reaches consensus across the DON, and writes one
- *      report through the KeystoneForwarder. `onReport` (ReceiverTemplate)
- *      accepts it only from the configured forwarder and, once set, only from
- *      the expected workflow owner and name.
+ * @dev The workflow has two triggers and one report format:
+ *        - a cron (every minute): it reads candidate ids from the Envio
+ *          indexer, asks `checkTasks` which of them are actionable at the last
+ *          finalized block, reaches consensus across the DON, and writes one
+ *          report through the KeystoneForwarder;
+ *        - an EVM log trigger on `PolarisCheckout.Reauthorized(buyer, ...)`,
+ *          the instant retry: a buyer whose collection was skipped for a lost
+ *          allowance re-signs a permit, and the workflow asks `dueTasksFor
+ *          (buyer)` which of their plans can be collected now and writes the
+ *          same report for just those, seconds later instead of at the next
+ *          rung of the dunning ladder.
+ *      `onReport` (ReceiverTemplate) accepts a report only from the configured
+ *      forwarder and, once set, only from the expected workflow owner, name
+ *      and id; while `simulationTransmitter` is set, only from that origin
+ *      (PolarisReceiver).
  *
  *      Report body (after the forwarder strips the 109-byte header):
  *        abi.encode(uint8 kind, Task[] tasks)   kind == REPORT_KIND (1)
@@ -62,7 +72,7 @@ interface IChargeableSubscriptions {
  *      `InsufficientGasForTask`, and the KeystoneForwarder may retry the
  *      transmission with a higher limit.
  */
-contract CollectionsReceiver is ReceiverTemplate {
+contract CollectionsReceiver is PolarisReceiver {
     uint8 public constant REPORT_KIND = 1;
 
     uint8 public constant ACTION_COLLECT_INSTALLMENT = 1;
@@ -85,14 +95,16 @@ contract CollectionsReceiver is ReceiverTemplate {
     /// One report processed.
     event CollectionsRun(uint256 tasks, uint256 executed, uint256 skipped);
 
-    error UnknownReportKind(uint8 kind);
     error UnknownAction(uint8 action);
     error InsufficientGasForTask(uint256 index);
     error ZeroAddress();
 
-    constructor(address forwarder, ICollectableLoans _loanEngine, IChargeableSubscriptions _payments)
-        ReceiverTemplate(forwarder)
-    {
+    constructor(
+        address forwarder,
+        ICollectableLoans _loanEngine,
+        IChargeableSubscriptions _payments,
+        address _simulationTransmitter
+    ) PolarisReceiver(forwarder, _simulationTransmitter) {
         if (address(_loanEngine) == address(0) || address(_payments) == address(0)) revert ZeroAddress();
         loanEngine = _loanEngine;
         payments = _payments;
@@ -120,9 +132,33 @@ contract CollectionsReceiver is ReceiverTemplate {
         }
     }
 
+    /**
+     * @notice The instant retry's one read: a collect task for each of
+     *         `borrower`'s plans whose next instalment is due now.
+     * @dev For the collections workflow's EVM log trigger on
+     *      `PolarisCheckout.Reauthorized`. A plan past grace is listed too
+     *      (collecting it is still the buyer's best outcome; liquidation stays
+     *      the cron's call). Walks every loan the borrower has had, which the
+     *      credit line keeps short. Returns an empty list when nothing is due,
+     *      for instance when the buyer re-signed before the instalment fell
+     *      due; the cron collects it then.
+     */
+    function dueTasksFor(address borrower) external view returns (Task[] memory tasks) {
+        uint256[] memory ids = loanEngine.loanIdsOf(borrower);
+        uint256 n;
+        for (uint256 i; i < ids.length; ++i) {
+            if (loanEngine.isInstallmentDue(ids[i])) ids[n++] = ids[i];
+        }
+        tasks = new Task[](n);
+        for (uint256 i; i < n; ++i) {
+            tasks[i] = Task({action: ACTION_COLLECT_INSTALLMENT, id: ids[i]});
+        }
+    }
+
     function _processReport(bytes calldata report) internal override {
-        (uint8 kind, Task[] memory tasks) = abi.decode(report, (uint8, Task[]));
-        if (kind != REPORT_KIND) revert UnknownReportKind(kind);
+        _checkDelivery();
+        _requireKind(report, REPORT_KIND);
+        (, Task[] memory tasks) = abi.decode(report, (uint8, Task[]));
 
         uint256 executed;
         for (uint256 i; i < tasks.length; ++i) {

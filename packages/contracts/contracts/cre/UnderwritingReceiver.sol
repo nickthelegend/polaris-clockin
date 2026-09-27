@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {ReceiverTemplate} from "./ReceiverTemplate.sol";
+import {PolarisReceiver} from "./PolarisReceiver.sol";
 import {ScoreManager} from "../ScoreManager.sol";
 
 /**
@@ -40,18 +40,10 @@ import {ScoreManager} from "../ScoreManager.sol";
  *          another's history (`WalletAlreadyUnderwritten`): either way one
  *          history would open two lines.
  *        - While the forwarder is Chainlink's MockKeystoneForwarder
- *          (simulation), anyone can call it with any report. For collections
- *          that is harmless; for underwriting it would let anyone write credit
- *          facts. So `simulationTransmitter`, while set, must be the
- *          transaction's origin: the key `cre workflow simulate --broadcast`
- *          signs with. Clear it when moving to the production
- *          KeystoneForwarder, whose DON signatures make it unnecessary. It
- *          must be a key kept for that alone, never the deployer's: any
- *          contract the transmitter's key calls, for any reason, could relay
- *          a forged report through the public forwarder under this guard.
- *          scripts/deploy-monad.js refuses the deployer on a public network.
- *        - A forwarder check switched off (`setForwarderAddress(0)`, which the
- *          template allows) refuses every report instead of accepting all.
+ *          (simulation), anyone can call it with any report, which here would
+ *          let anyone write credit facts. So `simulationTransmitter`, while
+ *          set, must be the transaction's origin, and a forwarder check
+ *          switched off refuses every report (PolarisReceiver).
  *
  *      Each item runs in its own try/catch, emitting `UnderwritingApplied` or
  *      `UnderwritingRefused` with ScoreManager's revert data (`StaleEvidence`,
@@ -59,7 +51,7 @@ import {ScoreManager} from "../ScoreManager.sol";
  *      success and these events are what the app and API watch. As in
  *      CollectionsReceiver, running out of gas reverts the whole report.
  */
-contract UnderwritingReceiver is ReceiverTemplate {
+contract UnderwritingReceiver is PolarisReceiver {
     uint8 public constant REPORT_KIND = 2;
 
     struct Underwriting {
@@ -70,19 +62,12 @@ contract UnderwritingReceiver is ReceiverTemplate {
 
     ScoreManager public immutable scoreManager;
 
-    /// While non-zero, the only transaction origin allowed to deliver reports.
-    address public simulationTransmitter;
-
     /// The Polaris account each history wallet has backed.
     mapping(address => address) public linkedUserOf;
 
     event UnderwritingApplied(address indexed user, address indexed linkedWallet, uint16 score);
     event UnderwritingRefused(address indexed user, address indexed linkedWallet, bytes reason);
-    event SimulationTransmitterSet(address indexed transmitter);
 
-    error UnknownReportKind(uint8 kind);
-    error NotSimulationTransmitter(address origin);
-    error ForwarderCheckDisabled();
     error InsufficientGasForItem(uint256 index);
     error ZeroAddress();
     /// Per-item refusals, delivered as `UnderwritingRefused.reason`.
@@ -94,31 +79,17 @@ contract UnderwritingReceiver is ReceiverTemplate {
     error WalletAlreadyUnderwritten(address wallet);
 
     constructor(address forwarder, ScoreManager _scoreManager, address _simulationTransmitter)
-        ReceiverTemplate(forwarder)
+        PolarisReceiver(forwarder, _simulationTransmitter)
     {
         if (address(_scoreManager) == address(0)) revert ZeroAddress();
         scoreManager = _scoreManager;
-        simulationTransmitter = _simulationTransmitter;
-        emit SimulationTransmitterSet(_simulationTransmitter);
-    }
-
-    /// @notice Set, or with zero clear, the simulation-only origin check.
-    function setSimulationTransmitter(address transmitter) external onlyOwner {
-        simulationTransmitter = transmitter;
-        emit SimulationTransmitterSet(transmitter);
     }
 
     function _processReport(bytes calldata report) internal override {
-        if (this.getForwarderAddress() == address(0)) revert ForwarderCheckDisabled();
-        address transmitter = simulationTransmitter;
-        // tx.origin, deliberately: under simulation the forwarder is a public
-        // contract anyone can call, so msg.sender says nothing. The simulator's
-        // own broadcasting key is the one origin that means "our workflow ran".
-        // solhint-disable-next-line avoid-tx-origin
-        if (transmitter != address(0) && tx.origin != transmitter) revert NotSimulationTransmitter(tx.origin);
+        _checkDelivery();
 
-        (uint8 kind, Underwriting[] memory items) = abi.decode(report, (uint8, Underwriting[]));
-        if (kind != REPORT_KIND) revert UnknownReportKind(kind);
+        _requireKind(report, REPORT_KIND);
+        (, Underwriting[] memory items) = abi.decode(report, (uint8, Underwriting[]));
 
         for (uint256 i; i < items.length; ++i) {
             _underwrite(i, items[i]);
