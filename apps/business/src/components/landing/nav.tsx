@@ -1,6 +1,6 @@
 "use client";
 
-import { PrimaryButton, TopNav } from "@polaris/ui";
+import { PrimaryButton, TopNav, cn } from "@polaris/ui";
 import { ArrowRight, CalendarClock, CircleHelp, CodeXml, Landmark, LayoutDashboard, Link2, LogIn, Tag } from "lucide-react";
 import Link from "next/link";
 
@@ -20,7 +20,7 @@ const ICONS: Record<string, React.ReactNode> = {
 /** A dark pill in the wallet pill's shape: where Polaris runs today. */
 export function NetworkPill({ className }: { className?: string }) {
   return (
-    <span className={`inline-flex h-11 items-center gap-2.5 rounded-full bg-ui-surface-1 pr-5 pl-4 text-[15px] font-medium whitespace-nowrap ${className ?? ""}`}>
+    <span className={cn("inline-flex h-11 items-center gap-2.5 rounded-full bg-ui-surface-1 pr-5 pl-4 text-[15px] font-medium whitespace-nowrap", className)}>
       <span aria-hidden className="relative grid size-2.5 place-items-center">
         <span className="absolute size-2.5 animate-ping rounded-full bg-ui-lime-button/60 motion-reduce:animate-none" />
         <span className="size-2 rounded-full bg-ui-lime-button" />

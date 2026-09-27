@@ -162,7 +162,7 @@ export function SalesPreview({ extra = 0, rows = true, height = 340, className }
                 </span>
               ),
             },
-            { key: "item", header: "Item", hideBelow: "md", render: (r) => <span className="block max-w-[200px] truncate">{r.item}</span> },
+            { key: "item", header: "Item", hideBelow: "xl", render: (r) => <span className="block max-w-[200px] truncate">{r.item}</span> },
             { key: "amount", header: "Amount", render: (r) => <span className="ui-figure">{money(r.cents)}</span> },
             { key: "status", header: "Status", hideBelow: "sm", render: (r) => <StatusPill tone={r.pill[1]}>{r.pill[0]}</StatusPill> },
           ]}
