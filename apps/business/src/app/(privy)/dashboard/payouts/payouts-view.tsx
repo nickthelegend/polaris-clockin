@@ -88,8 +88,8 @@ export function PayoutsView() {
       <StaleNotice queries={[payouts as QueryState<unknown>]} />
       <DataModeNotice empty={state !== undefined && state.balanceCents === 0 && state.history.length === 0} />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Panel title="Balance" sample={sample.on} className="xl:col-span-5" subtitle="Settled from your payments, in dollars">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <Panel title="Balance" sample={sample.on} className="lg:col-span-5" subtitle="Settled from your payments, in dollars">
           {payouts.error && !state ? (
             <LoadError query={payouts as QueryState<unknown>} title="We couldn't load your balance" />
           ) : !state ? (
@@ -130,13 +130,13 @@ export function PayoutsView() {
           )}
         </Panel>
 
-        <div ref={withdrawRef} className="xl:col-span-7">
+        <div ref={withdrawRef} className="lg:col-span-7">
           <WithdrawPanel state={state} wallet={wallet} onDone={payouts.reload} />
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div ref={autoRef} className="xl:col-span-5">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div ref={autoRef} className="lg:col-span-5">
           <AutoPayoutsPanel
             auto={state?.auto}
             wallet={wallet}
@@ -144,7 +144,7 @@ export function PayoutsView() {
             onPaidOut={payouts.reload}
           />
         </div>
-        <Panel title="History" sample={sample.on} className="xl:col-span-7" subtitle="Every withdrawal and automatic payout">
+        <Panel title="History" sample={sample.on} className="lg:col-span-7" subtitle="Every withdrawal and automatic payout">
           {!state ? (
             <div className="mt-5 grid gap-2">
               {[0, 1, 2].map((i) => (
