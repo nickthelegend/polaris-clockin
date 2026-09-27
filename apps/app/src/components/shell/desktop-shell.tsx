@@ -20,12 +20,13 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
-import { useAccounts } from "@/components/accounts";
+import { accountDigits } from "@/components/accounts";
 import { photoFor } from "@/components/avatars";
 import { useNotices } from "@/components/use-notices";
 import { DEV_SIGNER, signOut } from "@/lib/account";
 import { useAccountState, useOwner, usePrivyStatus } from "@/lib/account/hooks";
 import { useOrigin } from "@/lib/browser";
+import { receiveLink } from "@/lib/links";
 import { getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { usePrefs } from "@/lib/prefs";
@@ -135,25 +136,33 @@ export function DesktopShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** "Dollar account ···· 7C80": pressing it copies your receive link. */
+/**
+ * "Dollar account ···· 4821": pressing it copies your receive link (the toast
+ * shows the site and your name, never the account's address). Signed out it
+ * is the sample's "Sample account ···· 2451", and pressing it starts yours.
+ */
 function AccountPill() {
+  const router = useRouter();
   const state = useAccountState();
   const origin = useOrigin();
   const { name } = usePrefs();
-  const { accounts } = useAccounts();
-  const last4 = accounts.find((a) => a.id === "dollar")?.last4;
   const address = state.status === "ready" || state.status === "locked" ? state.address : null;
-  const link = address && origin ? `${origin}/send?${new URLSearchParams({ to: address, ...(name ? { n: name } : {}) }).toString()}` : null;
+  const link = address && origin ? receiveLink(origin, address, name) : null;
+  const digits = (label: string, last4: string) => (
+    <>
+      {label} <span className="text-ui-muted">····</span> {last4}
+    </>
+  );
   return (
     <WalletPill
-      address={link}
-      text={
-        <>
-          Dollar account <span className="text-ui-muted">····</span> {last4 ?? ""}
-        </>
-      }
+      address={link?.url ?? null}
+      displayAddress={link?.shown}
+      text={digits("Dollar account", accountDigits(address))}
       label="receive link"
-      pendingText="No account yet"
+      // Before the device's account is read: no flash of the sample's number.
+      pendingText={state.status === "unknown" ? "Dollar account" : digits("Sample account", accountDigits(null))}
+      pendingLabel="Sample account. Create your own account"
+      onPendingClick={state.status === "none" ? () => router.push("/onboard?next=/") : undefined}
       className="hidden xl:inline-flex"
       maxWidth={300}
     />

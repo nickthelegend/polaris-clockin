@@ -19,6 +19,16 @@ export type AccountView = MiniCard & {
 };
 
 /**
+ * The dollar account's number as a buyer sees it: four digits, like a bank
+ * card's, worked out from the account (never its hex tail); the sample
+ * account's are 2451.
+ */
+export function accountDigits(owner: string | null): string {
+  if (!owner) return "2451";
+  return String(parseInt(owner.slice(-8), 16) % 10000).padStart(4, "0");
+}
+
+/**
  * The account's three faces (refs A and D): the Dollar account you pay and
  * send from, the Pay later line, and Boost (dollars locked to raise the
  * line). Home shows the one picked in Select account.
@@ -28,7 +38,7 @@ export function useAccounts() {
   const balance = useData(() => getBalance(owner), [owner]);
   const credit = useData(() => getCreditLine(owner), [owner]);
   const { homeAccount } = usePrefs();
-  const last4 = (owner ?? "0x0000000000000000000000000000000000002451").slice(-4).toUpperCase();
+  const last4 = accountDigits(owner);
 
   const ready = balance.value !== undefined && credit.value !== undefined;
   const accounts: AccountView[] = ready

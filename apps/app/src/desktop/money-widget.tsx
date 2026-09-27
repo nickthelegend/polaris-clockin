@@ -35,6 +35,7 @@ import { SuccessSheet } from "@/components/success-sheet";
 import { type CreatedSendLink, createSendLink, transferTo } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
 import { useOrigin } from "@/lib/browser";
+import { receiveLink } from "@/lib/links";
 import { getActivity, getBalance, getContacts, getCreditLine, getPlans, getProfile, type Person } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { shortDate } from "@/lib/dates";
@@ -376,8 +377,9 @@ function ReceivePanel() {
   const activity = useData(() => getActivity(owner), [owner]);
   const now = useNow();
   const address = state.status === "ready" || state.status === "locked" ? state.address : null;
-  const url = address && origin ? `${origin}/send?${new URLSearchParams({ to: address, ...(name ? { n: name } : {}) }).toString()}` : null;
   const shown = name || profile.value?.name || "";
+  const link = address && origin ? receiveLink(origin, address, name) : null;
+  const url = link?.url ?? null;
 
   const week = useMemo(() => {
     if (!activity.value || !now) return null;
@@ -417,8 +419,8 @@ function ReceivePanel() {
           )}
         </p>
         <div className="flex w-full min-w-0 items-center gap-2 rounded-ui-field bg-ui-surface-2 p-1.5 pl-4">
-          <span className="ui-figure min-w-0 flex-1 truncate text-[14px]" title={url}>
-            {url.replace(/^https?:\/\//, "")}
+          <span className="min-w-0 flex-1 truncate text-[14px]" title="Your receive link">
+            {link?.shown}
           </span>
           <CopyButton value={url} label="receive link" />
           <IconSquareButton label="Share your receive link" icon={<Share2 />} tone="solid" size="sm" onClick={share} />

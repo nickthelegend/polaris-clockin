@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { QrCode } from "@/components/qr";
 import { useAccountState } from "@/lib/account/hooks";
 import { useOrigin } from "@/lib/browser";
+import { receiveLink } from "@/lib/links";
 import { usePrefs } from "@/lib/prefs";
 import { RouteSheet } from "@/components/shell/sheet-host";
 
@@ -21,8 +22,8 @@ export function ReceiveSheet() {
   const origin = useOrigin();
 
   const address = state.status === "ready" || state.status === "locked" ? state.address : null;
-  const params = address ? new URLSearchParams({ to: address, ...(name ? { n: name } : {}) }) : null;
-  const url = params && origin ? `${origin}/send?${params.toString()}` : null;
+  const link = address && origin ? receiveLink(origin, address, name) : null;
+  const url = link?.url ?? null;
 
   async function copy() {
     if (!url) return;
@@ -61,7 +62,7 @@ export function ReceiveSheet() {
         )}
       </p>
       <div className="flex w-full items-end gap-2">
-        <Input hideLabel label="Your link" readOnly value={url.replace(/^https?:\/\//, "")} wrapperClassName="min-w-0 flex-1" />
+        <Input hideLabel label="Your link" readOnly value={link?.shown ?? ""} wrapperClassName="min-w-0 flex-1" />
         <IconButton label="Copy link" icon={<Copy />} tone="lime" size="lg" onClick={() => void copy()} />
       </div>
       <Button

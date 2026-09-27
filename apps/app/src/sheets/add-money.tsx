@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAccounts } from "@/components/accounts";
 import { useAccountState } from "@/lib/account/hooks";
 import { useOrigin } from "@/lib/browser";
+import { receiveLink } from "@/lib/links";
 import { usd } from "@/lib/money";
 import { usePrefs } from "@/lib/prefs";
 import { RouteSheet } from "@/components/shell/sheet-host";
@@ -28,7 +29,7 @@ export function AddMoneySheet() {
       router.push("/onboard?next=/");
       return;
     }
-    const url = `${origin}/send?${new URLSearchParams({ to: address, ...(name ? { n: name } : {}) }).toString()}`;
+    const { url } = receiveLink(origin, address, name);
     const text = `Pay ${name || "me"} with Polaris. It takes a second, and there's no fee.`;
     if (navigator.share) {
       try {
