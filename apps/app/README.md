@@ -198,6 +198,14 @@ merchant web. Below 1024px nothing changes.
 The desktop shell is `src/components/shell/desktop-shell.tsx`; the route
 sheets say how they present with `desktop` on `<RouteSheet>`.
 
+The sample book is marked: while balances, plans and activity come from
+`mock.ts` (`SAMPLE_DATA` in `src/lib/data`), every desktop page figure and
+summary card carries an amber **Sample** pill, and signed out the nav's pill
+reads "Sample account ···· 2451". The sample is a month of an ordinary life
+(about 45 payments, 8 of them in the last day), so the Home chart moves like
+the reference's. The stub relayer's writes are kept in the tab's
+`sessionStorage`, so a reload after paying or sending keeps them.
+
 ## Code map
 
 | Path | What it is |
@@ -230,8 +238,9 @@ stand-in, so dropping the files in needs no code change:
 ## Not built yet
 
 - Balances, plans and activity are still placeholder data
-  (`src/lib/data/mock.ts`) until the Envio indexer lands; checkout links and
-  the relayer are real when `NEXT_PUBLIC_POLARIS_API_URL` is set.
+  (`src/lib/data/mock.ts`, marked Sample on the desktop) until the Envio
+  indexer lands; checkout links and the relayer are real when
+  `NEXT_PUBLIC_POLARIS_API_URL` is set.
 - The `/pay/[id]` screen doesn't yet call `src/lib/checkout-return.ts`, so a
   popup checkout doesn't post its result to the merchant page.
 - *Raise your limit* simulates the WalletConnect signature and the
