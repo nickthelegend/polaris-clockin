@@ -2,8 +2,9 @@ import "server-only";
 
 /**
  * One response shape for every route: `{ data }` on success, `{ error: { code,
- * message } }` on failure. The message is written for the person using the
- * dashboard; the code is for the client to branch on.
+ * message, field? } }` on failure. The message is written for the person using
+ * the dashboard; the code is for the client to branch on; `field` names the
+ * request field a validation error is about, so a form can mark it.
  */
 
 export class HttpError extends Error {
@@ -11,6 +12,7 @@ export class HttpError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly field?: string,
   ) {
     super(message);
     this.name = "HttpError";
@@ -21,8 +23,23 @@ export function ok<T>(data: T, status = 200): Response {
   return Response.json({ data }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export function fail(status: number, code: string, message: string, headers?: HeadersInit): Response {
-  return Response.json({ error: { code, message } }, { status, headers: { "Cache-Control": "no-store", ...headers } });
+export function fail(status: number, code: string, message: string, headers?: HeadersInit, field?: string): Response {
+  return Response.json(
+    { error: field ? { code, message, field } : { code, message } },
+    { status, headers: { "Cache-Control": "no-store", ...headers } },
+  );
+}
+
+/**
+ * A handler for a method the route doesn't support: a JSON 405 with `Allow`,
+ * instead of Next's empty body. Export it through withMerchant like any other.
+ */
+export function methodNotAllowed(allowed: readonly string[]) {
+  return async function notAllowed(): Promise<Response> {
+    return fail(405, "method_not_allowed", `This endpoint accepts ${allowed.join(" and ")} only.`, {
+      Allow: allowed.join(", "),
+    });
+  };
 }
 
 const MAX_BODY_BYTES = 16 * 1024;

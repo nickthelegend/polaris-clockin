@@ -1,5 +1,5 @@
 import { withMerchant } from "@/server/auth";
-import { ok, readJson } from "@/server/http";
+import { ok, readJson, methodNotAllowed } from "@/server/http";
 import { createApiKey, listApiKeys } from "@/server/services";
 import { parseCreateApiKey } from "@/server/validate";
 
@@ -13,3 +13,9 @@ export const POST = withMerchant(async (req, auth) => {
   const input = parseCreateApiKey(await readJson(req));
   return ok(await createApiKey(auth, input), 201);
 });
+
+/* Everything else answers a JSON 405 naming what the route accepts. */
+const notAllowed = methodNotAllowed(["GET", "POST"]);
+export const PUT = withMerchant(notAllowed);
+export const PATCH = withMerchant(notAllowed);
+export const DELETE = withMerchant(notAllowed);

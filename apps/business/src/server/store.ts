@@ -20,10 +20,13 @@ import type {
  * The merchant store.
  *
  * Route handlers talk to this interface and nothing else. Today it is an
- * in-memory map seeded with sample data per merchant; a later step swaps in a
- * database-backed implementation of the same interface (and the indexer feeds
- * payments, plans and the collector status). Every method is async so that
- * swap changes no call site.
+ * in-memory map, per server instance: it forgets everything on a restart, so
+ * the dashboard never calls what it holds permanent. New merchants start
+ * empty; only with NEXT_PUBLIC_POLARIS_DEMO_DATA=1 are they seeded with a
+ * labelled sample book. A later step swaps in a database-backed
+ * implementation of the same interface (and the indexer feeds payments, plans
+ * and the collector status). Every method is async so that swap changes no
+ * call site.
  *
  * Secrets never leave the store through the API layer: `StoredApiKey` carries
  * only a hash of the secret key, and a webhook's signing secret stays here.
@@ -52,6 +55,8 @@ export interface MerchantStore {
 
   listLinks(merchantId: string): Promise<PaymentLink[]>;
   insertLink(merchantId: string, link: PaymentLink): Promise<PaymentLink>;
+  /** Change a link's status (turning it off). Null when it isn't this merchant's. */
+  updateLink(merchantId: string, linkId: string, patch: { status: PaymentLink["status"] }): Promise<PaymentLink | null>;
 
   listPayments(merchantId: string): Promise<Payment[]>;
   listPlans(merchantId: string): Promise<Plan[]>;
@@ -66,12 +71,20 @@ export interface MerchantStore {
 
   listApiKeys(merchantId: string): Promise<StoredApiKey[]>;
   insertApiKey(merchantId: string, key: StoredApiKey): Promise<StoredApiKey>;
+  /** Revoke: the key stops authenticating at once. False when it isn't this merchant's. */
+  deleteApiKey(merchantId: string, keyId: string): Promise<boolean>;
   /** For the checkout API later: find a key by the hash of a presented secret. */
   findApiKeyBySecretHash(secretHash: string): Promise<{ merchantId: string; key: StoredApiKey } | null>;
 
   listWebhooks(merchantId: string): Promise<StoredWebhook[]>;
   getWebhook(merchantId: string, endpointId: string): Promise<StoredWebhook | null>;
   insertWebhook(merchantId: string, endpoint: StoredWebhook): Promise<StoredWebhook>;
+  updateWebhook(
+    merchantId: string,
+    endpointId: string,
+    patch: Partial<Pick<StoredWebhook, "url" | "events" | "enabled">>,
+  ): Promise<StoredWebhook | null>;
+  deleteWebhook(merchantId: string, endpointId: string): Promise<boolean>;
   listDeliveries(merchantId: string): Promise<WebhookDelivery[]>;
   insertDelivery(merchantId: string, delivery: WebhookDelivery): Promise<WebhookDelivery>;
 }
@@ -158,6 +171,13 @@ class MemoryStore implements MerchantStore {
     return clone(link);
   }
 
+  async updateLink(merchantId: string, linkId: string, patch: { status: PaymentLink["status"] }) {
+    const link = this.book(merchantId).links.find((l) => l.id === linkId);
+    if (!link) return null;
+    link.status = patch.status;
+    return clone(link);
+  }
+
   async listPayments(merchantId: string) {
     return clone(this.book(merchantId).payments);
   }
@@ -205,6 +225,13 @@ class MemoryStore implements MerchantStore {
     return clone(key);
   }
 
+  async deleteApiKey(merchantId: string, keyId: string) {
+    const book = this.book(merchantId);
+    const before = book.apiKeys.length;
+    book.apiKeys = book.apiKeys.filter((k) => k.id !== keyId);
+    return book.apiKeys.length !== before;
+  }
+
   async findApiKeyBySecretHash(secretHash: string) {
     for (const [merchantId, book] of this.books) {
       const key = book.apiKeys.find((k) => k.secretHash === secretHash);
@@ -225,6 +252,20 @@ class MemoryStore implements MerchantStore {
   async insertWebhook(merchantId: string, endpoint: StoredWebhook) {
     this.book(merchantId).webhooks.push(clone(endpoint));
     return clone(endpoint);
+  }
+
+  async updateWebhook(merchantId: string, endpointId: string, patch: Partial<Pick<StoredWebhook, "url" | "events" | "enabled">>) {
+    const endpoint = this.book(merchantId).webhooks.find((w) => w.id === endpointId);
+    if (!endpoint) return null;
+    Object.assign(endpoint, clone(patch));
+    return clone(endpoint);
+  }
+
+  async deleteWebhook(merchantId: string, endpointId: string) {
+    const book = this.book(merchantId);
+    const before = book.webhooks.length;
+    book.webhooks = book.webhooks.filter((w) => w.id !== endpointId);
+    return book.webhooks.length !== before;
   }
 
   async listDeliveries(merchantId: string) {

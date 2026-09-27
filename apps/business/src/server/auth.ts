@@ -5,6 +5,7 @@ import { getAddress, isAddress } from "viem";
 import type { Address } from "@/lib/data/types";
 import { fail, HttpError } from "./http";
 import { getPrivy } from "./privy";
+import { takeWriteToken } from "./rate-limit";
 
 /**
  * Who is calling, proven by Privy.
@@ -117,7 +118,15 @@ async function lookupProfile(userId: string): Promise<Profile> {
   try {
     const user = await privy.users()._get(userId);
     accounts = (user.linked_accounts ?? []) as readonly LinkedAccount[];
-  } catch {
+  } catch (error) {
+    const status = privyStatus(error);
+    // A valid token for a user Privy no longer has (deleted): the session is over.
+    if (status === 404) throw new HttpError(401, "invalid_token", "Your session has expired. Sign in again.");
+    // Privy refused our app secret: a server configuration problem, not the merchant's.
+    if (status === 401 || status === 403) {
+      console.error("[auth] Privy rejected the app credentials while loading a user", status);
+      throw new HttpError(503, "auth_not_configured", "Sign-in isn't configured correctly on this server.");
+    }
     throw new HttpError(502, "privy_unavailable", "We couldn't reach Privy to load your account. Try again.");
   }
 
@@ -125,6 +134,13 @@ async function lookupProfile(userId: string): Promise<Profile> {
   if (profiles.size >= MAX_CACHED) profiles.clear();
   profiles.set(userId, { value, expires: Date.now() + (value.walletAddress ? PROFILE_TTL_MS : PENDING_TTL_MS) });
   return value;
+}
+
+/** The HTTP status of a failed Privy API call, when it had one. */
+function privyStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const status = (error as { status?: unknown }).status;
+  return typeof status === "number" ? status : null;
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
@@ -170,12 +186,20 @@ export function withMerchant<Ctx = unknown>(
   return async function authenticated(req: Request, ctx: Ctx): Promise<Response> {
     try {
       const merchant = await authenticate(req);
+      if (UNSAFE_METHODS.has(req.method.toUpperCase())) {
+        const wait = takeWriteToken(merchant.userId);
+        if (wait > 0) {
+          return fail(429, "rate_limited", "That's a lot of changes at once. Wait a moment and try again.", {
+            "Retry-After": String(wait),
+          });
+        }
+      }
       return await handler(req, merchant, ctx);
     } catch (error) {
       if (error instanceof HttpError) {
         const headers: HeadersInit | undefined =
           error.status === 401 ? { "WWW-Authenticate": 'Bearer realm="polaris-business"' } : undefined;
-        return fail(error.status, error.code, error.message, headers);
+        return fail(error.status, error.code, error.message, headers, error.field);
       }
       console.error("[api] unhandled error", error);
       return fail(500, "internal", "Something went wrong on our side. Try again.");

@@ -9,7 +9,7 @@ import {
   CENTS_TO_AUSD_UNITS,
   TRANSFER_WITH_AUTHORIZATION_TYPES,
 } from "@/lib/chain";
-import { isToday } from "@/lib/data/format";
+import { isToday, money } from "@/lib/data/format";
 import { linkUrl } from "@/lib/data/placeholder";
 import type {
   ApiKey,
@@ -25,6 +25,7 @@ import type {
   PaymentLink,
   Payout,
   PayoutsState,
+  UpdateWebhookInput,
   WebhookDelivery,
   WebhookEndpoint,
   WebhooksState,
@@ -32,6 +33,8 @@ import type {
 } from "@/lib/data/types";
 import { requireWallet, type AuthedMerchant } from "./auth";
 import { HttpError } from "./http";
+import { resolveDestinationProblem } from "./net-guard";
+import { SERVER_DEMO_DATA } from "@/lib/data/demo";
 import { createPayoutPolicy } from "./payout-policy";
 import {
   hashSecret,
@@ -126,14 +129,21 @@ export async function getOverview(auth: AuthedMerchant): Promise<Overview> {
     },
     collector,
     autoPayouts,
-    sample: true,
+    // True only when the store was seeded with the labelled demo book.
+    sample: SERVER_DEMO_DATA,
   };
 }
 
 /* ── Links ──────────────────────────────────────────────────────────────── */
 
+/** Links are cheap to make and never deleted, so cap them per merchant. */
+const MAX_LINKS = 500;
+
 export async function createLink(auth: AuthedMerchant, input: CreateLinkInput): Promise<PaymentLink> {
   const merchant = await merchantFor(auth);
+  if ((await getStore().listLinks(merchant.id)).length >= MAX_LINKS) {
+    throw new HttpError(409, "limit_reached", `You can have up to ${MAX_LINKS} links. Turn off ones you no longer share.`);
+  }
   const id = randomBase62(10);
   const link: PaymentLink = {
     id,
@@ -160,6 +170,14 @@ export async function listLinks(auth: AuthedMerchant): Promise<PaymentLink[]> {
       ? { ...link, status: "expired" as const }
       : link,
   );
+}
+
+/** Turn a link off: it takes no more payments. Links are never deleted; payments point at them. */
+export async function deactivateLink(auth: AuthedMerchant, linkId: string): Promise<PaymentLink> {
+  const merchant = await merchantFor(auth);
+  const link = await getStore().updateLink(merchant.id, linkId, { status: "inactive" });
+  if (!link) throw new HttpError(404, "not_found", "That link doesn't exist.");
+  return link;
 }
 
 /* ── Payouts ────────────────────────────────────────────────────────────── */
@@ -244,7 +262,8 @@ export async function withdraw(auth: AuthedMerchant, input: WithdrawInput): Prom
       throw new HttpError(
         400,
         "insufficient_balance",
-        `You can withdraw up to $${(error.availableCents / 100).toFixed(2)} right now.`,
+        `You can withdraw up to ${money(error.availableCents)} right now.`,
+        "amountCents",
       );
     }
     throw error;
@@ -254,9 +273,19 @@ export async function withdraw(auth: AuthedMerchant, input: WithdrawInput): Prom
 export async function setAutoPayouts(auth: AuthedMerchant, input: AutoPayoutsInput): Promise<AutoPayouts> {
   const store = getStore();
   const merchant = await merchantFor(auth);
-  const wallet = requireWallet(auth);
   const current = await store.getAutoPayouts(merchant.id);
 
+  // Turning payouts off never needs the wallet: stopping must always work.
+  if (!input.enabled) {
+    return store.setAutoPayouts(merchant.id, {
+      ...current,
+      enabled: false,
+      payoutAddress: input.payoutAddress ?? current.payoutAddress,
+      nextRunAt: null,
+    });
+  }
+
+  const wallet = requireWallet(auth);
   if (input.payoutAddress && input.payoutAddress === wallet) {
     throw new HttpError(400, "invalid_request", "That's your Polaris payout account itself. Enter where the money should go.");
   }
@@ -309,7 +338,7 @@ export async function createApiKey(auth: AuthedMerchant, input: CreateApiKeyInpu
   const store = getStore();
   const merchant = await merchantFor(auth);
   if ((await store.listApiKeys(merchant.id)).length >= MAX_KEYS) {
-    throw new HttpError(409, "limit_reached", `You can have up to ${MAX_KEYS} keys. Remove one you no longer use.`);
+    throw new HttpError(409, "limit_reached", `You can have up to ${MAX_KEYS} keys. Revoke one you no longer use.`);
   }
   const secret = newSecretKey();
   const stored = await store.insertApiKey(merchant.id, {
@@ -322,6 +351,15 @@ export async function createApiKey(auth: AuthedMerchant, input: CreateApiKeyInpu
     lastUsedAt: null,
   });
   return { key: publicKey(stored), secret };
+}
+
+/** Revoke a key: it stops working at once, and it can't be brought back. */
+export async function revokeApiKey(auth: AuthedMerchant, keyId: string): Promise<{ id: string; revoked: true }> {
+  const merchant = await merchantFor(auth);
+  if (!(await getStore().deleteApiKey(merchant.id, keyId))) {
+    throw new HttpError(404, "not_found", "That key doesn't exist, or it was already revoked.");
+  }
+  return { id: keyId, revoked: true };
 }
 
 /* ── Webhooks ───────────────────────────────────────────────────────────── */
@@ -349,8 +387,10 @@ export async function createWebhook(auth: AuthedMerchant, input: CreateWebhookIn
     throw new HttpError(409, "limit_reached", `You can have up to ${MAX_ENDPOINTS} endpoints.`);
   }
   if (existing.some((e) => e.url === input.url)) {
-    throw new HttpError(409, "duplicate", "That endpoint is already registered.");
+    throw new HttpError(409, "duplicate", "That endpoint is already registered.", "url");
   }
+  const problem = await resolveDestinationProblem(new URL(input.url));
+  if (problem) throw new HttpError(400, "invalid_request", problem.message, "url");
   const secret = newWebhookSecret();
   const stored = await store.insertWebhook(merchant.id, {
     id: newId("we", 12),
@@ -358,9 +398,34 @@ export async function createWebhook(auth: AuthedMerchant, input: CreateWebhookIn
     events: input.events,
     secretHint: hint(secret, WEBHOOK_SECRET_PREFIX),
     secret,
+    enabled: true,
     createdAt: new Date().toISOString(),
   });
   return { endpoint: publicEndpoint(stored), secret };
+}
+
+export async function updateWebhook(auth: AuthedMerchant, endpointId: string, input: UpdateWebhookInput): Promise<WebhookEndpoint> {
+  const store = getStore();
+  const merchant = await merchantFor(auth);
+  if (input.url) {
+    const others = (await store.listWebhooks(merchant.id)).filter((e) => e.id !== endpointId);
+    if (others.some((e) => e.url === input.url)) {
+      throw new HttpError(409, "duplicate", "That endpoint is already registered.", "url");
+    }
+    const problem = await resolveDestinationProblem(new URL(input.url));
+    if (problem) throw new HttpError(400, "invalid_request", problem.message, "url");
+  }
+  const updated = await store.updateWebhook(merchant.id, endpointId, input);
+  if (!updated) throw new HttpError(404, "not_found", "That endpoint doesn't exist.");
+  return publicEndpoint(updated);
+}
+
+export async function deleteWebhook(auth: AuthedMerchant, endpointId: string): Promise<{ id: string; deleted: true }> {
+  const merchant = await merchantFor(auth);
+  if (!(await getStore().deleteWebhook(merchant.id, endpointId))) {
+    throw new HttpError(404, "not_found", "That endpoint doesn't exist.");
+  }
+  return { id: endpointId, deleted: true };
 }
 
 /**
@@ -373,6 +438,10 @@ export async function sendTestEvent(auth: AuthedMerchant, endpointId: string): P
   const merchant = await merchantFor(auth);
   const endpoint = await store.getWebhook(merchant.id, endpointId);
   if (!endpoint) throw new HttpError(404, "not_found", "That endpoint doesn't exist.");
+  if (endpoint.enabled === false) throw new HttpError(409, "endpoint_disabled", "Turn the endpoint on to send it a test event.");
+  // Check where it points now, not only at registration: DNS can change.
+  const problem = await resolveDestinationProblem(new URL(endpoint.url));
+  if (problem) throw new HttpError(400, "unsafe_destination", problem.message, "url");
 
   const createdAt = new Date();
   const eventId = `evt_${randomUUID().replace(/-/g, "")}`;

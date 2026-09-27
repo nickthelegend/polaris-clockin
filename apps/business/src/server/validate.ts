@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAddress, isAddress, zeroAddress } from "viem";
 
+import { money } from "@/lib/data/format";
 import {
   WEBHOOK_EVENTS,
   type Address,
@@ -11,46 +12,66 @@ import {
   type CreateWebhookInput,
   type LinkUsage,
   type PayMode,
+  type UpdateLinkInput,
+  type UpdateWebhookInput,
   type WebhookEventType,
   type WithdrawInput,
 } from "@/lib/data/types";
 import { HttpError } from "./http";
+import { webhookUrlProblem } from "./net-guard";
 
 /**
  * Request validation. Each function takes the parsed JSON body and returns a
- * typed input or throws a 400 whose message names the field and the fix.
+ * typed input or throws a 400 whose message a person can act on, plus the
+ * `field` it is about (the code name, for the client; never in the message).
  */
 
-function invalid(message: string): never {
-  throw new HttpError(400, "invalid_request", message);
+function invalid(message: string, field?: string): never {
+  throw new HttpError(400, "invalid_request", message, field);
 }
 
-function text(body: Record<string, unknown>, key: string, { min = 1, max = 200 } = {}): string {
+type TextRule = { min?: number; max?: number; name: string };
+
+function text(body: Record<string, unknown>, key: string, { min = 1, max = 200, name }: TextRule): string {
   const value = body[key];
-  if (typeof value !== "string") invalid(`${key} is required.`);
+  if (typeof value !== "string" || !value.trim()) invalid(`Enter ${name}.`, key);
   const trimmed = value.trim();
-  if (trimmed.length < min) invalid(`${key} is required.`);
-  if (trimmed.length > max) invalid(`${key} must be ${max} characters or fewer.`);
+  if (trimmed.length < min) invalid(`Use at least ${min} characters.`, key);
+  if (trimmed.length > max) invalid(`Keep it to ${max} characters or fewer.`, key);
   // No control characters: these end up in receipts, webhooks and logs.
-  if (/[\u0000-\u001f\u007f]/.test(trimmed)) invalid(`${key} contains characters we can't use.`);
+  if (/[\u0000-\u001f\u007f]/.test(trimmed)) invalid("Remove the line breaks or special characters.", key);
   return trimmed;
 }
 
 /** Whole cents, $1.00 to $1,000,000.00 unless a tighter cap applies. */
 function cents(body: Record<string, unknown>, key: string, { min = 100, max = 100_000_000 } = {}): number {
   const value = body[key];
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) invalid(`${key} must be a whole number of cents.`);
-  if (value < min) invalid(`The amount must be at least $${(min / 100).toFixed(2)}.`);
-  if (value > max) invalid(`The amount can be at most $${(max / 100).toLocaleString("en-US")}.`);
+  if (typeof value !== "number" || !Number.isFinite(value)) invalid("Enter an amount.", key);
+  if (!Number.isSafeInteger(value)) invalid("Use at most two decimal places.", key);
+  if (value < min) invalid(`The amount must be at least ${money(min)}.`, key);
+  if (value > max) invalid(`The amount can be at most ${money(max)}.`, key);
   return value;
 }
 
-export function address(value: unknown, label = "address"): Address {
-  if (typeof value !== "string" || !isAddress(value, { strict: false })) {
-    invalid(`Enter a valid ${label}: 0x followed by 40 hexadecimal characters.`);
+const HEX_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+
+/**
+ * An EVM address. All-lowercase or all-uppercase input carries no checksum
+ * and is accepted; mixed case is a checksum, and it must be right: a typo in a
+ * money destination should fail loudly, not be silently re-checksummed.
+ */
+export function address(value: unknown, label = "address", field = "address"): Address {
+  if (typeof value !== "string" || !HEX_ADDRESS.test(value.trim())) {
+    invalid(`Enter a valid ${label}: 0x followed by 40 letters and numbers.`, field);
   }
-  const checksummed = getAddress(value);
-  if (checksummed === zeroAddress) invalid(`The zero address can't receive money.`);
+  const raw = value.trim();
+  const body = raw.slice(2);
+  const mixed = body !== body.toLowerCase() && body !== body.toUpperCase();
+  if (mixed && !isAddress(raw, { strict: true })) {
+    invalid("Check the address: its capitalisation doesn't match its checksum.", field);
+  }
+  const checksummed = getAddress(raw.toLowerCase());
+  if (checksummed === zeroAddress) invalid("The zero address can't receive money.", field);
   return checksummed;
 }
 
@@ -60,28 +81,28 @@ const USAGES: readonly LinkUsage[] = ["single", "reusable"];
 const MAX_EXPIRY_HOURS = 24 * 365;
 
 export function parseBusinessName(body: Record<string, unknown>): { businessName: string } {
-  return { businessName: text(body, "businessName", { min: 2, max: 80 }) };
+  return { businessName: text(body, "businessName", { min: 2, max: 80, name: "your business name" }) };
 }
 
 export function parseCreateLink(body: Record<string, unknown>): CreateLinkInput {
   const amountCents = cents(body, "amountCents");
-  const description = text(body, "description", { max: 120 });
+  const description = text(body, "description", { max: 120, name: "what the buyer is paying for" });
 
   const rawModes = body.modes;
-  if (!Array.isArray(rawModes) || rawModes.length === 0) invalid("Choose at least one way to pay.");
+  if (!Array.isArray(rawModes) || rawModes.length === 0) invalid("Choose at least one way to pay.", "modes");
   const modes = [...new Set(rawModes)] as PayMode[];
-  if (!modes.every((m) => MODES.includes(m))) invalid("modes may only contain now, later and subscribe.");
+  if (!modes.every((m) => MODES.includes(m))) invalid("Choose Pay now, Pay in 4 or Subscribe.", "modes");
   // Pay in 4 has a floor: below $20 the instalments round to nothing useful.
-  if (modes.includes("later") && amountCents < 20_00) invalid("Pay in 4 needs an amount of at least $20.00.");
+  if (modes.includes("later") && amountCents < 20_00) invalid(`Pay in 4 needs an amount of at least ${money(20_00)}.`, "modes");
 
   const usage = body.usage as LinkUsage;
-  if (!USAGES.includes(usage)) invalid("usage must be single or reusable.");
+  if (!USAGES.includes(usage)) invalid("Choose single use or reusable.", "usage");
 
   const expires = body.expiresInHours;
   let expiresInHours: number | null = null;
   if (expires !== null && expires !== undefined) {
     if (typeof expires !== "number" || !Number.isInteger(expires) || expires < 1 || expires > MAX_EXPIRY_HOURS) {
-      invalid("expiresInHours must be a whole number of hours between 1 and 8760, or null.");
+      invalid("Choose an expiry between one hour and one year, or no expiry.", "expiresInHours");
     }
     expiresInHours = expires;
   }
@@ -89,23 +110,28 @@ export function parseCreateLink(body: Record<string, unknown>): CreateLinkInput 
   return { amountCents, description, modes: MODES.filter((m) => modes.includes(m)), usage, expiresInHours };
 }
 
+export function parseUpdateLink(body: Record<string, unknown>): UpdateLinkInput {
+  if (body.active !== false) invalid("A link can only be turned off.", "active");
+  return { active: false };
+}
+
 export function parseWithdraw(body: Record<string, unknown>): WithdrawInput {
   const amountCents = cents(body, "amountCents", { min: 1 });
-  const destination = address(body.destination, "destination address");
+  const destination = address(body.destination, "destination address", "destination");
 
   const auth = body.authorization;
   if (auth === undefined || auth === null) return { amountCents, destination };
-  if (typeof auth !== "object" || Array.isArray(auth)) invalid("authorization must be an object.");
+  if (typeof auth !== "object" || Array.isArray(auth)) invalid("The confirmation is malformed. Try again.", "authorization");
   const a = auth as Record<string, unknown>;
   const uint = (k: string) => {
     const v = a[k];
-    if (typeof v !== "string" || !/^\d{1,20}$/.test(v)) invalid(`authorization.${k} must be a decimal string.`);
+    if (typeof v !== "string" || !/^\d{1,20}$/.test(v)) invalid("The confirmation is malformed. Try again.", "authorization");
     return v;
   };
   const hex = (k: string, bytes?: number) => {
     const v = a[k];
     const pattern = bytes ? new RegExp(`^0x[0-9a-fA-F]{${bytes * 2}}$`) : /^0x[0-9a-fA-F]+$/;
-    if (typeof v !== "string" || !pattern.test(v)) invalid(`authorization.${k} is malformed.`);
+    if (typeof v !== "string" || !pattern.test(v)) invalid("The confirmation is malformed. Try again.", "authorization");
     return v as `0x${string}`;
   };
   return {
@@ -121,37 +147,51 @@ export function parseWithdraw(body: Record<string, unknown>): WithdrawInput {
 }
 
 export function parseAutoPayouts(body: Record<string, unknown>): AutoPayoutsInput {
-  if (typeof body.enabled !== "boolean") invalid("enabled must be true or false.");
+  if (typeof body.enabled !== "boolean") invalid("Choose on or off.", "enabled");
   const payoutAddress =
     body.payoutAddress === null || body.payoutAddress === undefined || body.payoutAddress === ""
       ? null
-      : address(body.payoutAddress, "payout address");
-  if (body.enabled && !payoutAddress) invalid("Add a payout address before turning on automatic payouts.");
+      : address(body.payoutAddress, "payout address", "payoutAddress");
+  if (body.enabled && !payoutAddress) invalid("Add a payout address before turning on automatic payouts.", "payoutAddress");
   return { enabled: body.enabled, payoutAddress };
 }
 
 export function parseCreateApiKey(body: Record<string, unknown>): CreateApiKeyInput {
-  return { name: text(body, "name", { max: 60 }) };
+  return { name: text(body, "name", { max: 60, name: "a name for the key" }) };
 }
 
-export function parseCreateWebhook(body: Record<string, unknown>): CreateWebhookInput {
-  const raw = text(body, "url", { max: 500 });
+function webhookUrl(raw: string): string {
   let url: URL;
   try {
     url = new URL(raw);
   } catch {
-    invalid("Enter the full endpoint URL, starting with https://.");
+    invalid("Enter the full endpoint URL, starting with https://.", "url");
   }
-  const local = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
-  if (url.protocol !== "https:" && !(local && url.protocol === "http:" && process.env.NODE_ENV !== "production")) {
-    invalid("Webhook endpoints must use https://.");
+  const problem = webhookUrlProblem(url);
+  if (problem) invalid(problem.message, "url");
+  return url.toString();
+}
+
+function webhookEvents(raw: unknown): WebhookEventType[] {
+  if (!Array.isArray(raw) || raw.length === 0) invalid("Choose at least one event.", "events");
+  const events = [...new Set(raw)] as WebhookEventType[];
+  if (!events.every((e) => (WEBHOOK_EVENTS as readonly string[]).includes(e))) invalid("One of those events isn't one we send.", "events");
+  return WEBHOOK_EVENTS.filter((e) => events.includes(e));
+}
+
+export function parseCreateWebhook(body: Record<string, unknown>): CreateWebhookInput {
+  const url = webhookUrl(text(body, "url", { max: 500, name: "the endpoint URL" }));
+  return { url, events: webhookEvents(body.events) };
+}
+
+export function parseUpdateWebhook(body: Record<string, unknown>): UpdateWebhookInput {
+  const patch: UpdateWebhookInput = {};
+  if (body.url !== undefined) patch.url = webhookUrl(text(body, "url", { max: 500, name: "the endpoint URL" }));
+  if (body.events !== undefined) patch.events = webhookEvents(body.events);
+  if (body.enabled !== undefined) {
+    if (typeof body.enabled !== "boolean") invalid("Choose on or off.", "enabled");
+    patch.enabled = body.enabled;
   }
-  if (url.username || url.password) invalid("Put credentials in your receiver, not in the URL.");
-
-  const rawEvents = body.events;
-  if (!Array.isArray(rawEvents) || rawEvents.length === 0) invalid("Choose at least one event.");
-  const events = [...new Set(rawEvents)] as WebhookEventType[];
-  if (!events.every((e) => (WEBHOOK_EVENTS as readonly string[]).includes(e))) invalid("One of the events isn't one we send.");
-
-  return { url: url.toString(), events: WEBHOOK_EVENTS.filter((e) => events.includes(e)) };
+  if (Object.keys(patch).length === 0) invalid("Change the URL, the events, or whether it's on.");
+  return patch;
 }
