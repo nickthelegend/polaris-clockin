@@ -181,7 +181,7 @@ export function SectionTrade() {
               </div>
               <div className="mt-6">
                 {type === "line" ? (
-                  <GradientLineChart label="Sales, the last 24 hours" data={DAY} height={340} formatValue={usd} formatAxis={(v) => usd(v)} formatTime={time} />
+                  <GradientLineChart label="Sales, the last 24 hours" data={DAY} height={340} formatValue={usd} formatAxis={(v) => usd(v)} formatTime={time} tickZone="utc" lastLabel="Now" />
                 ) : (
                   <CandlestickChart label="Sales, hourly candles" data={CANDLES} height={340} formatPrice={(v) => `$${Math.round(v)}`} formatTime={time} />
                 )}
