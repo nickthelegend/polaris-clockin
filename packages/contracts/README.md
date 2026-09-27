@@ -16,12 +16,20 @@ pnpm --filter @polarispay/contracts e2e:local   # node on :8600, deploy, nine fl
 
 `e2e:local` starts a Hardhat node on `127.0.0.1:8600`, deploys everything with
 the same script as testnet (MockAUSD and a local forwarder standing in for
-AUSD and Chainlink's), and runs: a CRE underwriting report opens a buyer's
-line; Pay now; Pay in 4 ($200 as 4 x $50.38, the merchant paid in full); a CRE
+AUSD and Chainlink's), and runs: an underwriting report opens a buyer's
+line; Pay now; Pay in 4 ($200 as 4 x $50.38, the merchant paid in full), after
+which a Pay now authorization the buyer signed for the same order is refused; a
 collections report collects instalment 1; the buyer pays the rest early by
-signature; Subscribe; a CRE report charges the renewal; send by link; claim.
-It prints gas used against each estimated limit and fails if any user sent a
-transaction or held MON.
+signature; Subscribe; a collections report charges the renewal; send by link;
+claim. It prints gas used against each estimated limit and fails if any user
+sent a transaction or held MON.
+
+The reports in this run are hand-built by the script (literal underwriting
+facts, hand-picked collection actions) and delivered through the mock
+forwarder by a stand-in key. No CRE workflow, DON or Nansen call runs here, so
+it is evidence for the receivers and contracts only. The CRE evidence is the
+workflows' own `e2e:local` (the real handlers against this stack) and
+`cre workflow simulate` output.
 
 ## Deploy to Monad testnet
 
@@ -55,8 +63,8 @@ which the script refuses), `CRE_WORKFLOW_OWNER`, `RELAYER_ADDRESS`,
 
 **Gas.** Monad bills the gas *limit*. Every script sends through `lib/tx.js`:
 `eth_estimateGas` plus 15%, never a blanket limit. Measured locally (gas used):
-Pay now 268k, open a plan 396k, CRE collection 153k, subscribe 310k, send
-167k, claim 63k, CRE underwriting 134k.
+Pay now 271k, open a plan 422k, a collections report 153k, subscribe 335k, send
+167k, claim 63k, an underwriting report 142k.
 
 ## Contracts
 

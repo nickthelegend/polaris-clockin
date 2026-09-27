@@ -9,13 +9,20 @@
  * signer that delivers reports through the MockKeystoneForwarder, as
  * `cre workflow simulate --broadcast` does through Chainlink's.
  *
- *   1. Underwrite: a CRE underwriting report opens the buyer's credit line
+ * No CRE workflow, DON or data provider (Nansen included) runs here. The
+ * reports are built by this script: the underwriting facts are literals and
+ * the collection actions are chosen by hand, so what this proves is the
+ * receivers and contracts, not the workflows. For the workflows, cite
+ * workflows' own e2e:local (the real handlers against this same stack) or
+ * `cre workflow simulate` output.
+ *
+ *   1. Underwrite: a hand-built underwriting report (mock forwarder) opens the buyer's credit line
  *   2. Pay now:    ReceiveWithAuthorization -> PolarisCheckout.pay
  *   3. Pay in 4:   PlanIntent + Permit -> PolarisCheckout.openPlan (merchant paid in full)
- *   4. Collect:    a CRE collections report collects instalment 1 when due
+ *   4. Collect:    a hand-built collections report (mock forwarder) collects instalment 1 when due
  *   5. Pay early:  RepayIntent -> PolarisLoanEngine.repayWithSig closes the plan
  *   6. Subscribe:  SubscribeIntent + Permit -> PolarisCheckout.subscribe
- *   7. Renew:      a CRE collections report charges period 2
+ *   7. Renew:      a hand-built collections report (mock forwarder) charges period 2
  *   8. Send:       ReceiveWithAuthorization + link-key Open -> PolarisSend.send
  *   9. Claim:      link-key Claim -> PolarisSend.claim to a fresh wallet
  *
@@ -51,6 +58,26 @@ async function now() {
 async function travel(seconds) {
   await ethers.provider.send("evm_increaseTime", [Number(seconds)]);
   await ethers.provider.send("evm_mine", []);
+}
+
+/**
+ * The custom error a call reverted with. ethers decodes it when the node
+ * returns the revert data; a Hardhat node over JSON-RPC instead names the error
+ * in its message, so both are read.
+ */
+function revertName(contract, e) {
+  if (e.revert?.name) return e.revert.name;
+  for (const data of [e.data, e.info?.error?.data, e.error?.data]) {
+    if (typeof data !== "string" || data.length < 10) continue;
+    try {
+      const parsed = contract.interface.parseError(data);
+      if (parsed) return parsed.name;
+    } catch {
+      // not one of this contract's errors
+    }
+  }
+  const named = /custom error '(\w+)\(/.exec(e.message ?? "");
+  return named ? named[1] : e.shortMessage ?? String(e);
 }
 
 function events(receipt, contract, name) {
@@ -114,7 +141,7 @@ async function main() {
   };
 
   // 1. Underwrite ------------------------------------------------------
-  console.log("Credit line");
+  console.log("Credit line (mock forwarder report, hand-built facts; no CRE workflow or Nansen)");
   const facts = {
     walletAgeDays: 730,
     txCount: 1_200,
@@ -130,7 +157,7 @@ async function main() {
     cre.encodeUnderwritingReport([{ user: buyer.address, linkedWallet: history.address, facts }]),
     cre.WORKFLOW_NAMES.UNDERWRITING
   );
-  await record(1, "CRE underwrite report -> ScoreManager.underwrite", uwReceipt);
+  await record(1, "mock forwarder report (hand-built facts) -> ScoreManager.underwrite", uwReceipt);
   const [applied] = events(uwReceipt, underwriting, "UnderwritingApplied");
   if (!applied) throw new Error("underwriting was refused");
   const limit = await scores.creditLimitOf(buyer.address);
@@ -209,7 +236,7 @@ async function main() {
   const refused = await payments
     .connect(relayer)
     .payWithAuthorization.staticCall(buyer.address, merchant, principal, planOrder, 0, t + 1800n, leftover.v, leftover.r, leftover.s)
-    .then(() => "accepted", (e) => e.revert?.name ?? e.shortMessage ?? String(e));
+    .then(() => "accepted", (e) => revertName(payments, e));
   if (refused !== "OrderAlreadySettled") {
     throw new Error(`a Pay now authorization for the plan's order could still charge the buyer: ${refused}`);
   }
@@ -219,14 +246,14 @@ async function main() {
       `buyer owes 4 x ${$(quote.installmentAmount)} (${$(quote.interest)} interest), first due in ${interval}s\n`
   );
 
-  // 4. CRE collects instalment 1 ---------------------------------------
-  console.log("Collections (CRE)");
+  // 4. A collections report collects instalment 1 ----------------------
+  console.log("Collections (mock forwarder report, hand-built)");
   await travel(interval + 1n);
   const candidates = [{ action: cre.ACTION.COLLECT_INSTALLMENT, id: loanId }];
   const ready = await collections.checkTasks(candidates);
   const due = candidates.filter((_, i) => ready[i]);
   const colReceipt = await report(collections.target, cre.encodeCollectionsReport(due), cre.WORKFLOW_NAMES.COLLECTIONS);
-  await record(4, "CRE collections report -> collectInstallment", colReceipt);
+  await record(4, "mock forwarder report (hand-built) -> collectInstallment", colReceipt);
   const [collected] = events(colReceipt, collections, "TaskExecuted");
   console.log(`     instalment 1 collected: ${$(collected.args.amount)}, ${(await engine.getLoan(loanId)).installmentsPaid}/4 paid`);
   console.log(`     on time: score ${await scores.scoreOf(buyer.address)}, credit line ${$(await scores.creditLimitOf(buyer.address))}\n`);
@@ -285,13 +312,13 @@ async function main() {
   const subId = started.args.subId;
   console.log(`     subscription #${subId}, period 1 charged, renews every ${plan.periodSeconds}s\n`);
 
-  // 7. CRE charges period 2 --------------------------------------------
-  console.log("Renewal (CRE)");
+  // 7. A collections report charges period 2 ---------------------------
+  console.log("Renewal (mock forwarder report, hand-built)");
   await travel(BigInt(plan.periodSeconds) + 1n);
   const renewal = [{ action: cre.ACTION.CHARGE_SUBSCRIPTION, id: subId }];
   if (!(await collections.checkTasks(renewal))[0]) throw new Error("subscription not due");
   const renewReceipt = await report(collections.target, cre.encodeCollectionsReport(renewal), cre.WORKFLOW_NAMES.COLLECTIONS);
-  await record(7, "CRE collections report -> chargeDue", renewReceipt);
+  await record(7, "mock forwarder report (hand-built) -> chargeDue", renewReceipt);
   console.log(`     periods charged: ${(await payments.getSubscription(subId)).periodsCharged}\n`);
 
   // 8. Send by link ----------------------------------------------------
