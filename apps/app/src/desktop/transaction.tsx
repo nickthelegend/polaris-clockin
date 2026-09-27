@@ -16,7 +16,7 @@ import { longDate, time } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
 import { isOpenLink, KIND_LABEL, movesBalance, n, planProgress, signed, statusOf } from "@/lib/view";
-import { ActivityPill, whatOf } from "./bits";
+import { ActivityAmount, ActivityPill, whatOf } from "./bits";
 
 /** Dark buttons step up a surface on the drawer's own #1D2129. */
 const ON_DRAWER = "bg-ui-surface-2 hover:bg-ui-surface-3";
@@ -65,6 +65,9 @@ export function TransactionDrawerContent({ id }: { id: string }) {
   const contact = item.counterparty.kind === "person" ? contacts.value?.find((c) => c.name === item.counterparty.name) : undefined;
   const progress = plan ? planProgress(plan) : null;
   const part = item.detail.match(/(\d+) of (\d+)/);
+  // The same merchant or person's other rows, newest first (the merchant
+  // drawer's "this customer's other payments").
+  const others = item.counterparty.kind === "polaris" ? [] : activity.value.filter((a) => a.id !== item.id && a.title === item.title).slice(0, 3);
 
   const who: KeyValue =
     item.counterparty.kind === "merchant"
@@ -125,6 +128,28 @@ export function TransactionDrawerContent({ id }: { id: string }) {
             ...(tiles.some((t) => t.label === "Status") ? [] : [{ label: "Status", value: statusOf(item) }]),
           ]}
         />
+        {others.length ? (
+          <div>
+            <h3 className="text-[14px] font-medium text-ui-muted">More with {item.title}</h3>
+            <ul className="mt-1 grid">
+              {others.map((o) => (
+                <li key={o.id} className="border-b border-ui-hairline last:border-b-0">
+                  <button
+                    type="button"
+                    onClick={() => router.replace(`/activity/${o.id}`, { scroll: false })}
+                    className="flex h-14 w-full items-center gap-3 rounded-[12px] text-left transition-colors hover:bg-ui-surface-2/60 focus-visible:outline-2 focus-visible:outline-ui-focus"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px]">{whatOf(o)}</span>
+                      <span className="block text-[13px] text-ui-muted">{`${longDate(o.at)}, ${time(o.at)}`}</span>
+                    </span>
+                    <ActivityAmount item={o} className="text-[15px]" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {waiting ? (
           <p className="text-[13px] leading-relaxed text-ui-muted">
             Nobody has claimed this link yet. Its receipt comes when they do; until then you can take the money back.

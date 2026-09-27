@@ -11,8 +11,8 @@ import {
   ListGroup,
   ListRow,
   MiniCardCarousel,
-  PrimaryButton,
   ScreenHeader,
+  SecondaryButton,
   Sheet,
   Skeleton,
   toast,
@@ -316,10 +316,10 @@ export function LinkReady({
             <QrCode value={link.url} size={132} label="QR code of your send link" />
             <div className="grid w-full grid-cols-2 gap-2">
               {desktop ? (
-                // Ref E's lime from 1024px; the phone keeps its white.
-                <PrimaryButton size="md" icon={<Share2 />} onClick={() => void share()}>
+                // Ref E's dark button from 1024px, a peer of Copy (Done is the one lime); the phone keeps its white.
+                <SecondaryButton size="sm" icon={<Share2 />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void share()}>
                   Share link
-                </PrimaryButton>
+                </SecondaryButton>
               ) : (
                 <Button variant="white" size="md" icon={<Share2 />} onClick={() => void share()}>
                   Share link
