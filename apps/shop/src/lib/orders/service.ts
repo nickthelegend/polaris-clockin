@@ -127,6 +127,12 @@ export async function getOrder(id: string, store: OrderStore = orderStore()): Pr
   return data.orders[id] ?? null;
 }
 
+/** The order a Polaris reference (the payRef, or an older order's id) belongs to. */
+export async function getOrderByRef(ref: string, store: OrderStore = orderStore()): Promise<Order | null> {
+  const data = await store.read();
+  return data.orders[ref] ?? Object.values(data.orders).find((o) => o.payRef === ref) ?? null;
+}
+
 /** An open session for the same mode that hasn't expired can be reopened instead of creating another. */
 export function reusableSession(order: Order, now: Date = new Date()): { id: string; url: string } | null {
   const { sessionId, sessionUrl, sessionExpiresAt, sessionMode, requestedMode } = order.payment;
