@@ -12,7 +12,11 @@ import { browserConfig, resolvePolarisConfig } from "@/lib/polaris";
 const buyer = privateKeyToAccount("0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d");
 const merchant = "0x4a1c000000000000000000000000000000000000" as const;
 
-beforeEach(() => resetMockState());
+beforeEach(() => {
+  resetMockState();
+  // A development build, as `next dev` compiles it.
+  vi.stubEnv("HALCYON_DEV_MOCK", "1");
+});
 afterEach(() => vi.unstubAllEnvs());
 
 describe("the dev mock can't exist in production", () => {

@@ -12,7 +12,8 @@ import {
   type WebhookEvent,
 } from "polarispay-sdk/server";
 
-import { devMockBuild, devMockInternalOrigin, devMockSecrets } from "./dev-polaris/guard";
+import { randomBytes } from "node:crypto";
+
 import type { BrowserPolarisConfig } from "./polaris-config";
 
 export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "polarispay-sdk/server";
@@ -49,6 +50,45 @@ export const DEV_MOCK_PATH = "/api/dev-polaris";
 
 type Env = Record<string, string | undefined>;
 
+export interface DevMockSecrets {
+  /** The only key the mock API accepts, and the only one the shop sends it. */
+  secretKey: string;
+  /** What the mock signs its webhooks with, and the only secret the shop verifies them with in mock mode. */
+  webhookSecret: string;
+}
+
+/**
+ * Fresh random secrets for this dev server process, shared by the shop and
+ * its mock through globalThis (route handlers run in one process in `next
+ * dev`). Nothing about them is in the repository, so knowing the source
+ * doesn't let anyone sign a webhook the shop will accept. They change on
+ * every restart, which the mock doesn't mind: it keeps no signed state.
+ *
+ * The check is written out here, not called, so that a production build,
+ * where it reads `"0" !== "1"`, compiles the rest of the function away.
+ */
+export function devMockSecrets(): DevMockSecrets {
+  if (process.env.HALCYON_DEV_MOCK !== "1") throw new Error("This build has no dev mock.");
+  const holder = globalThis as unknown as { __halcyonDevMockSecrets?: DevMockSecrets };
+  holder.__halcyonDevMockSecrets ??= {
+    // Letters and digits after the prefix: the SDK refuses anything else in a key.
+    secretKey: `sk_test_${randomBytes(16).toString("hex")}`,
+    webhookSecret: `whsec_${randomBytes(24).toString("hex")}`,
+  };
+  return holder.__halcyonDevMockSecrets;
+}
+
+/**
+ * Where the shop's server reaches its own mock: a fixed local origin, never
+ * one taken from a request's Host or X-Forwarded-Host (which would let a
+ * caller point the shop's bearer key at a server of their choosing).
+ */
+export function devMockInternalOrigin(env: Env = process.env): string {
+  if (process.env.HALCYON_DEV_MOCK !== "1") throw new Error("This build has no dev mock.");
+  const port = /^\d{2,5}$/.test(env.PORT ?? "") ? env.PORT : "3600";
+  return `http://127.0.0.1:${port}`;
+}
+
 export type PolarisConfig =
   | {
       ok: true;
@@ -69,8 +109,8 @@ const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 export function resolvePolarisConfig(env: Env, origin: string): PolarisConfig {
   const apiBase = env.POLARIS_API_BASE?.trim();
   if (!apiBase) {
-    // `devMockBuild()` is a literal "0" === "1" in a production bundle, so this branch can't run there.
-    if (!devMockBuild() || env.NODE_ENV !== "development") {
+    // A literal "0" !== "1" in a production bundle, so this branch can't run there.
+    if (process.env.HALCYON_DEV_MOCK !== "1" || env.NODE_ENV !== "development") {
       return { ok: false, reason: "POLARIS_API_BASE isn't set. Payments are off until it points at the Polaris API." };
     }
     // The shop's server reaches its mock on a fixed local origin, never one a request names.
@@ -130,7 +170,8 @@ export function browserConfig(): BrowserPolarisConfig {
   const config = resolvePolarisConfig(process.env, "");
   const payInFourAprBps = payInFourApr();
   if (!config.ok) return { ok: false, reason: config.reason, payInFourAprBps };
-  const mock = config.target === "dev-mock";
+  // Written out so a production build folds it to false and drops the mock's paths.
+  const mock = process.env.HALCYON_DEV_MOCK === "1" && config.target === "dev-mock";
   return {
     ok: true,
     target: config.target,
