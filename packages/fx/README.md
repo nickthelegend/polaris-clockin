@@ -10,7 +10,7 @@ used before (its ARS figure, 1,182 pesos per dollar, was 27% below Chainlink's 1
 
 | Import | Where it runs | What it is |
 |---|---|---|
-| `@polaris/fx` | server | Everything below, plus `createFxService()`: reads feeds with viem |
+| `@polaris/fx` | server | Everything below, plus `createFxService()` (reads feeds with viem) and `handleFxRequest()` (the `/api/fx` route) |
 | `@polaris/fx/feeds` | anywhere | The verified feed table, `hasFxFeed()`, `NO_FEED` |
 | `@polaris/fx/display` | anywhere | `formatLocalAmount()`, `rateAgeText()`, `isFreshRate()`, `parseFxLookup()` |
 
@@ -56,6 +56,11 @@ For each lookup the service:
 5. Caches the result for **5 minutes** (`unavailable` for 30 s), shares one
    read between concurrent lookups, and re-checks the 26 h limit when it
    serves from cache.
+
+An app exposes it as `GET /api/fx?currency=ARS` with `handleFxRequest(service,
+request)`: 400 for anything but a three-letter code, otherwise the lookup as
+JSON (200 even with no rate), `Cache-Control: public, max-age=60` for a rate.
+The customer app's route is `apps/app/src/app/api/fx/route.ts`.
 
 Options (all optional): `rpcUrls`, `env` (for `FX_RPC_MONAD`,
 `FX_RPC_ETHEREUM`, `FX_RPC_POLYGON`, `FX_RPC_BASE`, each a comma-separated
