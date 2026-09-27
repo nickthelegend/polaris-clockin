@@ -231,7 +231,7 @@ function RecentPayments({ payments, sample, className }: { payments: QueryState<
         onRowClick={(p) => router.push(`/dashboard/payments?open=${encodeURIComponent(p.id)}`)}
         empty={<PanelEmpty icon={<Layers />} title="No payments yet" description="Your latest payments land here the second they settle." />}
         columns={[
-          { key: "customer", header: "Customer", render: (p) => <PaymentName p={p} /> },
+          { key: "customer", header: "Customer", render: (p) => <PaymentName p={p} sub="fold" /> },
           { key: "item", header: "Item", hideBelow: "xl", render: (p) => <span className="block max-w-[220px] truncate" title={p.description}>{p.description}</span> },
           {
             key: "amount",

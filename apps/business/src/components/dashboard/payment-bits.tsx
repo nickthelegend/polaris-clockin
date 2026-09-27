@@ -39,7 +39,12 @@ export function ModeCoin({ mode, text, size = 28 }: { mode: PayMode; text: strin
  * line leads with it ("Pay in 4 · Website audit"), like the app's activity
  * rows; a row from a server's sample book carries the Sample chip.
  */
-export function PaymentName({ p, sub }: { p: Payment; sub?: boolean }) {
+/**
+ * A payment's buyer, with a sub line. `sub`: the status (below sm) and the
+ * description, always. `"fold"`: only what a table hides, the status below sm
+ * and the description below xl (where it has no Item column).
+ */
+export function PaymentName({ p, sub }: { p: Payment; sub?: boolean | "fold" }) {
   return (
     <TableName
       icon={<ModeCoin mode={p.mode} text={p.description} />}
@@ -50,7 +55,12 @@ export function PaymentName({ p, sub }: { p: Payment; sub?: boolean }) {
         </span>
       }
       sub={
-        sub ? (
+        sub === "fold" ? (
+          <span className="xl:hidden">
+            <span className="sm:hidden">{paymentPill(p).text} · </span>
+            {p.description}
+          </span>
+        ) : sub ? (
           <>
             <span className="sm:hidden">{paymentPill(p).text} · </span>
             {p.description}
