@@ -487,7 +487,7 @@ flowchart LR
         SEND["PolarisSend<br/>send by link"]
         LE["PolarisLoanEngine<br/>Pay in 4"]
         SM["ScoreManager<br/>300–850"]
-        COL["PolarisCollector<br/>CRE receiver"]
+        COL["CollectionsReceiver · UnderwritingReceiver<br/>CRE receivers"]
     end
 
     RLY --> PAY
@@ -558,11 +558,14 @@ flowchart LR
 7. **Minimum interval per deployment,** like `gracePeriod`: 1 hour in
    production, 60 s for the demo deployment, so a whole plan plays out on
    camera. The same applies to the subscription period minimum.
-8. **`PolarisCollector`** (new): a CRE `ReceiverTemplate` consumer.
-   - It accepts reports only from the KeystoneForwarder and our workflows.
-   - It runs collections, charges and liquidations in a batch, each in its own
-     try/catch.
-   - It forwards underwriting reports to `ScoreManager`.
+8. **`CollectionsReceiver` and `UnderwritingReceiver`** (new): CRE
+   `ReceiverTemplate` consumers (§3.3).
+   - They accept reports only from the forwarder and, once locked, only from
+     our workflows (author, name, workflow id).
+   - `CollectionsReceiver` runs collections, charges and liquidations in a
+     batch, each in its own try/catch, and answers `checkTasks` for the
+     workflow's one batched read.
+   - `UnderwritingReceiver` forwards underwriting facts to `ScoreManager`.
 9. **`MerchantRegistry.registerFor`** (owner-only), so a merchant is onboarded
    without holding MON.
 10. **Tests named for the exploit,** as the suite already does:
@@ -801,7 +804,7 @@ With fewer people, D folds into A and C.
 |---|---|---|---|---|---|
 | **Sat 26 – Sun 27 Sep** | New repo + import commit. Monad networks. Deploy the six contracts with AUSD; suite green | Mera smoke test on every team phone: Face ID → address → sign typed data | Privy app, a server wallet, and a policy that rejects a disallowed call | Envio init on Monad testnet. Nansen and Zerion keys. Day-0 questions (§11) | `pay()` from a script lands on Monad testnet, verified on the explorer |
 | **Mon 28 Sep – Thu 1 Oct** | `payWithAuthorization`, `PolarisSend`, `PolarisCheckout`, `collectInstallment`, `registerFor`, minimum intervals, tests | Onboarding, balance, pay a link now, send and claim | Relayer service; Business login, links, payments list | Indexer schema for payments and sends; storyboard for the video | **Face ID → paid a merchant link, and a send link claimed on a second phone. Gasless, on testnet** |
-| **Fri 2 – Mon 5 Oct** | `PolarisCollector` + `collections`; `underwrite` + `ScoreManager.underwrite` | Pay in 4 with the limit and its *why*; Bring your history | Payouts (one tap); webhooks, keys, event log | Nansen and Zerion adapters for `underwrite`; Envio to the cloud (on or after 5 Oct) | **An instalment collected by CRE on Monad testnet; the webhook arrives** |
+| **Fri 2 – Mon 5 Oct** | `CollectionsReceiver` + `collections`; `underwrite` + `ScoreManager.underwrite` | Pay in 4 with the limit and its *why*; Bring your history | Payouts (one tap); webhooks, keys, event log | Nansen and Zerion adapters for `underwrite`; Envio to the cloud (on or after 5 Oct) | **An instalment collected by CRE on Monad testnet; the webhook arrives** |
 | **Tue 6 – Thu 8 Oct** | CRE deploy if access has landed; mainnet decision | Subscriptions, copy pass, install polish (manifest, icons); TWA if needed | Automatic payouts; SDK 0.3.0 + docs; `shopping/` wired | README draft, write-up draft, per-bounty evidence | **The full 3-minute demo runs, uncut, on a real phone** |
 | **Fri 9 Oct** | **Feature freeze at 18:00.** Bug bash on an iPhone and an Android phone | | | | Zero known bugs on the demo path |
 | **Sat 10 – Sun 11 Oct** | D leads: video, README (pre-existing table, AI disclosure, attribution, setup), write-up, profile. Everyone reviews | | | | Someone who didn't build it can follow the README |

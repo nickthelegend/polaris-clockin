@@ -40,7 +40,7 @@ import { evidenceStaleness, linkMessage, underwriteConsentMessage } from "./mess
  * Under simulation the trigger is `cre workflow simulate ./underwriting
  * --listen` (http://localhost:2000/trigger, body `{ "input": payload }`).
  * A deployed workflow is fired through Chainlink's gateway with a JWT signed
- * by one of its authorised keys, which needs Early Access; point
+ * by one of its authorised keys, which needs deploy access; point
  * CRE_UNDERWRITING_TRIGGER_URL at a gateway proxy then.
  */
 

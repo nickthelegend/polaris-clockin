@@ -57,6 +57,18 @@ describe("committed configs", () => {
     expect(json("collections/config.staging.json").schedule).toBe("0 * * * * *");
     expect(json("collections/config.production.json").schedule).toBe("0 0 14 * * *");
   });
+
+  test("Confidential HTTP is on where the workflows are simulated, off until a deployed DON shows it serves it", () => {
+    expect(json("underwriting/config.staging.json").confidentialHttp).toBe(true);
+    expect(json("underwriting/config.production.json").confidentialHttp).toBe(false);
+    for (const t of ["staging", "production"]) {
+      expect(json(`underwriting/config.${t}.json`).secrets.zerionBasicAuth).toBe("ZERION_BASIC_AUTH");
+    }
+    // Every secret id the configs name is one secrets.yaml maps for simulation and the Vault DON.
+    const yaml = fs.readFileSync(join(ROOT, "secrets.yaml"), "utf8");
+    const mapped = [...yaml.matchAll(/^ {2}([A-Z_]+):$/gm)].map((m) => m[1]);
+    for (const id of Object.values(json("underwriting/config.staging.json").secrets) as string[]) expect(mapped).toContain(id);
+  });
 });
 
 describe("configure", () => {
@@ -86,6 +98,14 @@ describe("configure", () => {
     // Without the key the underwriting config stays refused, with the reason.
     const keyless = configsFor("production", record("production", FORWARDERS.production), templates("production"));
     expect(underwritingSchema.safeParse(keyless.underwriting).error?.issues[0]?.message).toContain("authorizedKeys is not set");
+  });
+
+  test("local: the local cron's pace, one attempt per rung of the ladder, Confidential HTTP as in staging", () => {
+    const out = configsFor("local", record("simulation", FORWARDERS.simulation), templates("staging"));
+    const c = collectionsSchema.parse(out.collections);
+    expect(c.schedule).toBe("*/30 * * * * *");
+    expect(c.candidates.chainBackoff).toEqual({ ladderSeconds: [21_600, 86_400, 259_200, 604_800], windowSeconds: 30 });
+    expect(underwritingSchema.parse(out.underwriting).confidentialHttp).toBe(true);
   });
 
   test("--indexer and --callback", () => {

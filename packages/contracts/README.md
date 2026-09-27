@@ -54,7 +54,7 @@ MON a rough estimate says it needs. Configuration (all optional) is documented
 at the top of `scripts/deploy-monad.js`: `AUSD_MODE`, `TREASURY`,
 `GRACE_SECONDS` (3600), `MIN_INTERVAL_SECONDS` and `MIN_PERIOD_SECONDS` (60,
 so a plan plays out on camera; weekly plans still work), `CRE_FORWARDER`
-(`simulation` by default, `production` once Early Access lands),
+(`simulation` by default, `production` once deploy access is granted),
 `CRE_SIMULATION_TRANSMITTER` (the address of `CRE_ETH_PRIVATE_KEY`, a key kept
 for `cre workflow simulate --broadcast` alone; required on the simulation
 forwarder, read from `CRE_ETH_PRIVATE_KEY` when unset, and never the deployer,
@@ -190,7 +190,7 @@ linked as another's history. While `simulationTransmitter` is set (simulation), 
 deliver, so it must be a dedicated CRE key, never the deployer.
 
 **Forwarders on Monad testnet**: simulation `0xB9F79d863261869B234c481D1f9A7af84AeAd192` (default),
-production `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`. To move to production after Early Access:
+production `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`. To move to production once deploy access is granted:
 `setForwarderAddress(0xF834…4482)` on both receivers, `setSimulationTransmitter(0)`, then
 `setExpectedAuthor(<workflow owner>)` and `setExpectedWorkflowName(...)`. Under `cre workflow simulate`
 a reverted `onReport` still reads as success, so judge runs by the events above.

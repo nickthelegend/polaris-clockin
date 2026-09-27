@@ -267,8 +267,8 @@ HTTP capability. `DUE_CANDIDATES` answers in the shape the
 `polaris-collections` workflow already parses (`Loan[].loanId`,
 `Subscription[].subId`), so pointing the workflow at the indexer is its
 `candidates.indexerUrl` plus `candidates.indexerQuery` set to this document.
-The pure helpers build the same task list anywhere else (the fallback keeper,
-a script):
+The pure helpers build the same task list anywhere else (anyone's keeper,
+a script: every collection action is permissionless):
 
 ```ts
 import { documents } from "@polarispay/indexer-client";

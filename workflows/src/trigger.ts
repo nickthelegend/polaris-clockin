@@ -19,7 +19,7 @@
  * cannot underwrite anyone on its own, and neither can whoever reaches it.
  *
  * A deployed workflow is fired through Chainlink's gateway with a JWT signed
- * by one of the workflow's `authorizedKeys`; that path needs Early Access and
+ * by one of the workflow's `authorizedKeys`; that path needs deploy access and
  * is described in README.md, not implemented here.
  */
 

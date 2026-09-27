@@ -147,6 +147,7 @@ interface ChainProfile {
   underwritten: boolean;
   liquidations: number;
 }
+
 /**
  * Every error `UnderwritingRefused.reason` can carry: the receiver's own
  * refusals (`InvalidUser`, `WalletAlreadyLinked`, `UserIsLinkedHistory`,

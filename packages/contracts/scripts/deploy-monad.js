@@ -28,7 +28,7 @@
  *   CRE_FORWARDER               "simulation" (testnet default: Chainlink's
  *                               MockKeystoneForwarder, for `cre workflow simulate
  *                               --broadcast`) or "production" (KeystoneForwarder,
- *                               once Early Access lands)
+ *                               once deploy access is granted)
  *   CRE_SIMULATION_TRANSMITTER  the address of CRE_ETH_PRIVATE_KEY, the key
  *                               `cre workflow simulate --broadcast` signs with: the
  *                               only origin UnderwritingReceiver accepts while on
