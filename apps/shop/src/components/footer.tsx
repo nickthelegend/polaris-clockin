@@ -25,7 +25,8 @@ const COLUMNS = [
 export function Footer() {
   return (
     <footer className="mt-24 bg-ink text-paper sm:mt-32">
-      <div className="mx-auto max-w-[1440px] px-4 pb-10 pt-16 sm:px-6 lg:px-10 lg:pt-24">
+      {/* Room under the last line for the floating "Built with Polaris" button. */}
+      <div className="mx-auto max-w-[1440px] px-4 pb-24 pt-16 sm:px-6 lg:px-10 lg:pt-24">
         <div className="grid gap-12 lg:grid-cols-[1.4fr_1fr_1fr]">
           <div className="max-w-md">
             <p className="display text-[2.4rem] leading-[1.05] sm:text-[3rem]">Fewer things, made to be used for a decade.</p>
@@ -37,10 +38,10 @@ export function Footer() {
           {COLUMNS.map((column) => (
             <nav key={column.title} aria-label={column.title}>
               <h2 className="text-[0.8rem] font-semibold uppercase tracking-[0.12em] text-paper/55">{column.title}</h2>
-              <ul className="mt-4 space-y-2.5">
+              <ul className="mt-2 sm:mt-4 sm:space-y-2.5">
                 {column.links.map((link) => (
                   <li key={link.href}>
-                    <Link href={link.href} className="text-[1rem] text-paper/90 transition-colors hover:text-paper">
+                    <Link href={link.href} className="inline-flex min-h-11 items-center text-[1rem] text-paper/90 transition-colors hover:text-paper sm:min-h-0">
                       {link.label}
                     </Link>
                   </li>

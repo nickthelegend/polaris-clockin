@@ -2,7 +2,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import { CloseIcon } from "@/components/icons";
 import { fetchOrder } from "@/lib/checkout-client";
@@ -74,16 +74,57 @@ function Json({ value }: { value: unknown }) {
   );
 }
 
+const TOKEN = /(\/\/[^\n]*)|("(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)|\b(import|from|const|await|async|if|return|export|function|new)\b/g;
+
+/** A few colours for the samples: comments, strings, keywords. No dependency needed for ten lines. */
+function highlight(code: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  let last = 0;
+  for (const m of code.matchAll(TOKEN)) {
+    if (m.index! > last) out.push(code.slice(last, m.index));
+    const [text, comment, string] = m;
+    const tone = comment ? "text-white/45" : string ? "text-[#d9fca0]" : "text-[#c4b5fd]";
+    out.push(
+      <span key={m.index} className={tone}>
+        {text}
+      </span>,
+    );
+    last = m.index! + text.length;
+  }
+  if (last < code.length) out.push(code.slice(last));
+  return out;
+}
+
 function Code({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(children);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard blocked: the code is still there to select.
+    }
+  };
   return (
-    <pre className="overflow-x-auto rounded-xl bg-black/40 p-3.5 font-mono text-[0.66rem] leading-[1.65] text-[#e9ecef] sm:p-4 sm:text-[0.76rem]">
-      <code>{children}</code>
-    </pre>
+    <div className="relative">
+      <pre className="whitespace-pre-wrap break-words rounded-xl bg-black/40 p-3.5 pr-16 font-mono text-[0.7rem] leading-[1.65] text-[#e9ecef] sm:whitespace-pre sm:p-4 sm:pr-16 sm:text-[0.76rem]">
+        <code>{highlight(children)}</code>
+      </pre>
+      <button
+        type="button"
+        onClick={copy}
+        className="absolute right-2 top-2 h-8 rounded-full bg-white/[0.08] px-3 text-[0.74rem] text-white/75 hover:bg-white/[0.14] hover:text-white"
+        aria-label={copied ? "Copied" : "Copy this code"}
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
   );
 }
 
 export function DevDrawer() {
-  const { currentOrderId, polarisConfig } = useShop();
+  const { currentOrderId, polarisConfig, drawerOpen, menuOpen } = useShop();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"order" | "code">("order");
@@ -120,7 +161,8 @@ export function DevDrawer() {
     };
   }, [open, load]);
 
-  if (pathname.startsWith("/api/")) return null;
+  // Out of the way of the store's own overlays: the bag and the phone menu.
+  if (pathname.startsWith("/api/") || drawerOpen || menuOpen) return null;
 
   const entries: Entry[] = order
     ? [
@@ -158,12 +200,15 @@ export function DevDrawer() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-controls="dev-drawer"
-        className="fixed bottom-3 left-3 z-30 inline-flex h-9 items-center gap-2 rounded-full bg-[#151514] pl-3 pr-3.5 text-[0.78rem] sm:h-10 sm:pr-4 sm:text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-transform hover:scale-[1.03] sm:bottom-6 sm:left-6"
+        aria-label="Built with Polaris"
+        className="fixed bottom-3 right-3 z-30 inline-flex h-10 w-10 items-center justify-center gap-2 rounded-full bg-[#151514] text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-transform hover:scale-[1.03] sm:bottom-6 sm:right-6 sm:w-auto sm:pl-3 sm:pr-4"
       >
         <PolarisMark className="!block !h-4 !w-4 ![filter:none]" />
-        Built with Polaris
+        <span className="hidden sm:inline">Built with Polaris</span>
         {order && order.events.length > 0 ? (
-          <span className="num grid h-5 min-w-5 place-items-center rounded-full bg-[#bffa62] px-1 text-[0.7rem] text-[#151514]">{order.events.length}</span>
+          <span className="num absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-[#bffa62] px-1 text-[0.7rem] text-[#151514] sm:static">
+            {order.events.length}
+          </span>
         ) : null}
       </button>
 
@@ -176,7 +221,7 @@ export function DevDrawer() {
             animate={{ opacity: 1, y: 0 }}
             exit={reduce ? { opacity: 0 } : { opacity: 0, y: 24 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-x-2 bottom-2 z-40 flex max-h-[82dvh] flex-col overflow-hidden rounded-2xl bg-[#151514] text-[#f5f5f5] shadow-[0_30px_80px_-20px_rgb(0_0_0/0.6)] sm:inset-x-auto sm:bottom-20 sm:left-6 sm:w-[520px] sm:max-h-[min(78dvh,760px)]"
+            className="fixed inset-x-2 bottom-2 z-40 flex max-h-[82dvh] flex-col overflow-hidden rounded-2xl bg-[#151514] text-[#f5f5f5] shadow-[0_30px_80px_-20px_rgb(0_0_0/0.6)] sm:inset-x-auto sm:bottom-20 sm:right-6 sm:w-[520px] sm:max-h-[min(78dvh,760px)]"
           >
             <div className="flex items-center justify-between px-5 pt-4">
               <p className="flex items-center gap-2 text-[0.95rem] font-semibold">

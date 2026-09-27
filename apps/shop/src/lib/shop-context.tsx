@@ -32,6 +32,9 @@ interface ShopState {
   drawerOpen: boolean;
   openDrawer: () => void;
   closeDrawer: () => void;
+  /** The phone menu, shared so floating controls can step out of its way. */
+  menuOpen: boolean;
+  setMenuOpen: (open: boolean) => void;
   polarisConfig: BrowserPolarisConfig;
   polaris: Polaris | null;
   /** The order the "Built with Polaris" drawer follows. */
@@ -64,6 +67,7 @@ export function ShopProvider({ polarisConfig, children }: { polarisConfig: Brows
   const [items, setItems] = useState<BagItem[]>([]);
   const [ready, setReady] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [polaris, setPolaris] = useState<Polaris | null>(null);
   const [currentOrderId, setCurrentOrder] = useState<string | null>(null);
 
@@ -145,12 +149,14 @@ export function ShopProvider({ polarisConfig, children }: { polarisConfig: Brows
       drawerOpen,
       openDrawer: () => setDrawerOpen(true),
       closeDrawer: () => setDrawerOpen(false),
+      menuOpen,
+      setMenuOpen,
       polarisConfig,
       polaris,
       currentOrderId,
       setCurrentOrderId,
     };
-  }, [items, ready, add, setQuantity, remove, clear, drawerOpen, polarisConfig, polaris, currentOrderId, setCurrentOrderId]);
+  }, [items, ready, add, setQuantity, remove, clear, drawerOpen, menuOpen, polarisConfig, polaris, currentOrderId, setCurrentOrderId]);
 
   return (
     <MotionConfig reducedMotion="user">
