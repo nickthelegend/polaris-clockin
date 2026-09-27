@@ -24,6 +24,7 @@ import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
+import { CheckoutDesktop, CheckoutMissing } from "@/desktop/checkout";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
 import { describeDuration, describeInterval, dueAt, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
@@ -35,11 +36,11 @@ import type { RelayReceipt } from "@/lib/relayer";
 import { useNow } from "@/lib/use-now";
 import { n } from "@/lib/view";
 
-type Paid = { mode: PayMode; receipt: RelayReceipt; at: number };
+export type Paid = { mode: PayMode; receipt: RelayReceipt; at: number };
 
-const MODE_LABEL: Record<PayMode, string> = { now: "Pay now", later: "Pay in 4", subscription: "Subscribe" };
+export const MODE_LABEL: Record<PayMode, string> = { now: "Pay now", later: "Pay in 4", subscription: "Subscribe" };
 
-function modesOf(link: PaymentLink): PayMode[] {
+export function modesOf(link: PaymentLink): PayMode[] {
   const modes: PayMode[] = [];
   if (link.modes.now) modes.push("now");
   if (link.modes.later) modes.push("later");
@@ -264,7 +265,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
   );
 }
 
-function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid; onDone: () => void }) {
+export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid; onDone: () => void }) {
   const later = link.modes.later;
   const sub = link.modes.subscription;
 
@@ -338,7 +339,13 @@ export function CheckoutRoute({ link, cold }: { cold?: boolean } & { link: Payme
     }
   }, [router, successUrl]);
   return (
-    <RouteSheet label={link ? `Pay ${link.merchant.name}` : "Payment link"} snapPoints={["full"]} cold={cold} onColdClose={leave}>
+    <RouteSheet
+      label={link ? `Pay ${link.merchant.name}` : "Payment link"}
+      snapPoints={["full"]}
+      cold={cold}
+      onColdClose={leave}
+      desktop={{ as: "page", focus: true, content: link ? <CheckoutDesktop link={link} /> : <CheckoutMissing /> }}
+    >
       {link ? (
         <CheckoutSheet link={link} />
       ) : (
