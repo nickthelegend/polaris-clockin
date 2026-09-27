@@ -3,9 +3,13 @@
 The merchant side of Polaris (`@polaris/business`): the merchant landing,
 sign-in with Privy, the dashboard (payment links, payments, the Pay in 4
 ledger, payouts, API keys and webhooks) **and the backend every Polaris
-payment goes through**. The web app is dark, in the Polaris app's visual
-language, and every screen is composed from `packages/ui`
-([`docs/design/system.md`](../../docs/design/system.md), "Web dashboard").
+payment goes through**. The web app follows ref E
+([`docs/design/refs-v2/ref-e-lumatrade.png`](../../docs/design/refs-v2/ref-e-lumatrade.png)):
+a dark panel floating on a lime canvas, a top nav, the gradient sales chart
+and the WITHDRAW / REQUEST widget. Every screen is composed from
+`packages/ui` ([`docs/design/system.md`](../../docs/design/system.md), "Web
+dashboard"); captures of every page are in
+[`docs/design/web-v2`](../../docs/design/web-v2).
 
 The backend:
 
@@ -123,12 +127,13 @@ blanks the variable in every other build and every check also tests
 ```
 src/app/(privy)/page.tsx          the landing (components/landing, components/motion)
 src/app/(privy)/login             sign in, name the business, register it on Monad
-src/app/(privy)/dashboard/*       the pages, behind the gate in dashboard/layout.tsx
+src/app/(privy)/dashboard/*       the pages (overview, payments, links, plans, payouts, developers, settings), behind the gate in dashboard/layout.tsx
 src/app/(privy)/layout.tsx        Privy (AuthProvider) and the data source: only this group mounts them
 src/app/gallery, not-found.tsx    no Privy
 src/components/auth               Privy, the unconfigured state and the dev-only mock, behind one AuthContext
-src/components/shell              the sidebar, top bar, floating nav and the header's account menu
-src/components/dashboard          panels, badges, the registration banner
+src/components/shell              ref E's frame and top nav (More: Developers, Settings), the wallet pill and the account menu
+src/components/dashboard          the money widget (WITHDRAW / REQUEST), PageHead and FigureRow, panels, status pills, the registration banner
+src/components/landing            the landing's sections, its frame and nav, and the live product preview (preview.tsx)
 src/lib/data                      DashboardData, types, formatting, sample data, insights.ts
 src/lib/payouts.ts                useWithdraw, useAutoPayouts, useRegisterMerchant
 src/lib/features.ts               readiness: which money controls work, and why not
