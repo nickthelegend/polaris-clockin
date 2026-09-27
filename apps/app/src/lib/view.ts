@@ -191,18 +191,6 @@ export function planProgress(plan: Plan): { done: number; total: number; left: M
   return { done, total: plan.instalments.length, left, next: plan.instalments.find((i) => i.paidAt === null) ?? null };
 }
 
-/** What is still owed on a plan after each instalment, for its sparkline. */
-export function planBalanceSeries(plan: Plan): number[] {
-  const total = plan.instalments.reduce((s, i) => s + i.amount, 0n);
-  const series = [toNumber(total)];
-  let owed = total;
-  for (const i of plan.instalments) {
-    owed -= i.amount;
-    series.push(toNumber(owed));
-  }
-  return series;
-}
-
 /* ── Notifications ───────────────────────────────────────────────────────── */
 
 export type Notice = {

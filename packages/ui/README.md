@@ -84,7 +84,7 @@ wins) and forwards refs where it renders one element.
 | `Tile` | `<Tile variant="raised">…</Tile>` |
 | `ThemeScope` | `<ThemeScope theme="light" root>…</ThemeScope>` |
 | `SectionHeader` | `<SectionHeader title="Recent sales" actionLabel="See all" href="/payments" />` · `size="lg"`, `subtitle`, `action` |
-| `SegmentedControl` | `<SegmentedControl aria-label="Pay" options={[{ value: "now", label: "Pay now" }, { value: "four", label: "Pay in 4" }]} />` · `shape="pill"`, `size`, `block` |
+| `SegmentedControl` | `<SegmentedControl aria-label="Pay" options={[{ value: "now", label: "Pay now" }, { value: "four", label: "Pay in 4" }]} />` · `shape="pill"`, `size`, `block`, `variant="icon"` (square icon-only segments on a dark glass track, each `label` read out: ref B's line / candles toggle) |
 | `RangeTabs` | `<RangeTabs value={range} onValueChange={setRange} onCalendar={pick} />` · `tone="onColor" \| "surface"` |
 | `Tabs`, `TabList`, `Tab`, `TabPanel` | `<Tabs defaultValue="all" variant="pill"><TabList aria-label="Payments"><Tab value="all" count={24}>All</Tab></TabList><TabPanel value="all">…</TabPanel></Tabs>` · `text` (ref A), `pill`, `segmented` |
 | `Money` | `<Money value={25841.11} />` · the dim dollar: `dim="both" \| "symbol" \| "cents" \| "none"`, `signed`, `compact`, `spaced` (ref D), `animate` |
@@ -93,6 +93,7 @@ wins) and forwards refs where it renders one element.
 | `Toggle` | `<Toggle label="Automatic payouts" description="Every day at 17:00" />` |
 | `Skeleton`, `SkeletonText` | `<Skeleton shape="card" height={200} />` |
 | `EmptyState` | `<EmptyState icon={<Link2 />} title="No links yet" description="…" action={<Button>New link</Button>} />` |
+| `IconDisc` | `<IconDisc icon={<ScanFace />} />` · the round icon well that leads a confirm, status or empty state; `size="sm" \| "md" \| "lg"` (48, 56, 64) |
 | `Toaster`, `toast` | mount `<Toaster />` once; `toast({ title: "Link copied", tone: "success" })` |
 | `Table`, `CellStack` | `<Table caption="Payments" columns={cols} rows={rows} rowKey={(r) => r.id} onRowClick={open} />` · `variant="lined" \| "rows"`, sorting, loading, `empty`, `hideBelow` |
 | `Keypad`, `applyKey` | `<Keypad onKey={(k) => setAmount((a) => applyKey(a, k))} captureKeyboard />` |
@@ -100,6 +101,7 @@ wins) and forwards refs where it renders one element.
 | `Logo`, `LogoMark` | `<Logo height={30} />` (the team's wordmark) · `<LogoMark size={28} />` (the star) |
 | `SuccessCheck` | `<SuccessCheck label="Paid" />` · a disc that springs in, a ring that pulses once, a check that draws itself; `tone="lime" \| "up" \| "purple"`, `size` |
 | `PageDots` | `<PageDots count={3} index={page} onSelect={setPage} />` · ref B's onboarding dots: the current page a white bar |
+| `ScanFrame` | `<ScanFrame><video className="absolute inset-0 size-full object-cover" />…</ScanFrame>` · the 4:3 camera well with lime corner marks for a QR scanner |
 
 ### Composites
 
@@ -110,7 +112,7 @@ wins) and forwards refs where it renders one element.
 | `GradientCard` | `<GradientCard tone="crimson" label="Your credit line" value={<Money value={500} dim="cents" />} meta={<DeltaBadge variant="chip" … />} />` · `purple` + `layout="side"` (ref A), `purple-chart` (ref B) |
 | `QuickTransfer` | `<QuickTransfer people={contacts} onAdd={newLink} onSelect={sendTo} />` |
 | `TxRow` | `<TxRow leading={<Avatar … />} title="Oat & Ember" subtitle="9:10 AM" amount={-59} subAmount="Pay in 4 · $14.75" />` · `variant="card"` (ref D) |
-| `AssetRow` | `<AssetRow leading={…} title="Kiko Ramen" subtitle="Oct 14 · 2 of 4" spark={[…]} value="$9.40" meta="+2.24%" />` · `variant="sunken"`, `sparkFill` |
+| `AssetRow` | `<AssetRow leading={…} title="Kiko Ramen" subtitle="Oct 14 · 2 of 4" spark={[…]} value="$9.40" meta="+2.24%" />` · `variant="sunken"`, `sparkFill`, or `progress={{ done: 1, total: 4, current: 1 }}` for instalment ticks in the sparkline's place |
 | `FeaturedTile` | `<FeaturedTile leading={…} title="Oat & Ember" value="$90.00" meta="Next Oct 12" progress={{ done: 2, total: 4 }} tint="#c2410c" />` |
 | `MiniCardCarousel` | `<MiniCardCarousel aria-label="Pay from" cards={accounts} value={id} onValueChange={setId} />` |
 | `StatTile` | `<StatTile value="+$850" label="Saved" tone="up" />` |

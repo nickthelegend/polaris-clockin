@@ -69,6 +69,11 @@ export type AssetRowProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "title
   subtitle?: ReactNode;
   /** The sparkline in the middle. */
   spark?: number[];
+  /**
+   * Instalment ticks in the sparkline's place: `done` paid in lime, the
+   * `current` one (this row's payment) in white, the rest dim.
+   */
+  progress?: { done: number; total: number; current?: number };
   /** Colour of the sparkline and delta: follows the trend unless set. */
   trend?: "up" | "down" | "flat";
   value: ReactNode;
@@ -94,6 +99,7 @@ export function AssetRow({
   title,
   subtitle,
   spark,
+  progress,
   trend,
   value,
   meta,
@@ -115,6 +121,18 @@ export function AssetRow({
       </span>
       {spark && spark.length > 1 ? (
         <Sparkline data={spark} color={color} height={30} width={64} strokeWidth={1.5} fill={sparkFill} className="shrink-0" />
+      ) : progress ? (
+        <span role="img" aria-label={`${progress.done} of ${progress.total} paid`} className="flex w-16 shrink-0 gap-1">
+          {Array.from({ length: progress.total }, (_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1.5 flex-1 rounded-full",
+                i < progress.done ? "bg-ui-lime" : i === progress.current ? "bg-ui-text" : "bg-ui-surface-3",
+              )}
+            />
+          ))}
+        </span>
       ) : null}
       <span className="min-w-[72px] shrink-0 text-right">
         <span className="ui-figure block text-[16px] leading-tight font-medium text-ui-text">{value}</span>

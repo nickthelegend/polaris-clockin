@@ -1,6 +1,6 @@
 "use client";
 
-import { AssetRow, EmptyState, FeaturedTile, SectionHeader, Skeleton } from "@polaris/ui";
+import { AssetRow, BottomSheet, Button, DetailsList, EmptyState, FeaturedTile, SectionHeader, Sheet, Skeleton, toast } from "@polaris/ui";
 import { CalendarClock, Repeat } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -10,17 +10,17 @@ import { cancelSubscription } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { describeInterval, getPlans, type Subscription } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { shortDate } from "@/lib/dates";
+import { longDate, relativeDay, shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
-import { planBalanceSeries, planProgress } from "@/lib/view";
+import { planProgress } from "@/lib/view";
 
 /** Plans (Insights → Plans): Pay in 4 as ref B's featured tiles, then subscriptions and what's paid off. */
 export function PlansView() {
   const router = useRouter();
   const owner = useOwner();
   const plans = useData(() => getPlans(owner), [owner]);
-  const [cancelling, setCancelling] = useState<Subscription | null>(null);
+  const [managing, setManaging] = useState<Subscription | null>(null);
 
   useEffect(() => prefetchDomains("payments"), []);
 
@@ -84,13 +84,15 @@ export function PlansView() {
               key={sub.id}
               leading={<MerchantAvatar name={sub.merchant.name} />}
               title={sub.merchant.name}
-              subtitle={sub.status === "active" ? `${sub.name} · next ${shortDate(sub.nextChargeAt)}` : `${sub.name} · cancelled`}
+              subtitle={sub.name}
               value={usd(sub.price)}
-              meta={sub.status === "active" ? describeInterval(sub.periodSeconds).replace(/^every /, "per ") : "Ended"}
+              meta={sub.status === "active" ? `Next ${shortDate(sub.nextChargeAt)}` : "Cancelled"}
               trend="flat"
               static={sub.status !== "active"}
-              onClick={sub.status === "active" ? () => setCancelling(sub) : undefined}
-              aria-label={sub.status === "active" ? `${sub.merchant.name}, ${usd(sub.price)} ${describeInterval(sub.periodSeconds)}. Manage` : undefined}
+              onClick={sub.status === "active" ? () => setManaging(sub) : undefined}
+              aria-label={
+                sub.status === "active" ? `${sub.merchant.name}, ${sub.name}, ${usd(sub.price)} ${describeInterval(sub.periodSeconds)}. Manage` : undefined
+              }
             />
           ))}
         </div>
@@ -106,7 +108,7 @@ export function PlansView() {
                 leading={<MerchantAvatar name={plan.merchant.name} />}
                 title={plan.merchant.name}
                 subtitle={plan.description}
-                spark={planBalanceSeries(plan)}
+                progress={{ done: plan.instalments.length, total: plan.instalments.length }}
                 trend="up"
                 value={usd(plan.principal + plan.interest)}
                 meta="Paid in full"
@@ -117,22 +119,78 @@ export function PlansView() {
         </>
       ) : null}
 
-      <ConfirmSheet
-        open={cancelling !== null}
-        onOpenChange={(open) => !open && setCancelling(null)}
-        title={cancelling ? `Cancel ${cancelling.merchant.name}?` : "Cancel subscription"}
-        summary={
-          cancelling
-            ? `${cancelling.name}, ${usd(cancelling.price)} ${describeInterval(cancelling.periodSeconds)}. Nothing more will be charged.`
-            : ""
-        }
-        confirmLabel="Cancel with Face ID"
-        busyLabel="Cancelling…"
-        danger
-        onAccount={async (signer) => {
-          if (cancelling) await cancelSubscription(signer, cancelling.subId);
-        }}
-      />
+      <SubscriptionSheet sub={managing} onClose={() => setManaging(null)} />
     </div>
+  );
+}
+
+/**
+ * Manage a subscription (fit): what it costs and when it next charges, and
+ * the one way out, which still asks for Face ID.
+ */
+function SubscriptionSheet({ sub, onClose }: { sub: Subscription | null; onClose: () => void }) {
+  const [cancelling, setCancelling] = useState(false);
+  // Keep the last one on screen while the sheet slides away.
+  const [shown, setShown] = useState(sub);
+  if (sub && sub !== shown) setShown(sub);
+  const s = sub ?? shown;
+
+  return (
+    <BottomSheet
+      open={sub !== null}
+      onOpenChange={(open) => {
+        if (!open) {
+          setCancelling(false);
+          onClose();
+        }
+      }}
+      snapPoints={["fit"]}
+      aria-label={s ? `${s.merchant.name} subscription` : "Subscription"}
+      maxWidth={440}
+    >
+      {s ? (
+        <>
+          <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-4 pt-1">
+            <div className="flex items-center gap-3">
+              <MerchantAvatar name={s.merchant.name} />
+              <div className="min-w-0">
+                <h2 className="truncate text-[20px] leading-tight font-medium tracking-[-0.02em]">{s.merchant.name}</h2>
+                <p className="truncate text-[14px] text-ui-muted">{s.name}</p>
+              </div>
+            </div>
+            <DetailsList
+              items={[
+                { label: "Price", value: `${usd(s.price)} ${describeInterval(s.periodSeconds)}` },
+                { label: "Next charge", value: `${shortDate(s.nextChargeAt)}, ${relativeDay(s.nextChargeAt)}` },
+                { label: "Since", value: longDate(s.startedAt) },
+                { label: "Paid from", value: "Your dollar account" },
+              ]}
+            />
+          </Sheet.Body>
+          <Sheet.Footer>
+            <Button variant="outline" size="lg" onClick={onClose}>
+              Done
+            </Button>
+            <Button variant="dark" size="lg" className="text-ui-down" onClick={() => setCancelling(true)}>
+              Cancel subscription
+            </Button>
+          </Sheet.Footer>
+          <ConfirmSheet
+            open={cancelling}
+            onOpenChange={setCancelling}
+            title={`Cancel ${s.merchant.name}?`}
+            summary={`${s.name}, ${usd(s.price)} ${describeInterval(s.periodSeconds)}. Nothing more will be charged.`}
+            confirmLabel="Cancel with Face ID"
+            busyLabel="Cancelling…"
+            danger
+            onAccount={async (signer) => {
+              await cancelSubscription(signer, s.subId);
+              toast({ title: `${s.merchant.name} is cancelled`, tone: "success" });
+            }}
+            onDone={onClose}
+          />
+        </>
+      ) : null}
+    </BottomSheet>
   );
 }

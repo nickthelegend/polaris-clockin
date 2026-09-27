@@ -24,7 +24,7 @@ import { getCreditLine, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { relativeDay, shortDate } from "@/lib/dates";
 import { usd } from "@/lib/money";
-import { n, planBalanceSeries, planProgress } from "@/lib/view";
+import { n, planProgress } from "@/lib/view";
 
 /** Credit line (full), on ref B's second screen: the crimson card, active plans, what's coming up. */
 export function CreditSheet() {
@@ -56,7 +56,7 @@ export function CreditSheet() {
         {credit.value ? (
           <GradientCard
             tone="crimson"
-            label="Your credit line"
+            label="Available to spend"
             value={<Money value={n(credit.value.available)} dim="cents" dimOpacity={0.55} />}
             meta={
               <Pill tone="glass" size="md">
@@ -114,8 +114,9 @@ export function CreditSheet() {
                   leading={<MerchantAvatar name={plan.merchant.name} />}
                   title={plan.merchant.name}
                   subtitle={`${shortDate(instalment.dueAt)} · ${instalment.index + 1} of ${plan.instalments.length}`}
-                  spark={planBalanceSeries(plan)}
-                  trend="up"
+                  progress={{ done: planProgress(plan).done, total: plan.instalments.length, current: instalment.index }}
+                  // Money going out: a neutral meta, not the green of money in.
+                  trend="flat"
                   value={usd(instalment.amount)}
                   meta={relativeDay(instalment.dueAt)}
                   onClick={() => router.push(`/plans/${plan.id}`, { scroll: false })}

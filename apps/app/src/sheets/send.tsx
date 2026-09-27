@@ -126,7 +126,7 @@ export function SendSheet() {
             )
           }
           title={who ? who.name : "Anyone with the link"}
-          subtitle={who ? who.handle : "They claim it with Face ID, anywhere"}
+          subtitle={who ? who.handle : "They claim it with Face ID"}
           value={
             <IconButton
               label="Change who you're sending to"
