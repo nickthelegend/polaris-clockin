@@ -10,6 +10,7 @@ references, and the product is rebuilt on a shared component library,
 | **B · Findex** | [`refs-v2/ref-b-findex.webp`](refs-v2/ref-b-findex.webp) | Onboarding (3D glass coins, "Invest smarter." headline, white Get Started), the gradient portfolio card, featured tiles, watchlist rows with sparklines, the purple chart card with range tabs, stat tiles, the Market/Limit segmented control, Sell/Buy buttons |
 | **C · Trading** | [`refs-v2/ref-c-trading.webp`](refs-v2/ref-c-trading.webp) | Candlesticks on a dark panel (lime up, purple down, price tags, timeframe chips), the key-value stat grid, the details list, the Send/Receive/Top Up tile buttons, the pill nav with a lime "Home" tab, purple Sell / lime Buy. Its layout and density shape the web dashboard, which is dark (see "Web dashboard") |
 | **D · Sales** | [`refs-v2/ref-d-sales.webp`](refs-v2/ref-d-sales.webp) | Analytics: the sales card with a sparkline and a delta chip, the weekly bar chart with a tooltip, the donut with floating value tags, the legend with thin progress bars, recent-sales rows, the balance card with side action squares |
+| **E · LumaTrade** | [`refs-v2/ref-e-lumatrade.png`](refs-v2/ref-e-lumatrade.png) | **The merchant web app** (landing, sign-in, dashboard): a dark rounded panel floating on a lime canvas, a top nav with a wallet pill and a lime button, the pair header with overlapping coins, the big figure with a delta chip, timeframe chips, the lime-to-orange gradient line with a white bubble, the borderless table with status pills, and the trade widget (BUY / SELL, stacked cards with a swap button, full-width buttons, the outlined balance card). See "Web dashboard" |
 
 Match them **exactly**: proportions, radii, spacing, weights, colours, icon
 style, and the density of each component. The content is ours, mapped below.
@@ -27,8 +28,8 @@ style, and the density of each component. The content is ours, mapped below.
 
 ## Tokens
 
-**Dark theme** (the mobile app, the web dashboard, the merchant landing and
-sign-in):
+**Dark theme** (the mobile app; the merchant web uses ref E's theme, see
+"Web dashboard"):
 
 | Token | Value |
 |---|---|
@@ -255,56 +256,63 @@ tabs are full screens; everything you *do* slides up over them.
 
 ## Web dashboard (apps/business)
 
-**The web is dark, in the mobile app's visual language. There is no light
-shell.** The merchant side should feel like the same product as the Polaris
-app: the dark tokens, Satoshi, lime accents, the glass renders, and ref B's
-and ref D's dark panels. Ref C sets the dashboard's layout and density only
-(its stat grid, details list, candle panel and labelled nav), not its light
-ground.
+**The web is ref E.** `<html data-theme="ref-e">`: the tokens sampled from the
+reference, Satoshi, and the `src/trade` components of `packages/ui`. It is the
+same product as the app (lime on near-black, Satoshi, the Polaris coin), in
+ref E's layout and components.
 
-- **Ground and surfaces:** `canvas` for the page, `surface-1` cards at 28px,
-  `surface-2` rows and tiles inside them, hairlines between table rows. The
-  pastel `StatCard`s (sage, pink, honey) and the `CardStack`'s sky card carry
-  the colour; lime is the one action colour.
-- **Three public pages share the look:**
-  - `/` is the merchant landing ("Polaris for Business"), in the spirit of
-    `apps/landing` (its motion tokens, reveal-on-scroll, Lenis and section
-    rhythm), but dark. Its product visual is built from real components (a
-    phone with the Checkout sheet beside a dark dashboard panel with the
-    `CandlestickChart`), never a screenshot. Signed-in merchants see
-    **Open dashboard** in its nav.
-  - `/login` has the wordmark, a two-line headline, one **Continue** (Privy's
-    modal), a trust line, and on wide screens a glass card and a mini
-    dashboard built from components.
-  - The dashboard lives under `/dashboard`; the old top-level paths redirect.
-- **Shell:**
-  - A left sidebar with the team's `PolarisMark` and wordmark
-    (`packages/brand`) and a lime active item. It is full width from 1280px
-    and an icon rail from 768 to 1279px. Below 768px there is a top bar and
-    the floating `BottomNav` (ref A's icon pill with the lime active circle).
-  - A header with the page title, the page's actions, and the signed-in
-    merchant's avatar menu (business name, email, copy the payout address,
-    sign out).
-- **Overview:**
-  - a Sales card with a sparkline and delta chip
-  - a `BarChart` of customers this week
-  - a `DonutChart` of sales by mode (Pay now / Pay in 4 / Subscriptions) with
-    a `ProgressLegend`
-  - `CandlestickChart` of daily payment volume, with timeframe chips
-  - recent sales rows
-  - credit exposure, with plain-language reasons from Nansen wallet history
-  - a Collections card: the Chainlink CRE workflow's last and next run
-  - an "Indexed by Envio" live event feed
-- **Payments, Links, the Plans ledger** (instalment ticks), **Payouts** (a
-  `CardStack` balance, one-tap withdraw, automatic payouts by a Privy session
-  signer) and **Developers** (keys, webhooks, the SDK snippet), all from the
-  same library. Detail views open in a `Drawer` and create and edit flows in
-  a `Dialog`; both become `BottomSheet`s below 768px.
+- **Frame:** from 1280px the whole page is a dark panel (#121418, 32px
+  corners, a big soft shadow) floating on the #E9FF9B canvas with 32px of
+  lime around it (`AppFrame`); below 1280px the panel is full bleed.
+- **Tokens:** panel #121418; raised cards and inputs #1D2129; hairlines
+  #37393D; the primary button #B0C956 with a near-black label; lime text and
+  gains #AABC6D on a #20231E / #2B2F24 chip; white text; muted labels #7E8189;
+  axis labels #7C7F87; status pills lime #2B2E26 / #DEEABA, purple #291F32 /
+  #AC70C6, teal #1B2D30 / #71C8C2, and amber (retrying, at risk) and red in
+  the same style. The chart line runs lime yellow at the top to orange lower
+  down over a warm dark fill; the tooltip is a white bubble over a glowing dot
+  and a dashed line. Radii: panel 32, stacked cards 30, outlined cards 26,
+  pills round.
+- **Top nav, not a sidebar** (`TopNav`): the Polaris mark and wordmark, then
+  Overview, Payments, Links, Pay in 4 and Payouts, a **More** dropdown
+  (Developers, Settings) like the reference's "Market ⌄", the payout wallet
+  pill (click to copy), the lime **New link** pill and the avatar menu (test
+  mode, sample data, settings, sign out). Below 1024px a compact bar whose
+  menu is a `BottomSheet`.
+- **Every page opens like the reference's chart:** overlapping coins and the
+  page's name (`PairHeader`), then the big figure with its `DeltaChip` and the
+  page's chips (`TimeframeChips`: timeframes or filters), then a borderless
+  `DataTable` with `StatusPill`s. A right-hand column holds the page's widget
+  or summary (`BalanceSummaryCard`, `PanelCard`); list pages keep one column
+  below 1280px so no table scrolls sideways at 1024.
+- **Overview** is the reference's main screen: Sales / USD (a dropdown for Pay
+  in 4 and Subscriptions), the period's gross with its change, line or
+  candles, 1h 24h 1w 1m, the `GradientLineChart`, and recent payments; on the
+  right the money widget (**WITHDRAW** / **REQUEST**: the AUSD "You send"
+  card over the USD "Arrives" card with the swap button, Withdraw, Change
+  payout address and the available balance card; REQUEST makes a payment
+  link that buyers can pay now, in 4 or monthly). Below it, outlined cards:
+  customers this week, sales by mode, credit exposure with the Nansen
+  reasons, Chainlink CRE collections and the Envio feed.
+- **Payments, Links** (with the REQUEST widget), **Pay in 4** (the ledger,
+  instalment ticks in lime), **Payouts** (the WITHDRAW widget large,
+  automatic payouts, history), **Developers** (keys, webhooks, the SDK
+  snippet) and **Settings**, all from the same components. Detail views open
+  in a `Drawer` and create and edit flows in a `Dialog`; both become
+  `BottomSheet`s below 768px.
+- **Landing (`/`) and sign-in (`/login`)** sit in the same frame under the
+  same top nav. The landing's hero visual is the product itself, built from
+  the components (the chart panel beside the stacked-card widget), never a
+  screenshot; its sections keep their copy. `/login` has one **Continue**
+  (Privy's modal) beside the chart panel.
 - **Honest data:** anything not yet backed by a live service (the indexer,
   the CRE workflow, Nansen, the relayer) shows an empty or "not connected"
   state. When sample data is on, every card and row that shows it carries a
-  `Sample` chip. A control that can't work yet is disabled with the reason
-  beside it; it is never left to fail.
+  `Sample` pill (amber). A control that can't work yet is disabled with the
+  reason beside it; it is never left to fail.
+- **Pay in 4 copy** follows the contracts: 10% APR pro-rated over the four
+  weekly payments, so $200 is 4 × $50.38 ($1.53 interest, $201.53 in total).
+  Never "interest-free".
 
 ## Rules
 
