@@ -28,7 +28,7 @@
 import { afterAll, describe, expect } from "bun:test";
 import { join } from "node:path";
 import { cre, type CronPayload, type HTTPPayload } from "@chainlink/cre-sdk";
-import { EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
+import { ConfidentialHttpMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import {
   collectionsReceiverAbi,
   mockAUSDAbi,
@@ -56,7 +56,16 @@ import { verifyCallback } from "../src/shared/callback.ts";
 import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
 import { configSchema as underwritingSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
-import { answerFromFixtures, cloneFixtures, type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
+import {
+  answerConfidentialFromFixtures,
+  answerFromFixtures,
+  cloneFixtures,
+  type ConfidentialRequestLike,
+  type CreRequestLike,
+  type SentRequest,
+  toSent,
+  toSentConfidential,
+} from "../test/helpers/fixtures-http.ts";
 import { answerHasura, type Tables } from "../test/helpers/hasura.ts";
 import { fs, requireModule } from "../test/helpers/host.ts";
 import { bridgeEvm, call, chainNowMs, rpcSync, sendTx, travel } from "./helpers/local-evm.ts";
@@ -119,6 +128,8 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
       ]),
     ],
   ]);
+  /** What the Vault DON would hold; the fixture transport ignores the values. */
+  const ENCLAVE_SECRETS = { NANSEN_API_KEY: "local-nansen", ZERION_BASIC_AUTH: "bG9jYWwtemVyaW9uOg==", ETHERSCAN_API_KEY: "local-etherscan" };
   const collectionsConfig = (over: Partial<CollectionsConfig> = {}): CollectionsConfig =>
     collectionsSchema.parse({
       ...JSON.parse(fs.readFileSync(join(ROOT, "collections", "config.local.json"), "utf8")),
@@ -150,6 +161,10 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
       }
       return answerFromFixtures(s, FIXTURES);
     };
+    // The paid providers under `confidentialHttp` (on in config.local.json, as in staging).
+    const enclave = ConfidentialHttpMock.testInstance();
+    enclave.sendRequest = (input) =>
+      answerConfidentialFromFixtures(toSentConfidential(input as unknown as ConfidentialRequestLike, ENCLAVE_SECRETS), FIXTURES);
     return { record, callbacks };
   }
 
@@ -325,7 +340,7 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
   test("collections, candidates from the indexer: nothing before the due time, instalment 1 when due, the webhook signed", () => {
     const { record, callbacks } = harness(() => ({ Plan: [indexedPlan()], Subscription: [] }));
     const withIndexer = collectionsConfig({
-      candidates: { indexerUrl: INDEXER_URL, indexerQuery: null, indexerLimit: 100, recentWindow: 50, sweepWindow: 0 },
+      candidates: { indexerUrl: INDEXER_URL, indexerQuery: null, indexerLimit: 100, recentWindow: 50, sweepWindow: 0, chainBackoff: null },
     });
     const early = collect(withIndexer);
     expect(early).toMatchObject({ status: "idle", source: "indexer", checked: 0 }); // the indexer proposed nothing yet
@@ -368,6 +383,16 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     ]);
     expect(second.skipped).toBe(1);
     track(record, "collections, 1 skipped (dunning)");
+
+    // Past the rung's window and before grace, the chain fallback keeps the ladder: no attempt, no gas.
+    const ladder = collectionsConfig().candidates.chainBackoff!;
+    travel(RPC, ladder.windowSeconds + 5);
+    const third = collect(collectionsConfig());
+    expect(third).toMatchObject({ source: "chain", status: "idle", txHash: null });
+    expect(third.heldBack).toEqual([{ action: "collect", id: loanId.toString(), nextAttemptAt: expect.any(Number) }]);
+    expect(third.heldBack[0].nextAttemptAt).toBeGreaterThan(Math.floor(chainNowMs(RPC) / 1000));
+    // Without the ladder the same run would have paid for another failing collection.
+    expect(collect(collectionsConfig({ candidates: { ...collectionsConfig().candidates, chainBackoff: null } })).skipped).toBe(1);
   });
 
   test("past grace, a plan that cannot be collected is liquidated in the same report", () => {

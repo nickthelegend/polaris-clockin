@@ -90,6 +90,9 @@ export function configsFor(target, record, templates, opts = {}) {
   if (target === "local") {
     // The local chain answers every minute; keep its runs quick and its windows small.
     collections.schedule = "*/30 * * * * *";
+    // One attempt per rung of the dunning ladder at that pace (src/collections/backoff.ts).
+    const ladder = collections.candidates?.chainBackoff;
+    if (ladder) collections.candidates = { ...collections.candidates, chainBackoff: { ...ladder, windowSeconds: 30 } };
   }
   if (opts.indexer !== undefined) {
     // A query left over from another indexer would fail against this one, and a

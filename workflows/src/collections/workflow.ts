@@ -2,9 +2,10 @@
  * `polaris-collections`: the Pay in 4 collections engine, on a cron.
  *
  *   1. Candidates. The Envio indexer proposes the plans and subscriptions
- *      whose due time has passed (HTTP, identical consensus); without an
- *      indexer, or when it fails, the chain does (`loanCount`,
- *      `subscriptionCount` and a bounded window of ids).
+ *      whose next attempt has come, on its dunning ladder (HTTP, identical
+ *      consensus); without an indexer, or when it fails, the chain does
+ *      (`loanCount`, `subscriptionCount` and a bounded window of ids), and
+ *      the same ladder is kept from each task's due time (./backoff.ts).
  *   2. The chain disposes. `CollectionsReceiver.checkTasks` at the last
  *      finalized block says which candidates are actionable: one EVM read per
  *      72 tasks, well under CRE's 5 KB read cap.
@@ -16,15 +17,15 @@
  *      ladder, posted signed to the Polaris API.
  *
  * A configured indexer that fails is never silent: the run reads candidates
- * from the chain (which has no dunning backoff), says so in `indexerError`,
- * and posts the callback even when nothing else happened, so the API can
- * raise it instead of the fallback quietly becoming the normal path.
+ * from the chain, says so in `indexerError`, and posts the callback even when
+ * nothing else happened, so the API can raise it instead of the fallback
+ * quietly becoming the normal path.
  *
  * The run returns a JSON summary; the chain events are the record.
  */
 
 import { type CronPayload, cre, consensusIdenticalAggregation, type HTTPSendRequester, type Runtime } from "@chainlink/cre-sdk";
-import { collectionsReceiverAbi } from "@polarispay/contracts/abi";
+import { collectionsReceiverAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
 import { type Address, parseAbi } from "viem";
 import { z } from "zod";
 import { base64Utf8 } from "../shared/callback.ts";
@@ -42,6 +43,7 @@ import {
   submitReport,
 } from "../shared/evm.ts";
 import { optionalSecret, postSignedCallback } from "../shared/http.ts";
+import { type ChainBackoff, chainBackoffSchema, instalmentDueAt, loanVerdict, subscriptionVerdict } from "./backoff.ts";
 import {
   candidatesRequestBody,
   DUE_CANDIDATES_QUERY,
@@ -82,6 +84,12 @@ export const configSchema = z.object({
     recentWindow: z.number().int().min(1).max(500),
     /** Chain mode: older ids checked per run, rotating so each is revisited. */
     sweepWindow: z.number().int().min(0).max(500),
+    /**
+     * Chain mode: the dunning ladder, counted from each task's due time
+     * (./backoff.ts), so a buyer who is short is not retried every run while
+     * the indexer is away. Null tries every due task on every run.
+     */
+    chainBackoff: chainBackoffSchema,
   }),
   /** Liquidate plans past grace when their collection fails. */
   liquidate: z.boolean(),
@@ -110,6 +118,8 @@ export interface CollectionsResult {
   note: string | null;
   checked: number;
   tasks: Array<{ action: string; id: string }>;
+  /** Chain mode: due tasks the dunning ladder holds back this run, and when each is next tried. */
+  heldBack: Array<{ action: string; id: string; nextAttemptAt: number }>;
   txHash: string | null;
   gasLimit: string | null;
   executed: number;
@@ -206,6 +216,60 @@ function readyAmong(
   return { ready, checked };
 }
 
+/**
+ * Chain mode: keep only the due tasks the dunning ladder lets this run try
+ * (./backoff.ts). One EVM read per task for its due time; a loan past grace
+ * needs none (it is always tried). Tasks whose due time the read quota leaves
+ * unread wait for a later run rather than be tried blind.
+ */
+function onTheLadder(
+  runtime: Runtime<CollectionsConfig>,
+  evm: EVMClient,
+  budget: ReadBudget,
+  ready: Ready,
+  now: number,
+  ladder: ChainBackoff,
+  reserve: number,
+): { ready: Ready; heldBack: CollectionsResult["heldBack"]; unread: number } {
+  const cfg = runtime.config;
+  const pastGrace = new Set(ready.liquidate.map(String));
+  const out: Ready = { collect: [], charge: [], liquidate: ready.liquidate };
+  const heldBack: CollectionsResult["heldBack"] = [];
+  let unread = 0;
+  const read = () => budget.left > reserve && budget.take();
+  for (const id of ready.collect) {
+    if (pastGrace.has(String(id))) {
+      out.collect.push(id);
+      continue;
+    }
+    if (!read()) {
+      unread++;
+      continue;
+    }
+    const loan = readContract(runtime, evm, { address: cfg.loanEngine, abi: polarisLoanEngineAbi, functionName: "getLoan", args: [id] }) as {
+      startedAt: bigint;
+      intervalSeconds: bigint;
+      installmentsPaid: number;
+    };
+    const v = loanVerdict(now, instalmentDueAt(loan), false, ladder);
+    if (v.attempt) out.collect.push(id);
+    else heldBack.push({ action: "collect", id: id.toString(), nextAttemptAt: v.nextAttemptAt });
+  }
+  for (const id of ready.charge) {
+    if (!read()) {
+      unread++;
+      continue;
+    }
+    const sub = readContract(runtime, evm, { address: cfg.payments, abi: polarisPaymentsAbi, functionName: "getSubscription", args: [id] }) as {
+      nextChargeAt: bigint;
+    };
+    const v = subscriptionVerdict(now, Number(sub.nextChargeAt), ladder);
+    if (v.attempt) out.charge.push(id);
+    else heldBack.push({ action: "charge", id: id.toString(), nextAttemptAt: v.nextAttemptAt });
+  }
+  return { ready: out, heldBack, unread };
+}
+
 export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload): string {
   const cfg = runtime.config;
   const evm = evmClientFor(cfg.chainSelectorName);
@@ -227,7 +291,7 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
   } else {
     if (indexed && "error" in indexed) {
       indexerError = indexed.error;
-      note = `indexer unavailable (${indexed.error}); read candidates from the chain, which has no dunning backoff`;
+      note = `indexer unavailable (${indexed.error}); read candidates from the chain${cfg.candidates.chainBackoff ? ", on the dunning ladder counted from each due time" : ", which has no dunning backoff"}`;
       runtime.log(note);
     }
     source = "chain";
@@ -245,7 +309,7 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
     ],
     RESERVE,
   );
-  const ready: Ready = {
+  let ready: Ready = {
     collect: first.ready.filter((t) => t.action === ACTION.COLLECT_INSTALLMENT).map((t) => t.id),
     charge: first.ready.filter((t) => t.action === ACTION.CHARGE_SUBSCRIPTION).map((t) => t.id),
     liquidate: [],
@@ -263,11 +327,23 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
     ready.liquidate = second.ready.map((t) => t.id);
     checked += second.checked;
   }
-  const total = candidates.loans.length + candidates.subscriptions.length;
-  if (first.checked < total) {
-    const more = `checked ${first.checked} of ${total} candidates inside the ${EVM_READ_LIMIT}-read quota; the rest wait for the next run`;
+  const addNote = (more: string) => {
     note = note ? `${note}; ${more}` : more;
     runtime.log(more);
+  };
+  const total = candidates.loans.length + candidates.subscriptions.length;
+  if (first.checked < total) {
+    addNote(`checked ${first.checked} of ${total} candidates inside the ${EVM_READ_LIMIT}-read quota; the rest wait for the next run`);
+  }
+  // The indexer's candidates are already on its ladder; the chain's get the same ladder here.
+  let heldBack: CollectionsResult["heldBack"] = [];
+  const ladder = cfg.candidates.chainBackoff;
+  if (source === "chain" && ladder && ready.collect.length + ready.charge.length > 0) {
+    const kept = onTheLadder(runtime, evm, budget, ready, Number(tick), ladder, RESERVE);
+    ready = kept.ready;
+    heldBack = kept.heldBack;
+    if (heldBack.length > 0) addNote(`${heldBack.length} due task(s) held back by the dunning ladder until their next rung`);
+    if (kept.unread > 0) addNote(`${kept.unread} due task(s) wait for a later run: no read left for their due time`);
   }
 
   const tasks = planTasks(ready, cfg.maxTasksPerReport);
@@ -278,6 +354,7 @@ export function onCron(runtime: Runtime<CollectionsConfig>, payload: CronPayload
     note,
     checked,
     tasks: tasks.map((t) => ({ action: ["", "collect", "charge", "liquidate"][t.action]!, id: t.id.toString() })),
+    heldBack,
     txHash: null,
     gasLimit: null,
     executed: 0,

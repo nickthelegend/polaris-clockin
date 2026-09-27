@@ -4,10 +4,10 @@
  * capabilities are the SDK's own mocks (@chainlink/cre-sdk/test).
  */
 
-import { expect } from "bun:test";
+import { describe, expect } from "bun:test";
 import { cre, type CronPayload } from "@chainlink/cre-sdk";
 import { addContractMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
-import { collectionsReceiverAbi, polarisLoanEngineAbi } from "@polarispay/contracts/abi";
+import { collectionsReceiverAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
 import { type Address, encodeErrorResult, type Hex, parseAbi } from "viem";
 import { verifyCallback } from "../src/shared/callback.ts";
 import { DUE_CANDIDATES_QUERY } from "../src/collections/candidates.ts";
@@ -33,7 +33,7 @@ const baseConfig = (over: Partial<CollectionsConfig> = {}): CollectionsConfig =>
     loanEngine: ENGINE,
     payments: PAYMENTS,
     forwarder: FORWARDER,
-    candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+    candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: null },
     liquidate: true,
     maxTasksPerReport: 25,
     checkBatch: 72,
@@ -61,25 +61,45 @@ interface Chain {
   outcome?: (t: Task) => { executed: bigint } | { skipped: Hex };
   delivered?: boolean;
   estimate?: bigint;
+  /** PolarisLoanEngine.getLoan: when each loan's next instalment falls due. */
+  loans?: Record<string, { startedAt: bigint; intervalSeconds: bigint; installmentsPaid: number }>;
+  /** PolarisPayments.getSubscription(id).nextChargeAt. */
+  nextChargeAt?: Record<string, bigint>;
 }
 
 /** Wire the EVM mock to a small fake chain and record what the workflow did. */
 function fakeChain(chain: Chain) {
   const evm = EvmMock.testInstance(SELECTOR);
-  const seen = { checkCalls: 0, checked: [] as Array<{ action: number; id: bigint }>, reports: [] as Task[][], gasLimits: [] as bigint[], countReads: 0 };
+  const seen = {
+    checkCalls: 0,
+    checked: [] as Array<{ action: number; id: bigint }>,
+    reports: [] as Task[][],
+    gasLimits: [] as bigint[],
+    countReads: 0,
+    dueReads: [] as string[],
+  };
 
   const engine = addContractMock(evm, { address: ENGINE, abi: polarisLoanEngineAbi });
   engine.loanCount = () => {
     seen.countReads++;
     return chain.loanCount;
   };
-  const payments = addContractMock(evm, {
-    address: PAYMENTS,
-    abi: parseAbi(["function subscriptionCount() view returns (uint256)"]),
-  });
+  engine.getLoan = (id: bigint) => {
+    seen.dueReads.push(`loan:${id}`);
+    const l = chain.loans?.[id.toString()];
+    if (!l) throw new Error(`no loan ${id} in this fake chain`);
+    return { borrower: FORWARDER, merchant: FORWARDER, principal: 0n, totalOwed: 0n, totalRepaid: 0n, installmentCount: 4, status: 0, ...l };
+  };
+  const payments = addContractMock(evm, { address: PAYMENTS, abi: polarisPaymentsAbi });
   payments.subscriptionCount = () => {
     seen.countReads++;
     return chain.subscriptionCount;
+  };
+  payments.getSubscription = (id: bigint) => {
+    seen.dueReads.push(`sub:${id}`);
+    const next = chain.nextChargeAt?.[id.toString()];
+    if (next === undefined) throw new Error(`no subscription ${id} in this fake chain`);
+    return { subscriber: FORWARDER, planId: 1n, startedAt: 0n, nextChargeAt: next, periodsCharged: 0, missedCharges: 0, status: 0 };
   };
   const receiver = addContractMock(evm, { address: RECEIVER, abi: collectionsReceiverAbi });
   receiver.checkTasks = (tasks: unknown) => {
@@ -227,7 +247,7 @@ test("the indexer proposes: its ids are checked on chain, and the chain counts a
   });
   const out = run(
     baseConfig({
-      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: null },
     }),
   );
   expect(out.source).toBe("indexer");
@@ -256,7 +276,7 @@ test("configured with the Polaris indexer, the default query is answered: no fal
   }));
   const out = run(
     baseConfig({
-      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: null },
     }),
   );
   expect(sent).toHaveLength(1);
@@ -275,7 +295,7 @@ test("a failing indexer falls back to the chain instead of reading as 'nothing d
   httpRecorder(() => ({ status: 200, json: { errors: [{ message: "field 'Loan' not found" }] } }));
   const out = run(
     baseConfig({
-      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: null },
     }),
   );
   expect(out.source).toBe("chain");
@@ -293,7 +313,7 @@ test("a failing indexer is not silent: the run names the error and tells the API
   const secrets = new Map([["main", new Map([["POLARIS_CALLBACK_SECRET", SECRET]])]]);
   const out = run(
     baseConfig({
-      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: null },
       callback: { url: CALLBACK, secretId: "POLARIS_CALLBACK_SECRET" },
     }),
     secrets,
@@ -318,7 +338,7 @@ test("a healthy run with nothing to say posts nothing, and a run that did someth
   const secrets = new Map([["main", new Map([["POLARIS_CALLBACK_SECRET", SECRET]])]]);
   const withCallback = (indexerUrl: string | null) =>
     baseConfig({
-      candidates: { indexerUrl, indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60 },
+      candidates: { indexerUrl, indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: null },
       callback: { url: CALLBACK, secretId: "POLARIS_CALLBACK_SECRET" },
     });
 
@@ -337,7 +357,7 @@ test("a healthy run with nothing to say posts nothing, and a run that did someth
 
 test("stays inside CRE's 15-read quota however many candidates there are", () => {
   const seen = fakeChain({ loanCount: 5_000n, subscriptionCount: 5_000n, ready: () => false });
-  const out = run(baseConfig({ candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 500, sweepWindow: 500 } }));
+  const out = run(baseConfig({ candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 500, sweepWindow: 500, chainBackoff: null } }));
   // 2 count reads + checkTasks reads, with 2 kept back for the write.
   expect(2 + seen.checkCalls).toBeLessThanOrEqual(15 - 2);
   expect(out.note).toContain("the rest wait for the next run");
@@ -357,4 +377,94 @@ test("caps a report at maxTasksPerReport without splitting a loan's collect-then
     { action: 1, id: 2n },
     { action: 3, id: 2n },
   ]);
+});
+
+describe("the dunning ladder when the chain proposes (candidates.chainBackoff)", () => {
+  const NOW = NOW_MS / 1000;
+  const H = 3600;
+  const LADDER = { ladderSeconds: [6 * H, 24 * H, 72 * H, 168 * H], windowSeconds: 120 };
+  const chainMode = (chainBackoff: typeof LADDER | null = LADDER) =>
+    baseConfig({ candidates: { indexerUrl: null, indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff } });
+  /** A weekly plan whose next instalment fell due at `dueAt`. */
+  const dueAt = (at: number) => ({ startedAt: BigInt(at - 7 * 86_400), intervalSeconds: BigInt(7 * 86_400), installmentsPaid: 0 });
+
+  test("tries a task on its rung, holds it between rungs, and never holds a loan past grace or a lapsing renewal", () => {
+    const seen = fakeChain({
+      loanCount: 4n,
+      subscriptionCount: 2n,
+      ready: (t) => t.action !== ACTION.LIQUIDATE || t.id === 4n,
+      loans: {
+        "1": dueAt(NOW - 30), // rung 0: just fell due
+        "2": dueAt(NOW - 3 * H), // tried at due time, next rung in 3 h
+        "3": dueAt(NOW - 6 * H - 60), // rung 1, 6 h after the first attempt
+        "4": dueAt(NOW - 2 * H), // past grace: collection, then liquidation
+      },
+      nextChargeAt: { "1": BigInt(NOW - H), "2": BigInt(NOW - 8 * 86_400) },
+    });
+    const out = run(chainMode());
+    expect(out.source).toBe("chain");
+    expect(seen.reports[0]).toEqual([
+      { action: ACTION.COLLECT_INSTALLMENT, id: 1n },
+      { action: ACTION.COLLECT_INSTALLMENT, id: 3n },
+      { action: ACTION.COLLECT_INSTALLMENT, id: 4n },
+      { action: ACTION.LIQUIDATE, id: 4n },
+      // Past its 7-day window the charge records the miss (and lapses the subscription in time): never held.
+      { action: ACTION.CHARGE_SUBSCRIPTION, id: 2n },
+    ]);
+    expect(out.heldBack).toEqual([
+      { action: "collect", id: "2", nextAttemptAt: NOW - 3 * H + 6 * H },
+      { action: "charge", id: "1", nextAttemptAt: NOW - H + 6 * H },
+    ]);
+    expect(out.note).toContain("2 due task(s) held back by the dunning ladder");
+    // One read per task for its due time; a loan past grace needs none.
+    expect(seen.dueReads).toEqual(["loan:1", "loan:2", "loan:3", "sub:1", "sub:2"]);
+  });
+
+  test("without a ladder (chainBackoff: null) every due task is tried on every run", () => {
+    const seen = fakeChain({ loanCount: 2n, subscriptionCount: 0n, ready: (t) => t.action === ACTION.COLLECT_INSTALLMENT });
+    const out = run(chainMode(null));
+    expect(seen.reports[0]).toEqual([
+      { action: ACTION.COLLECT_INSTALLMENT, id: 1n },
+      { action: ACTION.COLLECT_INSTALLMENT, id: 2n },
+    ]);
+    expect(out.heldBack).toEqual([]);
+    expect(seen.dueReads).toEqual([]);
+  });
+
+  test("the indexer's candidates are already on its ladder: no due-time reads, nothing held", () => {
+    const seen = fakeChain({ loanCount: 999n, subscriptionCount: 0n, ready: (t) => t.action === ACTION.COLLECT_INSTALLMENT });
+    httpRecorder(() => ({ status: 200, json: { data: { Loan: [{ loanId: "5" }], Subscription: [] } } }));
+    const out = run(
+      baseConfig({
+        candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: LADDER },
+      }),
+    );
+    expect(out.source).toBe("indexer");
+    expect(seen.dueReads).toEqual([]);
+    expect(seen.reports[0]).toEqual([{ action: ACTION.COLLECT_INSTALLMENT, id: 5n }]);
+  });
+
+  test("a failing indexer's fallback keeps the ladder, and says so", () => {
+    const seen = fakeChain({ loanCount: 1n, subscriptionCount: 0n, ready: (t) => t.action === ACTION.COLLECT_INSTALLMENT, loans: { "1": dueAt(NOW - 3 * H) } });
+    httpRecorder(() => ({ status: 503 }));
+    const out = run(
+      baseConfig({
+        candidates: { indexerUrl: "https://indexer.polaris.test/v1/graphql", indexerQuery: null, indexerLimit: 100, recentWindow: 150, sweepWindow: 60, chainBackoff: LADDER },
+      }),
+    );
+    expect(out).toMatchObject({ source: "chain", status: "idle", indexerError: "HTTP 503" });
+    expect(out.note).toContain("on the dunning ladder counted from each due time");
+    expect(out.heldBack).toHaveLength(1);
+    expect(seen.reports).toHaveLength(0);
+  });
+
+  test("stays inside the read quota: tasks whose due time it cannot read wait for a later run, never tried blind", () => {
+    const loans = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [String(i + 1), dueAt(NOW - 30)]));
+    const seen = fakeChain({ loanCount: 40n, subscriptionCount: 0n, ready: (t) => t.action === ACTION.COLLECT_INSTALLMENT, loans });
+    const out = run(chainMode());
+    // 2 counts + 1 checkTasks + 1 liquidation check, 2 kept for the write: 9 due-time reads.
+    expect(seen.dueReads).toHaveLength(9);
+    expect(seen.reports[0]).toHaveLength(9);
+    expect(out.note).toContain("31 due task(s) wait for a later run");
+  });
 });
