@@ -34,7 +34,7 @@
  * Pure, so the WASM runtime runs it and the tests hold it to the mirror.
  */
 
-import { scoreBreakdown } from "@polarispay/underwriting/core";
+import { ATTEST_MINIMUM, attestGaps } from "@polarispay/underwriting/core";
 
 export interface ThinCheckFacts {
   walletAgeDays: number;
@@ -46,15 +46,17 @@ export interface ThinCheckFacts {
   exchangeFunded: boolean;
 }
 
-/** Why these facts are a thin file the DON will not attest, or null when they may be reported. */
-/** ScoreManager.MIN_HISTORY_DAYS and MIN_HISTORY_TXS. */
-export const MIN_HISTORY_DAYS = 90;
-export const MIN_HISTORY_TXS = 10;
+/** ScoreManager.MIN_HISTORY_DAYS and MIN_HISTORY_TXS, as @polarispay/underwriting states them (one rule everywhere). */
+export const MIN_HISTORY_DAYS = ATTEST_MINIMUM.walletAgeDays;
+export const MIN_HISTORY_TXS = ATTEST_MINIMUM.txCount;
 
+/**
+ * Why these facts are a thin file the DON will not attest, or null when they
+ * may be reported (a declined file always is). The rule itself is the
+ * underwriting package's `attestGaps`, which mirrors ScoreManager.isThinFile.
+ */
 export function thinFileReason(facts: ThinCheckFacts): string | null {
-  const b = scoreBreakdown(facts);
-  if (b.declined) return null;
-  if (facts.walletAgeDays >= MIN_HISTORY_DAYS && facts.txCount >= MIN_HISTORY_TXS) return null;
+  if (attestGaps(facts).length === 0) return null;
   return (
     `thin file: ${facts.walletAgeDays} days and ${facts.txCount} transactions of history, under ScoreManager's ` +
     `${MIN_HISTORY_DAYS} days and ${MIN_HISTORY_TXS} transactions (isThinFile; a balance can be moved from account to account, ` +
