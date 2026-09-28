@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 /**
- * The Chainlink CRE states of the product, on `pnpm demo:local` (a local
- * Hardhat chain; it refuses anything else):
+ * The Chainlink CRE scenes of the product, on a running `pnpm demo:local`
+ * (a local Hardhat chain; it refuses anything else):
  *
  *   node scripts/demo-chainlink.mjs <step>
  *
  *   buyer          a buyer key for this run (.demo/chainlink.json), with test
- *                  dollars (MockAUSD) and local gas; and a block every second
- *                  from now on, so the local chain's clock moves like a real one
+ *                  dollars (MockAUSD) and local gas
  *   underwrite     the buyer's consent and a history wallet's link proof,
  *                  POST /api/credit/underwrite: the API fires trigger:local,
  *                  which runs the real polaris-underwrite handler on the CRE
@@ -15,31 +14,36 @@
  *                  through the local forwarder; waits for the line
  *   plan           a Halcyon order for Pay in 4 (the shop's POST /api/checkout),
  *                  signed as the app signs it and carried by POST /api/relay
- *   lose-approval  the buyer sets its approval to the loan engine to 0 (its own
- *                  transaction): the next collection fails for a lost approval
- *   collect        a collections report for CollectionsReceiver.dueTasksFor(buyer)
- *   watch-retry    waits for PolarisCheckout.Reauthorized, then delivers the
- *                  same report at once: what the collections workflow's EVM log
- *                  trigger does on a real network
+ *   lose-approval  the buyer sets its approval to the loan engine to 0 (its
+ *                  own transaction, as a wallet's "revoke" would): the next
+ *                  collection of a due instalment fails for a lost approval,
+ *                  and the plan asks the buyer to sign again
+ *   guard raise [price]
+ *                  THE DEMO THRESHOLD. The owner raises GuardianReceiver's
+ *                  depeg threshold (minPrice) above the real AUSD/USD price
+ *                  (default $1.001; Chainlink's feed reads about $0.9998), so
+ *                  the guardian's next run pauses new Pay in 4 plans. The
+ *                  price is never faked; the bar is moved, and every caption
+ *                  says "threshold raised for demo". Waits for the pause.
+ *   guard restore  the thresholds from before `raise` (else the deploy
+ *                  defaults); waits for the guardian's next run to resume
  *   guard max-age <seconds>
- *                  the owner sets how old an attestation may get before it is
- *                  stale (GuardianReceiver.setMaxAttestationAge; 3600 by default),
- *                  so a recording can show a late guard failing open in minutes
- *   guard healthy|depeg|stale
- *                  a guardian attestation from the local stand-in AUSD/USD feed
- *                  and PolarisLoanEngine.poolState(): healthy ($0.9998), a
- *                  depeg ($0.99, credit pauses), or one observed 59 minutes ago
- *                  (the guard goes stale a minute later and fails open)
+ *                  how old an attestation may get before it is stale and
+ *                  credit fails open (GuardianReceiver.setMaxAttestationAge;
+ *                  3600 by default)
+ *   guard status   GuardianReceiver.creditStatus() and thresholds()
  *   status         the buyer's plans and the guard, from the API
  *
- * HAND-BUILT REPORTS. On this local chain, `collect`, `watch-retry` and
- * `guard` build each report here (packages/contracts lib/cre.js, the same
- * encoders the contract tests hold the workflows to) and deliver it through
- * the local MockKeystoneForwarder from the deployer, which the receivers
- * accept as the local simulation transmitter. They stand in for the
- * collections and guardian workflows; no CRE workflow, DON or Chainlink feed
- * produced them. On Monad testnet the same reports come from
- * `cre workflow simulate --broadcast` (workflows/README.md).
+ * Every report in these scenes comes from a real workflow handler run by
+ * demo:local's local runners (workflows/scripts local-collections.mjs,
+ * local-guardian.mjs, local-trigger.mjs): the collections cron and its
+ * Reauthorized log trigger, and the guardian's cron. This script only does
+ * what a person would: the owner's settings, the buyer's own transactions,
+ * and the API calls the apps make. On Monad testnet the same reports come
+ * from `cre workflow simulate --broadcast` (workflows/README.md).
+ *
+ * DEMO_BUYER_KEY overrides the buyer (e.g. the app's dev signer key, so the
+ * browser's buyer is the one who loses the approval).
  *
  * Reads .demo/demo.json and .demo/deployment.json, written by demo:local.
  */
@@ -55,7 +59,7 @@ const STATE = join(DEMO, "chainlink.json");
 const BUSINESS = join(REPO, "apps", "business");
 const CONTRACTS = join(REPO, "packages", "contracts");
 
-// Hardhat's well-known first account: the local deployer, MockAUSD minter and CRE simulation transmitter.
+// Hardhat's well-known first account: the local deployer, the owner of every contract, and MockAUSD's minter.
 const OWNER_KEY = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 
 const fileUrl = (p) => pathToFileURL(p).href;
@@ -80,6 +84,8 @@ const reader = viem.createPublicClient({ chain, transport: viem.http(RPC) });
 const owner = viem.createWalletClient({ account: accounts.privateKeyToAccount(OWNER_KEY), chain, transport: viem.http(RPC) });
 
 const log = (msg) => console.log(`[chainlink] ${msg}`);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const dollars = (price8) => `$${(Number(price8) / 1e8).toFixed(4)}`;
 
 function state() {
   return existsSync(STATE) ? JSON.parse(readFileSync(STATE, "utf8")) : {};
@@ -88,9 +94,9 @@ function save(next) {
   writeFileSync(STATE, JSON.stringify({ ...state(), ...next }, null, 2));
 }
 function buyer() {
-  const s = state();
-  if (!s.buyerKey) throw new Error("No buyer yet: run `node scripts/demo-chainlink.mjs buyer` first.");
-  return accounts.privateKeyToAccount(s.buyerKey);
+  const key = process.env.DEMO_BUYER_KEY || state().buyerKey;
+  if (!key) throw new Error("No buyer yet: run `node scripts/demo-chainlink.mjs buyer` first, or set DEMO_BUYER_KEY.");
+  return accounts.privateKeyToAccount(key);
 }
 
 async function api(path, init = {}) {
@@ -110,37 +116,20 @@ async function send(hash) {
   return receipt;
 }
 
-/** Deliver a hand-built report through the local forwarder, as the local simulation transmitter. */
-async function report(receiver, body, workflowName) {
-  const block = await reader.getBlock();
-  const raw = cre.encodeRawReport({
-    body,
-    workflowName,
-    workflowOwner: owner.account.address,
-    executionId: viem.keccak256(viem.toHex(`${workflowName}:${Date.now()}:${Math.random()}`)),
-    timestamp: Number(block.timestamp),
-  });
-  const forwarder = viem.getAddress(deployment.cre.forwarder);
-  const hash = await owner.writeContract({ address: forwarder, abi: abis.mockKeystoneForwarderAbi, functionName: "report", args: [receiver, raw, "0x", []] });
-  const receipt = await send(hash);
-  const processed = viem.parseEventLogs({ abi: abis.mockKeystoneForwarderAbi, logs: receipt.logs, eventName: "ReportProcessed" })[0];
-  if (!processed?.args.result) throw new Error(`the receiver refused the report (tx ${hash})`);
-  return hash;
+/* ── The buyer ─────────────────────────────────────────────────────────── */
+
+async function gas(address) {
+  await reader.request({ method: "hardhat_setBalance", params: [address, "0x8AC7230489E80000"] });
 }
 
-/* ── Steps ─────────────────────────────────────────────────────────────── */
-
 async function stepBuyer() {
-  // A block a second, as a real chain makes them (Monad: every 400 ms), so the chain's clock moves on its own:
-  // instalments fall due (dueTasksFor) and the guard's attestation ages (isStale) without anyone sending a transaction.
-  await reader.request({ method: "evm_setIntervalMining", params: [1000] });
   const key = state().buyerKey ?? accounts.generatePrivateKey();
   const account = accounts.privateKeyToAccount(key);
   save({ buyerKey: key });
   await send(await owner.writeContract({ address: at("Stablecoin"), abi: abis.mockAUSDAbi, functionName: "mint", args: [account.address, 500_000_000n] }));
-  await reader.request({ method: "hardhat_setBalance", params: [account.address, "0x8AC7230489E80000"] });
+  await gas(account.address);
   log(`buyer ${account.address}: $500.00 of test dollars and local gas`);
-  log("the key is in .demo/chainlink.json (git-ignored): store it as the app's dev signer, localStorage[\"polaris.dev-signer.v1\"] = { privateKey, createdAt }, to be this buyer");
+  log('the key is in .demo/chainlink.json (git-ignored): store it as the app\'s dev signer, localStorage["polaris.dev-signer.v1"] = { privateKey, createdAt }, to be this buyer');
 }
 
 async function stepUnderwrite() {
@@ -163,7 +152,7 @@ async function stepUnderwrite() {
       log(`decision: ${s.decision.status}${s.decision.reason ? ` (${s.decision.reason})` : ""}, line $${s.onChain?.creditLimit ?? "?"}, report ${s.decision.txHash ?? "none"}`);
       return;
     }
-    await new Promise((r) => setTimeout(r, 2000));
+    await sleep(2000);
   }
   throw new Error("no decision after 3 minutes: see .demo/logs/cre-trigger.log");
 }
@@ -215,58 +204,101 @@ async function stepPlan() {
 
 async function stepLoseApproval() {
   const account = buyer();
+  await gas(account.address);
   const wallet = viem.createWalletClient({ account, chain, transport: viem.http(RPC) });
   const hash = await wallet.writeContract({ address: at("Stablecoin"), abi: abis.mockAUSDAbi, functionName: "approve", args: [at("PolarisLoanEngine"), 0n] });
   await send(hash);
-  log(`approval to the loan engine set to 0 by the buyer (tx ${hash})`);
+  log(`the buyer ${account.address} set its approval to the loan engine to 0 (tx ${hash}): the next due instalment's collection fails, and the plan asks to sign again`);
 }
 
-async function dueTasks(borrower) {
-  return reader.readContract({ address: at("CollectionsReceiver"), abi: abis.collectionsReceiverAbi, functionName: "dueTasksFor", args: [borrower] });
+/* ── The guard ─────────────────────────────────────────────────────────── */
+
+const guardian = () => at("GuardianReceiver");
+
+async function thresholdsNow() {
+  const t = await reader.readContract({ address: guardian(), abi: abis.guardianReceiverAbi, functionName: "thresholds" });
+  return { minPrice: t.minPrice, minFreeCash: t.minFreeCash, maxBadDebtBps: Number(t.maxBadDebtBps), maxPriceAge: Number(t.maxPriceAge) };
 }
 
-async function stepCollect() {
-  const tasks = await dueTasks(buyer().address);
-  if (tasks.length === 0) throw new Error("nothing is due for the buyer yet (wait for the interval)");
-  const hash = await report(at("CollectionsReceiver"), cre.encodeCollectionsReport(tasks.map((t) => ({ action: Number(t.action), id: t.id }))), cre.WORKFLOW_NAMES.COLLECTIONS);
-  log(`collections report (hand-built) for ${tasks.length} task(s): tx ${hash}`);
+async function creditStatus() {
+  const s = await reader.readContract({ address: guardian(), abi: abis.guardianReceiverAbi, functionName: "creditStatus" });
+  return { ...s, round: s.round, observedAt: Number(s.observedAt) };
 }
 
-async function stepWatchRetry() {
-  const account = buyer();
-  const from = await reader.getBlockNumber();
-  log(`waiting for Reauthorized from ${account.address} (sign again in the app)…`);
+async function setThresholds(t) {
+  const hash = await owner.writeContract({ address: guardian(), abi: abis.guardianReceiverAbi, functionName: "setThresholds", args: [t] });
+  await send(hash);
+  return hash;
+}
+
+/** Wait for the guardian's next run to land an attestation whose verdict is `paused`. */
+async function waitForVerdict(paused, fromRound) {
+  const started = Date.now();
   for (;;) {
-    const logs = await reader.getContractEvents({ address: at("PolarisCheckout"), abi: abis.polarisCheckoutAbi, eventName: "Reauthorized", args: { buyer: account.address }, fromBlock: from });
-    if (logs.length) {
-      log(`Reauthorized in tx ${logs[0].transactionHash}`);
-      await stepCollect();
-      return;
-    }
-    await new Promise((r) => setTimeout(r, 1000));
+    const s = await creditStatus();
+    if (s.round > fromRound && s.attestedPaused === paused) return s;
+    if (Date.now() - started > 180_000) throw new Error(`no ${paused ? "pausing" : "resuming"} attestation in 3 minutes: see .demo/logs/cre-guardian.log`);
+    await sleep(2000);
   }
 }
 
-async function stepGuard(kind) {
-  const guardian = at("GuardianReceiver");
-  const feed = at("MockAusdUsdFeed");
-  const price = kind === "depeg" ? 99_000_000n : 99_980_000n;
-  const block = await reader.getBlock();
-  const observedAt = kind === "stale" ? block.timestamp - 3540n : block.timestamp;
-  await send(await owner.writeContract({ address: feed, abi: abis.mockPriceFeedAbi, functionName: "setRound", args: [price, observedAt - 60n] }));
-  const [roundId, answer, , updatedAt] = await reader.readContract({ address: feed, abi: abis.mockPriceFeedAbi, functionName: "latestRoundData" });
-  const [pool, thresholds] = await reader.readContract({ address: guardian, abi: abis.guardianReceiverAbi, functionName: "currentInputs" });
-  const a = cre.buildAttestation({ price: answer, priceRoundId: roundId, priceUpdatedAt: updatedAt, pool, observedAt }, thresholds);
-  const hash = await report(guardian, cre.encodeGuardianReport(a), cre.WORKFLOW_NAMES.GUARDIAN);
-  log(`guardian attestation (hand-built, local stand-in feed at $${(Number(price) / 1e8).toFixed(4)}${kind === "stale" ? ", observed 59 min ago" : ""}): tx ${hash}`);
+function lastGuardianRun() {
+  try {
+    return JSON.parse(readFileSync(demo.guardian?.status ?? join(DEMO, "guardian.json"), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+async function stepGuardRaise(priceArg) {
+  const min = viem.parseUnits(priceArg ?? "1.001", 8);
+  const before = await thresholdsNow();
+  if (!state().thresholdsBefore) save({ thresholdsBefore: { ...before, minPrice: String(before.minPrice), minFreeCash: String(before.minFreeCash) } });
+  const { round } = await creditStatus();
+  const hash = await setThresholds({ ...before, minPrice: min });
+  const run = lastGuardianRun();
+  const price = run?.result?.price;
+  log(`THRESHOLD RAISED FOR DEMO: the owner set the depeg threshold to ${dollars(min)} (was ${dollars(before.minPrice)}) in tx ${hash}`);
+  if (price) log(`the guardian's last read: ${price.kind === "chainlink" ? "Chainlink" : "the local mock"} ${price.description} ${price.answer} (round ${price.roundId}); the price is not touched`);
+  log("waiting for the guardian's next scheduled run…");
+  const s = await waitForVerdict(true, round);
+  log(`the guardian attested round ${s.round}: Pay in 4 paused (${reasonWords(s.attestedReasons).join(", ")})`);
+}
+
+async function stepGuardRestore() {
+  const saved = state().thresholdsBefore;
+  const t = saved
+    ? { minPrice: BigInt(saved.minPrice), minFreeCash: BigInt(saved.minFreeCash), maxBadDebtBps: saved.maxBadDebtBps, maxPriceAge: saved.maxPriceAge }
+    : { minPrice: cre.GUARDIAN_DEFAULTS.minPrice, minFreeCash: cre.GUARDIAN_DEFAULTS.minFreeCash, maxBadDebtBps: cre.GUARDIAN_DEFAULTS.maxBadDebtBps, maxPriceAge: cre.GUARDIAN_DEFAULTS.maxPriceAge };
+  const { round } = await creditStatus();
+  const hash = await setThresholds(t);
+  save({ thresholdsBefore: null });
+  log(`the owner restored the depeg threshold to ${dollars(t.minPrice)} in tx ${hash}; waiting for the guardian's next scheduled run…`);
+  const s = await waitForVerdict(false, round);
+  log(`the guardian attested round ${s.round}: healthy, Pay in 4 resumed`);
 }
 
 async function stepMaxAge(seconds) {
   const age = Number(seconds);
   if (!Number.isInteger(age) || age < 1 || age > 604_800) throw new Error("max-age takes 1 to 604800 seconds");
-  const hash = await owner.writeContract({ address: at("GuardianReceiver"), abi: abis.guardianReceiverAbi, functionName: "setMaxAttestationAge", args: [age] });
+  const hash = await owner.writeContract({ address: guardian(), abi: abis.guardianReceiverAbi, functionName: "setMaxAttestationAge", args: [age] });
   await send(hash);
   log(`guardian maxAttestationAge set to ${age} s by the owner (tx ${hash})`);
+}
+
+function reasonWords(mask) {
+  const names = { 1: "depeg", 2: "low free cash", 4: "bad debt", 8: "stale price", 128: "owner pause" };
+  return Object.entries(names)
+    .filter(([bit]) => (mask & Number(bit)) !== 0)
+    .map(([, w]) => w);
+}
+
+async function stepGuardStatus() {
+  const [s, t] = await Promise.all([creditStatus(), thresholdsNow()]);
+  log(`openPlan: ${s.paused ? `paused (${reasonWords(s.reasons).join(", ")})` : "open"}; attested round ${s.round} ${s.attestedPaused ? "paused" : "healthy"}${s.stale ? ", STALE (fails open)" : ""}; override ${["none", "resume", "pause"][s.overrideMode]}`);
+  log(`thresholds: depeg below ${dollars(t.minPrice)}, free cash under $${(Number(t.minFreeCash) / 1e6).toLocaleString("en-US")}, bad debt over ${t.maxBadDebtBps / 100}% of originations, price older than ${t.maxPriceAge / 3600} h`);
+  const run = lastGuardianRun();
+  if (run) log(`last run ${run.at}: ${run.result.status} (${run.result.why}), price ${run.result.price.kind} ${run.result.price.answer}`);
 }
 
 async function stepStatus() {
@@ -277,18 +309,17 @@ async function stepStatus() {
 }
 
 const [step, arg, value] = process.argv.slice(2);
+const guardSteps = { raise: () => stepGuardRaise(value), restore: stepGuardRestore, "max-age": () => stepMaxAge(value), status: stepGuardStatus };
 const steps = {
   buyer: stepBuyer,
   underwrite: stepUnderwrite,
   plan: stepPlan,
   "lose-approval": stepLoseApproval,
-  collect: stepCollect,
-  "watch-retry": stepWatchRetry,
-  guard: () => (arg === "max-age" ? stepMaxAge(value) : stepGuard(arg)),
+  guard: () => guardSteps[arg](),
   status: stepStatus,
 };
-if (!steps[step] || (step === "guard" && !["healthy", "depeg", "stale", "max-age"].includes(arg))) {
-  console.error("Usage: node scripts/demo-chainlink.mjs buyer | underwrite | plan | lose-approval | collect | watch-retry | guard healthy|depeg|stale | guard max-age <seconds> | status");
+if (!steps[step] || (step === "guard" && !guardSteps[arg])) {
+  console.error("Usage: node scripts/demo-chainlink.mjs buyer | underwrite | plan | lose-approval | guard raise [price] | guard restore | guard max-age <seconds> | guard status | status");
   process.exit(2);
 }
 await steps[step]();

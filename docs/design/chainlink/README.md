@@ -1,5 +1,14 @@
 # The Chainlink states, as the product shows them
 
+> **Superseded for the collections and guardian scenes by
+> [`docs/demo/chainlink`](../../demo/chainlink/README.md)**, where every report
+> comes from a real workflow handler (`pnpm demo:e2e:chainlink`). The
+> screens below were captured earlier with hand-built collections and
+> guardian reports; `scripts/demo-chainlink.mjs` no longer has the
+> `collect`, `watch-retry` and `guard healthy|depeg|stale` steps that built
+> them. They still show every state the product can be in (the stale guard
+> is only here).
+
 Captured on 28 Sep 2026 from `pnpm demo:local` (branch `metropolis/cl-apps`)
 at 1440×900 and 402×877 for the customer app and the shop, and 1440×900 for
 the merchant dashboard. Headless Chrome, reduced motion. Every figure on

@@ -22,11 +22,25 @@
  *     polarispay-sdk against the real API and checkout (no dev mock);
  *  6. a local faucet on :3650 for test dollars (MockAUSD), which the app's
  *     Add money sheet offers on this chain;
- *  7. the CRE collections cron's local stand-in (workflows,
- *     collections:local): the real `polaris-collections` handler every
- *     minute, collecting the Pay in 4 instalments that are due through
- *     CollectionsReceiver and reporting to the API (the dashboard's
- *     Collections card, installment.collected webhooks).
+ *  7. the CRE collections workflow's local stand-in (workflows,
+ *     collections:local): the real `polaris-collections` handler on both of
+ *     its triggers, the cron every minute (collecting the Pay in 4
+ *     instalments that are due through CollectionsReceiver) and the EVM log
+ *     trigger on PolarisCheckout's Reauthorized (the instant retry after a
+ *     buyer signs again), reporting to the API (the dashboard's Collections
+ *     card and Chainlink page, installment.collected webhooks);
+ *  8. the CRE guardian's local stand-in (workflows, guardian:local): the real
+ *     `polaris-guardian` handler every minute, reading Chainlink's AUSD/USD
+ *     Data Feed on Monad MAINNET (public RPC, reads only) and the pool on the
+ *     local chain, and attesting to GuardianReceiver, which PolarisCheckout
+ *     asks before every new Pay in 4 plan. DEMO_GUARDIAN_PRICE=mock reads
+ *     the local chain's labelled MockAusdUsdFeed instead (offline); without
+ *     it, a mainnet feed that cannot be read falls back to the mock, and the
+ *     banner says so.
+ *
+ * `node scripts/demo-chainlink.mjs` drives the Chainlink scenes on a running
+ * demo (the guardian's demo threshold, a lost approval); `pnpm
+ * demo:e2e:chainlink` plays them headless end to end.
  *
  * Before it prints the URLs it opens every page and API route once, so no
  * first click waits for `next dev` to compile it.
@@ -34,7 +48,10 @@
  * DEMO_FAST_PLANS=1 makes Pay in 4 instalments a minute apart instead of a
  * week (PAY_IN_4_INTERVAL_SECONDS=60, the local deployment's minimum), so
  * the collections run is on camera: instalment 2 is collected about a
- * minute after checkout. Its log is .demo/logs/cre-collections.log.
+ * minute after checkout. Its log is .demo/logs/cre-collections.log. It
+ * also sets the loan engine's grace to 15 minutes (GRACE_SECONDS overrides),
+ * so a missed payment is dunned, and can be signed for again, before it is
+ * liquidated.
  * DEMO_PAY_IN_4_INTERVAL_SECONDS sets the interval outright (it wins over
  * DEMO_FAST_PLANS).
  *
@@ -174,6 +191,43 @@ async function rpc(method, params = []) {
   return body.result;
 }
 
+/** Chainlink's AUSD/USD on Monad mainnet: the price polaris-guardian reads in staging and production. */
+const AUSD_USD_MONAD_MAINNET = "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13";
+const MONAD_MAINNET_RPC = process.env.POLARIS_MONAD_MAINNET_RPC || "https://rpc.monad.xyz";
+
+/**
+ * Where the local guardian reads AUSD/USD: Chainlink's feed on Monad mainnet
+ * when its public RPC answers as that feed (chain 143, "AUSD / USD"), else
+ * the local chain's labelled mock. DEMO_GUARDIAN_PRICE=mainnet|mock decides.
+ */
+async function guardianPriceSource() {
+  const forced = process.env.DEMO_GUARDIAN_PRICE;
+  if (forced === "mock") return { price: "mock", why: "DEMO_GUARDIAN_PRICE=mock: the local MockAusdUsdFeed (not Chainlink)" };
+  const call = async (method, params) => {
+    const res = await fetch(MONAD_MAINNET_RPC, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = await res.json();
+    if (body.error) throw new Error(body.error.message);
+    return body.result;
+  };
+  try {
+    if ((await call("eth_chainId", [])) !== "0x8f") throw new Error(`${MONAD_MAINNET_RPC} is not Monad mainnet (143)`);
+    // description(): an ABI-encoded string, "AUSD / USD"
+    const hex = await call("eth_call", [{ to: AUSD_USD_MONAD_MAINNET, data: "0x7284e416" }, "latest"]);
+    const length = Number.parseInt(hex.slice(66, 130), 16);
+    const text = Buffer.from(hex.slice(130, 130 + length * 2), "hex").toString("utf8");
+    if (text !== "AUSD / USD") throw new Error(`the feed says "${text}"`);
+    return { price: "mainnet", why: `Chainlink AUSD / USD on Monad mainnet via ${MONAD_MAINNET_RPC}` };
+  } catch (error) {
+    if (forced === "mainnet") throw new Error(`DEMO_GUARDIAN_PRICE=mainnet, but the feed could not be read: ${error.message}`);
+    return { price: "mock", why: `Monad mainnet unreachable (${error.message}): the local MockAusdUsdFeed (not Chainlink) stands in` };
+  }
+}
+
 function stop() {
   if (stopping) return;
   stopping = true;
@@ -257,11 +311,32 @@ async function main() {
   run(process.execPath, [hardhat, "run", "scripts/deploy-monad.js", "--network", "monadLocal"], {
     cwd: CONTRACTS,
     stdio: ["ignore", deployLog, deployLog],
-    env: { ...process.env, POLARIS_LOCAL_NODE_PORT: String(PORTS.node), RELAYER_ADDRESS },
+    env: {
+      ...process.env,
+      POLARIS_LOCAL_NODE_PORT: String(PORTS.node),
+      RELAYER_ADDRESS,
+      // With instalments a minute apart, the local default grace (2 min) would liquidate a missed payment before
+      // the buyer could sign again; 15 min keeps the dunning (and the instant retry) on screen. GRACE_SECONDS wins.
+      ...(FAST_PLANS && !process.env.GRACE_SECONDS ? { GRACE_SECONDS: "900" } : {}),
+    },
   });
   const deploymentFile = join(DEMO, "deployment.json");
   copyFileSync(join(CONTRACTS, "deployments", "monad-local.json"), deploymentFile);
   const deployment = JSON.parse(readFileSync(deploymentFile, "utf8"));
+  // The guardian's price. The API and the dashboard read which feed it is from this record, so it names what the runner reads.
+  const guardianPrice = await guardianPriceSource();
+  log(`guardian price: ${guardianPrice.why}`);
+  if (guardianPrice.price === "mainnet") {
+    deployment.cre.workflows.guardian.priceFeed = {
+      chainId: 143,
+      chainSelectorName: "monad-mainnet",
+      address: AUSD_USD_MONAD_MAINNET,
+      decimals: 8,
+      description: "AUSD / USD",
+      kind: "chainlink",
+    };
+    writeFileSync(deploymentFile, JSON.stringify(deployment, null, 2));
+  }
   const at = (name) => deployment.contracts[name].address;
   log(`deployed on chain ${deployment.chainId}: PolarisCheckout ${at("PolarisCheckout")}, demo merchant ${deployment.demo.merchant} (${deployment.demo.merchantName})`);
 
@@ -371,7 +446,7 @@ async function main() {
     },
   });
 
-  // ── 3b. the CRE collections cron (local stand-in), every minute ───────
+  // ── 3b. the CRE collections workflow (local stand-in): its cron every minute, and its log trigger ──
   background("cre-collections", process.execPath, [join(WORKFLOWS, "scripts", "local-collections.mjs")], {
     cwd: WORKFLOWS,
     env: {
@@ -381,6 +456,20 @@ async function main() {
       POLARIS_LOCAL_COLLECTIONS_EVERY_MS: "60000",
       POLARIS_CALLBACK_URL: `${BUSINESS_URL}/api/cre/callback`,
       POLARIS_CALLBACK_SECRET: secrets.callback,
+    },
+  });
+
+  // ── 3c. the CRE guardian (local stand-in), every minute ─────────────────
+  background("cre-guardian", process.execPath, [join(WORKFLOWS, "scripts", "local-guardian.mjs")], {
+    cwd: WORKFLOWS,
+    env: {
+      ...process.env,
+      POLARIS_LOCAL_RPC: RPC,
+      POLARIS_LOCAL_DEPLOYMENT: deploymentFile,
+      POLARIS_LOCAL_GUARDIAN_EVERY_MS: "60000",
+      POLARIS_LOCAL_GUARDIAN_PRICE: guardianPrice.price,
+      POLARIS_MONAD_MAINNET_RPC: MONAD_MAINNET_RPC,
+      POLARIS_LOCAL_GUARDIAN_STATUS: join(DEMO, "guardian.json"),
     },
   });
 
@@ -474,6 +563,8 @@ async function main() {
       `/api/public/credit/${zero}/messages`,
       `/api/public/buyers/${zero}`,
       "/api/public/network",
+      "/api/public/credit-guard",
+      "/api/chainlink",
       ["OPTIONS", "/api/relay"],
       ["POST", "/api/relay", {}],
       ["OPTIONS", "/api/credit/underwrite"],
@@ -500,6 +591,7 @@ async function main() {
       "/dashboard/payouts",
       "/dashboard/developers",
       "/dashboard/settings",
+      "/dashboard/chainlink",
     ]),
     warm(SHOP_URL, ["/shop", "/products/halcyon-one", "/cart", "/checkout", "/orders/HC-00000", ["POST", "/api/checkout", {}], "/api/orders/HC-00000", ["POST", "/api/webhooks/polaris", {}]]),
   ]);
@@ -517,6 +609,7 @@ async function main() {
     "/credit",
     "/credit/score",
     "/plans",
+    "/plans/0",
     "/cards",
     "/insights",
     "/profile",
@@ -524,6 +617,7 @@ async function main() {
     "/settings",
     "/accounts",
     "/pay/cs_test_warmupwarmup?display=popup",
+    "/api/fx?currency=ARS",
   ]);
   log(`warmed the dashboard and API in ${Math.round(business.ms / 1000)} s, the shop in ${Math.round(shop.ms / 1000)} s, the app in ${Math.round(app.ms / 1000)} s`);
 
@@ -533,6 +627,7 @@ async function main() {
       {
         ports: PORTS,
         fastPlans: FAST_PLANS,
+        guardian: { price: guardianPrice.price, why: guardianPrice.why, status: join(DEMO, "guardian.json") },
         urls: { business: BUSINESS_URL, dashboard: `${BUSINESS_URL}/dashboard`, app: APP_URL, shop: SHOP_URL, faucet: `${FAUCET_URL}/mint`, rpc: RPC },
         chainId: deployment.chainId,
         contracts: Object.fromEntries(Object.entries(deployment.contracts).map(([k, v]) => [k, v.address])),
@@ -554,8 +649,10 @@ Polaris is running locally (chain ${deployment.chainId}; nothing is live, no Pri
 
 Pay in 4 needs a credit line: in the checkout, Raise your limit runs the CRE
 underwriting workflow locally (sample history from fixtures, not Nansen).
-The CRE collections workflow runs every minute (.demo/logs/cre-collections.log);
-instalments are ${FAST_PLANS ? "a minute apart (DEMO_FAST_PLANS=1)" : "a week apart (DEMO_FAST_PLANS=1 makes them a minute)"}.
+The CRE collections workflow runs every minute and on every Reauthorized
+(.demo/logs/cre-collections.log); instalments are ${FAST_PLANS ? "a minute apart (DEMO_FAST_PLANS=1)" : "a week apart (DEMO_FAST_PLANS=1 makes them a minute)"}.
+The CRE guardian runs every minute (.demo/logs/cre-guardian.log): ${guardianPrice.why}.
+Chainlink scenes: node scripts/demo-chainlink.mjs guard raise | guard restore | lose-approval | status.
 Logs: .demo/logs. Ctrl+C stops everything.
 `);
   await new Promise(() => {});
