@@ -1,0 +1,32 @@
+$ cre workflow simulate ./guardian -T staging-settings --non-interactive --trigger-index 0 --broadcast
+# exit 0, 2026-09-28T08:16:57.921Z
+
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: a61c671a6d1213c7dedbdf451f465603f858da82f608ed1c4beb8f752e56ce0a
+  Config hash: b8e79ffafbcb1b817397eb423d4fa828a5f071c45f8d2d04b1aee6e1255a396d
+2026-09-28T13:47:08Z [SIMULATION] Simulator Initialized
+
+2026-09-28T13:47:08Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-09-28T13:47:09Z [USER LOG] Chainlink AUSD / USD on monad-mainnet: 0.99982194 (round 18446744073709559179, updated 3553s before the pool block)
+2026-09-28T13:47:09Z [USER LOG] pool at monad-testnet block 66359392: free cash 10000000138, owed 0, bad debt 0 of 200000152 originated (base units)
+2026-09-28T13:47:09Z [USER LOG] verdict: healthy; first; first
+2026-09-28T13:47:11Z [USER LOG] wrote the attestation, gas limit 335786 (estimate 291988), tx 0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080
+2026-09-28T13:47:11Z [USER LOG] GuardianReceiver accepted it: feed round 1, Pay in 4 open
+
+✓ Workflow Simulation Result:
+"{\"status\":\"written\",\"why\":\"first\",\"transition\":\"first\",\"verdict\":{\"creditPaused\":false,\"reasons\":0,\"reasonNames\":[]},\"price\":{\"kind\":\"chainlink\",\"chain\":\"monad-mainnet\",\"feed\":\"0xE20751C7B5867bCBef815ffc1b284c3f412a9e13\",\"description\":\"AUSD / USD\",\"roundId\":\"18446744073709559179\",\"answer\":\"0.99982194\",\"updatedAt\":1790579875,\"ageSeconds\":3553},\"pool\":{\"chain\":\"monad-testnet\",\"block\":\"66359392\",\"observedAt\":1790583428,\"freeCash\":\"10000000138\",\"totalOwed\":\"0\",\"badDebt\":\"0\",\"totalOriginated\":\"200000152\",\"badDebtAcknowledged\":\"0\"},\"thresholds\":{\"minPrice\":\"0.995\",\"maxPrice\":\"1.005\",\"minFreeCash\":\"1000000000\",\"maxBadDebtBps\":500,\"minOriginated\":\"10000000000\",\"maxPriceAge\":7200},\"before\":{\"paused\":false,\"reasons\":0,\"poolReasons\":0,\"priceReasons\":0,\"attestedReasons\":0,\"observedAt\":0,\"stale\":true,\"override\":\"none\",\"overrideUntil\":0,\"maxAttestationAge\":3600},\"round\":\"1\",\"refusal\":null,\"txHash\":\"0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080\",\"gasLimit\":\"335786\",\"note\":null}"
+
+2026-09-28T13:47:11Z [SIMULATION] Execution finished signal received
+2026-09-28T13:47:11Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

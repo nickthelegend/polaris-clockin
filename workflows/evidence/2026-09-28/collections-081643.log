@@ -1,0 +1,30 @@
+$ cre workflow simulate ./collections -T staging-settings --non-interactive --trigger-index 0 --broadcast
+# exit 0, 2026-09-28T08:16:43.397Z
+
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: 5ffc39f8091dd4ed08a8e52689f7d8868e48240e6ab80590ad3aad98266d0444
+  Config hash: 6bcb98ba4afa2eaf80a8efb5f0293def99370dc6373ff375f984ed09ea2a5778
+! Secret "POLARIS_CALLBACK_SECRET" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_POLARIS_CALLBACK_SECRET").
+2026-09-28T13:46:52Z [SIMULATION] Simulator Initialized
+
+2026-09-28T13:46:52Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+2026-09-28T13:46:54Z [USER LOG] wrote 2 tasks, gas limit 317165 (estimate 275796), tx 0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4
+2026-09-28T13:46:55Z [USER LOG] collect #1 ok; liquidate #1 ok
+
+✓ Workflow Simulation Result:
+"{\"status\":\"written\",\"trigger\":{\"kind\":\"cron\",\"scheduledAt\":1790583420},\"source\":\"chain\",\"indexerError\":null,\"note\":null,\"checked\":2,\"tasks\":[{\"action\":\"collect\",\"id\":\"1\"},{\"action\":\"liquidate\",\"id\":\"1\"}],\"heldBack\":[],\"txHash\":\"0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4\",\"gasLimit\":\"317165\",\"executed\":2,\"skipped\":0,\"events\":2,\"callbackStatus\":null}"
+
+2026-09-28T13:46:55Z [SIMULATION] Execution finished signal received
+2026-09-28T13:46:55Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

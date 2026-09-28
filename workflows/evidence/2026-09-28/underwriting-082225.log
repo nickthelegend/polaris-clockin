@@ -1,0 +1,37 @@
+$ cre workflow simulate ./underwriting -T staging-settings --non-interactive --trigger-index 0 --config ../.local/evidence/underwriting.staging.json --broadcast --http-payload ./underwriting/payload.json
+# exit 0, 2026-09-28T08:22:25.049Z
+# config: ./underwriting/config.staging.json, providers without a key left out: nansen, zerion, zerionBasicAuth, etherscan
+
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: f4d8537cefc7eb48ff3a84ff28e4cdb1bf2c69824d409d257093c8eaf6ef9210
+  Config hash: a367c788dc4c3098d3fa4cf30ca4879a7e78aacd78b5b3135631069774e3103f
+! Secret "ZERION_API_KEY" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_ZERION_API_KEY").
+! Secret "ZERION_BASIC_AUTH" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_ZERION_BASIC_AUTH").
+! Secret "ETHERSCAN_API_KEY" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_ETHERSCAN_API_KEY").
+! Secret "POLARIS_CALLBACK_SECRET" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_POLARIS_CALLBACK_SECRET").
+! Secret "NANSEN_API_KEY" uses itself as the env var name — this is fragile and may cause confusion. Consider using a distinct env var name (e.g. "CRE_NANSEN_API_KEY").
+✓ Loaded JSON from file: F:\Projects\polaris\.claude\worktrees\cl-integration\workflows\underwriting\payload.json
+✓ Created HTTP trigger payload with 2 fields
+2026-09-28T13:52:34Z [SIMULATION] Simulator Initialized
+
+2026-09-28T13:52:34Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
+2026-09-28T13:52:34Z [USER LOG] provider issues: zerion.transactions:unauthorized,etherscan.tokentx:unauthorized
+2026-09-28T13:52:34Z [USER LOG] underwriting 0x6bfac61ED492C019aaA3665f596E1f347055E21A: incomplete (not final: account.firstSeenAt,account.sentCount)
+
+✓ Workflow Simulation Result:
+"{\"status\":\"incomplete\",\"user\":\"0x6bfac61ED492C019aaA3665f596E1f347055E21A\",\"linkedWallet\":null,\"reason\":\"not final: account.firstSeenAt,account.sentCount\",\"expectedScore\":520,\"onChainScore\":null,\"missing\":[\"account.firstSeenAt\",\"account.sentCount\"],\"httpCalls\":0,\"txHash\":null,\"gasLimit\":null}"
+
+2026-09-28T13:52:34Z [SIMULATION] Execution finished signal received
+2026-09-28T13:52:34Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

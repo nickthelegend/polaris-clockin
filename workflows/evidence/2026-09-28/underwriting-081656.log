@@ -1,0 +1,9 @@
+$ cre workflow simulate ./underwriting -T staging-settings --non-interactive --trigger-index 0 --config F:\Projects\polaris\.claude\worktrees\cl-integration\workflows\.local\evidence\underwriting.staging.json --broadcast --http-payload ./underwriting/payload.json
+# exit 1, 2026-09-28T08:16:56.612Z
+# config: ./underwriting/config.staging.json, providers without a key left out: nansen, zerion, zerionBasicAuth, etherscan
+
+Initializing...
+Loading settings...
+✗ validation error                                     
+ConfigPath must be a maximum of 97 characters in length
+                                                       

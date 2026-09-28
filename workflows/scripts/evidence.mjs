@@ -55,7 +55,7 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { encodeFunctionData, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { configure } from "./configure.mjs";
@@ -225,6 +225,17 @@ export function runConfig(w, config, { env, secretsNames, callback = null }) {
  * runConfig for one run, written to workflows/.local/evidence/ (git-ignored)
  * for `--config`: returns { file, leftOut, callback }, or null.
  */
+/**
+ * The path to hand the CLI for `--config`. `cre workflow simulate` resolves it
+ * against the workflow's own folder (like workflow.yaml's config-path) and
+ * refuses a path longer than 97 characters, which a nested worktree's absolute
+ * path exceeds, so pass it relative to that folder.
+ */
+export function cliConfigArg(file, workflowDir) {
+  const rel = relative(workflowDir, file).split(sep).join("/");
+  return rel.startsWith("../") || rel.startsWith("./") ? rel : `./${rel}`;
+}
+
 export function runConfigFor(w, target, env, { root = ROOT, callback = null } = {}) {
   const config = JSON.parse(readFileSync(join(root, WORKFLOWS[w].dir, `config.${TARGETS[target]}.json`), "utf8"));
   const secretsNames = parseSecretsNames(readFileSync(join(root, "secrets.yaml"), "utf8"));
@@ -234,7 +245,7 @@ export function runConfigFor(w, target, env, { root = ROOT, callback = null } = 
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${w}.${TARGETS[target]}.json`);
   writeFileSync(file, `${JSON.stringify(change.config, null, 2)}\n`);
-  return { file, leftOut: change.leftOut, callback: change.callback };
+  return { file, arg: cliConfigArg(file, join(root, WORKFLOWS[w].dir)), leftOut: change.leftOut, callback: change.callback };
 }
 
 /**
@@ -363,7 +374,7 @@ async function main() {
     const override = runConfigFor(w, target, env, { callback });
     if (override?.leftOut.length) console.log(`No key for ${override.leftOut.join(", ")}: left out of this run's config (${override.file})`);
     if (override?.callback) console.log(`Run callback: ${override.callback} (this run only)`);
-    const args = simulateArgs(w, target, r, override?.file ?? null);
+    const args = simulateArgs(w, target, r, override?.arg ?? null);
     const at = new Date();
     const run = await runCreCaptured(args, { env });
     const parsed = parseSimulation(run.output);

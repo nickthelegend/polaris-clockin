@@ -25,7 +25,7 @@ import { allSecretEnvNames, CRE_TARGETS, parseSecretsNames, secretEnvFor, secret
 // @ts-expect-error: plain ESM scripts, no type declarations
 import { missingSecretEnv, simulationEnv, withoutMissingKeys } from "../scripts/sim.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
-import { preflight, runConfig, simulateArgs } from "../scripts/evidence.mjs";
+import { cliConfigArg, preflight, runConfig, simulateArgs } from "../scripts/evidence.mjs";
 
 const ROOT = join(import.meta.dir, "..");
 const read = (p: string) => fs.readFileSync(join(ROOT, p), "utf8");
@@ -195,6 +195,18 @@ describe("an evidence run's own config", () => {
     const retry = simulateArgs("collections", "staging-settings", { txHash: `0x${"ab".repeat(32)}`, eventIndex: 1 }, file);
     expect(retry.slice(retry.indexOf("--config"), retry.indexOf("--config") + 2)).toEqual(["--config", file]);
     expect(simulateArgs("guardian", "staging-settings")).not.toContain("--config");
+  });
+
+  test("the CLI gets a short relative --config path, not the long absolute one", () => {
+    // cre workflow simulate refuses a config path over 97 characters; a nested
+    // worktree's absolute path to underwriting.staging.json is 100.
+    const root = "F:/Projects/polaris/.claude/worktrees/cl-integration/workflows";
+    const file = `${root}/.local/evidence/underwriting.staging.json`;
+    expect(file.length).toBeGreaterThan(97);
+    const arg = cliConfigArg(file, `${root}/underwriting`);
+    // resolved by the CLI against the workflow's own folder
+    expect(arg).toBe("../.local/evidence/underwriting.staging.json");
+    expect(arg.length).toBeLessThanOrEqual(97);
   });
 
   test("--callback is refused without the key that signs it, or when it is not a URL", () => {
