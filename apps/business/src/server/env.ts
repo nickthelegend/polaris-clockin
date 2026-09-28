@@ -453,7 +453,7 @@ function localSessionFrom(production: boolean, chain: ChainConfig | null): Serve
   const wallet = env("POLARIS_LOCAL_SESSION_WALLET");
   if (!token && !wallet) return null;
   if (production || !chain?.local || !flag("POLARIS_DISABLE_PRIVY")) {
-    throw new Error("POLARIS_LOCAL_SESSION_* is for `pnpm demo:local` only: a local chain, NODE_ENV=development and POLARIS_DISABLE_PRIVY=1.");
+    throw new Error("POLARIS_LOCAL_SESSION_* is for `pnpm demo:local` only: a local chain, never in production (NODE_ENV=production), and POLARIS_DISABLE_PRIVY=1.");
   }
   if (!token || token.length < 32 || !/^[A-Za-z0-9_-]+$/.test(token)) {
     throw new Error("POLARIS_LOCAL_SESSION_TOKEN must be at least 32 random letters, digits, - or _.");
