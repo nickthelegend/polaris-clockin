@@ -93,6 +93,36 @@ describe("verifying a contract built from an earlier commit (lib/verify.js)", fu
     expect(err?.message).to.match(/names no sourceCommit/);
   });
 
+  it("prefers the deploy commit's text when today's differs only in comments (CollectionsReceiver's NatSpec)", async function () {
+    if (!haveCommit(DEPLOY_COMMIT)) this.skip();
+    const fqn = "contracts/cre/CollectionsReceiver.sol:CollectionsReceiver";
+    const { input, solcVersion } = await standardInputAt(hre, fqn, DEPLOY_COMMIT);
+    const old = await compileFor(hre, input, solcVersion, fqn);
+    const [owner] = await ethers.getSigners();
+    const args = [1, 2, 3, 4].map(() => ethers.Wallet.createRandom().address);
+    const deployed = await new ethers.ContractFactory(old.abi, old.bytecode, owner).deploy(...args);
+    const address = await deployed.getAddress();
+
+    // Today's sources run the same code, but only the deploy commit's give the same bytes, metadata included.
+    const artifact = await hre.artifacts.readArtifact(fqn);
+    const onChain = await ethers.provider.getCode(address);
+    expect(sameExecutable(onChain, artifact.deployedBytecode, old.immutableReferences)).to.equal(true);
+    expect(onChain.toLowerCase()).to.not.equal(artifact.deployedBytecode.toLowerCase());
+
+    const found = await verificationInput(hre, { fqn, address, commit: DEPLOY_COMMIT });
+    expect(found.from).to.equal(DEPLOY_COMMIT);
+    expect(found.exact).to.equal(true);
+    expect(found.input.sources["contracts/cre/CollectionsReceiver.sol"].content).to.not.include("simulation transmitter guard, as all three");
+
+    // With no commit to try, today's still verify it (same executable code).
+    const fallback = await verificationInput(hre, { fqn, address, commit: null });
+    expect(fallback).to.include({ from: "today", exact: false });
+
+    // And today's build of it stays on today's sources.
+    const current = await (await ethers.getContractFactory("CollectionsReceiver")).deploy(...args);
+    expect((await sourcesFor(hre, { fqn, address: await current.getAddress(), commit: DEPLOY_COMMIT })).from).to.equal("today");
+  });
+
   it("knows the commit it is at, and whether the contracts are committed", () => {
     const { commit, dirty } = headSource();
     expect(commit).to.match(/^[0-9a-f]{40}$/);

@@ -185,6 +185,12 @@ async function compileFor(hre, input, solcVersion, fqn) {
  * on chain is theirs ({ from: "today" }), else those of `commit` once they
  * are shown to reproduce it ({ from: commit, input, solcLongVersion, abi }).
  * Throws when neither does.
+ *
+ * When today's sources run the same code but their metadata differs (only a
+ * comment changed since the deploy: CollectionsReceiver's NatSpec, for one)
+ * and `commit`'s reproduce the code byte for byte, metadata included, the
+ * commit's win: the explorer then shows the very text that was deployed, as
+ * an exact match. If they don't, today's are used, as before.
  */
 async function sourcesFor(hre, { fqn, address, commit, root = repoRoot() }) {
   const onChain = await hre.ethers.provider.getCode(address);
@@ -192,13 +198,28 @@ async function sourcesFor(hre, { fqn, address, commit, root = repoRoot() }) {
   const buildInfo = await hre.artifacts.getBuildInfo(fqn);
   const { sourceName, contractName } = splitFqn(fqn);
   const today = buildInfo?.output?.contracts?.[sourceName]?.[contractName]?.evm?.deployedBytecode;
-  if (sameExecutable(onChain, artifact.deployedBytecode, today?.immutableReferences)) return { from: "today" };
+  if (sameExecutable(onChain, artifact.deployedBytecode, today?.immutableReferences)) {
+    if (!commit || sameBytes(onChain, artifact.deployedBytecode, today?.immutableReferences)) return { from: "today" };
+    try {
+      const atCommit = await buildAt(hre, fqn, commit, root);
+      if (sameBytes(onChain, atCommit.compiled.deployedBytecode, atCommit.compiled.immutableReferences)) return atCommit;
+    } catch {
+      // The commit's sources don't build or aren't there: today's run the same code, so they still verify.
+    }
+    return { from: "today" };
+  }
   if (!commit) throw new Error(`${fqn} at ${address}: the code on chain is not today's, and the record names no sourceCommit`);
-  const { input, solcVersion, solcLongVersion } = await standardInputAt(hre, fqn, commit, root);
-  const compiled = await compileFor(hre, input, solcVersion, fqn);
-  if (!sameExecutable(onChain, compiled.deployedBytecode, compiled.immutableReferences)) {
+  const atCommit = await buildAt(hre, fqn, commit, root);
+  if (!sameExecutable(onChain, atCommit.compiled.deployedBytecode, atCommit.compiled.immutableReferences)) {
     throw new Error(`${fqn} at ${address}: the code on chain is neither today's nor ${commit.slice(0, 10)}'s`);
   }
+  return atCommit;
+}
+
+/** `fqn` built from `commit`'s sources, in sourcesFor's shape. */
+async function buildAt(hre, fqn, commit, root) {
+  const { input, solcVersion, solcLongVersion } = await standardInputAt(hre, fqn, commit, root);
+  const compiled = await compileFor(hre, input, solcVersion, fqn);
   return { from: commit, input: compiled.input, solcVersion, solcLongVersion, abi: compiled.abi, compiled };
 }
 
