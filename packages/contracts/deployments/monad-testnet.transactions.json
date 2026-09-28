@@ -1,0 +1,246 @@
+{
+  "note": "Every transaction the deployer sent during deploy:monad on 28 Sep 2026 (nonces 0-33), read back from Monad testnet block by block (blocks 66288112-66288420) and decoded against packages/contracts/abi. deployments/monad-testnet.json keeps only the contract creations.",
+  "chainId": 10143,
+  "deployer": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
+  "explorer": "https://testnet.monadscan.com",
+  "transactions": [
+    {
+      "nonce": 0,
+      "block": 66288112,
+      "hash": "0x117e473ec59c69168cbd4a3901e140ee2af3d8e4593ca5af2e46b69866367239",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 1,
+      "block": 66288120,
+      "hash": "0xef12c0718ccb1fb7f2552d143e8de507f568a4646627c892caeff017be70854c",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 2,
+      "block": 66288126,
+      "hash": "0xe8c4f3bf90429faea48931eb0b5c2da008bc691ebe0f9921b865f654d56a374f",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 3,
+      "block": 66288133,
+      "hash": "0x056b47385754c208dc2d696b9ce4b8fe7c2090dc844c3bc75b8dde194609e18e",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 4,
+      "block": 66288138,
+      "hash": "0x50637e33dde8b8ba6401ac9c9a0dc1714d0ba0c1e649dc381d18ecabb9c636fa",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 5,
+      "block": 66288140,
+      "hash": "0xcbd8ef906cbdc850f01c534c8610b5dbc29ac63ed84a054ab408a78423a70fb9",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 6,
+      "block": 66288144,
+      "hash": "0x28d8c131cc2b7bb3fe9aa5805e5e9af32274ba17fb04302752a8dbea7f81d083",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 7,
+      "block": 66288148,
+      "hash": "0x9f81549cd07cf46f018c77f175f596ab7cf535f484f87bf6079ce57fb84924b9",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 8,
+      "block": 66288152,
+      "hash": "0x5df039074ed9a5b6e11c517955b42393a430d369a12c554096316a1d64dc020c",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 9,
+      "block": 66288157,
+      "hash": "0x0ac454dd6f28fea4ef998bbf63f0cc72e9d84ecc4cf725b8077dd3cf04bcc379",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 10,
+      "block": 66288161,
+      "hash": "0xf643b392792f7f2a0c07edbf8e91a469e463fd065a9ef5d40b8bc59862f64c4a",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 11,
+      "block": 66288166,
+      "hash": "0xe717c54d4ce41e4164ded7ddbb31e65a40c666ec94b4d056842d2dd0f35f2369",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 12,
+      "block": 66288174,
+      "hash": "0x708c703d9c2075e2291bc0eeb52ffe2fc7119ad1ca3f450642baed5c46e7373f",
+      "contract": "ScoreManager",
+      "call": "setWriter(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a, true)"
+    },
+    {
+      "nonce": 13,
+      "block": 66288178,
+      "hash": "0xe1b8cd6239b37762715285fde08a0ca771815af2ea8e9250ab44ebaa1b02cfcd",
+      "contract": "ScoreManager",
+      "call": "setUnderwriter(0x523e9791d0e324525F66F91b21B478C18e284a19, true)"
+    },
+    {
+      "nonce": 14,
+      "block": 66288183,
+      "hash": "0x022dbe90e1477c824f89afda0f7904abea8f9e21fca8500d6cead4397055a14f",
+      "contract": "ScoreManager",
+      "call": "setCollateralVault(0xD0e777f8DfA2E62F500054E85F815fC54fae3E72)"
+    },
+    {
+      "nonce": 15,
+      "block": 66288191,
+      "hash": "0x33c91eeb894de3b22134f8aaa6585ee4599f9a5d4a3e3ba6892947aa7b75ce70",
+      "contract": "ScoreManager",
+      "call": "setRequireUnderwriting(true)"
+    },
+    {
+      "nonce": 16,
+      "block": 66288195,
+      "hash": "0xf9a779fa32a941256fdc43fbe3258119508d3d90e37da95bb1bedc89a927880b",
+      "contract": "CollateralVault",
+      "call": "setLoanEngine(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a)"
+    },
+    {
+      "nonce": 17,
+      "block": 66288199,
+      "hash": "0xa3c9b51ea325d06e37b3887b99bf963e9e49ece0492764684d65c0a1aab05145",
+      "contract": "CollateralVault",
+      "call": "setSeizer(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a, true)"
+    },
+    {
+      "nonce": 18,
+      "block": 66288204,
+      "hash": "0xbfce62f96fcacea0024882db12e89cbd4a30d521415b9af2ac12a67437397add",
+      "contract": "PolarisLoanEngine",
+      "call": "setCollateralVault(0xD0e777f8DfA2E62F500054E85F815fC54fae3E72)"
+    },
+    {
+      "nonce": 19,
+      "block": 66288208,
+      "hash": "0xce744c071feaad90c9e369b7f081ff157dfbf7d1391cc8712e1267bd84cc7eaf",
+      "contract": "PolarisLoanEngine",
+      "call": "setMerchantRegistry(0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4)"
+    },
+    {
+      "nonce": 20,
+      "block": 66288213,
+      "hash": "0xd67021623b514cf36a03e7e41a493ef2066d7dcd222564801eb6dd6b51aea25b",
+      "contract": "PolarisLoanEngine",
+      "call": "setOriginator(0x3874ef1bcE222755525a96f8284631780b9bC70B, true)"
+    },
+    {
+      "nonce": 21,
+      "block": 66288221,
+      "hash": "0x07bd93df656287d84e143e2c8952d85e3c9ca6efb0fbd9b4637c708bf7663e7a",
+      "contract": "PolarisPayments",
+      "call": "setCheckout(0x3874ef1bcE222755525a96f8284631780b9bC70B)"
+    },
+    {
+      "nonce": 22,
+      "block": 66288225,
+      "hash": "0x324d202836ef5acfaa012eb79c60353e9b6e95066fd9ebb4a7357c19db272664",
+      "contract": "PolarisCheckout",
+      "call": "setCreditGuardian(0xF8259426519d7908e7AF63f20aea3FfCF52426D8)"
+    },
+    {
+      "nonce": 23,
+      "block": 66288230,
+      "hash": "0xadad057da61876b94d428c37004ecb5b8513e0bf3622377d5ef540b1eed098ab",
+      "contract": "PolarisPayments",
+      "call": "setOperator(0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69, true)"
+    },
+    {
+      "nonce": 24,
+      "block": 66288235,
+      "hash": "0x99063fdfe9df92a10a194d7c9a9ff6d381b3f05948aca1068538dc4131fee579",
+      "contract": "MerchantRegistry",
+      "call": "setOperator(0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69, true)"
+    },
+    {
+      "nonce": 25,
+      "block": 66288244,
+      "hash": "0x181500b181fe607e97af67eaa314ddd027806c0a6b9b3edf04946822bcca45d2",
+      "contract": "BatchSettlement",
+      "call": "setSettler(0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69, true)"
+    },
+    {
+      "nonce": 26,
+      "block": 66288253,
+      "hash": "0x4655b35dd8974728a21b75d78dbfff24a6350576f447aadd422c9d46c9111a0c",
+      "contract": "MerchantRegistry",
+      "call": "registerFor(0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185, Polaris Demo Studio, 0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185, https://polarispay.app/demo/merchant.json, 1790565098, 0xae7e1f13a164827ff135df27577e3c1c28fe602272ac414199c44700028ee6133474304a879fdde6c28607c03000474bd59be652f021a0dfc6ca8d3d86397b681b)"
+    },
+    {
+      "nonce": 27,
+      "block": 66288257,
+      "hash": "0x7ea6bbf4e01531cfa3f05f26ba0a709b518d1a56c37eaacf4cf6e10cd5655e64",
+      "contract": "MerchantRegistry",
+      "call": "setActive(0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185, true)"
+    },
+    {
+      "nonce": 28,
+      "block": 66288261,
+      "hash": "0x1b74e909c818484fa2537e236a6c2840c6b1be3dd40ced860095d6c9e91c576d",
+      "contract": "MerchantRegistry",
+      "call": "setMaxOrderValue(0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185, 1000000000)"
+    },
+    {
+      "nonce": 29,
+      "block": 66288266,
+      "hash": "0xe78857a6f2adcfbceb45b18a2cb9a8ea966ab670baff03a129931217147eb23d",
+      "contract": "PolarisPayments",
+      "call": "createPlanFor(0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185, 9990000, 2592000, Studio Pro, monthly)"
+    },
+    {
+      "nonce": 30,
+      "block": 66288270,
+      "hash": "0x070738796029823d8753783bbd4c9d4dd185ea414fa02dea935ec058507d4568",
+      "contract": "PolarisPayments",
+      "call": "createPlanFor(0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185, 1000000, 60, Demo, every period)"
+    },
+    {
+      "nonce": 31,
+      "block": 66288274,
+      "hash": "0x067ec25863b81f79e1c4deb52df2f11df408bafe402257edcb0a746deef7b27f",
+      "contract": "Stablecoin",
+      "call": "mint(0x6Df4a0b84BD608123D1f3412709AcaC69523c115, 10000000000)"
+    },
+    {
+      "nonce": 32,
+      "block": 66288279,
+      "hash": "0xe73cc90eb16f1cf0522f1a4a4d536dd1e2a059944605a009ef71a7b6f1fe54af",
+      "contract": "Stablecoin",
+      "call": "approve(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a, 10000000000)"
+    },
+    {
+      "nonce": 33,
+      "block": 66288284,
+      "hash": "0xd9e533f91ad0174c497439bb122d5827967e66a40ea22effbe3ab7b9dbbf87dd",
+      "contract": "PolarisLoanEngine",
+      "call": "fund(10000000000)"
+    }
+  ]
+}
