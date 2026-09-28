@@ -19,6 +19,7 @@ import {
   polarisLoanEngineAbi,
   polarisPaymentsAbi,
   polarisSendAbi,
+  polarisSplitAbi,
 } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { centsToUnits, formatUnits } from "../chain/money";
@@ -29,8 +30,9 @@ import { consume, LIMITS } from "../ratelimit";
 import { dropAfterMs } from "../ingest/sync";
 import { ensureQuoted, orderKeyOf, openSessionForPayment } from "../sessions/sessions";
 import { periodSeconds } from "../sessions/params";
+import { MAX_SHARES, readSplit, requireSplitContract, shareNonce, SPLIT_MAX_EXPIRY, SPLIT_MIN_LIFETIME, splitIdOf } from "../split";
 import { carry, fromRecord, type RelayResult } from "./carry";
-import { address, bad, bytes32, deadline, signature, text, uint, vrs } from "./parse";
+import { address, bad, bytes32, deadline, field, signature, text, uint, vrs } from "./parse";
 import { polarisDomain, TYPES, type Domain } from "./typed-data";
 
 /**
@@ -57,9 +59,26 @@ import { polarisDomain, TYPES, type Domain } from "./typed-data";
  * | `reauthorize`        | borrower: Permit (engine)  | PolarisCheckout.reauthorize                 |
  * | `cancelSubscription` | subscriber: CancelSubscription | PolarisPayments.cancelWithSignature     |
  * | `transfer`           | owner: TransferWithAuth.   | AUSD.transferWithAuthorization              |
+ * | `createSplit`        | organiser: CreateSplit     | PolarisSplit.createSplit                    |
+ * | `payShare`           | friend: ReceiveWithAuth.   | PolarisSplit.payShare                       |
+ * | `closeSplit`         | organiser: CloseSplit      | PolarisSplit.closeSplit                     |
  */
 
-export const RELAY_TYPES = ["pay", "openPlan", "subscribe", "send", "claim", "cancelSend", "repay", "reauthorize", "cancelSubscription", "transfer"] as const;
+export const RELAY_TYPES = [
+  "pay",
+  "openPlan",
+  "subscribe",
+  "send",
+  "claim",
+  "cancelSend",
+  "repay",
+  "reauthorize",
+  "cancelSubscription",
+  "transfer",
+  "createSplit",
+  "payShare",
+  "closeSplit",
+] as const;
 export type RelayType = (typeof RELAY_TYPES)[number];
 
 export type RelayResponse = {
@@ -75,6 +94,9 @@ export type RelayResponse = {
   planId?: string;
   subscriptionId?: string;
   orderKey?: string;
+  /** createSplit, payShare, closeSplit: the split, and for payShare the share. */
+  splitId?: string;
+  shareIndex?: string;
 };
 
 const now = () => Math.floor(Date.now() / 1000);
@@ -632,6 +654,131 @@ async function transfer(body: Record<string, unknown>, chain: ChainConfig): Prom
   return respond("transfer", result, null);
 }
 
+/* ── Split the bill (PolarisSplit) ──────────────────────────────────────── */
+
+const UINT128_MAX = (1n << 128n) - 1n;
+
+/**
+ * The organiser opens a split: their CreateSplit signature over the shares,
+ * the salt the split's id comes from, the hash of the link's words and the
+ * expiry. The words themselves never come here. Every share must be at least
+ * the relayer's minimum, like a send by link, so a split can't be used to
+ * make the relayer carry dust between throwaway accounts.
+ */
+async function createSplit(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
+  const split = requireSplitContract(chain);
+  const sig = signature(body, "signature");
+  const replayed = await replay("createSplit", relayIdOf("createSplit", sig));
+  if (replayed) return replayed;
+  const organiser = address(body, "creation.organiser");
+  const salt = bytes32(body, "creation.salt");
+  const raw = field(body, "creation.amounts");
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_SHARES) bad("creation.amounts", `creation.amounts must list 1 to ${MAX_SHARES} shares.`);
+  const amounts = raw.map((_, i) => uint(body, `creation.amounts.${i}`, { max: UINT128_MAX }));
+  amounts.forEach((amount, i) => assertMinimum(amount, `creation.amounts.${i}`));
+  if (amounts.reduce((sum, a) => sum + a, 0n) > UINT128_MAX) bad("creation.amounts", "The shares add up to too much.");
+  const memoHash = bytes32(body, "creation.memoHash");
+  const expiresAt = uint(body, "creation.expiresAt", { max: 0xffffffffffffffffn });
+  const t = BigInt(now());
+  if (expiresAt < t + BigInt(SPLIT_MIN_LIFETIME) + 60n || expiresAt > t + BigInt(SPLIT_MAX_EXPIRY)) {
+    bad("creation.expiresAt", "A split stays open from a few minutes to 60 days.");
+  }
+  const createDeadline = deadline(uint(body, "creation.deadline"), "creation.deadline", { maxAheadSeconds: 3600 });
+  const creation = { organiser, salt, amounts, memoHash, expiresAt, deadline: createDeadline };
+  await assertSigner(
+    organiser,
+    recoverTypedDataAddress({ domain: polarisDomain("split", chain.id, split), types: TYPES.CreateSplit, primaryType: "CreateSplit", message: creation, signature: sig }),
+    "split",
+  );
+  const splitId = splitIdOf(organiser, salt);
+  if (await readSplit(splitId, chain)) throw new HttpError(409, "split_exists", "This split is already open.");
+  countVerified(organiser, { open: true });
+  const result = await carry({
+    kind: "createSplit",
+    relayId: relayIdOf("createSplit", sig),
+    to: split,
+    data: encodeFunctionData({ abi: polarisSplitAbi, functionName: "createSplit", args: [creation, sig] }),
+    signer: organiser,
+  });
+  return respond("createSplit", { ...result, ids: { splitId, ...result.ids } }, null);
+}
+
+/**
+ * A friend pays their share: an ERC-3009 ReceiveWithAuthorization from them,
+ * payable to PolarisSplit, for exactly the share's amount (read from the
+ * chain, never taken from the request), with the nonce PolarisSplit derives
+ * from the split and the share. Refused before any gas when the split is
+ * closed, expired or the share already paid.
+ */
+async function payShare(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
+  const split = requireSplitContract(chain);
+  const sig = signature(body, "signature");
+  const replayed = await replay("payShare", relayIdOf("payShare", sig));
+  if (replayed) return replayed;
+  const splitId = bytes32(body, "splitId");
+  const index = uint(body, "index", { max: BigInt(MAX_SHARES - 1) });
+  const payer = address(body, "payer");
+  const validAfter = uint(body, "validAfter");
+  const validBefore = deadline(uint(body, "validBefore"), "validBefore", { maxAheadSeconds: 3600 });
+  const state = await readSplit(splitId, chain);
+  if (!state) throw new HttpError(404, "split_not_found", "We couldn't find that split.");
+  if (state.closed) throw new HttpError(409, "split_closed", "This split was closed, so it can't be paid any more. Nothing was charged.");
+  if (now() >= state.expiresAt) throw new HttpError(410, "split_expired", "This split has expired. Nothing was charged.");
+  if (index >= BigInt(state.amounts.length)) bad("index", "That share isn't part of this split.");
+  if (state.payers[Number(index)]) throw new HttpError(409, "already_paid", "This share has already been paid.", { param: "index" });
+  const amount = state.amounts[Number(index)] as bigint;
+  if (body.amount !== undefined && uint(body, "amount") !== amount) throw new HttpError(400, "wrong_amount", "The share changed. Open the link again.", { param: "amount" });
+
+  await assertSigner(
+    payer,
+    recoverTypedDataAddress({
+      domain: stablecoinDomain(chain),
+      types: TYPES.ReceiveWithAuthorization,
+      primaryType: "ReceiveWithAuthorization",
+      message: { from: payer, to: split, value: amount, validAfter, validBefore, nonce: shareNonce(splitId, index) },
+      signature: sig,
+    }),
+    "share",
+  );
+  countVerified(payer, { open: true });
+  const { v, r, s } = vrs(sig);
+  const result = await carry({
+    kind: "payShare",
+    relayId: relayIdOf("payShare", sig),
+    to: split,
+    data: encodeFunctionData({ abi: polarisSplitAbi, functionName: "payShare", args: [splitId, index, payer, validAfter, validBefore, v, r, s] }),
+    signer: payer,
+  });
+  return respond("payShare", { ...result, ids: { splitId, shareIndex: index.toString(), ...result.ids } }, null);
+}
+
+/** The organiser closes a split: their CloseSplit signature. Nothing moves; unpaid shares can't be paid after. */
+async function closeSplit(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
+  const split = requireSplitContract(chain);
+  const sig = signature(body, "signature");
+  const replayed = await replay("closeSplit", relayIdOf("closeSplit", sig));
+  if (replayed) return replayed;
+  const splitId = bytes32(body, "splitId");
+  const closeDeadline = deadline(uint(body, "deadline"), "deadline", { maxAheadSeconds: 3600 });
+  const state = await readSplit(splitId, chain);
+  if (!state) throw new HttpError(404, "split_not_found", "We couldn't find that split.");
+  if (state.closed) throw new HttpError(409, "split_closed", "This split is already closed.");
+  await assertSigner(
+    state.organiser,
+    recoverTypedDataAddress({ domain: polarisDomain("split", chain.id, split), types: TYPES.CloseSplit, primaryType: "CloseSplit", message: { splitId, deadline: closeDeadline }, signature: sig }),
+    "close",
+  );
+  countVerified(state.organiser, { open: true });
+  const result = await carry({
+    kind: "closeSplit",
+    relayId: relayIdOf("closeSplit", sig),
+    to: split,
+    data: encodeFunctionData({ abi: polarisSplitAbi, functionName: "closeSplit", args: [splitId, closeDeadline, sig] }),
+    signer: state.organiser,
+  });
+  return respond("closeSplit", { ...result, ids: { splitId, ...result.ids } }, null);
+}
+
 /* ── Entry points ───────────────────────────────────────────────────────── */
 
 export async function handleRelay(body: Record<string, unknown>): Promise<RelayResponse> {
@@ -664,6 +811,12 @@ export async function handleRelay(body: Record<string, unknown>): Promise<RelayR
       return cancelSubscription(body, chain);
     case "transfer":
       return transfer(body, chain);
+    case "createSplit":
+      return createSplit(body, chain);
+    case "payShare":
+      return payShare(body, chain);
+    case "closeSplit":
+      return closeSplit(body, chain);
   }
 }
 

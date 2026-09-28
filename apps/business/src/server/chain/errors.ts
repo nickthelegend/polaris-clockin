@@ -10,6 +10,7 @@ import {
   polarisLoanEngineAbi,
   polarisPaymentsAbi,
   polarisSendAbi,
+  polarisSplitAbi,
 } from "./abis";
 import { mockAUSDAbi } from "@polarispay/contracts/abi";
 
@@ -34,6 +35,7 @@ const ABIS: Abi[] = [
   polarisLoanEngineAbi,
   polarisPaymentsAbi,
   polarisSendAbi,
+  polarisSplitAbi,
   merchantRegistryAbi,
   collectionsReceiverAbi,
   iausdAbi,
@@ -141,6 +143,15 @@ const MESSAGES: Record<string, { status: number; code: string; message: string }
   EmptyOrderId: { status: 400, code: "invalid_order", message: "This checkout is missing its order reference." },
   ZeroAmount: { status: 400, code: "invalid_amount", message: "That amount isn't allowed." },
   ZeroAddress: { status: 400, code: "invalid_request", message: "That request is missing an account." },
+  // PolarisSplit: split-the-bill links.
+  SplitExists: { status: 409, code: "split_exists", message: "This split is already open." },
+  SplitNotFound: { status: 404, code: "split_not_found", message: "We couldn't find that split." },
+  SplitIsClosed: { status: 409, code: "split_closed", message: "This split was closed, so it can't be paid any more. Nothing was charged." },
+  SplitExpired: { status: 410, code: "split_expired", message: "This split has expired. Nothing was charged." },
+  ShareAlreadyPaid: { status: 409, code: "already_paid", message: "This share has already been paid." },
+  ShareOutOfRange: { status: 400, code: "invalid_share", message: "That share isn't part of this split." },
+  NoShares: { status: 400, code: "invalid_split", message: "A split needs at least one share." },
+  TooManyShares: { status: 400, code: "invalid_split", message: "A split can have at most 50 shares." },
 };
 
 const FALLBACK = { status: 422, code: "transaction_would_fail", message: "This can't go through right now. Nothing was charged." };

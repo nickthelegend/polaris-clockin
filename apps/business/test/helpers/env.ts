@@ -13,6 +13,7 @@ import {
   polarisLoanEngineAbi,
   polarisPaymentsAbi,
   polarisSendAbi,
+  polarisSplitAbi,
 } from "@polarispay/contracts/abi";
 import { setMerchantVerifierForTests, type AuthedMerchant } from "@/server/auth";
 import { resetClientForTests, setPublicClientForTests } from "@/server/chain/client";
@@ -39,13 +40,14 @@ export const ADDR = {
   payments: at("PolarisPayments"),
   registry: at("MerchantRegistry"),
   send: at("PolarisSend"),
+  split: at("PolarisSplit"),
   checkout: at("PolarisCheckout"),
   collections: at("CollectionsReceiver"),
   underwriting: at("UnderwritingReceiver"),
   guardian: at("GuardianReceiver"),
 };
 
-export const ALL_ABIS = [polarisCheckoutAbi, polarisPaymentsAbi, polarisLoanEngineAbi, polarisSendAbi, merchantRegistryAbi, iausdAbi, collectionsReceiverAbi] as unknown as Abi[];
+export const ALL_ABIS = [polarisCheckoutAbi, polarisPaymentsAbi, polarisLoanEngineAbi, polarisSendAbi, polarisSplitAbi, merchantRegistryAbi, iausdAbi, collectionsReceiverAbi] as unknown as Abi[];
 
 export type TestEnv = {
   chain: FakeChain;

@@ -224,7 +224,10 @@ export type RelayKind =
   | "activateMerchant"
   | "createSubscriptionPlan"
   | "quoteOrder"
-  | "payout";
+  | "payout"
+  | "createSplit"
+  | "payShare"
+  | "closeSplit";
 
 export type RelayRecord = {
   /** A digest of the signed request: the same signatures relay once. */
@@ -456,7 +459,7 @@ export type WalletMoveRecord = {
   id: string;
   /** The address whose book this is, lowercased. */
   address: string;
-  kind: "added" | "received" | "sent" | "sent-link" | "claimed" | "link-returned" | "payment" | "refund" | "instalment";
+  kind: "added" | "received" | "sent" | "sent-link" | "claimed" | "link-returned" | "payment" | "refund" | "instalment" | "split-paid" | "split-received";
   direction: "in" | "out";
   amountUnits: string;
   counterparty: Address;
@@ -468,7 +471,39 @@ export type WalletMoveRecord = {
   /** For a sent link: when it was claimed, or taken back. */
   settledAt: IsoDate | null;
   settledAs: "claimed" | "returned" | null;
+  /** A share of a split (split-paid, split-received): the split's id and the share's index, from PolarisSplit.SharePaid. Absent on older records. */
+  splitId?: Hex | null;
+  shareIndex?: number | null;
   at: IsoDate;
+};
+
+/**
+ * A split-the-bill link (PolarisSplit), as the chain sync saw it: what the
+ * organiser opened, which share each friend paid and when, and whether it was
+ * closed. Only what the chain shows: the split's words (what it's for, the
+ * names) travel in the link and are never sent here. The chain's own
+ * `splitOf`/`sharesOf` stay the authority; this record adds times and
+ * transaction hashes. Keyed by the split id, lowercased.
+ */
+export type SplitRecord = {
+  id: Hex;
+  /** Lowercased. */
+  organiser: string;
+  totalUnits: string;
+  /** One amount per share, base units. */
+  amountsUnits: string[];
+  /** Unix seconds. */
+  expiresAt: number;
+  memoHash: Hex;
+  /** Who paid each share, when, in which transaction (null when the sync found it already paid); null while unpaid. */
+  shares: Array<{ payer: Address; txHash: Hex | null; paidAt: IsoDate } | null>;
+  paidCount: number;
+  createdTxHash: Hex | null;
+  createdBlock: number | null;
+  createdAt: IsoDate;
+  closedAt: IsoDate | null;
+  closedTxHash: Hex | null;
+  updatedAt: IsoDate;
 };
 /** A chain log we have handled: `<txHash>:<logIndex>`. Claimed before handling, released if handling fails. */
 export type ProcessedLogRecord = { id: string; txHash: Hex; blockNumber: number; at: IsoDate };
@@ -762,6 +797,14 @@ export const COLLECTIONS = {
       at: (d: WalletMoveRecord) => d.at,
     },
   } satisfies CollectionSpec<WalletMoveRecord>,
+  splits: {
+    name: "splits",
+    id: (d: SplitRecord) => d.id.toLowerCase(),
+    indexes: {
+      organiser: (d: SplitRecord) => d.organiser.toLowerCase(),
+      createdAt: (d: SplitRecord) => d.createdAt,
+    },
+  } satisfies CollectionSpec<SplitRecord>,
   processedLogs: {
     name: "processed_logs",
     id: (d: ProcessedLogRecord) => d.id,
@@ -828,6 +871,7 @@ export function collections(store: Store) {
     webhookDeliveries: store.collection(COLLECTIONS.webhookDeliveries),
     cursors: store.collection(COLLECTIONS.cursors),
     walletMoves: store.collection(COLLECTIONS.walletMoves),
+    splits: store.collection(COLLECTIONS.splits),
     processedLogs: store.collection(COLLECTIONS.processedLogs),
     collectorRuns: store.collection(COLLECTIONS.collectorRuns),
     failedLogs: store.collection(COLLECTIONS.failedLogs),

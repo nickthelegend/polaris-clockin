@@ -3,7 +3,7 @@ import "server-only";
 import type { WalletMoveRecord } from "@polaris/db";
 import { decodeEventLog, getAddress, parseAbi, toEventSelector, zeroAddress, type Address, type Hex, type Log } from "viem";
 
-import { polarisSendAbi } from "./chain/abis";
+import { polarisSendAbi, polarisSplitAbi } from "./chain/abis";
 import { logsClient, publicClient, requireChain } from "./chain/client";
 import { getDb } from "./db";
 import type { ChainConfig } from "./env";
@@ -14,7 +14,9 @@ import { chunkSize } from "./ingest/sync";
  * Polaris app needs beside the merchant records (buyers.ts) so a buyer's
  * activity and balance history add up. Money added (a mint, or dollars sent
  * in), transfers to and from people, send links made, claimed or taken back,
- * and the transfers inside a payment or an instalment (kept for the balance,
+ * shares of a split paid (and, for its organiser, each share arriving: the
+ * split and share from PolarisSplit's SharePaid in the same transaction), and
+ * the transfers inside a payment or an instalment (kept for the balance,
  * shown through the payment's own row).
  *
  * Read per address, on demand, from the AUSD `Transfer` logs to or from it
@@ -32,6 +34,7 @@ const SENT = sendEvent("Sent");
 const CLAIMED = sendEvent("Claimed");
 const CANCELLED = sendEvent("Cancelled");
 const REFUNDED = sendEvent("Refunded");
+const SHARE_PAID = toEventSelector(polarisSplitAbi.find((e) => e.type === "event" && e.name === "SharePaid") as Parameters<typeof toEventSelector>[0]);
 
 /** Ranges read per request: the rest waits for the next read (the app asks every 15 s). */
 const MAX_RANGES = 25;
@@ -55,16 +58,36 @@ async function blockTime(n: number): Promise<string> {
   return iso;
 }
 
-/** Which Polaris contract (if any) emitted logs in a transaction: how a transfer inside it is told apart. */
-const txContracts = new Map<Hex, Set<string>>();
-async function contractsIn(txHash: Hex): Promise<Set<string>> {
-  const cached = txContracts.get(txHash);
+/** A transaction's logs, from its receipt (cached). */
+const txLogs = new Map<Hex, Log[]>();
+async function logsOf(txHash: Hex): Promise<Log[]> {
+  const cached = txLogs.get(txHash);
   if (cached) return cached;
   const receipt = await publicClient().getTransactionReceipt({ hash: txHash });
-  const set = new Set(receipt.logs.map((l) => l.address.toLowerCase()));
-  if (txContracts.size > 5_000) txContracts.clear();
-  txContracts.set(txHash, set);
-  return set;
+  if (txLogs.size > 5_000) txLogs.clear();
+  txLogs.set(txHash, receipt.logs as Log[]);
+  return receipt.logs as Log[];
+}
+
+/** Which Polaris contract (if any) emitted logs in a transaction: how a transfer inside it is told apart. */
+async function contractsIn(txHash: Hex): Promise<Set<string>> {
+  return new Set((await logsOf(txHash)).map((l) => l.address.toLowerCase()));
+}
+
+/** The split share a transaction paid (PolarisSplit.SharePaid), for the friend's and the organiser's rows. */
+async function shareIn(chain: ChainConfig, txHash: Hex): Promise<{ splitId: Hex; shareIndex: number } | null> {
+  const split = chain.contracts.split?.toLowerCase();
+  if (!split) return null;
+  for (const log of await logsOf(txHash).catch(() => [] as Log[])) {
+    if (log.address.toLowerCase() !== split || log.topics[0] !== SHARE_PAID) continue;
+    try {
+      const out = decodeEventLog({ abi: polarisSplitAbi, eventName: "SharePaid", data: log.data, topics: log.topics as [Hex, ...Hex[]] });
+      return { splitId: out.args.splitId.toLowerCase() as Hex, shareIndex: Number(out.args.index) };
+    } catch {
+      /* not a SharePaid after all */
+    }
+  }
+  return null;
 }
 
 type Parsed = { log: Log; txHash: Hex; logIndex: number; blockNumber: number };
@@ -90,6 +113,8 @@ function classify(
     if (claimed) return { kind: "claimed", linkKey: claimed };
     return { kind: "link-returned", linkKey: find("Cancelled", "Refunded") };
   }
+  // A share of a split: the friend's dollars go through PolarisSplit to the organiser in one transaction.
+  if (c.split && other === c.split.toLowerCase()) return { kind: direction === "out" ? "split-paid" : "split-received", linkKey: null };
   const has = (a: Address | null) => a !== null && inTx.has(a.toLowerCase());
   if (has(c.payments) || has(c.checkout)) return { kind: direction === "out" ? "payment" : "refund", linkKey: null };
   if (has(c.loanEngine) || has(c.collections)) return { kind: direction === "out" ? "instalment" : "received", linkKey: null };
@@ -138,6 +163,7 @@ async function readRange(chain: ChainConfig, who: Address, from: number, to: num
     const id = `${p.txHash}:${p.logIndex}:${who.toLowerCase()}`;
     // Kept once: a range read again never forgets that a link was claimed since.
     if (await db.walletMoves.get(id)) continue;
+    const share = kind === "split-paid" || kind === "split-received" ? await shareIn(chain, p.txHash) : null;
     await db.walletMoves.insert({
       id,
       address: who.toLowerCase(),
@@ -151,6 +177,8 @@ async function readRange(chain: ChainConfig, who: Address, from: number, to: num
       linkKey,
       settledAt: null,
       settledAs: null,
+      splitId: share?.splitId ?? null,
+      shareIndex: share?.shareIndex ?? null,
       at: await blockTime(p.blockNumber),
     });
   }

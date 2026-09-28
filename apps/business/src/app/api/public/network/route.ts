@@ -21,12 +21,14 @@ export const GET = withPublic(async () => {
     chainId: chain.id,
     name: chain.name,
     explorerUrl: chain.explorerUrl,
-    contracts: { stablecoin: c.stablecoin, payments: c.payments, checkout: c.checkout, send: c.send, loanEngine: c.loanEngine, registry: c.registry },
+    // `split` is null on a deployment that predates PolarisSplit: the app then doesn't offer split links.
+    contracts: { stablecoin: c.stablecoin, payments: c.payments, checkout: c.checkout, send: c.send, split: c.split, loanEngine: c.loanEngine, registry: c.registry },
     domains: {
       stablecoin: { ...chain.stablecoinDomain, chainId: chain.id, verifyingContract: c.stablecoin },
       checkout: polarisDomain("checkout", chain.id, c.checkout),
       payments: polarisDomain("payments", chain.id, c.payments),
       send: polarisDomain("send", chain.id, c.send),
+      split: c.split ? polarisDomain("split", chain.id, c.split) : null,
       loanEngine: polarisDomain("loanEngine", chain.id, c.loanEngine),
     },
     payIn4: { ...config.payIn4, aprBps: 1000 },

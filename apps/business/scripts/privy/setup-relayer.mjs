@@ -28,7 +28,7 @@
 // fund the relayer with testnet MON and grant it its contract roles.
 
 import { banner, flag, loadDeployment, loadEnv, mask, privyClient, writeAdminKey, writeEnvPrivy } from "./lib.mjs";
-import { buildRegistryAdminPolicy, buildRelayerPolicy, lintPolicy, RELAYER_CALLS } from "../../src/server/policy/relayer.ts";
+import { buildRegistryAdminPolicy, buildRelayerPolicy, callsFor, lintPolicy } from "../../src/server/policy/relayer.ts";
 
 const apply = flag("apply");
 const withRegistry = flag("registry-admin");
@@ -49,8 +49,9 @@ banner(`Polaris relayer on chain ${deployment.chainId}`);
 console.log(`Contracts from ${deployment.file}
 `);
 console.log("The relayer may sign exactly these calls (eth_signTransaction, value 0):");
-for (const c of RELAYER_CALLS) console.log(`  ALLOW  ${c.contract.padEnd(10)} ${c.functionName.padEnd(28)} ${c.why}`);
+for (const c of callsFor(deployment.addresses)) console.log(`  ALLOW  ${c.contract.padEnd(10)} ${c.functionName.padEnd(28)} ${c.why}`);
 console.log(`  (transferWithAuthorization and PolarisSend.send only for ${minAmountUnits} base units or more)`);
+if (!deployment.addresses.split) console.log("  (no PolarisSplit in this deployment: its three calls are left out until deploy-split)");
 console.log("  DENY   any transaction that carries MON");
 console.log("  DENY   everything else (no rule matches → Privy denies)");
 

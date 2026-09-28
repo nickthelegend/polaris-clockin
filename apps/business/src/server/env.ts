@@ -55,6 +55,8 @@ export type ContractAddresses = {
   checkout: Address;
   payments: Address;
   send: Address;
+  /** PolarisSplit, split-the-bill links; null for a deployment that predates it (Monad testnet's of 28 Sep 2026). */
+  split: Address | null;
   loanEngine: Address;
   registry: Address;
   scoreManager: Address;
@@ -282,6 +284,7 @@ function contractsFrom(d: Deployment): ContractAddresses {
     checkout: need("PolarisCheckout"),
     payments: need("PolarisPayments"),
     send: need("PolarisSend"),
+    split: maybe("PolarisSplit"),
     loanEngine: need("PolarisLoanEngine"),
     registry: need("MerchantRegistry"),
     scoreManager: need("ScoreManager"),

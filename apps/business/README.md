@@ -247,6 +247,8 @@ belongs to a checkout session, and one PolarisCheckout already settled.
 | `PolarisPayments.createPlanFor` | operator (server: a session's subscription terms) | publishes a plan for the session's own merchant; moves nothing |
 | `PolarisPayments.quoteOrder` | operator (server: a session's price) | pins the session's price on its order before the order id is handed out; moves nothing |
 | `PolarisSend.send` / `claim` / `cancel` | sender + link key / link key / sender | the link key's signature names the recipient |
+| `PolarisSplit.createSplit` / `closeSplit` | organiser: `CreateSplit` / `CloseSplit` | the organiser signs the shares, the hash of the link's words and the expiry; a close names its split. Each share must be at least `RELAYER_MIN_TRANSFER_UNITS` |
+| `PolarisSplit.payShare` | friend: ERC-3009 `ReceiveWithAuthorization` | nonce = `keccak256(splitId, index)`, value = the share's amount read from the chain; refused before any gas when the split is closed, expired or the share paid |
 | `PolarisLoanEngine.repayWithSig` | borrower: `RepayIntent` | |
 | `PolarisCheckout.reauthorize` | borrower: ERC-2612 `Permit` to the loan engine | the contract checks spender, signer and that the value covers everything owed; the relayer refuses first when nothing is owed, the approval already covers it, or the permit is short |
 | `MerchantRegistry.registerFor` / `updatePayoutAddressWithSig` | merchant's embedded wallet | the merchant signs name and payout address |
@@ -412,7 +414,19 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
   Subscribe permit value that keeps their other subscriptions funded).
 - `GET /api/public/buyers/{address}`: the buyer's plans, subscriptions and
   payments to Polaris merchants, from chain events, with only what the chain
-  already shows (no descriptions, order ids or metadata).
+  already shows (no descriptions, order ids or metadata); every other dollar
+  in or out (`moves`, with `split-paid` and `split-received` naming the
+  split and the share); and `splits`, the split-the-bill links the address
+  organised.
+- `GET /api/public/splits/{id}`: a split-the-bill link's status for its page:
+  PolarisSplit's `splitOf`/`sharesOf` read now (who organised it, each
+  share's amount and payer, open, settled, closed or expired), with when each
+  share was paid and in which transaction from the chain sync's `splits`
+  records (`src/server/split.ts`). The split's words (what it's for, the
+  names) travel in the link's fragment and never reach this server; the
+  response carries their hash (`memoHash`) for the app to check them against.
+  A deployment that predates PolarisSplit answers `503 split_unavailable` on
+  the relay and `contracts.split: null` on `/api/public/network`.
 - `GET /api/public/credit/{address}` and `/messages`, `POST /api/credit/underwrite`:
   credit (above).
 - `GET /api/public/network`: the contracts and EIP-712 domains.

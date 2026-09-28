@@ -34,6 +34,12 @@
  * A merchant-signed plan intent would close the second one; it needs a
  * contract change (plan §5.3), so it is written down here instead.
  *
+ * PolarisSplit (split the bill by link) adds three calls, each carrying its
+ * owner's signature: the organiser's CreateSplit and CloseSplit, and each
+ * friend's ERC-3009 authorization for exactly their share. A deployment that
+ * predates PolarisSplit has no address for it: its rules are left out of the
+ * policy and its calls are refused, like any other contract off the list.
+ *
  * `payWithAuthorization` (polarispay-sdk's direct pay) goes to
  * PolarisPayments without PolarisCheckout's cross-mode order guard, so the
  * relay refuses an order that belongs to a checkout session or that the
@@ -51,9 +57,10 @@ import {
   polarisLoanEngineAbi,
   polarisPaymentsAbi,
   polarisSendAbi,
+  polarisSplitAbi,
 } from "@polarispay/contracts/abi";
 
-export type RelayerContract = "checkout" | "payments" | "send" | "loanEngine" | "registry" | "stablecoin";
+export type RelayerContract = "checkout" | "payments" | "send" | "split" | "loanEngine" | "registry" | "stablecoin";
 
 export type AllowedCall = {
   contract: RelayerContract;
@@ -90,6 +97,9 @@ export const RELAYER_CALLS: readonly AllowedCall[] = [
   { contract: "send", functionName: "send", rule: "Send by link: PolarisSend.send", why: "Sender's ERC-3009 authorisation + the link key's Open", signedBy: "owner", minAmountArg: "amount" },
   { contract: "send", functionName: "claim", rule: "Claim a link: PolarisSend.claim", why: "The link key's Claim naming the recipient", signedBy: "owner" },
   { contract: "send", functionName: "cancel", rule: "Cancel a link: PolarisSend.cancel", why: "Sender's Cancel signature", signedBy: "owner" },
+  { contract: "split", functionName: "createSplit", rule: "Split a bill: PolarisSplit.createSplit", why: "Organiser's CreateSplit signature (the shares, the link's words, the expiry)", signedBy: "owner" },
+  { contract: "split", functionName: "payShare", rule: "Pay a share: PolarisSplit.payShare", why: "Friend's ERC-3009 authorisation for exactly their share, nonce = split and share", signedBy: "owner" },
+  { contract: "split", functionName: "closeSplit", rule: "Close a split: PolarisSplit.closeSplit", why: "Organiser's CloseSplit signature (unpaid shares can no longer be paid)", signedBy: "owner" },
   { contract: "loanEngine", functionName: "repayWithSig", rule: "Pay early: PolarisLoanEngine.repayWithSig", why: "Borrower's RepayIntent", signedBy: "owner" },
   { contract: "registry", functionName: "registerFor", rule: "Onboard: MerchantRegistry.registerFor", why: "Merchant's Registration signature (Privy embedded wallet)", signedBy: "owner" },
   { contract: "registry", functionName: "updatePayoutAddressWithSig", rule: "Payout address: updatePayoutAddressWithSig", why: "Merchant's PayoutUpdate signature", signedBy: "owner" },
@@ -100,12 +110,31 @@ export const CONTRACT_ABIS: Record<RelayerContract, Abi> = {
   checkout: polarisCheckoutAbi as unknown as Abi,
   payments: polarisPaymentsAbi as unknown as Abi,
   send: polarisSendAbi as unknown as Abi,
+  split: polarisSplitAbi as unknown as Abi,
   loanEngine: polarisLoanEngineAbi as unknown as Abi,
   registry: merchantRegistryAbi as unknown as Abi,
   stablecoin: iausdAbi as unknown as Abi,
 };
 
-export type RelayerAddresses = Record<RelayerContract, Address>;
+/**
+ * Where each contract the relayer calls lives. PolarisSplit is optional: a
+ * deployment from before it (Monad testnet's of 28 Sep 2026) has none, and
+ * then nothing may call it.
+ */
+export type RelayerAddresses = Record<Exclude<RelayerContract, "split">, Address> & { split?: Address | null };
+
+/** The contracts a deployment actually has, with their addresses. */
+export function deployedContracts(addresses: RelayerAddresses): Array<[RelayerContract, Address]> {
+  return (Object.entries(addresses) as Array<[RelayerContract, Address | null | undefined]>).filter(
+    (entry): entry is [RelayerContract, Address] => typeof entry[1] === "string",
+  );
+}
+
+/** The calls on the allow-list whose contract this deployment has. */
+export function callsFor(addresses: RelayerAddresses): AllowedCall[] {
+  const have = new Set(deployedContracts(addresses).map(([c]) => c));
+  return RELAYER_CALLS.filter((c) => have.has(c.contract));
+}
 
 export class PolicyViolation extends Error {
   readonly rule: string;
@@ -146,7 +175,7 @@ export function checkRelayerCall(
   }
   if (!tx.to) throw new PolicyViolation("to", "The relayer never deploys contracts.");
   const to = getAddress(tx.to);
-  const contract = (Object.keys(expected.addresses) as RelayerContract[]).find((c) => getAddress(expected.addresses[c]) === to);
+  const contract = deployedContracts(expected.addresses).find(([, a]) => getAddress(a) === to)?.[0];
   if (!contract) throw new PolicyViolation("to", `${to} isn't a Polaris contract the relayer may call.`);
   if (!tx.data || tx.data.length < 10) throw new PolicyViolation("function_name", "The relayer only calls contract functions.");
 
@@ -193,7 +222,8 @@ export function functionFragments(abi: Abi, name: string): Abi {
  *   with the gas limit set from estimateGas + 15% (Monad bills the limit).
  * - One DENY rule refuses any transaction carrying MON. The Node SDK's viem
  *   adapter omits a zero `value`, so "value = 0" can't be an ALLOW condition.
- * - One ALLOW rule per call: this chain, this contract, this function, and
+ * - One ALLOW rule per call whose contract the deployment has: this chain,
+ *   this contract, this function, and
  *   for the calls that move an amount a stranger chooses (an AUSD transfer,
  *   a send by link) that amount at least `minAmountUnits`, so a compromised
  *   server can't be used to burn the relayer's MON on zero-value calls.
@@ -214,10 +244,10 @@ export function buildRelayerPolicy(input: { chainId: number; addresses: RelayerA
       conditions: [{ field_source: "ethereum_transaction", field: "value", operator: "gt", value: "0" }],
     },
   ];
-  for (const call of RELAYER_CALLS) {
+  for (const call of callsFor(input.addresses)) {
     const abi = functionFragments(CONTRACT_ABIS[call.contract], call.functionName);
     const conditions: Condition[] = [
-      { field_source: "ethereum_transaction", field: "to", operator: "in", value: bothCases(input.addresses[call.contract]) },
+      { field_source: "ethereum_transaction", field: "to", operator: "in", value: bothCases(input.addresses[call.contract] as Address) },
       onChain,
       { field_source: "ethereum_calldata", field: "function_name", abi, operator: "eq", value: call.functionName },
     ];

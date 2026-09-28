@@ -62,6 +62,8 @@ export function loadDeployment(env) {
       checkout: at("PolarisCheckout"),
       payments: at("PolarisPayments"),
       send: at("PolarisSend"),
+      // Absent from a deployment that predates split-the-bill links: its rules are then left out.
+      split: d.contracts?.PolarisSplit?.address ?? null,
       loanEngine: at("PolarisLoanEngine"),
       registry: at("MerchantRegistry"),
       stablecoin: at("Stablecoin"),
