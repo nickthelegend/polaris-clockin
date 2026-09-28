@@ -50,6 +50,14 @@ inlined at build time, and public, except the optional server-side `FX_RPC_*`.
 | `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
 | `FX_RPC_MONAD`, `FX_RPC_ETHEREUM`, `FX_RPC_POLYGON`, `FX_RPC_BASE` | public RPCs (`packages/fx/src/feeds.ts`) | **Server only.** Comma-separated JSON-RPC URLs `/api/fx` reads the Chainlink FX feeds from (Monad mainnet, Ethereum, Polygon, Base). Read-only calls; no key needed |
 
+**Hosted** (Vercel, [`docs/deploy.md`](../../docs/deploy.md) step 2): every
+`NEXT_PUBLIC_*` is compiled in, so set them in the project before it builds:
+`NEXT_PUBLIC_POLARIS_API_URL`, `NEXT_PUBLIC_CHAIN_ID=10143`, and
+`NEXT_PUBLIC_RP_ID` (the Face ID domain, which accounts are tied to for good).
+`GET /api/health` reports what the build has (the API, chain, relying party,
+and that the dev signer and local demo switches are off), for
+`scripts/deploy-check.mjs`.
+
 ## With Polaris for Business (the real relayer)
 
 Set `NEXT_PUBLIC_POLARIS_API_URL` to the business app (`http://localhost:3100`

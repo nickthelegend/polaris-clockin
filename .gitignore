@@ -45,6 +45,9 @@ workflows/**/.cre_build_tmp.js
 # pnpm demo:local: the local chain, databases and logs of the last run
 .demo/
 
+# The Vercel CLI's project links (vercel link; docs/deploy.md)
+.vercel/
+
 # Claude Code: run notes and worktrees stay on this machine; .claude/launch.json is shared
 .claude/handoff/
 .claude/worktrees/
