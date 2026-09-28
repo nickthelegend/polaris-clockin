@@ -30,6 +30,8 @@ import { useMemo, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { CreditGuardLine } from "@/components/credit-guard-note";
+import { CreditProvenance } from "@/components/credit-provenance";
 import { SuccessSheet } from "@/components/success-sheet";
 import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
@@ -195,6 +197,8 @@ export function CreditDesktop() {
             ) : (
               <Skeleton shape="card" height={170} />
             )}
+            <CreditProvenance credit={c} className="justify-self-start" />
+            <CreditGuardLine />
             <PrimaryButton asChild size="lg" block icon={<Gauge />} className="mt-1">
               <Link href="/credit/score" scroll={false}>
                 See your score
@@ -323,7 +327,9 @@ export function ScoreDesktop() {
               )}
             </div>
 
-            <SectionTitle className="mt-10">What moves it</SectionTitle>
+            <SectionTitle className="mt-10" action={<CreditProvenance credit={c} size="sm" />}>
+              What moves it
+            </SectionTitle>
             <DataTable
               className="mt-3"
               caption="What moves your score"
@@ -388,6 +394,7 @@ export function ScoreDesktop() {
 
       <Dialog open={why} onOpenChange={setWhy} size="sm" title="What moves your score" description="Facts anyone can check. Paying on time moves it most.">
         <Dialog.Body>
+          <CreditProvenance credit={c} size="sm" className="mb-3" />
           {c ? (
             <DetailsList
               size="sm"

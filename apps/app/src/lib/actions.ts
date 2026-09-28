@@ -1,6 +1,7 @@
 import { type Address, type Hex, type LocalAccount, parseAbi, zeroAddress } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { api, apiConfigured } from "./api";
+import { owedOnOpenPlans } from "./collection";
 import { publicClient } from "./chain";
 import type { PaymentLink, Person, Plan } from "./data/types";
 import { getDomain, isConfigured, resolveContract } from "./domains";
@@ -302,6 +303,29 @@ export async function transferTo(account: LocalAccount, to: Person, amount: Micr
     }),
   );
   return relayer.transfer({ to, authorization });
+}
+
+const debtAbi = parseAbi(["function activeDebtOf(address borrower) view returns (uint256)"]);
+
+/**
+ * Sign again after a collection failed because Polaris's approval to take
+ * the buyer's payments was gone: one ERC-2612 permit to the loan engine,
+ * which PolarisCheckout.reauthorize applies. A permit replaces the approval,
+ * so it covers everything still owed on every open plan
+ * (`PolarisLoanEngine.activeDebtOf`, which the contract checks).
+ */
+export async function reauthorizePayments(account: LocalAccount, plans: Plan[]): Promise<RelayReceipt> {
+  let owed = owedOnOpenPlans(plans);
+  const [domain, loanEngine, nonce] = await Promise.all([getDomain("ausd"), resolveContract("loanEngine"), readNonce("ausd", account.address)]);
+  if (isConfigured("loanEngine") && loanEngine !== zeroAddress) {
+    try {
+      owed = await publicClient().readContract({ address: loanEngine, abi: debtAbi, functionName: "activeDebtOf", args: [account.address] });
+    } catch {
+      // keep the plans' own figures; the relayer checks the permit against the chain anyway
+    }
+  }
+  const permit = await sign(account, buildPermit(domain, { owner: account.address, spender: loanEngine, value: owed, nonce, deadline: now() + 30n * MINUTE }));
+  return relayer.reauthorize({ buyer: account.address, permit });
 }
 
 const loanAbi = parseAbi([

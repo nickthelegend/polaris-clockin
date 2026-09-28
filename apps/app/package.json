@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "check:signatures": "node scripts/verify-signatures.ts"
+    "check:signatures": "node scripts/verify-signatures.ts",
+    "test": "node --experimental-strip-types --disable-warning=ExperimentalWarning --test test/*.test.ts"
   },
   "dependencies": {
     "@category-labs/mera": "0.2.0",

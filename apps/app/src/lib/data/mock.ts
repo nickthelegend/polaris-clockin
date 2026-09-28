@@ -466,6 +466,8 @@ function creditLine(): CreditLine {
     reasons,
     historyLinked: ledger.historyLinked,
     openingCap: OPENING_CAP,
+    // Sample reasons, attested by no one: never shown as verified.
+    verified: null,
   };
 }
 
@@ -478,6 +480,8 @@ export const mockData: PolarisData = {
   getProfile: () => settle<Profile>({ name: "Lena Vogel", memberSince: loadedAt - 92 * MS_DAY }),
   getBalance: () => settle<Balance>({ available: ledger.balance, updatedAt: Date.now() }),
   getCreditLine: () => settle(creditLine()),
+  // The offline demo has no chain, so no risk guard to read.
+  getCreditGuard: async () => null,
   getPlans: () =>
     settle({
       plans: ledger.plans.map((plan) => ({ ...plan, instalments: plan.instalments.map((i) => ({ ...i })) })),

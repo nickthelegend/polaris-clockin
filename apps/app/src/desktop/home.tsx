@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useAccounts } from "@/components/accounts";
+import { SignAgainNotice } from "@/components/sign-again";
 import { useOwner } from "@/lib/account/hooks";
 import { getActivity, getPlans } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
@@ -56,9 +57,12 @@ function timeLabel(frame: Frame) {
  * widget with your credit on the right.
  */
 export function HomeDesktop() {
+  const owner = useOwner();
+  const plans = useData(() => getPlans(owner), [owner]);
   return (
     <>
       <h1 className="sr-only">Home</h1>
+      <SignAgainNotice plans={plans.value?.plans} className="mb-8" />
       <div className="grid grid-cols-[minmax(0,1fr)_356px] gap-x-10 gap-y-10 xl:grid-cols-[minmax(0,1fr)_404px] xl:gap-x-11">
         <BalanceChart className="col-start-1 row-start-1" />
         <MoneyWidget className="col-start-2 row-span-2 row-start-1 self-start xl:sticky xl:top-6" />

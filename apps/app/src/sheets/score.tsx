@@ -22,6 +22,7 @@ import { CandlestickChart as CandlesIcon, Info, LineChart } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { CreditProvenance } from "@/components/credit-provenance";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { ScoreDesktop } from "@/desktop/credit";
 import { SuccessSheet } from "@/components/success-sheet";
@@ -150,6 +151,7 @@ export function ScoreSheet() {
           <Skeleton shape="card" height={380} />
         )}
 
+        <CreditProvenance credit={credit.value} className="self-start" />
         <div className="grid grid-cols-3 gap-2.5">
           <StatTile value={paidOnTime ?? "–"} label="On time" />
           <StatTile value={credit.value ? usd(credit.value.limit, { trim: true }) : "–"} label="Your line" />
@@ -184,6 +186,7 @@ export function ScoreSheet() {
           <p className="text-[14px] leading-[1.45] text-ui-muted">
             Your score is worked out from facts anyone can check, and it sets your Pay later line. Paying on time moves it most.
           </p>
+          <CreditProvenance credit={credit.value} size="sm" className="self-start" />
           {credit.value ? (
             <DetailsList
               size="sm"

@@ -1,5 +1,6 @@
 import { type Address, getAddress, type Hex, parseAbi, zeroAddress } from "viem";
 import { api } from "../api";
+import { type ApiCreditGuard, toGuardView } from "../credit-guard";
 import { publicClient } from "../chain";
 import { resolveContract } from "../domains";
 import type { Micros } from "../money";
@@ -9,6 +10,7 @@ import { getRemotePaymentLink } from "./remote";
 import type {
   ActivityItem,
   Balance,
+  CreditGuardView,
   CreditLine,
   Instalment,
   Merchant,
@@ -52,6 +54,8 @@ type CreditStatus = {
     reason: string | null;
     linkedWallet: Address | null;
     explanation: { reasons: Array<{ text: string; points: number | null; provider: string | null }> } | null;
+    /** The underwriting report's transaction (Chainlink CRE), and when it landed. */
+    verified?: { by: "Chainlink CRE"; workflow: string; txHash: Hex; at: string; explorerUrl: string | null } | null;
   } | null;
 };
 
@@ -67,6 +71,9 @@ type BuyerBook = {
     startedAt: number;
     state: string;
     openedTxHash: Hex;
+    lastFailure?: { reason: string; at: string; nextAttemptAt: string | null } | null;
+    needsSignature?: boolean;
+    reauthorized?: { at: string; txHash: Hex; collected: { at: string; txHash: Hex } | null } | null;
   }>;
   subscriptions: Array<{
     id: string;
@@ -124,6 +131,23 @@ export function toPlan(p: BuyerBook["plans"][number]): Plan {
     // The API's plan states (the chain sync's): collecting and dunning are open; repaid and written off are done.
     status: OPEN_PLAN_STATES.has(p.state) ? "active" : "completed",
     openedAt: p.startedAt * 1000,
+    collection: {
+      failure: p.lastFailure
+        ? {
+            reason: p.lastFailure.reason === "insufficient_funds" || p.lastFailure.reason === "allowance_lost" ? p.lastFailure.reason : "other",
+            at: Date.parse(p.lastFailure.at),
+            nextAttemptAt: p.lastFailure.nextAttemptAt ? Date.parse(p.lastFailure.nextAttemptAt) : null,
+          }
+        : null,
+      needsSignature: Boolean(p.needsSignature),
+      reauthorized: p.reauthorized
+        ? {
+            at: Date.parse(p.reauthorized.at),
+            txHash: p.reauthorized.txHash,
+            collected: p.reauthorized.collected ? { at: Date.parse(p.reauthorized.collected.at), txHash: p.reauthorized.collected.txHash } : null,
+          }
+        : null,
+    },
   };
 }
 
@@ -180,7 +204,7 @@ export const liveData: PolarisData = {
   },
 
   async getCreditLine(owner): Promise<CreditLine> {
-    const empty: CreditLine = { limit: 0n, available: 0n, used: 0n, score: 0, aprBps: APR_BPS, nextPayment: null, reasons: [], historyLinked: false, openingCap: 0n };
+    const empty: CreditLine = { limit: 0n, available: 0n, used: 0n, score: 0, aprBps: APR_BPS, nextPayment: null, reasons: [], historyLinked: false, openingCap: 0n, verified: null };
     if (!owner) return empty;
     const [status, plans] = await Promise.all([api<CreditStatus>(`/api/public/credit/${owner}`), book(owner).then((b) => b.plans.map(toPlan))]);
     const limit = BigInt(status.onChain?.creditLimitUnits ?? "0");
@@ -209,7 +233,12 @@ export const liveData: PolarisData = {
       historyLinked: Boolean(status.decision?.linkedWallet),
       // ScoreManager caps an opening line at $1,000; paying on time raises it from there.
       openingCap: limit > OPENING_CAP ? limit : OPENING_CAP,
+      verified: status.decision?.status === "applied" && status.decision.verified ? { ...status.decision.verified, at: Date.parse(status.decision.verified.at) } : null,
     };
+  },
+
+  async getCreditGuard(): Promise<CreditGuardView | null> {
+    return toGuardView(await api<ApiCreditGuard>("/api/public/credit-guard"));
   },
 
   async getPlans(owner) {

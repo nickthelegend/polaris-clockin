@@ -5,6 +5,7 @@ import { CalendarX } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { SignAgainCard } from "@/components/sign-again";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
 import { PlanDrawerContent } from "@/desktop/plans";
@@ -65,6 +66,7 @@ export function PlanSheet({ id }: { id: string }) {
         className="-mt-2 shrink-0 px-5"
       />
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-3 pt-1">
+        <SignAgainCard plan={plan} plans={plans.value.plans} />
         <KeyValueGrid
           items={[
             { label: "Amount", value: usd(plan.principal) },
