@@ -89,9 +89,13 @@ export function usePlay<T extends Element>(play: boolean | undefined, amount?: n
   return { ref, shown, reduced } as const;
 }
 
-/** True after the first client render; SSR renders the pre-animation state. */
+const noSubscribe = () => () => undefined;
+
+/** True after hydration; the server (and the hydrating render) read false. */
 export function useMounted(): boolean {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  return mounted;
+  return useSyncExternalStore(
+    noSubscribe,
+    () => true,
+    () => false,
+  );
 }
