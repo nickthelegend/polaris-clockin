@@ -422,12 +422,19 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
 
 - **The risk guard.** `GET /api/public/credit-guard` (`src/server/cre/guardian.ts`)
   reads `PolarisCheckout.creditPaused()`, which is what `openPlan` applies,
-  and GuardianReceiver's `creditStatus`, `thresholds`, `latestAttestation`
-  and `latestRoundData`, once per 10 s per process. States: `open`,
-  `paused` (with the reasons and "Pay in 4 is paused by our risk guard; pay
-  now works as usual."), `stale` and `never` (the guard is late and blocks
-  nothing: it fails open), `unconfigured`, `unavailable` (a failed read,
-  treated as open, as the contract treats a guard it can't read). The hosted
+  and GuardianReceiver's `creditStatus`, `currentInputs` (the pool as the
+  receiver reads it, the thresholds, the acknowledged bad debt),
+  `latestAttestation` and `latestRoundData`, once per 10 s per process.
+  States: `open`, `paused` (with the reasons and "Pay in 4 is paused by our
+  risk guard; pay now works as usual."), `stale` and `never` (the price check
+  is late and blocks nothing: it fails open; the pool's checks still apply),
+  `unconfigured`, `unavailable` (a failed read, treated as open, as the
+  contract treats a guard it can't read). Each check says where its figure
+  comes from: the price from the latest CRE attestation, the cash and bad
+  debt from the pool itself, live. When PolarisCheckout asks another guardian
+  than the deployment record names (a redeploy the API's env hasn't caught up
+  with), its own `creditPaused()` still decides `paused`, and `mismatch`
+  says so: the API never offers Pay in 4 the relay would refuse. The hosted
   checkout's `payIn4` carries it; the app, polarispay-sdk's
   `credit.guard()` (Halcyon) and the dashboard's banner read the route.
 - **Signing again.** `POST /api/relay` type `reauthorize` carries a buyer's
@@ -442,7 +449,14 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
   a buyer within 15 minutes of their Reauthorized is shown beside it (the
   instant retry). An UnderwritingApplied keeps its transaction on the
   account's credit decision, which `GET /api/public/credit/{account}` returns
-  as `verified` ("Verified by Chainlink CRE" in the app). `GET /api/chainlink`
+  as `verified`, with who delivered it (`src/server/cre/provenance.ts`):
+  `delivery` is `don` only for a report that came through Chainlink's
+  KeystoneForwarder (DON-signed; "Verified by Chainlink CRE" in the app),
+  `simulation` for the CLI's simulator through Chainlink's
+  MockKeystoneForwarder ("Chainlink CRE (simulated)"), `local` on a local
+  chain ("CRE workflow, local run"), `unknown` otherwise. The forwarder is
+  the one the report's ReportProcessed named, else the one
+  UnderwritingReceiver trusts. `GET /api/chainlink`
   (a merchant session) serves the dashboard page; a merchant sees its own
   buyers' addresses and its own share of each collections run only. The
   schedules come from the workflows' own configs (`workflows/<dir>/config.<CRE_TARGET>.json`,

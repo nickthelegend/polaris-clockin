@@ -270,10 +270,14 @@ in [`docs/design/chainlink`](../../docs/design/chainlink).
   the collection that follows lands: *Collected*, with its receipt
   (`components/sign-again.tsx`, `src/lib/collection.ts`). The amount carries
   the Chainlink FX line.
-- **Verified by Chainlink CRE.** The credit line and score show the
-  underwriting report's date and transaction (`components/credit-provenance.tsx`),
-  only for a line a report opened; the reasons are the report's own. The
-  offline demo's sample line is never shown as verified.
+- **Where the line came from.** The credit line and score show the
+  underwriting report's date and transaction (`components/credit-provenance.tsx`,
+  `src/lib/provenance.ts`), only for a line a report opened; the reasons are
+  the report's own. It says "Verified by Chainlink CRE" only for a report
+  Chainlink's DON signed (the API's `delivery: "don"`, through Chainlink's
+  KeystoneForwarder); a simulated run reads "Chainlink CRE (simulated)" and a
+  local one "CRE workflow, local run", in a plain pill instead of the lime
+  shield. The offline demo's sample line shows none.
 
 `pnpm --filter @polaris/app test` checks the guard and collection states
 (node --test, `test/`).

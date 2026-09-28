@@ -49,13 +49,16 @@ For each lookup the service:
    failed read.
 3. Normalises: `formatUnits(answer, decimals)`, inverted for "EUR / USD"
    style pairs, so `perUsd` is always local units per dollar.
-4. Treats a rate older than **26 hours** as missing (Ethereum's FX feeds have
-   a 24 h heartbeat) and tries the next feed, a different chain carrying the
+4. Treats a rate older than its own feed's limit as missing (twice the
+   feed's heartbeat, or its heartbeat plus 10 minutes, whichever is longer,
+   and never more than **26 hours**: 14 min for Monad's 240 s feeds, 26 h for
+   Ethereum's 24 h ones) and tries the next feed, a different chain carrying the
    same pair. If every feed answered but all were too old, the result is
    `stale`; if none could be read, `unavailable`.
 5. Caches the result for **5 minutes** (`unavailable` for 30 s), shares one
-   read between concurrent lookups, and re-checks the 26 h limit when it
-   serves from cache.
+   read between concurrent lookups, and re-checks the rate's own limit when
+   it serves from cache (the rate carries it, `maxAgeSeconds`, and the app
+   hides a rate that ages past it on screen).
 6. Answers within **10 s** whatever the RPCs do (5 s per request): past
    the deadline the caller gets `unavailable` while the read finishes and
    fills the cache for the next one.
