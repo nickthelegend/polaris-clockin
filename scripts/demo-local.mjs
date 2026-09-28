@@ -26,6 +26,8 @@
  * Then open http://127.0.0.1:3600, add something to the bag and check out
  * with Polaris. The dashboard is http://localhost:3100/dashboard.
  *
+ * DEMO_PAY_IN_4_INTERVAL_SECONDS (default a week) sets the Pay in 4 interval.
+ *
  * Ports: DEMO_NODE_PORT (8545), DEMO_BUSINESS_PORT (3100), DEMO_APP_PORT
  * (3000), DEMO_SHOP_PORT (3600), DEMO_TRIGGER_PORT (2000), DEMO_FAUCET_PORT
  * (3650). State lives in .demo/ (git-ignored) and is fresh on every run.
@@ -285,7 +287,9 @@ async function main() {
     POLARIS_PUBLIC_URL: BUSINESS_URL,
     POLARIS_APP_ORIGINS: `http://127.0.0.1:${PORTS.app}`,
     POLARIS_WORKERS: "1",
-    PAY_IN_4_INTERVAL_SECONDS: "604800",
+    // A week, as in production. DEMO_PAY_IN_4_INTERVAL_SECONDS shortens it (the local chain allows 60 s) so a
+    // recording can show an instalment fall due, fail and be collected without moving the chain's clock.
+    PAY_IN_4_INTERVAL_SECONDS: process.env.DEMO_PAY_IN_4_INTERVAL_SECONDS || "604800",
     CRON_SECRET: secrets.cron,
     CRE_UNDERWRITING_TRIGGER_URL: `http://127.0.0.1:${PORTS.trigger}/trigger`,
     CRE_TRIGGER_MIN_INTERVAL_MS: "2000",
