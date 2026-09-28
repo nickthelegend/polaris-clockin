@@ -1,0 +1,281 @@
+{
+  "at": "2026-09-28T01:37:42.913Z",
+  "guardianPrice": {
+    "price": "mainnet",
+    "why": "Chainlink AUSD / USD on Monad mainnet via https://rpc.monad.xyz",
+    "status": "F:\\Projects\\polaris\\.claude\\worktrees\\cl-integration\\.demo\\guardian.json"
+  },
+  "results": [
+    {
+      "name": "a buyer account (the dev signer standing in for Face ID)",
+      "ok": true,
+      "detail": "0xCf7F5F324fD074C1b530C35bF9Fb2Bcd755A9B20"
+    },
+    {
+      "name": "FX: /api/fx reads Chainlink's USD / ARS feed",
+      "ok": true,
+      "detail": "1612.4065 ARS per USD, USD / ARS on ethereum 0xBb65fa58BDb7d33e4a3D1A40a7A9BD99E746367b, round 18446744073709551862"
+    },
+    {
+      "name": "FX: the Send form shows the amount in pesos at the Chainlink rate",
+      "ok": true,
+      "detail": "About ≈ ARS 161.241 · Chainlink rate, 4 h ago · indicative"
+    },
+    {
+      "name": "Underwriting: Raise your limit ran the CRE underwriting workflow and opened a line on chain",
+      "ok": true,
+      "detail": "score 697, line $1000.00, report tx 0x10d38ddb663b14507d34a5af1e5896202c879155c0998b0329e10587f5f12f11"
+    },
+    {
+      "name": "Pay in 4: a plan opened on chain through PolarisCheckout.openPlan",
+      "ok": true,
+      "detail": "plan 1, tx 0xa40b39a6936c5c8bc9161e00cb25d988773b210cd71d3edf328c2da0f645a00d"
+    },
+    {
+      "name": "The buyer revoked the loan engine's approval (their own transaction)",
+      "ok": true,
+      "detail": "0x4b048bc28378340663ef4b6666e65c58d9baa8d828ddca812f9b340f136c9ca9"
+    },
+    {
+      "name": "Credit: the line says Verified by Chainlink CRE, with the report's transaction",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Guardian: its next scheduled run paused Pay in 4 on chain (depeg, threshold raised for demo)",
+      "ok": true,
+      "detail": "Chainlink AUSD/USD 0.99983039 < $1.001; attestation round 2, tx 0x9dfcb21353bf0486e00a977c64b6b702517d398ba074f8b3e08d88af929376af"
+    },
+    {
+      "name": "On chain: PolarisCheckout.creditPaused() is (true, depeg), so openPlan refuses new plans",
+      "ok": true,
+      "detail": "creditPaused() = (true, 1)"
+    },
+    {
+      "name": "Shop: Pay in 4 says it is paused by the risk guard; Pay now is offered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Pay now still works while Pay in 4 is paused",
+      "ok": true,
+      "detail": "/orders/hc_jzzufhoje77g2f4venf2?via=polaris"
+    },
+    {
+      "name": "Checkout: on a session that offers Pay in 4, the app shows it paused with the guard's words, and the API refuses it",
+      "ok": true,
+      "detail": "payIn4.available=false, reason \"Pay in 4 is paused by our risk guard; pay now works as usual.\""
+    },
+    {
+      "name": "Guardian: after the owner restored the threshold, the next run resumed Pay in 4",
+      "ok": true,
+      "detail": "round 3, tx 0x40fbf0da383b8e433a6faa0d62f92d1d8b33896650e042df54b0ac2f836d098c"
+    },
+    {
+      "name": "Shop: Pay in 4 is offered again",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Collections: the cron's run could not take payment 1 (lost approval); the plan asks the buyer to sign again",
+      "ok": true,
+      "detail": "lastFailure {\"reason\":\"allowance_lost\",\"at\":\"2026-09-28T01:37:42.000Z\",\"nextAttemptAt\":\"2026-09-28T07:37:42.000Z\"}"
+    },
+    {
+      "name": "Instant retry: Reauthorized fired the collections workflow's log trigger, and payment 1 was collected",
+      "ok": true,
+      "detail": "2 s after signing; reauthorize 0xd75c78f2eeca8853a0329f6e26dc7ab5a84d4360e05bfee3bda63c868f132a5a, collection 0xaeec70eeed3da08cda71e96ca872ccfcba535c41466a4d64dbbb074d7f900619"
+    },
+    {
+      "name": "The collections log shows the log-triggered run that collected",
+      "ok": true,
+      "detail": "2026-09-28T01:37:31.463Z [cre collections] log written: 1 checked, 1 collected, 0 skipped collect #1 tx 0xaeec70eeed3da08cda71e96ca872ccfcba535c41466a4d64dbbb074d7f900619"
+    },
+    {
+      "name": "Dashboard: the Chainlink page lists the collections run that followed the re-sign as an instant retry",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "buyer": "0xCf7F5F324fD074C1b530C35bF9Fb2Bcd755A9B20",
+    "fx": {
+      "currency": "ARS",
+      "status": "ok",
+      "rate": {
+        "currency": "ARS",
+        "perUsd": 1612.4065,
+        "updatedAt": 1790543663,
+        "source": {
+          "chain": "ethereum",
+          "chainId": 1,
+          "address": "0xBb65fa58BDb7d33e4a3D1A40a7A9BD99E746367b",
+          "pair": "USD / ARS",
+          "decimals": 8,
+          "roundId": "18446744073709551862"
+        }
+      }
+    },
+    "underwriting": {
+      "decision": "applied",
+      "score": 697,
+      "limit": "1000.00",
+      "report": {
+        "by": "Chainlink CRE",
+        "workflow": "polaris-underwrite",
+        "txHash": "0x10d38ddb663b14507d34a5af1e5896202c879155c0998b0329e10587f5f12f11",
+        "at": "2026-09-28T01:36:16.000Z",
+        "blockNumber": 49,
+        "explorerUrl": null
+      }
+    },
+    "plan": {
+      "id": "1",
+      "openedTxHash": "0xa40b39a6936c5c8bc9161e00cb25d988773b210cd71d3edf328c2da0f645a00d",
+      "intervalSeconds": 60
+    },
+    "loseApproval": "0x4b048bc28378340663ef4b6666e65c58d9baa8d828ddca812f9b340f136c9ca9",
+    "guardianPause": {
+      "log": [
+        "[chainlink] THRESHOLD RAISED FOR DEMO: the owner set the depeg threshold to $1.0010 (was $0.9950) in tx 0xbd4664a8e6ef70f5f855ea27776827408ae15fdcd4a2b0ed12688312e01b782b",
+        "[chainlink] the guardian's last read: Chainlink AUSD / USD 0.99983039 (round 18446744073709559173); the price is not touched",
+        "[chainlink] waiting for the guardian's next scheduled run…",
+        "[chainlink] the guardian attested round 2: Pay in 4 paused (depeg)"
+      ],
+      "guard": {
+        "state": "paused",
+        "reasons": [
+          "depeg"
+        ],
+        "round": 2
+      },
+      "run": {
+        "status": "written",
+        "why": "verdict",
+        "transition": "paused",
+        "verdict": {
+          "creditPaused": true,
+          "reasons": 1,
+          "reasonNames": [
+            "depeg"
+          ]
+        },
+        "price": {
+          "kind": "chainlink",
+          "chain": "monad-mainnet",
+          "feed": "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13",
+          "description": "AUSD / USD",
+          "roundId": "18446744073709559173",
+          "answer": "0.99983039",
+          "updatedAt": 1790558267,
+          "ageSeconds": 1133
+        },
+        "pool": {
+          "chain": "monad-testnet",
+          "block": "54",
+          "observedAt": 1790559400,
+          "freeCash": "99651000000",
+          "totalOwed": "349000265",
+          "badDebt": "0",
+          "totalOriginated": "349000265"
+        },
+        "thresholds": {
+          "minPrice": "1.001",
+          "minFreeCash": "1000000000",
+          "maxBadDebtBps": 500,
+          "maxPriceAge": 7200
+        },
+        "before": {
+          "paused": false,
+          "reasons": 0,
+          "attestedReasons": 0,
+          "observedAt": 1790559269,
+          "stale": false,
+          "override": "none",
+          "maxAttestationAge": 3600
+        },
+        "round": "2",
+        "refusal": null,
+        "txHash": "0x9dfcb21353bf0486e00a977c64b6b702517d398ba074f8b3e08d88af929376af",
+        "gasLimit": "180920",
+        "note": null
+      }
+    },
+    "gatePaused": {
+      "paused": true,
+      "reasons": 1
+    },
+    "guardianResume": {
+      "log": [
+        "[chainlink] the owner restored the depeg threshold to $0.9950 in tx 0x8ad8ca6ba0e411731f9d44cf54c79abb1ecfc87b68e3500dd05d4e1cdc346f1a; waiting for the guardian's next scheduled run…",
+        "[chainlink] the guardian attested round 3: healthy, Pay in 4 resumed"
+      ],
+      "guard": {
+        "state": "open",
+        "round": 3
+      },
+      "run": {
+        "status": "written",
+        "why": "verdict",
+        "transition": "resumed",
+        "verdict": {
+          "creditPaused": false,
+          "reasons": 0,
+          "reasonNames": []
+        },
+        "price": {
+          "kind": "chainlink",
+          "chain": "monad-mainnet",
+          "feed": "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13",
+          "description": "AUSD / USD",
+          "roundId": "18446744073709559173",
+          "answer": "0.99983039",
+          "updatedAt": 1790558267,
+          "ageSeconds": 1195
+        },
+        "pool": {
+          "chain": "monad-testnet",
+          "block": "62",
+          "observedAt": 1790559462,
+          "freeCash": "99651000000",
+          "totalOwed": "349000265",
+          "badDebt": "0",
+          "totalOriginated": "349000265"
+        },
+        "thresholds": {
+          "minPrice": "0.995",
+          "minFreeCash": "1000000000",
+          "maxBadDebtBps": 500,
+          "maxPriceAge": 7200
+        },
+        "before": {
+          "paused": true,
+          "reasons": 1,
+          "attestedReasons": 1,
+          "observedAt": 1790559400,
+          "stale": false,
+          "override": "none",
+          "maxAttestationAge": 3600
+        },
+        "round": "3",
+        "refusal": null,
+        "txHash": "0x40fbf0da383b8e433a6faa0d62f92d1d8b33896650e042df54b0ac2f836d098c",
+        "gasLimit": "150000",
+        "note": null
+      }
+    },
+    "instantRetry": {
+      "reauthorizeTx": "0xd75c78f2eeca8853a0329f6e26dc7ab5a84d4360e05bfee3bda63c868f132a5a",
+      "collectionTx": "0xaeec70eeed3da08cda71e96ca872ccfcba535c41466a4d64dbbb074d7f900619",
+      "seconds": 2,
+      "signedAt": "2026-09-28T01:38:12.000Z",
+      "collectedAt": "2026-09-28T01:38:14.000Z"
+    },
+    "collectionsLog": [
+      "2026-09-28T01:33:54.875Z [cre collections] log trigger on PolarisCheckout 0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6 Reauthorized (0xd76c9fffb0eee17b94b2c5c485c1dcadfb48e50f9089e879e50c163b8ce02d73)",
+      "2026-09-28T01:37:00.557Z [cre collections] cron written: 2 checked, 0 collected, 1 skipped collect #1 tx 0x0716a5ce4e8ec3f1840632c96ec760983aa49c17e9d6ec091c7430300c049f15",
+      "2026-09-28T01:37:30.882Z [cre collections] log trigger: Reauthorized from 0xcf7f5f324fd074c1b530c35bf9fb2bcd755a9b20 in 0xd75c78f2eeca8853a0329f6e26dc7ab5a84d4360e05bfee3bda63c868f132a5a",
+      "2026-09-28T01:37:31.463Z [cre collections] log written: 1 checked, 1 collected, 0 skipped collect #1 tx 0xaeec70eeed3da08cda71e96ca872ccfcba535c41466a4d64dbbb074d7f900619"
+    ]
+  }
+}
