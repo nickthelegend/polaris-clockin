@@ -110,19 +110,31 @@ function sessionFor(id: string, fresh: boolean): Promise<string> {
   return pending;
 }
 
+/** No such link or session, or one that is used up, turned off or expired: the page says the link goes nowhere. */
+const gone = (error: unknown) => [404, 410].includes((error as { status?: number }).status ?? 0);
+
 async function readSession(sessionId: string): Promise<PaymentLink | null> {
   try {
     return toPaymentLink(await api<PublicSession>(`/api/public/sessions/${encodeURIComponent(sessionId)}`));
   } catch (error) {
-    if ((error as { status?: number }).status === 404) return null;
+    if (gone(error)) return null;
+    throw error;
+  }
+}
+
+async function openLinkSession(id: string, fresh: boolean): Promise<PaymentLink | null> {
+  try {
+    return await readSession(await sessionFor(id, fresh));
+  } catch (error) {
+    if (gone(error)) return null;
     throw error;
   }
 }
 
 export async function getRemotePaymentLink(id: string): Promise<PaymentLink | null> {
   if (!id.startsWith("pl_")) return readSession(id);
-  const link = await readSession(await sessionFor(id, false));
+  const link = await openLinkSession(id, false);
   // A reusable link whose session someone already paid opens a new one for this buyer.
-  if (link && link.status !== "open" && opened) return readSession(await sessionFor(id, true));
+  if (link && link.status !== "open" && opened) return openLinkSession(id, true);
   return link;
 }
