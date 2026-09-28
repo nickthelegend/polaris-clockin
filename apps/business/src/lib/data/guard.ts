@@ -1,12 +1,16 @@
 import type { IsoDate } from "./types";
 
 /**
- * The credit guard: the Chainlink CRE `polaris-guardian` workflow's verdict
- * on the credit pool, as GuardianReceiver keeps it on chain and
- * PolarisCheckout.openPlan applies it. When it says credit is paused, new Pay
- * in 4 plans are refused; Pay now, Send and Subscribe never ask it. A guard
- * that stopped reporting (older than its `maxAttestationAge`) fails open, so
- * Pay in 4 keeps working and the screens say when it last checked.
+ * The credit guard: GuardianReceiver's answer, as PolarisCheckout.openPlan
+ * applies it. When it says credit is paused, new Pay in 4 plans are refused;
+ * Pay now, Send and Subscribe never ask it. Two halves:
+ *
+ * - the price (depeg, stale price): the Chainlink CRE `polaris-guardian`
+ *   workflow's attestation of Chainlink AUSD/USD on Monad mainnet. An
+ *   attestation older than the guard's `maxAttestationAge` fails open, so
+ *   Pay in 4 keeps working and the screens say when it last checked;
+ * - the pool (low cash, bad debt): read by GuardianReceiver from the credit
+ *   pool itself on every call, so it never goes stale and no report sets it.
  *
  * These are the shapes the API serves (`GET /api/public/credit-guard`, the
  * dashboard's `GET /api/chainlink`) and the pure helpers that read them, safe
@@ -32,7 +36,7 @@ export function reasonsFromMask(mask: number): GuardReason[] {
 
 /** Why credit is paused, in the merchant's words. */
 export const GUARD_REASON_TEXT: Readonly<Record<GuardReason, string>> = {
-  depeg: "AUSD/USD fell below its floor",
+  depeg: "AUSD/USD left its band",
   low_cash: "The credit pool's free cash fell below its floor",
   bad_debt: "Bad debt passed its share of everything lent",
   stale_price: "The AUSD/USD price was too old to trust",
@@ -43,11 +47,11 @@ export const GUARD_REASON_TEXT: Readonly<Record<GuardReason, string>> = {
 export const GUARD_PAUSED_MESSAGE = "Pay in 4 is paused by our risk guard; pay now works as usual.";
 
 /**
- * - `open`: a fresh attestation says the pool is healthy (or the owner forced credit open).
+ * - `open`: a fresh attestation says the peg is healthy and the pool passes (or the owner forced credit open).
  * - `paused`: new Pay in 4 plans are refused now.
- * - `stale`: the latest attestation is older than the guard's `maxAttestationAge`: credit fails open.
- * - `never`: no attestation yet: credit fails open.
- * - `unconfigured`: no guardian is deployed, or PolarisCheckout doesn't ask it.
+ * - `stale`: the latest attestation is older than the guard's `maxAttestationAge`: its price checks fail open (the pool's still apply).
+ * - `never`: no attestation yet: the price checks fail open (the pool's still apply).
+ * - `unconfigured`: no guardian is deployed, or PolarisCheckout asks none.
  * - `unavailable`: the chain couldn't be read just now (PolarisCheckout fails open on the same).
  */
 export type CreditGuardState = "open" | "paused" | "stale" | "never" | "unconfigured" | "unavailable";
@@ -58,11 +62,17 @@ export type GuardOverride = "none" | "resume" | "pause";
 export type GuardCheck = {
   key: "price" | "cash" | "bad_debt" | "price_age";
   label: string;
-  /** The attested figure, in words ("$0.9998", "$48,210.00", "0.00%", "12 min"). */
+  /** The figure, in words ("$0.9998", "$48,210.00", "0.00% of lent", "12 min"). */
   value: string;
-  /** Its limit, in words ("at least $0.995"). */
+  /** Its limit, in words ("between $0.995 and $1.005"). */
   limit: string;
   ok: boolean;
+  /**
+   * Where the figure comes from: `attestation`, the CRE workflow's latest
+   * report (Chainlink AUSD/USD on Monad mainnet), or `pool`, the credit pool
+   * itself, which GuardianReceiver reads on every call.
+   */
+  source: "attestation" | "pool";
 };
 
 export type CreditGuard = {
@@ -79,20 +89,42 @@ export type CreditGuard = {
   /** Past this age an attestation is stale and credit fails open. */
   maxAgeSeconds: number | null;
   override: GuardOverride;
+  /** When a forced resume ends by itself (GuardianReceiver caps it at a day); null otherwise. */
+  overrideUntil: IsoDate | null;
   /** GuardianReceiver, when one is deployed. */
   guardian: `0x${string}` | null;
+  /**
+   * PolarisCheckout asks another guardian than the one this API is configured
+   * with (a redeploy the API's env hasn't caught up with). `paused` and
+   * `reasons` are still the checkout's own answer; the rest is unknown.
+   */
+  mismatch: { checkoutGuardian: `0x${string}`; configuredGuardian: `0x${string}` } | null;
   /** Rounds written so far (its feed's latest round id). */
   round: number | null;
   /** When the API read the chain. */
   readAt: IsoDate;
-  /** The latest attestation's own verdict (an owner override or staleness is not in it). */
+  /** The latest attestation's own verdict (an owner override, staleness and today's pool are not in it). */
   attested: { paused: boolean; reasons: GuardReason[] } | null;
+  /** Which of the reasons now come from the pool itself, and which from the latest attestation's price. */
+  sources: { pool: GuardReason[]; price: GuardReason[] } | null;
   thresholds: {
-    /** AUSD/USD floor, dollars ("0.995"). */
+    /** AUSD/USD floor and ceiling, dollars ("0.995", "1.005"). */
     minPrice: string;
+    maxPrice: string;
     minFreeCashUnits: string;
     maxBadDebtBps: number;
+    /** The bad-debt share applies only once this much has been lent. */
+    minOriginatedUnits: string;
     maxPriceAgeSeconds: number;
+  } | null;
+  /** The credit pool now, as GuardianReceiver reads it (PolarisLoanEngine.poolState). */
+  pool: {
+    freeCashUnits: string;
+    totalOwedUnits: string;
+    badDebtUnits: string;
+    totalOriginatedUnits: string;
+    /** Bad debt the owner acknowledged: only bad debt beyond it counts. */
+    badDebtAcknowledgedUnits: string;
   } | null;
   attestation: {
     /** The Chainlink AUSD/USD round the workflow cited, and its answer in dollars. */
@@ -181,36 +213,68 @@ function duration(seconds: number): string {
   return `${hours} h`;
 }
 
+/** GuardianReceiver.Thresholds, as the chain returns them. */
+export type GuardThresholds = {
+  minPrice: bigint;
+  maxPrice: bigint;
+  minFreeCash: bigint;
+  maxBadDebtBps: number;
+  minOriginated: bigint;
+  maxPriceAge: number;
+};
+
 /**
- * The guardian's four checks for an attestation under `thresholds`: the same
- * formula as GuardianReceiver.evaluate (and lib/cre.js `guardianReasons`),
- * with the figures in words. `ok: false` on exactly the reasons evaluate()
- * would set.
+ * The guardian's four checks, with the figures in words: the price and its
+ * age from the latest attestation `a` (none when there is no attestation),
+ * the free cash and the bad debt from the pool now, under `t` and the bad
+ * debt the owner acknowledged. The same formula as GuardianReceiver
+ * (evaluate, and isCreditPaused's live pool read): `ok: false` on exactly
+ * the reasons it would set.
  */
 export function guardChecks(
-  a: { price: bigint; priceUpdatedAt: bigint; freeCash: bigint; badDebt: bigint; totalOriginated: bigint; observedAt: bigint },
-  t: { minPrice: bigint; minFreeCash: bigint; maxBadDebtBps: number; maxPriceAge: number },
+  a: { price: bigint; priceUpdatedAt: bigint; observedAt: bigint } | null,
+  pool: { freeCash: bigint; badDebt: bigint; totalOriginated: bigint },
+  t: GuardThresholds,
+  badDebtAcknowledged = 0n,
 ): GuardCheck[] {
-  const badDebtLimit = (a.totalOriginated * BigInt(t.maxBadDebtBps)) / 10_000n;
-  const priceAge = a.observedAt > a.priceUpdatedAt ? a.observedAt - a.priceUpdatedAt : 0n;
-  const priceStale = a.priceUpdatedAt === 0n || priceAge > BigInt(t.maxPriceAge);
-  const share = a.totalOriginated === 0n ? 0 : Number((a.badDebt * 1_000_000n) / a.totalOriginated) / 10_000;
-  return [
-    { key: "price", label: "AUSD/USD", value: `$${fixed(a.price, 8, 4)}`, limit: `at least $${fixed(t.minPrice, 8, 3)}`, ok: a.price >= t.minPrice },
-    { key: "cash", label: "Free pool cash", value: unitsToUsd(a.freeCash), limit: `at least ${unitsToUsd(t.minFreeCash)}`, ok: a.freeCash >= t.minFreeCash },
+  const counted = pool.badDebt > badDebtAcknowledged ? pool.badDebt - badDebtAcknowledged : 0n;
+  const applies = pool.totalOriginated >= t.minOriginated;
+  const badDebtLimit = (pool.totalOriginated * BigInt(t.maxBadDebtBps)) / 10_000n;
+  const share = pool.totalOriginated === 0n ? 0 : Number((counted * 1_000_000n) / pool.totalOriginated) / 10_000;
+  const pct = (t.maxBadDebtBps / 100).toFixed(2).replace(/\.00$/, "");
+  const checks: GuardCheck[] = [];
+  if (a) {
+    checks.push({
+      key: "price",
+      label: "AUSD/USD",
+      value: `$${fixed(a.price, 8, 4)}`,
+      limit: `between $${fixed(t.minPrice, 8, 3)} and $${fixed(t.maxPrice, 8, 3)}`,
+      ok: a.price >= t.minPrice && a.price <= t.maxPrice,
+      source: "attestation",
+    });
+  }
+  checks.push(
+    { key: "cash", label: "Free pool cash", value: unitsToUsd(pool.freeCash), limit: `at least ${unitsToUsd(t.minFreeCash)}`, ok: pool.freeCash >= t.minFreeCash, source: "pool" },
     {
       key: "bad_debt",
       label: "Bad debt",
-      value: `${share.toFixed(2)}% of lent`,
-      limit: `at most ${(t.maxBadDebtBps / 100).toFixed(2).replace(/\.00$/, "")}%`,
-      ok: a.badDebt <= badDebtLimit,
+      value: `${share.toFixed(2)}% of lent${badDebtAcknowledged > 0n ? ` (after ${unitsToUsd(badDebtAcknowledged)} acknowledged)` : ""}`,
+      limit: applies ? `at most ${pct}%` : `at most ${pct}%, from ${unitsToUsd(t.minOriginated)} lent`,
+      ok: !applies || counted <= badDebtLimit,
+      source: "pool",
     },
-    {
+  );
+  if (a) {
+    const priceAge = a.observedAt > a.priceUpdatedAt ? a.observedAt - a.priceUpdatedAt : 0n;
+    const priceStale = a.priceUpdatedAt === 0n || priceAge > BigInt(t.maxPriceAge);
+    checks.push({
       key: "price_age",
       label: "Price age",
       value: a.priceUpdatedAt === 0n ? "no price" : duration(Number(priceAge)),
       limit: `at most ${duration(t.maxPriceAge)}`,
       ok: !priceStale,
-    },
-  ];
+      source: "attestation",
+    });
+  }
+  return checks;
 }

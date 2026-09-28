@@ -20,6 +20,7 @@ import { placeholderChainlink } from "@/lib/data/chainlink-sample";
 import { describeCron, nextCronFire } from "@/lib/data/cron";
 import { GUARD_PAUSED_MESSAGE, guardChecks, lastCheckedLine, reasonsFromMask } from "@/lib/data/guard";
 import { describeGuard, resetCreditGuardForTests, type GuardReads } from "@/server/cre/guardian";
+import { CHAINLINK_FORWARDERS, deliveryOf, PROVENANCE_LABEL, resetProvenanceForTests } from "@/server/cre/provenance";
 import { getDb } from "@/server/db";
 import { syncChain } from "@/server/ingest/sync";
 import { TYPES } from "@/server/relayer/typed-data";
@@ -42,7 +43,10 @@ let merchant: Merchant;
 const buyer = privateKeyToAccount(generatePrivateKey());
 
 const NOW = BigInt(Math.floor(Date.now() / 1000));
-const THRESHOLDS = { minPrice: 99_500_000n, minFreeCash: 1_000_000_000n, maxBadDebtBps: 500, maxPriceAge: 7200 };
+const THRESHOLDS = { minPrice: 99_500_000n, maxPrice: 100_500_000n, minFreeCash: 1_000_000_000n, maxBadDebtBps: 500, minOriginated: 10_000_000_000n, maxPriceAge: 7200 };
+/** The pool now, as GuardianReceiver reads it: $20,000 lent, so the bad-debt share applies. */
+const POOL = { freeCash: 48_210_000_000n, totalOwed: 1_200_000_000n, badDebt: 0n, totalOriginated: 20_000_000_000n };
+const OTHER_GUARDIAN = "0x00000000000000000000000000000000000060a2";
 const HEALTHY = {
   priceRoundId: 18446744073709552000n,
   price: 99_980_000n,
@@ -58,8 +62,23 @@ const HEALTHY = {
 
 type GuardOver = {
   gate?: [boolean, number];
-  status?: Partial<{ paused: boolean; reasons: number; attestedPaused: boolean; attestedReasons: number; observedAt: bigint; stale: boolean; overrideMode: number; maxAttestationAge: number; round: bigint }>;
+  status?: Partial<{
+    paused: boolean;
+    reasons: number;
+    attestedPaused: boolean;
+    attestedReasons: number;
+    observedAt: bigint;
+    stale: boolean;
+    overrideMode: number;
+    maxAttestationAge: number;
+    round: bigint;
+    overrideUntil: bigint;
+    poolReasons: number;
+    priceReasons: number;
+    badDebtAcknowledged: bigint;
+  }>;
   latest?: Partial<typeof HEALTHY>;
+  pool?: Partial<typeof POOL>;
   checkoutGuardian?: string;
 };
 
@@ -76,13 +95,17 @@ function guardian(over: GuardOver = {}) {
     overrideMode: 0,
     maxAttestationAge: 3600,
     round: 3n,
+    overrideUntil: 0n,
+    poolReasons: 0,
+    priceReasons: latest.reasons & 9,
+    badDebtAcknowledged: 0n,
     ...over.status,
   };
   env.chain.timestamp = NOW;
   env.chain.reads.creditGuardian = () => over.checkoutGuardian ?? ADDR.guardian;
   env.chain.reads.creditPaused = () => over.gate ?? [status.paused, status.reasons];
   env.chain.reads.creditStatus = () => status;
-  env.chain.reads.thresholds = () => THRESHOLDS;
+  env.chain.reads.currentInputs = () => [{ ...POOL, ...over.pool }, THRESHOLDS, status.badDebtAcknowledged];
   env.chain.reads.latestAttestation = () => latest;
   env.chain.reads.latestRoundData = () => [3n, 4_820_000_000_000n, latest.observedAt, latest.observedAt, 3n];
   env.chain.reads.decimals = () => 8;
@@ -109,30 +132,42 @@ describe("the credit guard", () => {
     expect(reasonsFromMask(2 | 8 | 0x40)).toEqual(["low_cash", "stale_price"]);
   });
 
-  it("checks an attestation with GuardianReceiver.evaluate's formula, at the edges", () => {
-    const failing = (a: Partial<typeof HEALTHY>) =>
-      guardChecks({ ...HEALTHY, ...a }, THRESHOLDS)
+  it("checks with GuardianReceiver's formula, at the edges: the price from the attestation, the cash and bad debt from the pool now", () => {
+    const failing = (a: Partial<typeof HEALTHY>, pool: Partial<typeof POOL> = {}, acknowledged = 0n) =>
+      guardChecks({ ...HEALTHY, ...a }, { ...POOL, ...pool }, THRESHOLDS, acknowledged)
         .filter((c) => !c.ok)
         .map((c) => c.key);
     expect(failing({})).toEqual([]);
-    // price < minPrice: $0.995 exactly is not a depeg, one unit less is.
+    // price < minPrice or > maxPrice: $0.995 and $1.005 exactly are not a depeg, one unit past either is.
     expect(failing({ price: 99_500_000n })).toEqual([]);
     expect(failing({ price: 99_499_999n })).toEqual(["price"]);
-    // freeCash < minFreeCash.
-    expect(failing({ freeCash: 1_000_000_000n })).toEqual([]);
-    expect(failing({ freeCash: 999_999_999n })).toEqual(["cash"]);
-    // badDebt > floor(totalOriginated * 500 / 10000): 5% of $5,000 is $250.
-    expect(failing({ badDebt: 250_000_000n })).toEqual([]);
-    expect(failing({ badDebt: 250_000_001n })).toEqual(["bad_debt"]);
+    expect(failing({ price: 100_500_000n })).toEqual([]);
+    expect(failing({ price: 100_500_001n })).toEqual(["price"]);
+    // freeCash < minFreeCash, in the pool now: the attestation's figure no longer decides.
+    expect(failing({}, { freeCash: 1_000_000_000n })).toEqual([]);
+    expect(failing({}, { freeCash: 999_999_999n })).toEqual(["cash"]);
+    expect(failing({ freeCash: 0n })).toEqual([]);
+    // badDebt > floor(totalOriginated * 500 / 10000): 5% of $20,000 is $1,000...
+    expect(failing({}, { badDebt: 1_000_000_000n })).toEqual([]);
+    expect(failing({}, { badDebt: 1_000_000_001n })).toEqual(["bad_debt"]);
+    // ...only once $10,000 is lent, and only beyond what the owner acknowledged.
+    expect(failing({}, { badDebt: 5_000_000_000n, totalOriginated: 9_999_999_999n })).toEqual([]);
+    expect(failing({}, { badDebt: 1_500_000_000n }, 500_000_000n)).toEqual([]);
+    expect(failing({}, { badDebt: 1_500_000_001n }, 500_000_000n)).toEqual(["bad_debt"]);
     // priceUpdatedAt == 0, or observedAt - priceUpdatedAt > maxPriceAge.
     expect(failing({ priceUpdatedAt: 0n })).toEqual(["price_age"]);
     expect(failing({ priceUpdatedAt: HEALTHY.observedAt - 7200n })).toEqual([]);
     expect(failing({ priceUpdatedAt: HEALTHY.observedAt - 7201n })).toEqual(["price_age"]);
     // A price stamped after the observation is not stale (the contract's observedAt > priceUpdatedAt guard).
     expect(failing({ priceUpdatedAt: HEALTHY.observedAt + 30n })).toEqual([]);
-    const checks = guardChecks({ ...HEALTHY, price: 99_000_000n }, THRESHOLDS);
-    expect(checks[0]).toMatchObject({ label: "AUSD/USD", value: "$0.9900", limit: "at least $0.995", ok: false });
-    expect(checks[1]).toMatchObject({ value: "$48,210.00", limit: "at least $1,000.00", ok: true });
+    const checks = guardChecks({ ...HEALTHY, price: 99_000_000n }, POOL, THRESHOLDS);
+    expect(checks[0]).toMatchObject({ label: "AUSD/USD", value: "$0.9900", limit: "between $0.995 and $1.005", ok: false, source: "attestation" });
+    expect(checks[1]).toMatchObject({ value: "$48,210.00", limit: "at least $1,000.00", ok: true, source: "pool" });
+    expect(checks.map((c) => c.source)).toEqual(["attestation", "pool", "pool", "attestation"]);
+    // No attestation yet: only the pool's checks, which apply all the same.
+    expect(guardChecks(null, POOL, THRESHOLDS).map((c) => c.key)).toEqual(["cash", "bad_debt"]);
+    const young = guardChecks(null, { ...POOL, totalOriginated: 5_000_000_000n, badDebt: 5_000_000_000n }, THRESHOLDS);
+    expect(young[1]).toMatchObject({ ok: true, limit: "at most 5%, from $10,000.00 lent" });
   });
 
   it("describes each state from one read, failing open like PolarisCheckout", () => {
@@ -140,8 +175,24 @@ describe("the credit guard", () => {
     const reads = (over: Partial<GuardReads> = {}): GuardReads => ({
       checkoutGuardian: ADDR.guardian,
       gate: { paused: false, reasons: 0 },
-      status: { paused: false, reasons: 0, attestedPaused: false, attestedReasons: 0, observedAt: NOW - 120n, stale: false, overrideMode: 0, maxAttestationAge: 3600, round: 3n },
+      status: {
+        paused: false,
+        reasons: 0,
+        attestedPaused: false,
+        attestedReasons: 0,
+        observedAt: NOW - 120n,
+        stale: false,
+        overrideMode: 0,
+        maxAttestationAge: 3600,
+        round: 3n,
+        overrideUntil: 0n,
+        poolReasons: 0,
+        priceReasons: 0,
+        badDebtAcknowledged: 0n,
+      },
+      pool: POOL,
       thresholds: THRESHOLDS,
+      badDebtAcknowledged: 0n,
       latest: HEALTHY,
       round: { roundId: 3n, answer: 4_820_000_000_000n, updatedAt: NOW - 120n },
       feedDecimals: 8,
@@ -162,13 +213,28 @@ describe("the credit guard", () => {
     expect(lastCheckedLine(stale, Number(NOW) * 1000)).toBe("Last checked 1 h ago");
 
     const never = describeGuard(reads({ status: { ...reads().status, observedAt: 0n, stale: true } }), chain, at);
-    expect(never).toMatchObject({ state: "never", paused: false, checkedAt: null, attestation: null, checks: [] });
+    expect(never).toMatchObject({ state: "never", paused: false, checkedAt: null, attestation: null });
+    // No price check yet, but the pool's own checks, which GuardianReceiver reads live.
+    expect(never.checks.map((c) => c.key)).toEqual(["cash", "bad_debt"]);
+    expect(never.pool).toMatchObject({ freeCashUnits: "48210000000", totalOriginatedUnits: "20000000000", badDebtAcknowledgedUnits: "0" });
+    expect(never.thresholds).toMatchObject({ minPrice: "0.995", maxPrice: "1.005", minOriginatedUnits: "10000000000" });
+
+    // Low cash pauses from the pool alone, with no attestation at all.
+    const lowCash = describeGuard(
+      reads({ gate: { paused: true, reasons: 2 }, pool: { ...POOL, freeCash: 10n }, status: { ...reads().status, observedAt: 0n, stale: true, paused: true, reasons: 2, poolReasons: 2 } }),
+      chain,
+      at,
+    );
+    expect(lowCash).toMatchObject({ state: "paused", paused: true, reasons: ["low_cash"], sources: { pool: ["low_cash"], price: [] } });
 
     // The owner forced a pause: the gate says so whatever the attestation says.
     const forced = describeGuard(reads({ gate: { paused: true, reasons: 0x80 }, status: { ...reads().status, paused: true, reasons: 0x80, overrideMode: 2 } }), chain, at);
-    expect(forced).toMatchObject({ state: "paused", reasons: ["owner_pause"], override: "pause" });
+    expect(forced).toMatchObject({ state: "paused", reasons: ["owner_pause"], override: "pause", overrideUntil: null });
+    // A forced resume says when it ends by itself.
+    const resumed = describeGuard(reads({ status: { ...reads().status, overrideMode: 1, overrideUntil: NOW + 600n } }), chain, at);
+    expect(resumed).toMatchObject({ state: "open", override: "resume", overrideUntil: new Date(Number(NOW + 600n) * 1000).toISOString() });
 
-    // A checkout that doesn't ask this guardian, and a chain that couldn't be read.
+    // A checkout that asks no guardian, and a chain that couldn't be read.
     expect(describeGuard(reads({ checkoutGuardian: "0x0000000000000000000000000000000000000000" }), chain, at).state).toBe("unconfigured");
     expect(describeGuard(null, chain, at)).toMatchObject({ state: "unavailable", paused: false });
     expect(describeGuard(null, { contracts: { guardian: null } as never, cre: null }, at).state).toBe("unconfigured");
@@ -190,6 +256,26 @@ describe("the credit guard", () => {
     };
     resetCreditGuardForTests();
     expect(await guardNow()).toMatchObject({ state: "unavailable", paused: false });
+  });
+
+  // Security review: on a guardian mismatch (a redeploy the API's env hasn't
+  // caught up with) describeGuard returned the empty "unconfigured" guard,
+  // paused: false, even while the checkout's own creditPaused() refused Pay in 4.
+  it("a checkout asking another guardian than the API's still decides paused, and says there is a mismatch", async () => {
+    const chain = { contracts: { guardian: ADDR.guardian } as never, cre: null };
+    const at = new Date(Number(NOW) * 1000);
+    const gateOnly = (paused: boolean, reasons: number) => ({ checkoutGuardian: OTHER_GUARDIAN as `0x${string}`, gate: { paused, reasons } });
+    const paused = describeGuard(gateOnly(true, 1), chain, at);
+    expect(paused).toMatchObject({ state: "paused", paused: true, reasons: ["depeg"], message: GUARD_PAUSED_MESSAGE });
+    expect(paused.mismatch).toEqual({ checkoutGuardian: OTHER_GUARDIAN, configuredGuardian: ADDR.guardian });
+    expect(describeGuard(gateOnly(false, 0), chain, at)).toMatchObject({ paused: false, mismatch: { checkoutGuardian: OTHER_GUARDIAN } });
+
+    // Served that way to the app, the hosted checkout and shops.
+    guardian({ checkoutGuardian: OTHER_GUARDIAN, gate: [true, 1] });
+    expect(await guardNow()).toMatchObject({ state: "paused", paused: true, reasons: ["depeg"] });
+    const session = await newSession(merchant);
+    const view = (await json(await sessionGet(request("GET", `/api/public/sessions/${session.id}`), params({ id: session.id })))).body.data;
+    expect(view.payIn4).toMatchObject({ available: false, reason: GUARD_PAUSED_MESSAGE });
   });
 
   it("the hosted checkout offers Pay in 4 as paused, with the guard's words, and keeps it on when the guard is stale", async () => {
@@ -374,6 +460,8 @@ describe("the chain sync records what each CRE report did", () => {
     const credit = (await json(await creditGet(request("GET", `/api/public/credit/${buyer.address}`), params({ account: buyer.address })))).body.data;
     expect(credit.decision).toMatchObject({ status: "applied", txHash: uwTx, verified: { by: "Chainlink CRE", workflow: "polaris-underwrite", txHash: uwTx } });
     expect(credit.decision.verified.at).toBe(new Date(Number(env.chain.timestamp) * 1000).toISOString());
+    // A local chain's report is a local run, never "Verified by Chainlink CRE".
+    expect(credit.decision.verified).toMatchObject({ delivery: "local", label: "CRE workflow, local run" });
     expect(await getDb().creRuns.count({})).toBe(3);
   });
 });
@@ -411,5 +499,31 @@ describe("CRE cron schedules", () => {
     expect(new Date(nextCronFire("0 0 14 * * *", t)!).toISOString()).toBe("2026-10-01T14:00:00.000Z");
     expect(new Date(nextCronFire("0 0 9 * * *", t)!).toISOString()).toBe("2026-10-02T09:00:00.000Z");
     expect(nextCronFire("0 0 14 * * MON", t)).toBeNull();
+  });
+});
+
+/* ── Who stands behind a CRE report ─────────────────────────────────────── */
+
+describe("report provenance (the app's \"Verified by Chainlink CRE\")", () => {
+  beforeEach(() => resetProvenanceForTests());
+  const testnet = { id: 10143, rpcUrl: "https://testnet-rpc.monad.xyz" };
+  const [production] = CHAINLINK_FORWARDERS[10143]!.production;
+  const [simulation] = CHAINLINK_FORWARDERS[10143]!.simulation;
+
+  it("is verified only through Chainlink's KeystoneForwarder; the simulator's forwarder and a local chain say what they are", () => {
+    expect(deliveryOf(production!, testnet)).toBe("don");
+    expect(deliveryOf(production!.toLowerCase(), testnet)).toBe("don");
+    expect(deliveryOf(simulation!, testnet)).toBe("simulation");
+    expect(deliveryOf("0x00000000000000000000000000000000000f0a3d", testnet)).toBe("unknown");
+    expect(deliveryOf(null, testnet)).toBe("unknown");
+    // demo:local, or a node on this machine standing in for Monad testnet (even with a mock at Chainlink's address).
+    expect(deliveryOf(production!, { id: 31337, rpcUrl: "http://127.0.0.1:8545" })).toBe("local");
+    expect(deliveryOf(simulation!, { id: 10143, rpcUrl: "http://127.0.0.1:8620" })).toBe("local");
+    expect(PROVENANCE_LABEL).toEqual({
+      don: "Verified by Chainlink CRE",
+      simulation: "Chainlink CRE (simulated)",
+      local: "CRE workflow, local run",
+      unknown: "CRE workflow report",
+    });
   });
 });

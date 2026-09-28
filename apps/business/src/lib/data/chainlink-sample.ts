@@ -37,7 +37,8 @@ export function placeholderGuard(now = Date.now()): CreditGuard {
     totalOriginated: 12_480_000_000n,
     observedAt: BigInt(observed),
   };
-  const thresholds = { minPrice: 99_500_000n, minFreeCash: 1_000_000_000n, maxBadDebtBps: 500, maxPriceAge: 7200 };
+  const thresholds = { minPrice: 99_500_000n, maxPrice: 100_500_000n, minFreeCash: 1_000_000_000n, maxBadDebtBps: 500, minOriginated: 10_000_000_000n, maxPriceAge: 7200 };
+  const pool = { freeCash: 48_210_360_000n, badDebt: 0n, totalOriginated: 12_480_000_000n };
   return {
     state: "open",
     paused: false,
@@ -47,11 +48,15 @@ export function placeholderGuard(now = Date.now()): CreditGuard {
     ageSeconds: 7 * 60,
     maxAgeSeconds: 3600,
     override: "none",
+    overrideUntil: null,
     guardian: null,
+    mismatch: null,
     round: 214,
     readAt: iso(now),
     attested: { paused: false, reasons: [] },
-    thresholds: { minPrice: "0.995", minFreeCashUnits: "1000000000", maxBadDebtBps: 500, maxPriceAgeSeconds: 7200 },
+    sources: { pool: [], price: [] },
+    thresholds: { minPrice: "0.995", maxPrice: "1.005", minFreeCashUnits: "1000000000", maxBadDebtBps: 500, minOriginatedUnits: "10000000000", maxPriceAgeSeconds: 7200 },
+    pool: { freeCashUnits: "48210360000", totalOwedUnits: "5335610000", badDebtUnits: "0", totalOriginatedUnits: "12480000000", badDebtAcknowledgedUnits: "0" },
     attestation: {
       priceRoundId: "18446744073709552612",
       price: "0.9998",
@@ -62,7 +67,7 @@ export function placeholderGuard(now = Date.now()): CreditGuard {
       totalOriginatedUnits: "12480000000",
       observedAt: iso(observed * 1000),
     },
-    checks: guardChecks(attestation, thresholds),
+    checks: guardChecks(attestation, pool, thresholds),
     feed: {
       address: "0x0000000000000000000000000000000000000000",
       description: "Polaris pool health, computed by CRE",

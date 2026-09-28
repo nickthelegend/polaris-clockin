@@ -137,10 +137,10 @@ function Fact({ label, value, title }: { label: string; value: ReactNode; title?
 /* ── The risk guard ─────────────────────────────────────────────────────── */
 
 const STATE: Record<CreditGuard["state"], { title: string; tone: "lime" | "amber" | "neutral"; body: string }> = {
-  open: { title: "Pay in 4 is open", tone: "lime", body: "The latest check found the pool healthy. New plans open as usual." },
+  open: { title: "Pay in 4 is open", tone: "lime", body: "The latest check found the peg healthy, and the pool passes. New plans open as usual." },
   paused: { title: "Pay in 4 is paused", tone: "amber", body: "New Pay in 4 plans are refused on chain. Pay now and subscriptions work as usual, and plans already open keep collecting." },
-  stale: { title: "Pay in 4 is open: the guard is late", tone: "amber", body: "The last check is older than the guard allows, so it no longer blocks anything (it fails open) until the next check lands." },
-  never: { title: "Pay in 4 is open: no check yet", tone: "neutral", body: "The guardian hasn't written a report yet. Until it does, it blocks nothing." },
+  stale: { title: "Pay in 4 is open: the price check is late", tone: "amber", body: "The last price check is older than the guard allows, so the price no longer blocks anything (it fails open) until the next check lands. The pool's own checks still apply." },
+  never: { title: "Pay in 4 is open: no price check yet", tone: "neutral", body: "The guardian hasn't written a report yet. Until it does, only the pool's own checks can pause Pay in 4." },
   unconfigured: { title: "No risk guard", tone: "neutral", body: "No guardian is set on PolarisCheckout on this network, so nothing pauses Pay in 4." },
   unavailable: { title: "The guard couldn't be read", tone: "neutral", body: "The chain didn't answer just now. PolarisCheckout treats an unreadable guard as open, and so does this page." },
 };
@@ -151,10 +151,17 @@ function GuardPanel({ guard, sample }: { guard: CreditGuard; sample: boolean }) 
   const now = useNow(5_000);
   const age = guardAgeSeconds(guard, now);
   const max = guard.maxAgeSeconds;
-  const state = STATE[guard.state];
+  const state =
+    guard.mismatch && !guard.paused
+      ? { title: "Pay in 4 is open", tone: "neutral" as const, body: "PolarisCheckout asks another guardian than the one this dashboard reads, and it isn't pausing Pay in 4 now." }
+      : STATE[guard.state];
   const feed = guard.priceFeed;
   const mainnetExplorer = feed?.chainId === 143 ? `https://monadvision.com/address/${feed.address}` : null;
-  const lifted = guard.reasons.includes("bad_debt") || guard.reasons.includes("owner_pause") ? "Polaris resumes it by hand." : "It opens again on the next healthy check.";
+  const lifted = guard.reasons.includes("owner_pause")
+    ? "Polaris lifts it by hand."
+    : guard.reasons.includes("bad_debt")
+      ? "Bad debt never falls: Polaris acknowledges it by hand, and only new losses count after that."
+      : "It opens again as soon as the check passes.";
   return (
     <Panel title="Risk guard" subtitle="polaris-guardian: whether new Pay in 4 plans may open" sample={sample}>
       <div className="mt-5 flex items-start gap-3">
@@ -197,14 +204,28 @@ function GuardPanel({ guard, sample }: { guard: CreditGuard; sample: boolean }) 
 
       {guard.checks.length ? (
         <>
-          <p className="mt-6 mb-3 text-[13px] text-ui-muted">The latest attestation, against today&apos;s thresholds</p>
-          <CheckList aria-label="The guardian's checks" items={guard.checks.map((c) => ({ key: c.key, label: c.label, value: c.value, limit: c.limit, ok: c.ok }))} />
+          <p className="mt-6 mb-3 text-[13px] text-ui-muted">
+            Against today&apos;s thresholds: the price from the latest CRE attestation, the cash and bad debt from the pool itself, read on every Pay in 4
+          </p>
+          <CheckList
+            aria-label="The guardian's checks"
+            items={guard.checks.map((c) => ({ key: c.key, label: `${c.label} (${c.source === "pool" ? "pool, live" : "CRE attestation"})`, value: c.value, limit: c.limit, ok: c.ok }))}
+          />
         </>
       ) : null}
 
       {guard.override !== "none" ? (
         <p className="mt-4 text-[13px] leading-snug text-ui-warn">
-          {guard.override === "pause" ? "Polaris has forced a pause: the attestations are ignored until it is lifted." : "Polaris has forced credit open: the attestations are ignored until it is lifted."}
+          {guard.override === "pause"
+            ? "Polaris has forced a pause: the checks are ignored until it is lifted."
+            : `Polaris has forced credit open: the checks are ignored${guard.overrideUntil ? ` until ${new Date(guard.overrideUntil).toUTCString().slice(5, 22)} UTC, when it ends by itself` : " for now"}.`}
+        </p>
+      ) : null}
+
+      {guard.mismatch ? (
+        <p className="mt-4 text-[13px] leading-snug text-ui-warn">
+          PolarisCheckout asks another guardian ({guard.mismatch.checkoutGuardian}) than the one this dashboard reads ({guard.mismatch.configuredGuardian}). Pay in 4
+          follows the checkout&apos;s own answer; update the deployment record the API reads to see why.
         </p>
       ) : null}
 
@@ -256,8 +277,8 @@ function FeedPanel({ guard, sample, explorer }: { guard: CreditGuard; sample: bo
             {!sample ? <Row label="Contract" value={<TxLink hash={feed.address} href={explorer ? `${explorer}/address/${feed.address}` : null} kind="contract" />} /> : null}
           </dl>
           <p className="mt-4 text-[13px] leading-relaxed text-ui-muted">
-            Free pool cash at the attested AUSD/USD price, 0 while the attestation pauses credit. Computed by our CRE workflow; it is a Polaris
-            attestation, not a Chainlink Data Feed or Proof of Reserve.
+            The pool&apos;s free cash when the report landed (read from the pool, not the report), at the attested AUSD/USD price; 0 while the
+            verdict pauses credit. Computed by our CRE workflow; it is a Polaris attestation, not a Chainlink Data Feed or Proof of Reserve.
           </p>
           {!sample ? (
             <CodeBlock className="mt-4" aria-label="Reading the pool health feed" note="viem" samples={[{ key: "ts", label: "TypeScript", code: READ_SNIPPET(feed.address) }]} />
