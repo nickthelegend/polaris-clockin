@@ -72,5 +72,11 @@ the thresholds, the verdict) and the FX read.
 - **"Instant retry" on the dashboard** is the API's reading of the chain: a
   collection of a buyer within 15 minutes after their `Reauthorized`. The chain
   does not record which trigger fired a report; the runner's log does.
+- **ARS comes from Ethereum:** Monad has no USD / ARS feed (its FX feeds are EUR,
+  GBP, JPY, CHF and CAD), so the peso line reads Chainlink's USD / ARS on
+  Ethereum, 4 h old at the time (the line shows the age).
+- **Clocks:** the local chain's clock ran about 40 s ahead of the wall clock, so a
+  time the chain recorded (`lastFailure.at`) reads later than the runner's log line
+  for the same moment.
 - No Monad testnet transaction is here: `cre workflow simulate --broadcast` needs
   `cre login` and a testnet deployment (the root README, "What only you can do").
