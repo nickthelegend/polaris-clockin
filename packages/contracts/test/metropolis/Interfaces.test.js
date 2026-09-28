@@ -53,6 +53,7 @@ describe("Published interfaces", () => {
         PolarisPayments: payments,
         PolarisCheckout: await (await ethers.getContractFactory("PolarisCheckout")).deploy(owner.address, engine, payments, scores),
         PolarisSend: await (await ethers.getContractFactory("PolarisSend")).deploy(ausd),
+        PolarisSplit: await (await ethers.getContractFactory("PolarisSplit")).deploy(ausd),
         MerchantRegistry: await (await ethers.getContractFactory("MerchantRegistry")).deploy(owner.address),
       });
     });
@@ -66,6 +67,8 @@ describe("Published interfaces", () => {
         ["PolarisSend", "OPEN_TYPEHASH", "PolarisSend", "Open"],
         ["PolarisSend", "CLAIM_TYPEHASH", "PolarisSend", "Claim"],
         ["PolarisSend", "CANCEL_TYPEHASH", "PolarisSend", "Cancel"],
+        ["PolarisSplit", "CREATE_TYPEHASH", "PolarisSplit", "CreateSplit"],
+        ["PolarisSplit", "CLOSE_TYPEHASH", "PolarisSplit", "CloseSplit"],
         ["MerchantRegistry", "REGISTRATION_TYPEHASH", "MerchantRegistry", "Registration"],
         ["MerchantRegistry", "PAYOUT_UPDATE_TYPEHASH", "MerchantRegistry", "PayoutUpdate"],
         ["MockAUSD", "RECEIVE_WITH_AUTHORIZATION_TYPEHASH", "Stablecoin", "ReceiveWithAuthorization"],

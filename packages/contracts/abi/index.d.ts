@@ -6955,6 +6955,808 @@ export declare const polarisSendAbi: readonly [
   }
 ];
 
+/** ABI of PolarisSplit. */
+export declare const polarisSplitAbi: readonly [
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "contract IERC20";
+        readonly "name": "_stablecoin";
+        readonly "type": "address";
+      }
+    ];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "constructor";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "index";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "InvalidAmount";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "InvalidExpiry";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "InvalidShortString";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "InvalidSignature";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "NoShares";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "ReentrancyGuardReentrantCall";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "address";
+        readonly "name": "token";
+        readonly "type": "address";
+      }
+    ];
+    readonly "name": "SafeERC20FailedOperation";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "index";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "ShareAlreadyPaid";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "index";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "shareCount";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "ShareOutOfRange";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "SignatureExpired";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "SignatureWindowTooLong";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "SplitExists";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "SplitExpired";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "SplitIsClosed";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "SplitNotFound";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "string";
+        readonly "name": "str";
+        readonly "type": "string";
+      }
+    ];
+    readonly "name": "StringTooLong";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "count";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "TooManyShares";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "expected";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "received";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "UnexpectedAmount";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "ZeroAddress";
+    readonly "type": "error";
+  },
+  {
+    readonly "anonymous": false;
+    readonly "inputs": readonly [];
+    readonly "name": "EIP712DomainChanged";
+    readonly "type": "event";
+  },
+  {
+    readonly "anonymous": false;
+    readonly "inputs": readonly [
+      {
+        readonly "indexed": true;
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "indexed": true;
+        readonly "internalType": "uint256";
+        readonly "name": "index";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "indexed": true;
+        readonly "internalType": "address";
+        readonly "name": "payer";
+        readonly "type": "address";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "amount";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "paidCount";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "shareCount";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "SharePaid";
+    readonly "type": "event";
+  },
+  {
+    readonly "anonymous": false;
+    readonly "inputs": readonly [
+      {
+        readonly "indexed": true;
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "indexed": true;
+        readonly "internalType": "address";
+        readonly "name": "organiser";
+        readonly "type": "address";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "paidCount";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "shareCount";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "SplitClosed";
+    readonly "type": "event";
+  },
+  {
+    readonly "anonymous": false;
+    readonly "inputs": readonly [
+      {
+        readonly "indexed": true;
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "indexed": true;
+        readonly "internalType": "address";
+        readonly "name": "organiser";
+        readonly "type": "address";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "total";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint128[]";
+        readonly "name": "amounts";
+        readonly "type": "uint128[]";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint64";
+        readonly "name": "expiresAt";
+        readonly "type": "uint64";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "bytes32";
+        readonly "name": "memoHash";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "SplitCreated";
+    readonly "type": "event";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "CLOSE_TYPEHASH";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "CREATE_TYPEHASH";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "MAX_EXPIRY";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint64";
+        readonly "name": "";
+        readonly "type": "uint64";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "MAX_SHARES";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "MAX_SIGNATURE_WINDOW";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint64";
+        readonly "name": "";
+        readonly "type": "uint64";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "MIN_LIFETIME";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint64";
+        readonly "name": "";
+        readonly "type": "uint64";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "deadline";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "closeDigest";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "deadline";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "bytes";
+        readonly "name": "signature";
+        readonly "type": "bytes";
+      }
+    ];
+    readonly "name": "closeSplit";
+    readonly "outputs": readonly [];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "components": readonly [
+          {
+            readonly "internalType": "address";
+            readonly "name": "organiser";
+            readonly "type": "address";
+          },
+          {
+            readonly "internalType": "bytes32";
+            readonly "name": "salt";
+            readonly "type": "bytes32";
+          },
+          {
+            readonly "internalType": "uint128[]";
+            readonly "name": "amounts";
+            readonly "type": "uint128[]";
+          },
+          {
+            readonly "internalType": "bytes32";
+            readonly "name": "memoHash";
+            readonly "type": "bytes32";
+          },
+          {
+            readonly "internalType": "uint64";
+            readonly "name": "expiresAt";
+            readonly "type": "uint64";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "deadline";
+            readonly "type": "uint256";
+          }
+        ];
+        readonly "internalType": "struct PolarisSplit.Creation";
+        readonly "name": "c";
+        readonly "type": "tuple";
+      }
+    ];
+    readonly "name": "createDigest";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "components": readonly [
+          {
+            readonly "internalType": "address";
+            readonly "name": "organiser";
+            readonly "type": "address";
+          },
+          {
+            readonly "internalType": "bytes32";
+            readonly "name": "salt";
+            readonly "type": "bytes32";
+          },
+          {
+            readonly "internalType": "uint128[]";
+            readonly "name": "amounts";
+            readonly "type": "uint128[]";
+          },
+          {
+            readonly "internalType": "bytes32";
+            readonly "name": "memoHash";
+            readonly "type": "bytes32";
+          },
+          {
+            readonly "internalType": "uint64";
+            readonly "name": "expiresAt";
+            readonly "type": "uint64";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "deadline";
+            readonly "type": "uint256";
+          }
+        ];
+        readonly "internalType": "struct PolarisSplit.Creation";
+        readonly "name": "c";
+        readonly "type": "tuple";
+      },
+      {
+        readonly "internalType": "bytes";
+        readonly "name": "signature";
+        readonly "type": "bytes";
+      }
+    ];
+    readonly "name": "createSplit";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "eip712Domain";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes1";
+        readonly "name": "fields";
+        readonly "type": "bytes1";
+      },
+      {
+        readonly "internalType": "string";
+        readonly "name": "name";
+        readonly "type": "string";
+      },
+      {
+        readonly "internalType": "string";
+        readonly "name": "version";
+        readonly "type": "string";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "chainId";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "address";
+        readonly "name": "verifyingContract";
+        readonly "type": "address";
+      },
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "salt";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "uint256[]";
+        readonly "name": "extensions";
+        readonly "type": "uint256[]";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "paidBy";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "address";
+        readonly "name": "";
+        readonly "type": "address";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "index";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "address";
+        readonly "name": "payer";
+        readonly "type": "address";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "validAfter";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "validBefore";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint8";
+        readonly "name": "v";
+        readonly "type": "uint8";
+      },
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "r";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "s";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "payShare";
+    readonly "outputs": readonly [];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "index";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "shareNonce";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "pure";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "sharesOf";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint128[]";
+        readonly "name": "amounts";
+        readonly "type": "uint128[]";
+      },
+      {
+        readonly "internalType": "address[]";
+        readonly "name": "payers";
+        readonly "type": "address[]";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "address";
+        readonly "name": "organiser";
+        readonly "type": "address";
+      },
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "salt";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "splitIdOf";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "stateMutability": "pure";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "splitId";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "splitOf";
+    readonly "outputs": readonly [
+      {
+        readonly "components": readonly [
+          {
+            readonly "internalType": "address";
+            readonly "name": "organiser";
+            readonly "type": "address";
+          },
+          {
+            readonly "internalType": "uint64";
+            readonly "name": "expiresAt";
+            readonly "type": "uint64";
+          },
+          {
+            readonly "internalType": "uint8";
+            readonly "name": "shareCount";
+            readonly "type": "uint8";
+          },
+          {
+            readonly "internalType": "uint8";
+            readonly "name": "paidCount";
+            readonly "type": "uint8";
+          },
+          {
+            readonly "internalType": "bool";
+            readonly "name": "closed";
+            readonly "type": "bool";
+          },
+          {
+            readonly "internalType": "uint128";
+            readonly "name": "total";
+            readonly "type": "uint128";
+          },
+          {
+            readonly "internalType": "uint128";
+            readonly "name": "paidTotal";
+            readonly "type": "uint128";
+          },
+          {
+            readonly "internalType": "bytes32";
+            readonly "name": "memoHash";
+            readonly "type": "bytes32";
+          }
+        ];
+        readonly "internalType": "struct PolarisSplit.Split";
+        readonly "name": "";
+        readonly "type": "tuple";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "stablecoin";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "contract IERC20";
+        readonly "name": "";
+        readonly "type": "address";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  }
+];
+
 /** ABI of CollateralVault. */
 export declare const collateralVaultAbi: readonly [
   {

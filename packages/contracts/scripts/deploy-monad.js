@@ -12,7 +12,7 @@
  *
  * Order: stablecoin, ScoreManager, PolarisLoanEngine, PolarisPayments,
  * MerchantRegistry, CollateralVault, BatchSettlement, PolarisSend,
- * PolarisCheckout, (MockKeystoneForwarder, local only), CollectionsReceiver,
+ * PolarisSplit, PolarisCheckout, (MockKeystoneForwarder, local only), CollectionsReceiver,
  * UnderwritingReceiver, GuardianReceiver (with its thresholds), (MockPriceFeed
  * as MockAusdUsdFeed, local only); then roles, including the checkout's
  * credit guardian; then the demo merchant (registered by its own signature)
@@ -85,7 +85,7 @@ function deploymentFile(networkName) {
 async function roughDeploymentGas() {
   const names = [
     "ScoreManager", "PolarisLoanEngine", "PolarisPayments", "MerchantRegistry", "CollateralVault",
-    "BatchSettlement", "PolarisSend", "PolarisCheckout", "CollectionsReceiver", "UnderwritingReceiver",
+    "BatchSettlement", "PolarisSend", "PolarisSplit", "PolarisCheckout", "CollectionsReceiver", "UnderwritingReceiver",
     "GuardianReceiver",
   ];
   let gas = 0n;

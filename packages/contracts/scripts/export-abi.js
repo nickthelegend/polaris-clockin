@@ -30,6 +30,7 @@ const CONTRACTS = [
   "ScoreManager",
   "MerchantRegistry",
   "PolarisSend",
+  "PolarisSplit",
   "CollateralVault",
   "BatchSettlement",
   "CollectionsReceiver",

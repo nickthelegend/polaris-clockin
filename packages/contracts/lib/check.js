@@ -142,6 +142,14 @@ async function checkDeployment(ethers, record) {
     row("relayer: does not originate loans", !(await engine.isOriginator(relayer)));
   }
 
+  // ── split the bill (absent from a deployment that predates it) ─────────
+  if (addr("PolarisSplit")) {
+    const split = await at("PolarisSplit");
+    row("PolarisSplit: pays in the record's stablecoin", same(await split.stablecoin(), addr("Stablecoin")), await split.stablecoin());
+    const d = await split.eip712Domain();
+    row("PolarisSplit: EIP-712 domain \"PolarisSplit\" v1", d.name === "PolarisSplit" && d.version === "1", `${d.name} v${d.version}`);
+  }
+
   // ── the dollar and the demo merchant ───────────────────────────────────
   const token = await ethers.getContractAt("MockAUSD", addr("Stablecoin"));
   const kind = record.contracts.Stablecoin?.kind;

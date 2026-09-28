@@ -49,6 +49,7 @@ function rebuiltArgs() {
     CollateralVault: [owner, token],
     BatchSettlement: [owner, token],
     PolarisSend: [token],
+    PolarisSplit: [token],
     PolarisCheckout: [owner, c("PolarisLoanEngine"), c("PolarisPayments"), c("ScoreManager")],
     CollectionsReceiver: [d.cre.forwarder, c("PolarisLoanEngine"), c("PolarisPayments"), d.cre.simulationTransmitter],
     UnderwritingReceiver: [d.cre.forwarder, c("ScoreManager"), d.cre.simulationTransmitter],

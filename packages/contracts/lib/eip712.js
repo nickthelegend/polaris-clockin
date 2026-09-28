@@ -97,6 +97,22 @@ const TYPES = {
       { name: "deadline", type: "uint256" },
     ],
   },
+  // Domain: name "PolarisSplit", version "1". A friend pays a share with the
+  // stablecoin's ReceiveWithAuthorization (nonce PolarisSplit.shareNonce).
+  PolarisSplit: {
+    CreateSplit: [
+      { name: "organiser", type: "address" },
+      { name: "salt", type: "bytes32" },
+      { name: "amounts", type: "uint128[]" },
+      { name: "memoHash", type: "bytes32" },
+      { name: "expiresAt", type: "uint64" },
+      { name: "deadline", type: "uint256" },
+    ],
+    CloseSplit: [
+      { name: "splitId", type: "bytes32" },
+      { name: "deadline", type: "uint256" },
+    ],
+  },
   // Domain: name "MerchantRegistry", version "1".
   MerchantRegistry: {
     Registration: [
@@ -122,6 +138,7 @@ const DOMAIN_NAMES = {
   PolarisLoanEngine: { name: "PolarisLoanEngine", version: "1" },
   PolarisPayments: { name: "PolarisPayments", version: "1" },
   PolarisSend: { name: "PolarisSend", version: "1" },
+  PolarisSplit: { name: "PolarisSplit", version: "1" },
   MerchantRegistry: { name: "MerchantRegistry", version: "1" },
 };
 
@@ -129,7 +146,8 @@ const DOMAIN_NAMES = {
 const AUSD_DOMAIN_NAME = { name: "Agora Dollar", version: "1" };
 
 /**
- * The typehash preimage for a single-struct type (none of ours nest), e.g.
+ * The typehash preimage for a single-struct type (none of ours nest; an
+ * array of atoms, CreateSplit's `uint128[] amounts`, is not a nested struct), e.g.
  * "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)".
  */
 function typeString(primaryType, fields) {
