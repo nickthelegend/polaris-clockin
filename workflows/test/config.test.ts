@@ -1,10 +1,12 @@
 /**
  * The committed configs, and what `configure` writes into them.
  *
- * Staging and production ship without contract addresses because none are
- * deployed yet (packages/contracts/deployments/monad-testnet.json does not
- * exist): the schema refuses them with the command that fills them, and
- * nothing else in them may be wrong.
+ * Staging is filled from the Monad testnet deployment
+ * (packages/contracts/deployments/monad-testnet.json, by `configure staging`)
+ * and must say exactly what `configure` would write from that record.
+ * Production ships without contract addresses until the receivers move to the
+ * production KeystoneForwarder: the schema refuses it with the command that
+ * fills it, and nothing else in it may be wrong.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -50,8 +52,24 @@ const record = (forwarderKind: string, forwarder: string, workflowOwner: string 
   },
 });
 
+const TESTNET_RECORD = join(ROOT, "..", "packages", "contracts", "deployments", "monad-testnet.json");
+
 describe("committed configs", () => {
-  for (const target of ["staging", "production"]) {
+  test("staging is exactly what configure writes from the Monad testnet deployment, and every schema accepts it", () => {
+    const deployment = json("../packages/contracts/deployments/monad-testnet.json");
+    expect(deployment.chainId).toBe(10143);
+    const committed = { collections: json("collections/config.staging.json"), underwriting: json("underwriting/config.staging.json"), guardian: json("guardian/config.staging.json") };
+    expect(configsFor("staging", deployment, committed)).toEqual(committed);
+    expect(collectionsSchema.safeParse(committed.collections).success).toBe(true);
+    expect(underwritingSchema.safeParse(committed.underwriting).success).toBe(true);
+    expect(guardianSchema.safeParse(committed.guardian).success).toBe(true);
+    expect(committed.collections.receiver).toBe(deployment.contracts.CollectionsReceiver.address);
+    expect(committed.guardian.receiver).toBe(deployment.contracts.GuardianReceiver.address);
+    expect(committed.underwriting.stablecoins[0]).toBe(deployment.contracts.Stablecoin.address);
+    expect(fs.existsSync(TESTNET_RECORD)).toBe(true);
+  });
+
+  for (const target of ["production"]) {
     test(`${target}: only the undeployed addresses are missing, and the error says how to fill them`, () => {
       for (const [w, schema] of [
         ["collections", collectionsSchema],
@@ -87,8 +105,10 @@ describe("committed configs", () => {
     expect(yaml.match(/chain-name: monad-mainnet/g)).toHaveLength(3);
   });
 
-  test("the instant retry is on in both configs, on finalized logs", () => {
-    for (const t of ["staging", "production"]) expect(json(`collections/config.${t}.json`).retry).toEqual({ checkout: null, confidence: "FINALIZED" });
+  test("the instant retry is on in both configs, on finalized logs: staging listens to the deployed PolarisCheckout", () => {
+    const checkout = json("../packages/contracts/deployments/monad-testnet.json").contracts.PolarisCheckout.address;
+    expect(json("collections/config.staging.json").retry).toEqual({ checkout, confidence: "FINALIZED" });
+    expect(json("collections/config.production.json").retry).toEqual({ checkout: null, confidence: "FINALIZED" });
   });
 
   test("Confidential HTTP is on where the workflows are simulated, off until a deployed DON shows it serves it", () => {
