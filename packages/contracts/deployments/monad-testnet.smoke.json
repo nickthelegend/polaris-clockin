@@ -1,0 +1,156 @@
+{
+  "at": "2026-09-28T02:27:29.122Z",
+  "chainId": 10143,
+  "note": "Written by pnpm --filter @polaris/business smoke:testnet -- --run. The dollar is MockAUSD, a labelled mock for the testnet demo. The relayer is the dev adapter (RELAYER_MODE=local on testnet), standing in for the Privy relayer. The buyer's Pay in 4 line is secured by collateral it locked itself: an unsecured line needs the CRE underwriting report (requireUnderwriting is on).",
+  "server": {
+    "url": "http://localhost:3850",
+    "relayer": "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69",
+    "relayerTransactions": 5,
+    "relayerMonSpent": "0.162926742"
+  },
+  "buyer": "0xd1C7858FCAcD8440c84daef461A91BC15352d667",
+  "merchant": "0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185",
+  "payNow": {
+    "sessionId": "cs_test_H25tDYYNysMqzlotSC8BXvWQ",
+    "orderId": "smoke-now-1790562428468",
+    "txHash": "0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2",
+    "webhook": "evt_8fc27512521647a5a11bfc76027c"
+  },
+  "payIn4": {
+    "sessionId": "cs_test_UWOuuUEO8vcVofTs5sBmpOux",
+    "orderId": "smoke-plan-1790562438204",
+    "planId": "1",
+    "intervalSeconds": 60,
+    "txHash": "0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d",
+    "webhook": "evt_fdcc7a871c931fbec047c23c7264",
+    "schedule": [
+      {
+        "index": 1,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T02:28:23.000Z"
+      },
+      {
+        "index": 2,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T02:29:23.000Z"
+      },
+      {
+        "index": 3,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T02:30:23.000Z"
+      },
+      {
+        "index": 4,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T02:31:23.000Z"
+      }
+    ]
+  },
+  "reauthorize": {
+    "txHash": "0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002",
+    "reauthorizedLogIndex": 1,
+    "evidence": "pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002"
+  },
+  "steps": [
+    {
+      "what": "mint $1,000.00 of MockAUSD (the labelled mock dollar) to the test buyer",
+      "by": "deployer",
+      "txHash": "0xace09560679a97d5c3124cd907ad022dbec6f3b230930b49a2ff43ce025c7750",
+      "block": 66291252,
+      "from": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
+      "to": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+      "gasLimit": "64046",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0xace09560679a97d5c3124cd907ad022dbec6f3b230930b49a2ff43ce025c7750"
+    },
+    {
+      "what": "0.03 MON to the test buyer, for its own collateral and approval calls",
+      "by": "deployer",
+      "txHash": "0x7409f8c2be480ee1eb34c094ed43f509d4c1e5bcebce580ef40211977eb50e27",
+      "block": 66291257,
+      "from": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
+      "to": "0xd1C7858FCAcD8440c84daef461A91BC15352d667",
+      "gasLimit": "21000",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0x7409f8c2be480ee1eb34c094ed43f509d4c1e5bcebce580ef40211977eb50e27"
+    },
+    {
+      "what": "Pay now $25.00: PolarisCheckout.pay relayed",
+      "by": "relayer",
+      "txHash": "0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2",
+      "block": 66291276,
+      "from": "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "gasLimit": "453358",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2",
+      "events": [
+        "CheckoutPaid"
+      ]
+    },
+    {
+      "what": "the buyer approves CollateralVault for $202 (its own call)",
+      "by": "buyer",
+      "txHash": "0x447632f8b39a6ea1eee89888be68532a63e71b0edf6029a8c81a6f3c4c07bf3c",
+      "block": 66291285,
+      "from": "0xd1C7858FCAcD8440c84daef461A91BC15352d667",
+      "to": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+      "gasLimit": "52931",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0x447632f8b39a6ea1eee89888be68532a63e71b0edf6029a8c81a6f3c4c07bf3c"
+    },
+    {
+      "what": "the buyer locks $202 in CollateralVault (its own call): a secured line",
+      "by": "buyer",
+      "txHash": "0x46b795480e40d2fbd91d19890100713365d51a7ae29d6c8fd70bf0e06260cd1d",
+      "block": 66291289,
+      "from": "0xd1C7858FCAcD8440c84daef461A91BC15352d667",
+      "to": "0xD0e777f8DfA2E62F500054E85F815fC54fae3E72",
+      "gasLimit": "157294",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0x46b795480e40d2fbd91d19890100713365d51a7ae29d6c8fd70bf0e06260cd1d"
+    },
+    {
+      "what": "Pay in 4 $200.00 (4 instalments, 60 s apart): PolarisCheckout.openPlan relayed",
+      "by": "relayer",
+      "txHash": "0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d",
+      "block": 66291308,
+      "from": "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "gasLimit": "798777",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d",
+      "planId": "1",
+      "guardian": "open (no attestation yet: fails open by design)",
+      "events": [
+        "LoanCreated"
+      ]
+    },
+    {
+      "what": "the buyer sets its approval to the loan engine to 0 (its own call): a lost approval",
+      "by": "buyer",
+      "txHash": "0x6415573ea494049017d10efa35e8d77ad186ce204daeef23ed72cb132dff9f47",
+      "block": 66291313,
+      "from": "0xd1C7858FCAcD8440c84daef461A91BC15352d667",
+      "to": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+      "gasLimit": "35465",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0x6415573ea494049017d10efa35e8d77ad186ce204daeef23ed72cb132dff9f47"
+    },
+    {
+      "what": "the buyer signs again: PolarisCheckout.reauthorize relayed (Reauthorized: the collections workflow's log trigger)",
+      "by": "relayer",
+      "txHash": "0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002",
+      "block": 66291321,
+      "from": "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "gasLimit": "146803",
+      "status": "success",
+      "explorer": "https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002",
+      "events": [
+        "Reauthorized"
+      ],
+      "reauthorizedLogIndex": 1
+    }
+  ]
+}
