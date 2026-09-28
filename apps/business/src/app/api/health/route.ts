@@ -28,7 +28,6 @@ export const GET = withPublic(async (req) => {
     automaticPayouts: config.payoutSigner !== null,
     checkoutOrigin: config.checkoutOrigin,
     publicUrl: config.publicUrl,
-    ready: problems.length === 0,
     productionReady: problems.length === 0,
     ...(hasCronSecret(req) ? { problems } : {}),
   });

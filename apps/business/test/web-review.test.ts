@@ -143,7 +143,8 @@ describe("health", () => {
     const res = await json(await health(request("GET", "/api/health"), params({})));
     expect(res.status).toBe(200);
     expect(res.body.data.problems).toBeUndefined();
-    expect(typeof res.body.data.ready).toBe("boolean");
+    expect(typeof res.body.data.productionReady).toBe("boolean");
+    expect(res.body.data.ready).toBeUndefined();
     expect(res.body.data.checkoutOrigin).toBe("http://localhost:3000");
   });
 
