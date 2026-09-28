@@ -154,6 +154,17 @@ describe("PolarisMessaging", () => {
     expect(container.textContent).toContain("or 4 payments of $50.38 with Polaris");
   });
 
+  it("says Pay in 4 is paused, and that paying now works, while the credit guard has paused it", () => {
+    render(<PolarisMessaging amount="200.00" paused />);
+    expect(container.textContent).toContain("Pay in 4 is paused by our risk guard; pay now works as usual.");
+    expect(container.textContent).not.toContain("4 payments of");
+    expect(container.querySelector("button.plrs-link")).toBeNull();
+    render(<PolarisMessaging amount="200.00" paused="Pay in 4 is resting today." />);
+    expect(container.textContent).toContain("Pay in 4 is resting today.");
+    render(<PolarisMessaging amount="200.00" paused={null} />);
+    expect(container.textContent).toContain("or 4 payments of $50.38 with Polaris");
+  });
+
   it("opens an accessible Learn more popover and closes on Escape, returning focus", () => {
     render(<PolarisMessaging amount="200.00" />);
     const trigger = container.querySelector<HTMLButtonElement>("button.plrs-link")!;

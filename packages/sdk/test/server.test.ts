@@ -281,3 +281,23 @@ describe("webhooks on the server client", () => {
     expect(polaris.webhooks.verify(payload, header, "whsec_x", { toleranceSeconds: 60 }).type).toBe("payout.paid");
   });
 });
+
+describe("the credit guard on the server client", () => {
+  it("reads GET /api/public/credit-guard: whether new Pay in 4 plans can open", async () => {
+    const guard = {
+      state: "paused",
+      paused: true,
+      reasons: ["depeg"],
+      message: "Pay in 4 is paused by our risk guard; pay now works as usual.",
+      checkedAt: "2026-10-02T12:00:00.000Z",
+      ageSeconds: 42,
+      readAt: "2026-10-02T12:00:42.000Z",
+    };
+    const { fetch, calls } = fakeFetch([json(200, { data: guard })]);
+    const out = await server(fetch).credit.guard();
+    expect(out).toEqual(guard);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${BASE_URL}/api/public/credit-guard`);
+    expect(calls[0]!.init.method).toBe("GET");
+  });
+});

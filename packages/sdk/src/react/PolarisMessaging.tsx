@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
 
+import { CREDIT_PAUSED_MESSAGE } from "../credit.js";
 import { formatUsdAmount, quotePayIn4, toCents, type AmountInput, type PayIn4Quote } from "../money.js";
 import { PolarisMark } from "./PolarisMark.js";
 import { PolarisStyles } from "./styles.js";
@@ -22,6 +23,12 @@ export type PolarisMessagingProps = {
   align?: "start" | "end";
   className?: string;
   style?: CSSProperties;
+  /**
+   * The credit guard has paused new Pay in 4 plans (`polaris.credit.guard()`
+   * on your server): pass `true` or its `message`. The line then says Pay
+   * in 4 is paused and that paying now works, instead of offering a plan.
+   */
+  paused?: boolean | string | null;
 };
 
 const HOUR = 3_600;
@@ -97,6 +104,7 @@ export function PolarisMessaging({
   align = "start",
   className,
   style,
+  paused,
 }: PolarisMessagingProps) {
   const [open, setOpen] = useState(false);
   const popoverId = useId();
@@ -140,6 +148,21 @@ export function PolarisMessaging({
   }, [open, close]);
 
   if (!quote) return null;
+
+  if (paused) {
+    return (
+      <div className={className ? `plrs-root plrs-msg ${className}` : "plrs-root plrs-msg"} data-theme={theme} data-paused="" style={style}>
+        <PolarisStyles />
+        <span role="status">
+          <span className="plrs-brand">
+            <PolarisMark />
+            Polaris
+          </span>{" "}
+          {typeof paused === "string" ? paused : CREDIT_PAUSED_MESSAGE}
+        </span>
+      </div>
+    );
+  }
 
   const count = quote.installments.length;
   const each = formatUsdAmount(quote.each);
