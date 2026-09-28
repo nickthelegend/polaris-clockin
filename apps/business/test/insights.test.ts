@@ -116,7 +116,9 @@ describe("the Envio panel", () => {
     } as unknown as IndexerClient);
     const insights = await merchantInsights({ wallet: WALLET, sample: false, payments: [payment], plans: [plan] });
     const feed = getIndexedEvents({ sample: false, payments: [payment], plans: [plan], insights });
-    expect(feed).toMatchObject({ source: "not_connected", reason: expect.stringContaining("indexer down") });
+    // A fixed sentence on the dashboard; the error itself goes to the server log.
+    expect(feed).toMatchObject({ source: "not_connected", reason: expect.stringContaining("The indexer didn't answer") });
+    expect(JSON.stringify(feed)).not.toContain("indexer down");
   });
 
   it("falls back to the chain sync's events, labelled, without an indexer", async () => {

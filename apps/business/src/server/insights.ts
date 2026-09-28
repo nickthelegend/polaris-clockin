@@ -38,9 +38,14 @@ function indexerClient(): IndexerClient | null {
     url: indexer.url,
     chainId: chain?.id,
     headers: indexer.token ? { authorization: `Bearer ${indexer.token}` } : undefined,
-    timeoutMs: 5_000,
+    // The Overview waits on it: an indexer that is down costs 2 s, not 5.
+    timeoutMs: 2_000,
   });
 }
+
+/** The indexer's answer per merchant wallet, for 10 s: the Overview reads every few seconds. */
+const indexerCache = new Map<string, { at: number; value: Promise<Insights["indexer"]> }>();
+const INDEXER_CACHE_MS = 10_000;
 
 const cents = (units: bigint) => Number(units / 10_000n);
 
@@ -106,12 +111,21 @@ async function indexedEvents(wallet: Address | null, payments: Payment[], plans:
   const client = indexerClient();
   if (!client) return { source: "chain-sync", events: eventsFromSync(payments, plans) };
   if (!wallet) return { source: "envio", events: [], progressBlock: null };
-  try {
-    const [activity, status] = await Promise.all([client.merchantActivity(wallet, { limit: 8 }), client.status().catch(() => null)]);
-    return { source: "envio", events: activity.map(eventFromActivity), progressBlock: status?.progressBlock ?? null };
-  } catch (error) {
-    return { source: "envio-error", error: error instanceof Error ? error.message.slice(0, 200) : "The indexer didn't answer." };
-  }
+  const key = wallet.toLowerCase();
+  const hit = indexerCache.get(key);
+  if (!clientOverride && hit && Date.now() - hit.at < INDEXER_CACHE_MS) return hit.value;
+  const value = (async (): Promise<Insights["indexer"]> => {
+    try {
+      const [activity, status] = await Promise.all([client.merchantActivity(wallet, { limit: 8 }), client.status().catch(() => null)]);
+      return { source: "envio", events: activity.map(eventFromActivity), progressBlock: status?.progressBlock ?? null };
+    } catch (error) {
+      // The detail is for the server's log; the dashboard says it plainly.
+      console.warn(`[insights] the Envio indexer didn't answer: ${error instanceof Error ? error.message : String(error)}`);
+      return { source: "envio-error", error: "The indexer didn't answer." };
+    }
+  })();
+  indexerCache.set(key, { at: Date.now(), value });
+  return value;
 }
 
 const PROVIDER_LABEL: Record<string, UnderwritingReason["source"]> = { nansen: "Nansen", zerion: "Zerion" };

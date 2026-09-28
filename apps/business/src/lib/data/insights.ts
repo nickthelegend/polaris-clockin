@@ -56,7 +56,7 @@ export type CollectionsRun = {
   history: number[];
 };
 
-// TODO(wire): replace with GET /api/collector (the CRE workflow's report receiver posts a heartbeat after each run).
+/** The labelled sample book's collections card (sample merchants only); live merchants read collectorStatus in server/services.ts (the chain's CollectionsRun events and the CRE runner's heartbeat). */
 export function placeholderCollectionsRun(plans: Plan[], now = Date.now()): CollectionsRun {
   const open = plans.filter((p) => p.state === "collecting" || p.state === "dunning");
   const retrying = plans.filter((p) => p.state === "dunning").length;
@@ -146,7 +146,7 @@ function fakeHash(seed: string) {
   return `0x${out.slice(0, 64)}`;
 }
 
-// TODO(wire): replace with the Envio indexer's GraphQL endpoint (latest PolarisPayments, PolarisLoanEngine and Subscriptions events for this merchant).
+/** The labelled sample book's feed (sample merchants only); live merchants read server/insights.ts (the Envio indexer, or the chain sync). */
 export function placeholderIndexedEvents(payments: Payment[], plans: Plan[], now = Date.now()): IndexedEvent[] {
   const events: IndexedEvent[] = [];
   for (const p of payments.slice(0, 14)) {
@@ -240,7 +240,7 @@ export type Underwriting = {
   averageLineCents: Cents;
 };
 
-// TODO(wire): replace with GET /api/underwriting/summary (the CRE `underwrite` workflow's attested facts, scored on chain by ScoreManager).
+/** The labelled sample book's credit panel (sample merchants only); live merchants read server/insights.ts (the CRE underwriting decisions). */
 export function placeholderUnderwriting(plans: Plan[]): Underwriting {
   const open = plans.filter((p) => p.state === "collecting" || p.state === "dunning");
   return {
