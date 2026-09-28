@@ -278,6 +278,17 @@ What each sponsor asks for, where this repository meets it, and how to check.
 
 ## Screenshots
 
+### Pay in 4, end to end
+
+Captured from a `pnpm demo:e2e` run against `pnpm demo:local`. A buyer at the
+Halcyon demo shop picks Pay in 4, and the Polaris checkout opens in a pop-up.
+The CRE underwriting workflow raises their limit with plain-language reasons,
+and they confirm. The shop gets a paid order with four payments, and the
+merchant sees the sale and the plan. Locally, a dev signer stands in for Face
+ID; the badge says so.
+
+![Pay in 4 from the shop to the merchant dashboard](docs/screenshots/demo-pay-in-4-end-to-end.jpg)
+
 ### Polaris for Business (merchant web app)
 
 ![Reference beside the merchant Overview](docs/screenshots/merchant-web-vs-reference.jpg)
