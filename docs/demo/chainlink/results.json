@@ -2,8 +2,7 @@
   "at": "2026-09-28T01:37:42.913Z",
   "guardianPrice": {
     "price": "mainnet",
-    "why": "Chainlink AUSD / USD on Monad mainnet via https://rpc.monad.xyz",
-    "status": "F:\\Projects\\polaris\\.claude\\worktrees\\cl-integration\\.demo\\guardian.json"
+    "why": "Chainlink AUSD / USD on Monad mainnet via https://rpc.monad.xyz"
   },
   "results": [
     {

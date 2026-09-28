@@ -472,7 +472,7 @@ async function orderPaid(page, pattern) {
 
   await buyerCtx.close();
   await merchantCtx.close();
-  fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify({ at: new Date().toISOString(), guardianPrice: demo.guardian, results, evidence }, null, 2));
+  fs.writeFileSync(path.join(OUT, "results.json"), JSON.stringify({ at: new Date().toISOString(), guardianPrice: { price: demo.guardian.price, why: demo.guardian.why }, results, evidence }, null, 2));
   console.log(JSON.stringify(results, null, 1));
   if (results.some((r) => !r.ok)) process.exitCode = 1;
 })().catch((e) => {
