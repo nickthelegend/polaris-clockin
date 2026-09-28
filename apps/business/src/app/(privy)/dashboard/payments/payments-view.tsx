@@ -34,7 +34,7 @@ import { explorerTx } from "@/lib/chain";
 import { periodSummary } from "@/lib/data/analytics";
 import { formatDateTime, MODE_LABEL, money } from "@/lib/data/format";
 import type { PayMode, Payment } from "@/lib/data/types";
-import { useQuery, useSample, type QueryState } from "@/lib/session";
+import { LIVE_REFRESH_MS, useQuery, useSample, type QueryState } from "@/lib/session";
 
 type StatusFilter = "all" | "succeeded" | "failed";
 type ModeFilter = "all" | PayMode;
@@ -42,7 +42,7 @@ type ModeFilter = "all" | PayMode;
 const PAGE = 40;
 
 export function PaymentsView() {
-  const payments = useQuery((d) => d.listPayments(), { refreshMs: 30_000 });
+  const payments = useQuery((d) => d.listPayments(), { refreshMs: LIVE_REFRESH_MS });
   const sample = useSample();
   const router = useRouter();
   const pathname = usePathname();
@@ -292,8 +292,8 @@ function SummaryActions({ onExport, canExport }: { onExport: () => void; canExpo
 }
 
 const COLUMNS: TableColumn<Payment>[] = [
+  // No Order column: the customer's sub line already names the merchant's order ("Halcyon order HC-59475"); the drawer has the ref.
   { key: "customer", header: "Customer", render: (p) => <PaymentName p={p} sub /> },
-  { key: "order", header: "Order", hideBelow: "lg", render: (p) => <span className="ui-figure whitespace-nowrap text-ui-muted">{p.orderId}</span> },
   { key: "date", header: "Date", hideBelow: "md", render: (p) => <span className="whitespace-nowrap text-ui-muted">{formatDateTime(p.createdAt)}</span> },
   {
     key: "status",

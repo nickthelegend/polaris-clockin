@@ -26,11 +26,11 @@ import { useMemo, useState } from "react";
 import { Address, CopyAction, DrawerActions, ExplorerAction, PlanStateBadge } from "@/components/dashboard/bits";
 import { DataModeNotice, LoadError, SampleBadge, StaleNotice } from "@/components/dashboard/common";
 import { FigureRow, PageCoin, PageHead } from "@/components/dashboard/page-head";
-import { ModeCoin } from "@/components/dashboard/payment-bits";
+import { BuyerCoin, ModeCoin } from "@/components/dashboard/payment-bits";
 import { explorerAddress } from "@/lib/chain";
 import { formatDate, formatDue, money, payInFourQuote, PLAN_INTERVAL_DAYS, shortAddress } from "@/lib/data/format";
 import type { Plan, PlanFilter } from "@/lib/data/types";
-import { useQuery, useSample, type QueryState } from "@/lib/session";
+import { LIVE_REFRESH_MS, useQuery, useSample, type QueryState } from "@/lib/session";
 
 const DAY = 86_400_000;
 /** Plans shown at a time; "Show more" adds another page. */
@@ -39,7 +39,7 @@ const PAGE = 25;
 const EXAMPLE = payInFourQuote(200_00);
 
 export function PlansView() {
-  const plans = useQuery((d) => d.listPlans(), { refreshMs: 60_000 });
+  const plans = useQuery((d) => d.listPlans(), { refreshMs: LIVE_REFRESH_MS });
   const sample = useSample();
   const router = useRouter();
   const pathname = usePathname();
@@ -233,7 +233,8 @@ const COLUMNS: TableColumn<Plan>[] = [
     header: "Buyer",
     render: (p) => (
       <TableName
-        icon={<ModeCoin mode="later" text={p.description} />}
+        className="max-w-[min(52vw,340px)]"
+        icon={<BuyerCoin address={p.buyer} />}
         title={
           <span className="flex min-w-0 items-center gap-2">
             <span className="ui-figure truncate">{shortAddress(p.buyer, 6, 4)}</span>
