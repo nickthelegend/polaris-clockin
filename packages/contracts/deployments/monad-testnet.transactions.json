@@ -1,5 +1,5 @@
 {
-  "note": "Every transaction the deployer sent during deploy:monad on 28 Sep 2026 (nonces 0-33), read back from Monad testnet block by block (blocks 66288112-66288420) and decoded against packages/contracts/abi. deployments/monad-testnet.json keeps only the contract creations. Later: the GuardianReceiver redeploy (redeploy-guardian:monad), nonces 39-40.",
+  "note": "Every transaction the deployer sent during deploy:monad on 28 Sep 2026 (nonces 0-33), read back from Monad testnet block by block (blocks 66288112-66288420) and decoded against packages/contracts/abi. deployments/monad-testnet.json keeps only the contract creations. Later: the GuardianReceiver redeploy (redeploy-guardian:monad), nonces 39-40. Later: the CollateralVault redeploy (redeploy-vault:monad), nonces 41-45.",
   "chainId": 10143,
   "deployer": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
   "explorer": "https://testnet.monadscan.com",
@@ -255,6 +255,41 @@
       "hash": "0xecceaa2ad1f0620c809ec2948cf91e146d75d0875d43b3fbfff72ff4e0ac2d5c",
       "contract": "PolarisCheckout",
       "call": "setCreditGuardian(0x4c99136634F670cd59E73fc284fED164C662e3Df)"
+    },
+    {
+      "nonce": 41,
+      "block": 66389185,
+      "hash": "0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453",
+      "contract": "create",
+      "call": "deploy"
+    },
+    {
+      "nonce": 42,
+      "block": 66389192,
+      "hash": "0x81f886b51697d0715de787c7a89a7e9e98c654721bbe30306e9d7f056ea48bbe",
+      "contract": "CollateralVault",
+      "call": "setLoanEngine(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a)"
+    },
+    {
+      "nonce": 43,
+      "block": 66389200,
+      "hash": "0x68b4daf6fbda7455a13a7f7e3da2fd565812d62e54734c9f0e900c6c5f932513",
+      "contract": "CollateralVault",
+      "call": "setSeizer(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a, true)"
+    },
+    {
+      "nonce": 44,
+      "block": 66389205,
+      "hash": "0xa92056b74bd168240ee76a17b14d05b0638dab141c5dd212abc9dae50654d512",
+      "contract": "ScoreManager",
+      "call": "setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)"
+    },
+    {
+      "nonce": 45,
+      "block": 66389210,
+      "hash": "0x960c26990a1420f01c4a196cbda530831e1359ca2faa5c69dca8bc11b850993f",
+      "contract": "PolarisLoanEngine",
+      "call": "setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)"
     }
   ]
 }

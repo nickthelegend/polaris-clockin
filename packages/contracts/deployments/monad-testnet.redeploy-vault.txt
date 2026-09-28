@@ -1,0 +1,19 @@
+Network   monadTestnet (chain 10143)
+Deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+Balance   5.303666130974212547 MON; needs about 0.140155905 at 102.0 gwei
+Replacing CollateralVault 0xD0e777f8DfA2E62F500054E85F815fC54fae3E72
+
+CollateralVault (today's code: lockWithPermit)
+  CollateralVault        0xC2F006aE9836a700CE8F1e457d11346cc42e23dc  (block 66389185, gas 1098077)
+  CollateralVault: loan engine = PolarisLoanEngine, which seizes
+  ScoreManager and PolarisLoanEngine: collateral vault = 0xC2F006aE9836a700CE8F1e457d11346cc42e23dc
+
+Spent     0.137930907000059253 MON
+Wrote     F:\Projects\polaris\.claude\worktrees\live\packages\contracts\deployments\monad-testnet.json
+tx        0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453  create deploy  https://testnet.monadscan.com/tx/0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453
+tx        0x81f886b51697d0715de787c7a89a7e9e98c654721bbe30306e9d7f056ea48bbe  CollateralVault setLoanEngine(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a)  https://testnet.monadscan.com/tx/0x81f886b51697d0715de787c7a89a7e9e98c654721bbe30306e9d7f056ea48bbe
+tx        0x68b4daf6fbda7455a13a7f7e3da2fd565812d62e54734c9f0e900c6c5f932513  CollateralVault setSeizer(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a, true)  https://testnet.monadscan.com/tx/0x68b4daf6fbda7455a13a7f7e3da2fd565812d62e54734c9f0e900c6c5f932513
+tx        0xa92056b74bd168240ee76a17b14d05b0638dab141c5dd212abc9dae50654d512  ScoreManager setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)  https://testnet.monadscan.com/tx/0xa92056b74bd168240ee76a17b14d05b0638dab141c5dd212abc9dae50654d512
+tx        0x960c26990a1420f01c4a196cbda530831e1359ca2faa5c69dca8bc11b850993f  PolarisLoanEngine setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)  https://testnet.monadscan.com/tx/0x960c26990a1420f01c4a196cbda530831e1359ca2faa5c69dca8bc11b850993f
+
+Next: `pnpm --filter @polarispay/contracts check:deployment:monad`, and the vault address in packages/sdk and packages/indexer.

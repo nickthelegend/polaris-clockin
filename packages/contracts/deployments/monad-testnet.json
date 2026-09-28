@@ -63,15 +63,16 @@
       ]
     },
     "CollateralVault": {
-      "address": "0xD0e777f8DfA2E62F500054E85F815fC54fae3E72",
-      "blockNumber": 66288140,
-      "txHash": "0xcbd8ef906cbdc850f01c534c8610b5dbc29ac63ed84a054ab408a78423a70fb9",
-      "gasUsed": "994637",
+      "address": "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc",
+      "blockNumber": 66389185,
+      "txHash": "0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453",
+      "gasUsed": "1098077",
       "abi": "abi/CollateralVault.json",
       "args": [
         "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
         "0x3F9554F15f58Bb5900822224f37A05be81eF9723"
-      ]
+      ],
+      "sourceCommit": "20518d2b344afd2a92ad51f4da9b93c516f8df09"
     },
     "BatchSettlement": {
       "address": "0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53",
@@ -621,6 +622,55 @@
           "hash": "0xecceaa2ad1f0620c809ec2948cf91e146d75d0875d43b3fbfff72ff4e0ac2d5c",
           "contract": "PolarisCheckout",
           "call": "setCreditGuardian(0x4c99136634F670cd59E73fc284fED164C662e3Df)"
+        }
+      ]
+    },
+    {
+      "at": "2026-09-28T10:51:46.385Z",
+      "contract": "CollateralVault",
+      "replaced": {
+        "address": "0xD0e777f8DfA2E62F500054E85F815fC54fae3E72",
+        "txHash": "0xcbd8ef906cbdc850f01c534c8610b5dbc29ac63ed84a054ab408a78423a70fb9",
+        "sourceCommit": "020484b2aea74bde3f2cbc918d534dbda1348723"
+      },
+      "address": "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc",
+      "sourceCommit": "20518d2b344afd2a92ad51f4da9b93c516f8df09",
+      "why": "lockWithPermit: a borrower secures a Pay in 4 line with one permit the Privy relayer carries, so they never need MON",
+      "txs": [
+        {
+          "nonce": 41,
+          "block": 66389185,
+          "hash": "0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453",
+          "contract": "create",
+          "call": "deploy"
+        },
+        {
+          "nonce": 42,
+          "block": 66389192,
+          "hash": "0x81f886b51697d0715de787c7a89a7e9e98c654721bbe30306e9d7f056ea48bbe",
+          "contract": "CollateralVault",
+          "call": "setLoanEngine(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a)"
+        },
+        {
+          "nonce": 43,
+          "block": 66389200,
+          "hash": "0x68b4daf6fbda7455a13a7f7e3da2fd565812d62e54734c9f0e900c6c5f932513",
+          "contract": "CollateralVault",
+          "call": "setSeizer(0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a, true)"
+        },
+        {
+          "nonce": 44,
+          "block": 66389205,
+          "hash": "0xa92056b74bd168240ee76a17b14d05b0638dab141c5dd212abc9dae50654d512",
+          "contract": "ScoreManager",
+          "call": "setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)"
+        },
+        {
+          "nonce": 45,
+          "block": 66389210,
+          "hash": "0x960c26990a1420f01c4a196cbda530831e1359ca2faa5c69dca8bc11b850993f",
+          "contract": "PolarisLoanEngine",
+          "call": "setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)"
         }
       ]
     }
