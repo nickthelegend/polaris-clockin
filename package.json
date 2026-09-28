@@ -14,6 +14,8 @@
     "demo:e2e:chainlink": "node scripts/demo-e2e-chainlink.cjs",
     "dev:demo": "pnpm --parallel --filter @polaris/business --filter @polaris/shop dev",
     "contracts:compile": "pnpm --filter @polarispay/contracts compile",
-    "contracts:test": "pnpm --filter @polarispay/contracts test"
+    "contracts:test": "pnpm --filter @polarispay/contracts test",
+    "deploy:check": "node scripts/deploy-check.mjs",
+    "test:scripts": "node --test scripts/deploy-check.test.mjs"
   }
 }
