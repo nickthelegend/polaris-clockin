@@ -136,6 +136,7 @@ the API. Each app's README lists its environment.
 | [`packages/indexer`](packages/indexer/README.md) | The Envio HyperIndex indexer for every Polaris event, with a webhook outbox |
 | `packages/indexer/client` | `@polarispay/indexer-client`: typed queries the dashboard, the CRE collections workflow and webhooks use |
 | `packages/db` | Polaris for Business storage (SQLite or memory), API keys, webhook signing |
+| [`packages/fx`](packages/fx/README.md) | Chainlink FX rates for the local-currency line: the verified feed table (Monad mainnet, Ethereum, Polygon, Base), a cached viem reader, the display formatting |
 | [`packages/ui`](packages/ui/README.md) | The shared component library both web apps are built from (`/gallery` in each) |
 | `packages/brand` | The Polaris mark and wordmark |
 | `packages/keeperhub` | The dunning ladder the collections path uses |
@@ -164,7 +165,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 |---|---|---|
 | Users send AUSD across borders | `PolarisSend` escrows AUSD by ERC-3009 against a link key; the app's Send and Claim (`apps/app/src/sheets/send.tsx`, `claim.tsx`); AUSD's own EIP-712 domain (`Agora Dollar`, `1`) | contracts `e2e:local` steps 8-9; `apps/app` `check:signatures` |
 | Real balances and activity | `apps/app/src/lib/data/live.ts`: `AUSD.balanceOf`, the API's record of chain events; the offline demo is labelled on every screen and never links a made-up hash | `docs/demo/01-app-home-funded.png`, `30-app-home-after.png` |
-| Local currency | Shown next to dollars at fixed **sample** rates, labelled "sample rate" (`apps/app/src/lib/money.ts`); a live FX feed is not wired | |
+| Local currency | Shown next to dollars at the live **Chainlink** rate, with its age ("≈ ARS 161.241 · Chainlink rate, 3 min ago · indicative"): `packages/fx` reads Chainlink Data Feeds server-side (EUR, GBP, JPY, CHF, CAD from Monad mainnet; 18 more from Ethereum, Polygon, Base), served by the app's `/api/fx`; no line for the 10 currencies without a feed, or when the rate is older than 26 h | `pnpm --filter @polaris/fx test`; `pnpm --filter @polaris/fx check:live`; `docs/design/fx/` |
 | A mobile app | An installable PWA; no Android wrapper (TWA) yet | ask Agora whether a PWA qualifies |
 
 ### Mera: the entire account layer
@@ -219,7 +220,9 @@ What each sponsor asks for, where this repository meets it, and how to check.
   browser a stand-in key signs the history wallet's proof (the app says so).
 - **The dashboard's local session** is `pnpm demo:local`'s own; the server
   accepts it only in development, on a local chain, with Privy off.
-- **Local-currency rates** are fixed samples, labelled as such.
+- **Local-currency rates** are live Chainlink rates read from public RPCs and
+  labelled "indicative"; only EUR, GBP, JPY, CHF and CAD come from Monad (the
+  rest from Ethereum, Polygon or Base), and 10 currencies have no feed and no line.
 - The app's offline demo (no API configured) shows sample data and says so.
 
 ## What only you can do

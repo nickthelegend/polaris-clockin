@@ -526,7 +526,7 @@ function CollectionsPanel({ plans, collector, sample }: { plans?: Plan[]; collec
   const lastAt = run?.source === "live" ? Date.parse(run.data.lastRun.at) : nextAt ? nextAt - 60_000 : null;
   const ago = (ms: number) => (ms < 90_000 ? `${Math.max(0, Math.round(ms / 1000))} s ago` : formatAgo(new Date(now - ms).toISOString(), now));
   return (
-    <Panel title="Collections" subtitle="Chainlink CRE workflow" sample={sample}>
+    <Panel title="Collections" subtitle="Chainlink CRE workflow" sample={sample} action={<SeeAll href="/dashboard/chainlink">Chainlink</SeeAll>}>
       {!run ? (
         <Skeleton shape="tile" height={260} className="mt-5" />
       ) : run.source === "not_connected" ? (

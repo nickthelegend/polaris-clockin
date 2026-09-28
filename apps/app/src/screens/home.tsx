@@ -22,10 +22,11 @@ import { useAccounts } from "@/components/accounts";
 import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar, photoFor } from "@/components/avatars";
 import { TabScreen } from "@/components/screen";
+import { SignAgainNotice } from "@/components/sign-again";
 import { useNotices } from "@/components/use-notices";
 import { HomeDesktop } from "@/desktop/home";
 import { useOwner } from "@/lib/account/hooks";
-import { getActivity, getContacts, getProfile } from "@/lib/data";
+import { getActivity, getContacts, getPlans, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { balanceDelta, DELTA_PERIOD, deltaFigure, subAmount, when } from "@/lib/view";
 
@@ -41,6 +42,7 @@ function HomePhone() {
   const profile = useData(() => getProfile(owner), [owner]);
   const contacts = useData(() => getContacts(owner), [owner]);
   const activity = useData(() => getActivity(owner), [owner]);
+  const plans = useData(() => getPlans(owner), [owner]);
   const { selected, balance } = useAccounts();
   const { unread } = useNotices();
   const [more, setMore] = useState(false);
@@ -63,6 +65,8 @@ function HomePhone() {
         onAvatar={() => router.push("/profile")}
         className="px-2"
       />
+
+      <SignAgainNotice plans={plans.value?.plans} className="mt-1.5" />
 
       {selected ? (
         <BalanceCard

@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { currencyForLocale, formatLocal, type Micros } from "./money";
+import { currencyForLocale } from "./money";
 
 /**
  * Per-device conveniences: the name on your send links and a local-currency
@@ -88,15 +88,15 @@ export function useLocale(): string | null {
 }
 
 /**
- * The local-currency equivalent formatter: the override if set, otherwise
- * the currency the browser's language implies. Null for dollars (nothing to
- * convert) and during server render.
+ * The viewer's local currency and locale: the override if set, otherwise the
+ * currency the browser's language implies. Null for dollars (nothing to
+ * convert) and during server render. The rate comes from lib/fx.ts.
  */
-export function useLocalCurrency(): { currency: string; format: (micros: Micros) => string | null } | null {
+export function useLocalCurrency(): { currency: string; locale: string } | null {
   const locale = useLocale();
   const { currency: override } = usePrefs();
   if (!locale) return null;
   const currency = override ?? currencyForLocale(locale);
   if (currency === "USD") return null;
-  return { currency, format: (micros) => formatLocal(micros, currency, locale) };
+  return { currency, locale };
 }

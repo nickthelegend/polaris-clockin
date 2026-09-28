@@ -10,6 +10,7 @@ import { CheckoutError, fetchOrder, logBrowserCalls, newAttemptId, placeOrder, t
 import { formatUsd } from "@/lib/money";
 import { payIn4 } from "@/lib/pay-in-4";
 import { PolarisCheckoutButton, chainFor, isPolarisError, type CheckoutResult, type PayResult, type PolarisError } from "@/lib/polaris-client";
+import { pausedMessage } from "@/lib/polaris-config";
 import { useShop } from "@/lib/shop-context";
 
 import { ContactFields, ContactSummary, DEMO_BUYER, FIELD_NAMES, validateBuyer, type BuyerForm } from "./contact-fields";
@@ -73,6 +74,8 @@ export function CheckoutView({
   const shipping = kind === "subscription" || subtotal === 0 || subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING;
   const total = subtotal + shipping;
   const aprBps = polarisConfig.payInFourAprBps;
+  // Polaris's risk guard has paused Pay in 4: offer Pay now (and say why), never a plan that would be refused.
+  const payInFourPaused = polarisConfig.ok ? pausedMessage(polarisConfig.creditGuard) : null;
 
   const [buyer, setBuyer] = useState<BuyerForm>(DEMO_BUYER);
   // Complete details show as one card, so the payment choice is in the first screen.
@@ -80,7 +83,7 @@ export function CheckoutView({
   const [touched, setTouched] = useState(false);
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({});
   const [method, setMethod] = useState<Method>("polaris");
-  const [mode, setMode] = useState<Mode>(subscription ? "subscribe" : "later");
+  const [mode, setMode] = useState<Mode>(subscription ? "subscribe" : payInFourPaused ? "now" : "later");
   const [notice, setNotice] = useState<Notice>(
     returnedFromCancel ? { tone: "info", at: "top", text: "You left Polaris without paying. Nothing was charged, and your order is as you left it." } : null,
   );
@@ -538,6 +541,7 @@ export function CheckoutView({
                 aprBps={aprBps}
                 hasWallet={hasWallet}
                 coarsePointer={coarsePointer}
+                payInFourPaused={payInFourPaused}
                 walletPanel={
                   needsSwitch ? (
                     <div className="mt-5 rounded-xl bg-sand px-4 py-4" role="group" aria-label="Switch network">

@@ -10,10 +10,12 @@ import type { Product } from "@/lib/catalog";
 import { formatUsd } from "@/lib/money";
 import { payIn4 } from "@/lib/pay-in-4";
 import { PolarisMark } from "@/lib/polaris-client";
+import { pausedMessage } from "@/lib/polaris-config";
 import { MAX_QUANTITY, useShop } from "@/lib/shop-context";
 
 export function PurchasePanel({ product, aprBps }: { product: Product; aprBps: number }) {
-  const { add, openDrawer, setBuyBar } = useShop();
+  const { add, openDrawer, setBuyBar, polarisConfig } = useShop();
+  const paused = polarisConfig.ok ? pausedMessage(polarisConfig.creditGuard) : null;
   const router = useRouter();
   const reduce = useReducedMotion();
   const groupId = useId();
@@ -58,7 +60,8 @@ export function PurchasePanel({ product, aprBps }: { product: Product; aprBps: n
   };
 
   const many = product.options.length > 4;
-  const plan = subscription ? null : payIn4(product.price, aprBps);
+  // While Polaris's risk guard has paused Pay in 4, the buy bar doesn't offer it.
+  const plan = subscription || paused ? null : payIn4(product.price, aprBps);
 
   return (
     <div className="mt-8">

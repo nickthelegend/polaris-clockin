@@ -65,6 +65,8 @@ export { assertWebhookEvent, validateWebhookEvent } from "./event-shape.js";
 export type { WebhookEventProblem } from "./event-shape.js";
 
 export { PAY_IN_4, formatUsd, normaliseAmount, quotePayIn4 } from "./money.js";
+export { CREDIT_PAUSED_MESSAGE } from "./credit.js";
+export type { CreditGuardReason, CreditGuardStatus } from "./credit.js";
 export type { AmountInput, PayIn4Installment, PayIn4Options, PayIn4Quote } from "./money.js";
 
 export type { PayParams, PayResult, PayStage, RelayPayRequest, RelayPayResponse, Result } from "./pay/direct.js";

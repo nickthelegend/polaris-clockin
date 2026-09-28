@@ -1,4 +1,5 @@
 import type { CheckoutSession, CheckoutSessionCreateParams, RequestOptions } from "../checkout/types.js";
+import type { CreditGuardStatus } from "../credit.js";
 import { configurationError, invalidRequest } from "../errors.js";
 import type { WebhookEvent } from "../events.js";
 import { requireSecretKey } from "../keys.js";
@@ -53,6 +54,14 @@ export interface PolarisServer {
       /** GET /api/v1/checkout/sessions/{id} */
       retrieve(id: string, options?: Omit<RequestOptions, "idempotencyKey">): Promise<CheckoutSession>;
     };
+  };
+  credit: {
+    /**
+     * GET /api/public/credit-guard: whether buyers can start a new Pay in 4
+     * plan right now. While `paused`, show Pay in 4 as unavailable with
+     * `message` and keep Pay now; the hosted checkout does the same.
+     */
+    guard(options?: Omit<RequestOptions, "idempotencyKey">): Promise<CreditGuardStatus>;
   };
   webhooks: {
     /**
@@ -153,6 +162,16 @@ export function createPolarisServer(options: PolarisServerOptions): PolarisServe
             signal: requestOptions.signal,
           });
         },
+      },
+    },
+    credit: {
+      async guard(requestOptions = {}) {
+        return http.request<CreditGuardStatus>({
+          method: "GET",
+          path: "/api/public/credit-guard",
+          timeoutMs: requestOptions.timeoutMs,
+          signal: requestOptions.signal,
+        });
       },
     },
     webhooks: {

@@ -120,6 +120,9 @@ wins) and forwards refs where it renders one element.
 | `Ticks` | `<Ticks done={2} total={4} />` · instalment ticks, `late` in amber, `size="sm"` for rows |
 | `CopyButton` | `<CopyButton value={address} label="payout address" />` · a fixed-size IconButton (or `variant="button"`) with a check and a toast |
 | `Menu` | `<Menu label="Account" trigger={<Avatar … />}><Menu.Header>…</Menu.Header><Menu.Item icon={<LogOut />} tone="danger" onSelect={signOut}>Sign out</Menu.Item></Menu>` · arrow keys, Home/End, Escape and Tab close, focus returns |
+| `TxLink`, `shortHash` | `<TxLink hash={run.txHash} href={run.explorerUrl} />` · the shortened hash in figures with an arrow, opening the explorer in a new tab (`kind` names it: transaction, report, contract); unlinked text when `href` is null (a local chain); `children` replaces the hash ("View report") |
+| `ProvenanceBadge` | `<ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" href={reportUrl} />` · a lime-tinted pill with a shield: who attested a figure, when, and "View report" (`linkLabel`) to the proof; only for facts a third party wrote on chain · `hash` shows the proof's transaction, unlinked, where there is no explorer · `size="sm"` |
+| `Meter` | `<Meter value={12 / 60} label="Time since the last check" valueText="12 min of 60" tone="lime" />` · a thin gauge of an allowance used (`role="meter"`); tones `lime`, `amber`, `red`, `neutral` |
 
 ### Composites
 
@@ -147,6 +150,7 @@ wins) and forwards refs where it renders one element.
 | `CodeBlock` | `<CodeBlock samples={[{ key: "node", label: "Node", filename: "route.ts", code }]} copyable />` · tabs, line numbers, brand-accent syntax colour; the right edge fades while a line runs past it; the note hides in a narrow panel so Copy stays on the tab row; leave `copyable` off for code that doesn't run yet |
 | `PhoneFrame` | `<PhoneFrame width={300}>…live components…</PhoneFrame>` · an iPhone around real components, for marketing pages |
 | `StatCard` | `<StatCard tone="sage" icon={<Percent />} label="Sales" delta={23} value={<Money … />} spark={sales} />` · `sage`, `pink`, `honey`, `sky`, `lilac`, `lime`, `surface` |
+| `CheckList` | `<CheckList items={[{ key: "price", label: "AUSD/USD", value: "$0.9998", limit: "at least $0.995", ok: true }]} />` · pass/fail checks with the figure observed over the rule it is held to: a lime check or an amber warning |
 
 ### Ref E: the merchant web app (`src/trade`)
 
@@ -172,6 +176,7 @@ with them composed into the reference itself.
 | `BalanceSummaryCard` | `<BalanceSummaryCard label="Available balance" value="$3,196.97" delta={7.45} stats={[{ label: "Network fee", value: "$0.00" }, …]} />` · the outlined card with its chip and the stats row |
 | `PanelCard` | `<PanelCard title="Customers this week" action={<SeeAll />}>…</PanelCard>` · ref E's card for what the reference doesn't show: `variant="outline"` (the summary card's border) or `filled` (#1D2129) |
 | `FigureRow` | `<FigureRow value={<Money value={1284.5} />} delta={4.5} deltaSuffix="this week" right={<TimeframeChips … />} />` · the big figure under the pair header with its delta chip (`deltaLabel` for a figure in dollars, `badge` for another chip, `deltaGoodWhen` for spending), the chips on the right; a skeleton while `value` is undefined |
+| `RunList` | `<RunList items={[{ id, tag: "Collected", tone: "lime", title: "2 instalments collected", detail, meta: "12 s ago", trailing: <TxLink … /> }]} />` · a log of automated runs or events in the table's language: status pill, what happened with a muted line, a link on the right; the pill moves before the title below 640px; `empty` in place of no items |
 
 ### One route, two layouts (`src/trade/Adaptive.tsx`, `src/overlays/AdaptiveSheet.tsx`)
 

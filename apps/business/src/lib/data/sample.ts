@@ -1,3 +1,4 @@
+import { placeholderChainlink, placeholderGuard } from "./chainlink-sample";
 import { payInFourQuote, PLAN_INSTALLMENTS, PLAN_INTERVAL_DAYS, isToday, money } from "./format";
 import { linkUrl } from "./links";
 import { DataError, type DashboardData } from "./source";
@@ -547,6 +548,11 @@ export function createSampleData(merchant: Merchant = SAMPLE_MERCHANT, { empty =
       m.registration = { state: "active", txHash: `0x${"5a".repeat(32)}`, activationTxHash: `0x${"6b".repeat(32)}`, error: null };
       return clone({ merchant: m });
     },
+    getChainlink: async () => {
+      await wait();
+      return placeholderChainlink();
+    },
+    getCreditGuard: async () => placeholderGuard(),
     getOverview: async () => {
       await wait();
       return clone(sampleOverview(get()));

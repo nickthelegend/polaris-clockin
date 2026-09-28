@@ -10,7 +10,7 @@ import { polarisLoanEngineAbi, scoreManagerAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { formatUnits } from "../chain/money";
 import { getDb } from "../db";
-import { getConfig } from "../env";
+import { explorerTxUrl, getConfig } from "../env";
 import { HttpError } from "../http";
 import { consume, LIMITS } from "../ratelimit";
 import { address, signature } from "../relayer/parse";
@@ -260,6 +260,21 @@ export async function explainDecision(accountLower: string): Promise<void> {
   await db.creditDecisions.update(accountLower, (d) => (d.callbackId === decision.callbackId ? { ...d, explanation } : d));
 }
 
+/** The report behind a decision, as the app links it: "Verified by Chainlink CRE". */
+function verifiedBy(decision: { txHash: Hex | null; at: string; report?: { txHash: Hex; at: string; blockNumber: number } | null }) {
+  const txHash = decision.report?.txHash ?? decision.txHash;
+  if (!txHash) return null;
+  return {
+    by: "Chainlink CRE" as const,
+    workflow: "polaris-underwrite" as const,
+    txHash,
+    /** The block time of the report when the chain sync has seen it, else when its callback arrived. */
+    at: decision.report?.at ?? decision.at,
+    blockNumber: decision.report?.blockNumber ?? null,
+    explorerUrl: explorerTxUrl(txHash),
+  };
+}
+
 /** Where an account's credit stands: the line on chain, the latest request, and what the workflow decided. */
 export async function creditStatus(account: Address) {
   const db = getDb();
@@ -294,6 +309,12 @@ export async function creditStatus(account: Address) {
           at: decision.at,
           /** The reasons, line by line, each with the provider behind it ("nansen", "zerion", …). */
           explanation: decision.explanation ?? null,
+          /**
+           * Provenance: the report transaction the Chainlink CRE underwriting
+           * workflow wrote (from the chain sync when it has seen it land, else
+           * the callback's), when it landed, and where to see it.
+           */
+          verified: verifiedBy(decision),
         }
       : null,
   };

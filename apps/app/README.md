@@ -32,7 +32,7 @@ browsers allow over plain http.
 ## Environment
 
 Copy [`.env.example`](.env.example) to `.env.local`. Everything is `NEXT_PUBLIC_*`,
-inlined at build time, and public.
+inlined at build time, and public, except the optional server-side `FX_RPC_*`.
 
 | Variable | Default | What it is |
 |---|---|---|
@@ -48,6 +48,7 @@ inlined at build time, and public.
 | `NEXT_PUBLIC_AUSD_ADDRESS` | AUSD on Monad testnet | The dollar token |
 | `NEXT_PUBLIC_POLARIS_API_URL` | unset | Polaris for Business (e.g. `http://localhost:3100`): the relayer (`POST /api/relay`), checkout sessions and payment links (`/api/public/…`), and the network's contracts and EIP-712 domains (`/api/public/network`). Unset: the stub relayer and sample links. |
 | `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
+| `FX_RPC_MONAD`, `FX_RPC_ETHEREUM`, `FX_RPC_POLYGON`, `FX_RPC_BASE` | public RPCs (`packages/fx/src/feeds.ts`) | **Server only.** Comma-separated JSON-RPC URLs `/api/fx` reads the Chainlink FX feeds from (Monad mainnet, Ethereum, Polygon, Base). Read-only calls; no key needed |
 
 ## With Polaris for Business (the real relayer)
 
@@ -222,6 +223,61 @@ reads "Sample account ···· 2451". The sample is a month of an ordinary life
 the reference's. The stub relayer's writes are kept in the tab's
 `sessionStorage`, so a reload after paying or sending keeps them.
 
+## Local currency
+
+Under a dollar amount the app prints what it is in the viewer's currency, at
+the live Chainlink rate: **"≈ ARS 161.241 · Chainlink rate, 3 min ago ·
+indicative"**. It shows on the claim screen, Send (phone keypad and the
+desktop form), the "Link ready." sheet, the checkout total (so a Halcyon buyer
+sees it too), and payment details. The currency is
+the one the browser's language implies (es-AR → ARS), or the one picked in
+Settings. Nothing is ever priced or paid in it.
+
+- `GET /api/fx?currency=ARS` (`src/app/api/fx/route.ts`) reads the rate on the
+  server with `@polaris/fx` ([its README](../../packages/fx/README.md) has the
+  feed table, every address verified on chain): Chainlink's `latestRoundData`,
+  normalised to local units per dollar, cached five minutes.
+- `src/lib/fx.ts` fetches it once per currency per five minutes for the whole
+  tab; `components/local-equivalent.tsx` prints the line and its age.
+- **No rate, no line.** Currencies Chainlink has no feed for (CLP, PEN, NOK,
+  PKR, VND, MYR, KES, GHS, EGP, AED), a rate older than 26 hours, or an RPC that
+  can't be reached all hide the line. Settings offers only currencies with a
+  rate, and says so when the automatic one has none.
+- EUR, GBP, JPY, CHF and CAD come from Monad mainnet's feeds; the other 18
+  from Ethereum, Polygon or Base. Some of those update once a day, which is
+  why the age is always shown.
+
+## Chainlink in the app
+
+Three things a buyer sees come from Polaris's Chainlink CRE workflows (the
+API serves them; see apps/business "Chainlink"). Captures of each state are
+in [`docs/design/chainlink`](../../docs/design/chainlink).
+
+- **The risk guard.** While the guardian has paused credit, the checkout
+  (phone and from 1024px) keeps Pay in 4 on screen as unavailable, with
+  *Pay in 4 is paused by our risk guard; pay now works as usual.* and a
+  button to pay now; the credit line says the same. A guard that is late
+  blocks nothing (it fails open), and the checkout's Pay in 4 and the credit
+  line say *Risk guard last checked 72 min ago · Pay in 4 stays on*. From the
+  session (`payIn4.guard`) and `GET /api/public/credit-guard`
+  (`src/lib/credit-guard.ts`, `components/credit-guard-note.tsx`).
+- **Sign again.** When a payment couldn't be collected because the approval
+  to take it was reset, Home, the plan sheet and the plan drawer say *Sign
+  again to pay your instalment*. One Face ID signs an ERC-2612 permit to the
+  loan engine for everything owed (`reauthorizePayments` in
+  `src/lib/actions.ts`), the relayer carries it to
+  `PolarisCheckout.reauthorize`, and the plan polls the API every 2 s until
+  the collection that follows lands: *Collected*, with its receipt
+  (`components/sign-again.tsx`, `src/lib/collection.ts`). The amount carries
+  the Chainlink FX line.
+- **Verified by Chainlink CRE.** The credit line and score show the
+  underwriting report's date and transaction (`components/credit-provenance.tsx`),
+  only for a line a report opened; the reasons are the report's own. The
+  offline demo's sample line is never shown as verified.
+
+`pnpm --filter @polaris/app test` checks the guard and collection states
+(node --test, `test/`).
+
 ## Code map
 
 | Path | What it is |
@@ -234,7 +290,9 @@ the reference's. The stub relayer's writes are kept in the tab's
 | `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
 | `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
 | `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data, marked Sample) without |
+| `src/app/api/fx/route.ts`, `src/lib/fx.ts` | The Chainlink rate behind the local-currency line: the server route (`@polaris/fx`) and the tab's shared, cached fetch |
 | `src/lib/underwriting.ts` | Pay in 4 credit: consent and link-proof signatures, the CRE underwriting request, waiting for the decision |
+| `src/lib/credit-guard.ts`, `src/lib/collection.ts` | The risk guard in the buyer's words; a plan's collection after a lost approval (sign again, collecting, collected) |
 | `src/desktop/` | The desktop layouts (from 1024px): Home and its money widget, the pages, the checkout card, onboarding; `lib/series.ts` draws their charts |
 | `src/screens/`, `src/sheets/` | The five tabs, and every sheet with its route wrapper (`SendRoute`, `CheckoutRoute`…), which the pages in `app/(tabs)` (cold) and `app/@sheet` (intercepted) render |
 | `src/components/` | App pieces composed from `@polaris/ui`: the shell (stage, sheet host, nav), Confirm with Face ID, the success receipt, the email sheet, QR |
@@ -264,8 +322,6 @@ stand-in, so dropping the files in needs no code change:
   31337, `NEXT_PUBLIC_LOCAL_DEMO=1`) a stand-in key signs when the browser
   has no wallet, and the screen says its history is a sample.
 - Receipts only you can read (plan §3.5) and the opt-in recovery key.
-- Local-currency figures use fixed sample rates, and say "sample rate" next to
-  every one; a live feed is not wired.
 
 The hosted checkout (`/pay/[id]`) speaks polarispay-sdk's v1 postMessage
 protocol (`src/lib/checkout-return.ts`): `ready` on load (`expired` for an

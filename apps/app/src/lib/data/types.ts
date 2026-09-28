@@ -60,6 +60,40 @@ export type CreditLine = {
   openedAt?: number | null;
   /** The score the line opened with; its history starts there. */
   openingScore?: number | null;
+  /**
+   * The report behind the line: the transaction the Chainlink CRE
+   * underwriting workflow wrote, and when. Null until one exists (and in the
+   * offline demo, whose line nobody attested).
+   */
+  verified: CreditProvenance | null;
+};
+
+/** "Verified by Chainlink CRE": the underwriting report's transaction. */
+export type CreditProvenance = {
+  by: "Chainlink CRE";
+  /** The CRE workflow that wrote it: polaris-underwrite. */
+  workflow: string;
+  txHash: Hex;
+  /** Null on a local chain, which has no explorer. */
+  explorerUrl: string | null;
+  /** When the report landed (its block time), ms. */
+  at: number;
+};
+
+/**
+ * The risk guard (the Chainlink CRE guardian's verdict, as PolarisCheckout
+ * applies it to new Pay in 4 plans). A stale guard fails open: Pay in 4
+ * keeps working and the screens say when it last checked.
+ */
+export type CreditGuardView = {
+  state: "open" | "paused" | "stale" | "never" | "unconfigured" | "unavailable";
+  paused: boolean;
+  /** What the buyer reads while it is paused. */
+  message: string | null;
+  /** Seconds since it last checked, as of `readAt`; null before the first check. */
+  ageSeconds: number | null;
+  /** When the API read it, ms. */
+  readAt: number;
 };
 
 export type Instalment = {
@@ -80,6 +114,17 @@ export type Plan = {
   instalments: Instalment[];
   status: "active" | "completed";
   openedAt: number;
+  /** Collections: why the current payment wasn't taken, and signing again for a lost approval. Absent in the offline demo. */
+  collection?: PlanCollection;
+};
+
+export type PlanCollection = {
+  /** The last failed collection of the current payment, and when it is tried again. */
+  failure: { reason: "insufficient_funds" | "allowance_lost" | "other"; at: number; nextAttemptAt: number | null } | null;
+  /** Polaris can no longer take this plan's payments: the buyer signs once more (PolarisCheckout.reauthorize). */
+  needsSignature: boolean;
+  /** They signed again, and the collection that followed (the CRE collections run), once it lands. */
+  reauthorized: { at: number; txHash: Hex; collected: { at: number; txHash: Hex } | null } | null;
 };
 
 export type Subscription = {
@@ -179,6 +224,8 @@ export type CheckoutSessionInfo = {
   expiresAt: number;
   /** Why Pay in 4 isn't offered, in the buyer's words, when it isn't. */
   payLaterUnavailable: string | null;
+  /** The risk guard as the checkout read it: paused (Pay in 4 shown as unavailable) or stale ("last checked 72 min ago"). */
+  creditGuard: CreditGuardView | null;
   /** The way to pay the merchant's page chose (the session's first mode): the checkout opens on it. */
   preferredMode: "now" | "later" | "subscription" | null;
   /** How it was paid, once the chain says so. */
@@ -210,6 +257,8 @@ export interface PolarisData {
   getProfile(owner: Address | null): Promise<Profile>;
   getBalance(owner: Address | null): Promise<Balance>;
   getCreditLine(owner: Address | null): Promise<CreditLine>;
+  /** The risk guard now; null when there is none to show (the offline demo). */
+  getCreditGuard(): Promise<CreditGuardView | null>;
   getPlans(owner: Address | null): Promise<{ plans: Plan[]; subscriptions: Subscription[] }>;
   getActivity(owner: Address | null): Promise<ActivityItem[]>;
   getContacts(owner: Address | null): Promise<Person[]>;

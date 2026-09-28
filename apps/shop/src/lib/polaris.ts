@@ -14,7 +14,7 @@ import {
 
 import { randomBytes } from "node:crypto";
 
-import type { BrowserPolarisConfig, LocalChain } from "./polaris-config";
+import type { BrowserPolarisConfig, LocalChain, ShopCreditGuard } from "./polaris-config";
 
 export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from "polarispay-sdk/server";
 export type { CheckoutSession, WebhookEvent as PolarisEvent } from "polarispay-sdk/server";
@@ -261,6 +261,33 @@ function server(config: Extract<PolarisConfig, { ok: true }>): PolarisServer {
     };
   }
   return cached.server;
+}
+
+let guardCache: { key: string; at: number; value: Promise<ShopCreditGuard | null> } | null = null;
+
+/** Tests: forget the last read. */
+export function resetCreditGuardCache(): void {
+  guardCache = null;
+}
+
+/**
+ * Polaris's risk guard (`polaris.credit.guard()`): whether buyers can start
+ * a new Pay in 4 plan. Read at most every 10 s, and never allowed to hold a
+ * page up: past 2.5 s, or on any error, it is null, which the store treats
+ * as open (the hosted checkout and the chain still apply the real answer).
+ */
+export async function creditGuard(origin = ""): Promise<ShopCreditGuard | null> {
+  const config = resolvePolarisConfig(process.env, origin);
+  if (!config.ok) return null;
+  const key = config.baseUrl;
+  if (guardCache && guardCache.key === key && Date.now() - guardCache.at < 10_000) return guardCache.value;
+  const read = server(config)
+    .credit.guard({ timeoutMs: 2_500 })
+    .then((g): ShopCreditGuard => ({ paused: g.paused, message: g.paused ? g.message : null, state: g.state }))
+    .catch(() => null);
+  const value = Promise.race([read, new Promise<null>((resolve) => setTimeout(() => resolve(null), 2_500))]);
+  guardCache = { key, at: Date.now(), value };
+  return value;
 }
 
 /** The checkout session parameters for an order: exactly what gets sent, and what the drawer shows. */

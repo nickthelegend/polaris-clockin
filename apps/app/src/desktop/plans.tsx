@@ -25,6 +25,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { SignAgainCard } from "@/components/sign-again";
+import { signAgainState } from "@/lib/collection";
 import { SuccessSheet } from "@/components/success-sheet";
 import { payEarly } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
@@ -161,7 +163,16 @@ export function PlansDesktop() {
                     {
                       key: "state",
                       header: "State",
-                      render: (p) => (p.status === "active" ? <StatusPill tone="purple">On track</StatusPill> : <StatusPill tone="lime" icon={<Check />}>Paid off</StatusPill>),
+                      render: (p) =>
+                        p.status === "active" && signAgainState(p) === "needed" ? (
+                          <StatusPill tone="amber">Sign again</StatusPill>
+                        ) : p.status === "active" ? (
+                          <StatusPill tone="purple">On track</StatusPill>
+                        ) : (
+                          <StatusPill tone="lime" icon={<Check />}>
+                            Paid off
+                          </StatusPill>
+                        ),
                     },
                     {
                       key: "left",
@@ -304,13 +315,18 @@ export function PlanDrawerContent({ id }: { id: string }) {
   return (
     <>
       <Sheet.Body className="grid content-start gap-6">
+        <SignAgainCard plan={plan} plans={plans.value.plans} />
         <div className="flex items-center gap-3">
           <MerchantAvatar name={plan.merchant.name} />
           <div className="min-w-0">
             <p className="truncate text-[18px] font-medium">{plan.merchant.name}</p>
             <p className="truncate text-[14px] text-ui-muted">{plan.description}</p>
           </div>
-          {plan.status === "active" ? (
+          {plan.status === "active" && signAgainState(plan) === "needed" ? (
+            <StatusPill tone="amber" className="ml-auto">
+              Sign again
+            </StatusPill>
+          ) : plan.status === "active" ? (
             <StatusPill tone="purple" className="ml-auto">
               On track
             </StatusPill>

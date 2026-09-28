@@ -35,6 +35,8 @@
  * week (PAY_IN_4_INTERVAL_SECONDS=60, the local deployment's minimum), so
  * the collections run is on camera: instalment 2 is collected about a
  * minute after checkout. Its log is .demo/logs/cre-collections.log.
+ * DEMO_PAY_IN_4_INTERVAL_SECONDS sets the interval outright (it wins over
+ * DEMO_FAST_PLANS).
  *
  * Then open http://127.0.0.1:3600, add something to the bag and check out
  * with Polaris. The dashboard is http://localhost:3100/dashboard.
@@ -335,8 +337,11 @@ async function main() {
     POLARIS_PUBLIC_URL: BUSINESS_URL,
     POLARIS_APP_ORIGINS: `http://127.0.0.1:${PORTS.app}`,
     POLARIS_WORKERS: "1",
-    // A week between instalments; DEMO_FAST_PLANS=1 makes it a minute, so the collections run shows on camera.
-    PAY_IN_4_INTERVAL_SECONDS: FAST_PLANS ? String(Math.max(60, deployment.config?.minInterval ?? 60)) : "604800",
+    // A week between instalments, as in production. DEMO_FAST_PLANS=1 makes it a minute, so the collections run
+    // shows on camera; DEMO_PAY_IN_4_INTERVAL_SECONDS sets it outright (the local chain allows 60 s) so a recording
+    // can show an instalment fall due, fail and be collected without moving the chain's clock.
+    PAY_IN_4_INTERVAL_SECONDS:
+      process.env.DEMO_PAY_IN_4_INTERVAL_SECONDS || (FAST_PLANS ? String(Math.max(60, deployment.config?.minInterval ?? 60)) : "604800"),
     CRON_SECRET: secrets.cron,
     CRE_UNDERWRITING_TRIGGER_URL: `http://127.0.0.1:${PORTS.trigger}/trigger`,
     CRE_TRIGGER_MIN_INTERVAL_MS: "2000",

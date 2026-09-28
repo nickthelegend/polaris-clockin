@@ -18,6 +18,23 @@ export type LocalChain = {
 };
 
 /**
+ * Polaris's risk guard, as the store shows it: while `paused`, Pay in 4 is
+ * offered nowhere and `message` says so ("Pay in 4 is paused by our risk
+ * guard; pay now works as usual."); Pay now and Subscribe carry on.
+ */
+export type ShopCreditGuard = {
+  paused: boolean;
+  message: string | null;
+  /** open, paused, stale, never, unconfigured, unavailable (polarispay-sdk's CreditGuardStatus). */
+  state: string;
+};
+
+/** The sentence while paused, from the guard when it sent one. */
+export function pausedMessage(guard: ShopCreditGuard | null | undefined): string | null {
+  return guard?.paused ? (guard.message ?? "Pay in 4 is paused by our risk guard; pay now works as usual.") : null;
+}
+
+/**
  * The Polaris settings a browser may see, handed from server components to
  * client ones. No secrets: the publishable key is public by design.
  */
@@ -36,5 +53,7 @@ export type BrowserPolarisConfig =
        * wallet payment signs for. Null: Monad testnet, from polarispay-sdk.
        */
       chain?: LocalChain | null;
+      /** Polaris's risk guard when the page was served (`creditGuard()`): while paused, Pay in 4 is off. Null: couldn't be read (treated as open). */
+      creditGuard?: ShopCreditGuard | null;
     }
   | { ok: false; reason: string; payInFourAprBps: number };

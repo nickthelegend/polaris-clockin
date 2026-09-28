@@ -38,3 +38,5 @@ export { PolarisError, PolarisSignatureVerificationError, isPolarisError } from 
 export type { PolarisErrorType, SignatureFailureReason } from "./errors.js";
 export { MONAD, MONAD_TESTNET } from "./chains.js";
 export { VERSION } from "./version.js";
+export { CREDIT_PAUSED_MESSAGE } from "./credit.js";
+export type { CreditGuardReason, CreditGuardStatus } from "./credit.js";

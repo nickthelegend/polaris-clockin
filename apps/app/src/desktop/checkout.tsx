@@ -21,6 +21,8 @@ import { useEffect, useId, useState } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { GuardPausedNotice, GuardStaleLine } from "@/components/credit-guard-note";
+import { LocalEquivalent } from "@/components/local-equivalent";
 import { useCloseSheet } from "@/components/shell/sheet-host";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
@@ -31,7 +33,7 @@ import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
 import { useNow } from "@/lib/use-now";
 import { n, subscribeSummary } from "@/lib/view";
-import { initialMode, MODE_LABEL, merchantLine, modesOf, type Paid, Receipt } from "@/sheets/checkout";
+import { initialMode, laterPaused, MODE_LABEL, merchantLine, modesOf, type Paid, Receipt } from "@/sheets/checkout";
 
 /**
  * A payment link from 1024px: one centred card on the framed canvas, under
@@ -59,6 +61,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
 
   const later = link.modes.later;
   const sub = link.modes.subscription;
+  const paused = laterPaused(link);
   const available = balance.value?.available;
   const needFor = (m: PayMode) => (m === "now" ? link.amount : m === "later" ? 0n : (sub?.price ?? link.amount));
   const short = available !== undefined && state.status !== "none" && available < needFor(mode);
@@ -68,7 +71,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
   const signedIn = available !== undefined && state.status !== "none";
 
   const title =
-    mode === "later" && later ? "Start Pay in 4" : mode === "subscription" && sub ? `Subscribe for ${usd(sub.price)}` : `Pay ${usd(link.amount, { trim: true })}`;
+    mode === "later" && paused ? "Pay in 4 is paused" : mode === "later" && later ? "Start Pay in 4" : mode === "subscription" && sub ? `Subscribe for ${usd(sub.price)}` : `Pay ${usd(link.amount, { trim: true })}`;
 
   const numbers: KeyValue[] =
     mode === "later" && later
@@ -116,6 +119,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
             <Money value={n(link.amount)} className="ui-figure text-[56px] leading-none font-medium tracking-[-0.04em]" />
             {later ? <DeltaChip value={null} label={`or 4 × ${each}`} /> : sub ? <DeltaChip value={null} label="Monthly" /> : null}
           </div>
+          <LocalEquivalent amount={link.amount} className="mt-3 block text-[15px]" />
 
           <DetailsList
             className="mt-8"
@@ -158,7 +162,9 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
           )}
 
           <div id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${mode}`} className="grid gap-4">
-            {mode === "later" && later ? (
+            {mode === "later" && paused ? (
+              <GuardPausedNotice message={paused} />
+            ) : mode === "later" && later ? (
               <div className="rounded-ui-swap bg-ui-surface-1 p-5">
                 <div className="flex items-baseline justify-between gap-3">
                   <p className="ui-figure text-[34px] leading-none font-medium tracking-[-0.03em]">4 × {each}</p>
@@ -224,7 +230,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
               </div>
             )}
 
-            <KeyValueGrid items={numbers} />
+            {mode === "later" && paused ? null : <KeyValueGrid items={numbers} />}
 
             {mode === "later" && later && credit.value ? (
               overLimit ? (
@@ -238,6 +244,12 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
                   <span className="ui-figure text-ui-text">{usd(credit.value.available)}</span> of {usd(credit.value.limit, { trim: true })}.
                 </p>
               )
+            ) : null}
+            {mode === "later" && later ? <GuardStaleLine guard={link.session?.creditGuard} /> : null}
+            {mode === "later" && paused ? (
+              <p className="text-[14px] leading-snug text-ui-muted">
+                Plans you already have keep going as scheduled. Pay in 4 comes back here as soon as the risk guard lifts the pause.
+              </p>
             ) : mode === "subscription" && sub ? (
               <p className="text-[14px] leading-snug text-ui-muted">
                 Charged {describeInterval(sub.periodSeconds)} from your dollar account until you cancel, which you can do any time in Pay in 4.
@@ -253,10 +265,14 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
           </div>
 
           <div className="mt-auto grid gap-3 pt-2">
-            <PrimaryButton size="lg" block icon={<ScanFace />} disabled={short || overLimit} onClick={() => setConfirming(true)}>
+            <PrimaryButton size="lg" block icon={<ScanFace />} disabled={short || overLimit || (mode === "later" && paused !== null)} onClick={() => setConfirming(true)}>
               {title}
             </PrimaryButton>
-            {mode === "later" && credit.value && !credit.value.historyLinked ? (
+            {mode === "later" && paused && link.modes.now ? (
+              <SecondaryButton size="lg" block onClick={() => setMode("now")}>
+                Pay now instead, {usd(link.amount)}
+              </SecondaryButton>
+            ) : mode === "later" && credit.value && !credit.value.historyLinked ? (
               <SecondaryButton size="lg" block iconRight={<TrendingUp />} onClick={() => setRaising(true)}>
                 Raise your limit
               </SecondaryButton>

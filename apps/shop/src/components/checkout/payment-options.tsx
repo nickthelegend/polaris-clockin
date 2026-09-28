@@ -54,6 +54,7 @@ export function PaymentOptions({
   hasWallet,
   coarsePointer,
   walletPanel,
+  payInFourPaused = null,
 }: {
   method: Method;
   onMethod: (m: Method) => void;
@@ -67,6 +68,8 @@ export function PaymentOptions({
   /** A touch screen: phones get a full-page redirect to Polaris, and rarely have a browser wallet. */
   coarsePointer: boolean;
   walletPanel: ReactNode;
+  /** Polaris's risk guard has paused new Pay in 4 plans: its sentence, shown in place of the plan. */
+  payInFourPaused?: string | null;
 }) {
   const name = useId();
   const modeName = useId();
@@ -83,7 +86,7 @@ export function PaymentOptions({
       ? [{ id: "subscribe", title: "Subscribe", detail: `${formatUsd(total)} a month` }]
       : [
           { id: "now", title: "Pay now", detail: formatUsd(total) },
-          { id: "later", title: "Pay in 4", detail: plan ? `4 × ${formatUsd(plan.each)}` : "" },
+          { id: "later", title: "Pay in 4", detail: payInFourPaused ? "Paused" : plan ? `4 × ${formatUsd(plan.each)}` : "" },
         ];
 
   const walletDisabled = kind === "subscription";
@@ -97,7 +100,9 @@ export function PaymentOptions({
           <Radio checked={method === "polaris"} />
           <span className="flex flex-1 flex-wrap items-center justify-between gap-x-4 gap-y-1">
             <PolarisLockup className="text-[1.08rem]" />
-            <span className="text-[0.9rem] text-muted">{kind === "subscription" ? "Monthly, cancel any time" : `Pay now, or in 4 payments at ${aprLabel(aprBps)}`}</span>
+            <span className="text-[0.9rem] text-muted">
+              {kind === "subscription" ? "Monthly, cancel any time" : payInFourPaused ? "Pay now in full" : `Pay now, or in 4 payments at ${aprLabel(aprBps)}`}
+            </span>
           </span>
         </label>
         <Expand open={method === "polaris"}>
@@ -105,7 +110,7 @@ export function PaymentOptions({
             <div role="radiogroup" aria-label="How to pay with Polaris" className={`grid gap-2 ${modes.length > 1 ? "sm:grid-cols-2" : ""}`}>
               {modes.map((m) => {
                 const checked = mode === m.id;
-                const disabled = m.id === "later" && !payInFourAllowed;
+                const disabled = m.id === "later" && (!payInFourAllowed || Boolean(payInFourPaused));
                 return (
                   <label
                     key={m.id}
@@ -121,7 +126,13 @@ export function PaymentOptions({
               })}
             </div>
 
-            {mode === "later" && plan ? (
+            {kind !== "subscription" && payInFourPaused ? (
+              <p role="status" className="mt-4 rounded-xl bg-sand px-4 py-3 text-[0.92rem] leading-relaxed text-ink">
+                {payInFourPaused}
+              </p>
+            ) : null}
+
+            {mode === "later" && plan && !payInFourPaused ? (
               <div className="mt-5">
                 <p className="text-[0.9rem] font-medium text-ink">Nothing to pay today. Then:</p>
                 <ol className="mt-3 grid grid-cols-4 gap-2" aria-label="Pay in 4 schedule">

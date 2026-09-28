@@ -50,6 +50,7 @@ is unavailable) and every dashboard route answers 503. The landing page and
 | `/dashboard/links` | Payment links: create (dialog), share with a QR code, turn off. |
 | `/dashboard/plans` | The Pay in 4 ledger with instalment ticks; rows open a plan drawer. |
 | `/dashboard/payouts` | The balance card, one-tap withdraw (review, confirm, receipt), automatic daily payouts with **Pay out now**, history. |
+| `/dashboard/chainlink` | The three Chainlink CRE workflows as they run (More > Chainlink, and the Overview's collections card): the risk guard's verdict, its checks against the thresholds and how old its last check is; the pool-health feed (`GuardianReceiver.latestRoundData`, "computed by CRE"); each workflow's triggers and latest reports on Monad, each with its transaction and what it did; how reports reach the receivers. Labelled sample data on a server with nothing deployed. |
 | `/dashboard/developers` | The integration (merchant ID, `baseUrl`, registration), API keys, webhooks with a test event and the delivery log (attempts, **Retry now**), the SDK snippet, the demo shop. |
 | `/gallery` | Every `@polaris/ui` component, beside the reference it reproduces. |
 
@@ -247,6 +248,7 @@ belongs to a checkout session, and one PolarisCheckout already settled.
 | `PolarisPayments.quoteOrder` | operator (server: a session's price) | pins the session's price on its order before the order id is handed out; moves nothing |
 | `PolarisSend.send` / `claim` / `cancel` | sender + link key / link key / sender | the link key's signature names the recipient |
 | `PolarisLoanEngine.repayWithSig` | borrower: `RepayIntent` | |
+| `PolarisCheckout.reauthorize` | borrower: ERC-2612 `Permit` to the loan engine | the contract checks spender, signer and that the value covers everything owed; the relayer refuses first when nothing is owed, the approval already covers it, or the permit is short |
 | `MerchantRegistry.registerFor` / `updatePayoutAddressWithSig` | merchant's embedded wallet | the merchant signs name and payout address |
 | AUSD `transferWithAuthorization` | owner (withdrawals, payouts) | the owner signs `to` and `value` |
 
@@ -414,6 +416,40 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
 - `GET /api/public/credit/{address}` and `/messages`, `POST /api/credit/underwrite`:
   credit (above).
 - `GET /api/public/network`: the contracts and EIP-712 domains.
+- `GET /api/public/credit-guard`: the risk guard (below).
+
+## Chainlink: the risk guard, signing again, and what each CRE report did
+
+- **The risk guard.** `GET /api/public/credit-guard` (`src/server/cre/guardian.ts`)
+  reads `PolarisCheckout.creditPaused()`, which is what `openPlan` applies,
+  and GuardianReceiver's `creditStatus`, `thresholds`, `latestAttestation`
+  and `latestRoundData`, once per 10 s per process. States: `open`,
+  `paused` (with the reasons and "Pay in 4 is paused by our risk guard; pay
+  now works as usual."), `stale` and `never` (the guard is late and blocks
+  nothing: it fails open), `unconfigured`, `unavailable` (a failed read,
+  treated as open, as the contract treats a guard it can't read). The hosted
+  checkout's `payIn4` carries it; the app, polarispay-sdk's
+  `credit.guard()` (Halcyon) and the dashboard's banner read the route.
+- **Signing again.** `POST /api/relay` type `reauthorize` carries a buyer's
+  permit to `PolarisCheckout.reauthorize` after a collection failed with
+  InsufficientAllowance. The buyer book (`GET /api/public/buyers/{address}`)
+  says when a plan `needsSignature`, and `reauthorized` holds the
+  Reauthorized transaction and, once it lands, the collection that followed.
+- **What each report did.** The chain sync also reads UnderwritingReceiver,
+  GuardianReceiver and PolarisCheckout's Reauthorized (`src/server/ingest/cre.ts`)
+  and keeps one `cre_runs` record per report transaction, with the
+  forwarder's ReportProcessed and the sender. A collections run that collects
+  a buyer within 15 minutes of their Reauthorized is shown beside it (the
+  instant retry). An UnderwritingApplied keeps its transaction on the
+  account's credit decision, which `GET /api/public/credit/{account}` returns
+  as `verified` ("Verified by Chainlink CRE" in the app). `GET /api/chainlink`
+  (a merchant session) serves the dashboard page; a merchant sees its own
+  buyers' addresses and its own share of each collections run only. The
+  schedules come from the workflows' own configs (`workflows/<dir>/config.<CRE_TARGET>.json`,
+  staging by default).
+- **On `pnpm demo:local`**, `node scripts/demo-chainlink.mjs` drives every
+  state (see its header; collections and guardian reports there are
+  hand-built and say so). Captures: [`docs/design/chainlink`](../../docs/design/chainlink).
 
 ## Environment
 

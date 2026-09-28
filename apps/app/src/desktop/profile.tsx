@@ -28,7 +28,7 @@ import { useAccountState, useOwner, usePrivyStatus } from "@/lib/account/hooks";
 import { getPlans, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { monthYear } from "@/lib/dates";
-import { currencyForLocale, LOCAL_CURRENCIES } from "@/lib/money";
+import { currencyForLocale, localCurrencyHint, localCurrencyOptions } from "@/lib/money";
 import { setPrefs, useLocale, usePrefs } from "@/lib/prefs";
 import { n } from "@/lib/view";
 import { PageCoin, PageGrid, PageHead, SectionTitle, SideNote, withSample } from "./bits";
@@ -202,17 +202,14 @@ export function SettingsDesktop() {
                 wrapperClassName="mt-5 max-w-[480px]"
               />
             </PanelCard>
-            <PanelCard title="Local currency" subtitle="Shown next to dollars at sample exchange rates, for reference only. You always pay in dollars.">
+            <PanelCard title="Local currency" subtitle={localCurrencyHint(prefs.currency ?? auto)}>
               <Select
                 variant="filled"
                 label="Local currency"
                 hideLabel
                 value={prefs.currency ?? "auto"}
                 onValueChange={(v) => setPrefs({ currency: v === "auto" ? null : v })}
-                options={[
-                  { value: "auto", label: `Automatic (${auto})`, text: "Automatic" },
-                  ...LOCAL_CURRENCIES.map((code) => ({ value: code, label: code === "USD" ? "USD (dollars only)" : code, text: code })),
-                ]}
+                options={localCurrencyOptions(auto, prefs.currency)}
                 wrapperClassName="mt-5 max-w-[480px]"
               />
             </PanelCard>

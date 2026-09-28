@@ -18,6 +18,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { MerchantAvatar, merchantBrand } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
+import { CreditGuardLine } from "@/components/credit-guard-note";
+import { CreditProvenance } from "@/components/credit-provenance";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { CreditDesktop } from "@/desktop/credit";
 import { useOwner } from "@/lib/account/hooks";
@@ -68,6 +70,8 @@ export function CreditSheet() {
         ) : (
           <Skeleton shape="card" height={164} />
         )}
+        <CreditProvenance credit={credit.value} className="self-start" />
+        <CreditGuardLine />
 
         <SectionHeader
           title="Active plans"

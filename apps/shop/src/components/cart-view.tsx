@@ -7,6 +7,7 @@ import { QuantityStepper } from "@/components/quantity";
 import { FLAT_SHIPPING, FREE_SHIPPING_THRESHOLD } from "@/lib/catalog";
 import { formatUsd } from "@/lib/money";
 import { PolarisMessaging } from "@/lib/polaris-client";
+import { pausedMessage } from "@/lib/polaris-config";
 import { MAX_QUANTITY, useShop } from "@/lib/shop-context";
 
 export function CartView() {
@@ -86,7 +87,7 @@ export function CartView() {
                 </div>
               </dl>
               {polarisConfig.ok ? (
-                <PolarisMessaging amount={(total / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} className="mt-4 text-ink-2 [--polaris-message-size:0.93rem]" />
+                <PolarisMessaging amount={(total / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} paused={pausedMessage(polarisConfig.creditGuard)} className="mt-4 text-ink-2 [--polaris-message-size:0.93rem]" />
               ) : null}
               <Link href="/checkout" className="btn btn-ink mt-7 w-full">
                 Check out

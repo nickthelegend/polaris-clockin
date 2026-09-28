@@ -9,7 +9,7 @@ import { PolarisLockup } from "@/components/polaris-lockup";
 import { PolarisMark } from "@/lib/polaris-client";
 
 /** The store's "Pay over time with Polaris" band, as a store would run a BNPL provider's promotion. */
-export function PayOverTimeBand({ aprBps, example }: { aprBps: number; example: Product }) {
+export function PayOverTimeBand({ aprBps, example, paused = null }: { aprBps: number; example: Product; paused?: string | null }) {
   const plan = payIn4(example.price, aprBps)!;
   const facts = [
     { title: `4 payments, ${aprLabel(plan.aprBps)}`, body: `${formatUsd(plan.interest)} of interest on this example, shown before you confirm.` },
@@ -33,6 +33,11 @@ export function PayOverTimeBand({ aprBps, example }: { aprBps: number; example: 
             Choose Polaris at checkout and split your order into four weekly payments, the first a week from today. Nothing to pay at
             checkout. Confirm with Face ID; there is no card to type in.
           </p>
+          {paused ? (
+            <p role="status" className="mt-5 max-w-[31rem] rounded-xl bg-paper px-4 py-3 text-[0.95rem] leading-relaxed text-ink shadow-[inset_0_0_0_1px_var(--color-hair-strong)]">
+              {paused}
+            </p>
+          ) : null}
           <dl className="mt-10 max-w-[34rem] divide-y divide-hair-strong border-y border-hair-strong">
             {facts.map((fact) => (
               <div key={fact.title} className="grid gap-1 py-4 sm:grid-cols-[14rem_1fr] sm:gap-6">

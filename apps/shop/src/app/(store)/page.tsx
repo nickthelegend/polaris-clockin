@@ -7,7 +7,8 @@ import { PayOverTimeBand } from "@/components/pay-over-time";
 import { ProductCard } from "@/components/product-card";
 import { ImageReveal } from "@/components/reveal";
 import { CATEGORIES, getProduct, type Product } from "@/lib/catalog";
-import { payInFourApr } from "@/lib/polaris";
+import { creditGuard, payInFourApr } from "@/lib/polaris";
+import { pausedMessage } from "@/lib/polaris-config";
 
 function product(id: string): Product {
   const p = getProduct(id);
@@ -15,7 +16,7 @@ function product(id: string): Product {
   return p;
 }
 
-export default function HomePage() {
+export default async function HomePage() {
   const aprBps = payInFourApr();
   return (
     <>
@@ -57,7 +58,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <PayOverTimeBand aprBps={aprBps} example={product("halcyon-one")} />
+      <PayOverTimeBand aprBps={aprBps} example={product("halcyon-one")} paused={pausedMessage(await creditGuard())} />
 
       <section aria-labelledby="categories-title" className="mx-auto max-w-[1440px] px-4 pt-24 sm:px-6 lg:px-10 lg:pt-32">
         <h2 id="categories-title" className="display text-[2.6rem] sm:text-[3.4rem]">

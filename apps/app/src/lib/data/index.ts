@@ -29,6 +29,7 @@ export { DEMO_LINK_IDS as SAMPLE_LINK_IDS } from "./mock";
 export const getProfile = (owner: Address | null) => data.getProfile(owner);
 export const getBalance = (owner: Address | null) => data.getBalance(owner);
 export const getCreditLine = (owner: Address | null) => data.getCreditLine(owner);
+export const getCreditGuard = () => data.getCreditGuard();
 export const getPlans = (owner: Address | null) => data.getPlans(owner);
 export const getActivity = (owner: Address | null) => data.getActivity(owner);
 export const getContacts = (owner: Address | null) => data.getContacts(owner);

@@ -20,6 +20,34 @@ export type Deployment = {
   config?: { minInterval?: number; minPeriod?: number; feeBps?: number; interestRateBps?: number; graceSeconds?: number };
   eip712?: Record<string, { domain: { name?: string; version?: string; chainId?: number; verifyingContract?: Address } } | undefined>;
   demo?: { merchant?: Address; merchantName?: string; merchantPrivateKey?: Hex };
+  /** The Chainlink CRE block the deploy script writes (packages/contracts lib/deploy.js). */
+  cre?: DeploymentCre;
+};
+
+/** What the deploy script records about the CRE workflows and their receivers. */
+export type DeploymentCre = {
+  forwarderKind?: "local" | "simulation" | "production";
+  forwarder?: Address;
+  simulationTransmitter?: Address | null;
+  workflowOwner?: Address | null;
+  workflows?: {
+    collections?: {
+      name?: string;
+      receiver?: Address;
+      workflowId?: Hex;
+      retry?: { trigger?: string; contract?: Address; event?: string; topic0?: Hex; view?: string };
+    };
+    underwrite?: { name?: string; receiver?: Address; workflowId?: Hex };
+    guardian?: {
+      name?: string;
+      receiver?: Address;
+      workflowId?: Hex;
+      priceFeed?: { chainId?: number; chainSelectorName?: string | null; address?: Address; decimals?: number; description?: string; kind?: "chainlink" | "mock" };
+      feed?: { description?: string; decimals?: number; address?: Address };
+    };
+  };
+  /** After lock-receivers (lock-receivers:monad): the receivers accept only the deployed workflows. */
+  locked?: { at?: string; workflowOwner?: Address; forwarderKind?: string } | null;
 };
 
 export type ContractAddresses = {
@@ -32,6 +60,8 @@ export type ContractAddresses = {
   scoreManager: Address;
   collections: Address | null;
   underwriting: Address | null;
+  /** GuardianReceiver: the CRE guardian's attestations, and the credit guard PolarisCheckout.openPlan asks. */
+  guardian: Address | null;
 };
 
 export type ChainConfig = {
@@ -46,6 +76,8 @@ export type ChainConfig = {
   logsRpcUrl: string | null;
   explorerUrl: string;
   contracts: ContractAddresses;
+  /** The CRE workflows as deployed: names, forwarder, the guardian's price feed (the deployment record's `cre` block). */
+  cre: DeploymentCre | null;
   /** The stablecoin's EIP-712 name and version (real AUSD: "Agora Dollar", "1"). */
   stablecoinDomain: { name: string; version: string };
   /** Shortest instalment interval the loan engine accepts, in seconds. */
@@ -255,6 +287,7 @@ function contractsFrom(d: Deployment): ContractAddresses {
     scoreManager: need("ScoreManager"),
     collections: maybe("CollectionsReceiver"),
     underwriting: maybe("UnderwritingReceiver"),
+    guardian: maybe("GuardianReceiver"),
   };
 }
 
@@ -276,6 +309,7 @@ function chainFrom(d: Deployment): ChainConfig {
     logsRpcUrl: env("POLARIS_LOGS_RPC_URL") ?? null,
     explorerUrl: (env("POLARIS_EXPLORER_URL") ?? DEFAULT_EXPLORER[id] ?? "").replace(/\/+$/, ""),
     contracts: contractsFrom(d),
+    cre: d.cre ?? null,
     stablecoinDomain: { name: stable?.name ?? "Agora Dollar", version: stable?.version ?? "1" },
     minIntervalSeconds: d.config?.minInterval ?? 3600,
     minPeriodSeconds: d.config?.minPeriod ?? 3600,

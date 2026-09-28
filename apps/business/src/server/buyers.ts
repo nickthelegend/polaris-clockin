@@ -57,6 +57,16 @@ export async function buyerBook(address: Address) {
         state: p.state,
         openedTxHash: p.openedTxHash,
         createdAt: p.createdAt,
+        /** Why the current instalment wasn't collected (insufficient_funds, allowance_lost, other), and when it is tried again. */
+        lastFailure: p.lastFailure,
+        /**
+         * The loan engine's approval is gone: the buyer signs once more
+         * (`POST /api/relay` type "reauthorize") and the CRE collections run
+         * that follows collects the instalment.
+         */
+        needsSignature: p.state === "dunning" && p.lastFailure?.reason === "allowance_lost" && !p.reauthorized,
+        /** They signed again (the Reauthorized transaction), and the collection that followed, once it lands. */
+        reauthorized: p.reauthorized ?? null,
       })),
     subscriptions: subscriptions.map((s) => ({
       id: s.id,
