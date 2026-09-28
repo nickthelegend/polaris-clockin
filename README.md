@@ -32,10 +32,12 @@ Track 02: Consumer Products & Payments. The plan is in
 > [Monad testnet deployment](#monad-testnet-deployment). The dollar there is
 > a clearly labelled **mock** (`MockAUSD`), because the deployer held no
 > testnet AUSD. The whole product also runs end to end on a local chain with
-> one command (`pnpm demo:local`, below). The Chainlink CRE workflows are
-> built and tested, and nothing but a `cre login` stands between them and
-> their `simulate --broadcast` runs on Monad testnet: **no CLI run and no
-> CRE transaction exist yet** ([Chainlink CRE](#chainlink-cre-an-orchestration-layer)).
+> one command (`pnpm demo:local`, below). The Chainlink CRE workflows ran
+> with the CRE CLI (`simulate --broadcast`) and delivered **three signed
+> reports on Monad testnet**: an instant collection on an EVM log trigger, a
+> scheduled collection, and a guardian attestation that reads Chainlink's
+> AUSD/USD feed on Monad mainnet
+> ([the runs](#cre-runs-on-monad-testnet-28-sep-2026)).
 
 ---
 
@@ -237,8 +239,9 @@ fresh buyer signed each step:
   which emitted `Reauthorized`.
 
 The buyer's Pay in 4 line is secured: the buyer locked $202 in
-CollateralVault itself. An unsecured line needs the CRE underwriting report,
-which waits for `cre login`. Apart from those two calls and one approval,
+CollateralVault itself. An unsecured line needs a CRE underwriting report,
+which needs provider keys (the workflow runs, and without keys it returns
+`incomplete` rather than guess). Apart from those two calls and one approval,
 the buyer sent nothing: every Polaris step was a signature the dev relayer
 carried.
 
@@ -344,57 +347,41 @@ reads all of it back (65 of 65, after the guardian's redeploy:
 | A real `Reauthorized` log, the instant retry's trigger input (log 1 of the receipt) | [`0xf02c45bd…`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002) |
 | The workflows' staging configs, filled from the deployment | `workflows/{collections,underwriting,guardian}/config.staging.json` (`configure staging`; a test holds them to the record) |
 
-#### CRE runs on Monad testnet: none yet (waiting for `cre login`)
+#### CRE runs on Monad testnet (28 Sep 2026)
 
-`cre workflow simulate` needs a CRE login, and this machine has none
-(`cre whoami`, 28 Sep 2026: "not logged in"). **No CRE transaction hash or
-simulate log exists yet, and none is shown here**: on chain the forwarder
-has delivered nothing to the receivers, the transmitter's nonce is 0, and
-`GuardianReceiver.latestRound()` is 0. The "orchestration" runs so far are
-the SDK's test runtime (`e2e:local`, `demo:local`), which is not the CLI.
+Each row is one `cre workflow simulate --broadcast` run with the CRE CLI
+v1.35.0, logged in as the team's CRE organisation (deploy access is not
+enabled yet, so these are simulations, which the bounty accepts). For each
+run, the CLI compiled the workflow to WASM, ran it, and sent its signed report
+to Monad testnet through Chainlink's forwarder for `monad-testnet`,
+`0xB9F79d863261869B234c481D1f9A7af84AeAd192`. `cre workflow supported-chains`
+lists that forwarder
+([`supported-chains.txt`](workflows/evidence/2026-09-28/supported-chains.txt)).
+Every transaction was read back from Monad testnet with status 1, and
+"Delivered" is the forwarder's `ReportProcessed` result for the receiver.
 
-Everything else is in place: the deployment, the configs, and the funded
-transmitter key (`CRE_ETH_PRIVATE_KEY` in the git-ignored `workflows/.env`).
-A real `Reauthorized` transaction for the log trigger also exists. What would
-have stopped every run even after a login is fixed: the CLI resolves every
-name in a workflow's secrets file before it runs, and aborts on one that is
-not set, and all three workflows pointed at the provider keys. Now the
-guardian names no secrets file, collections its own (the callback key only),
-and the scripts define every name the CLI resolves (empty when there is no
-key; `workflows/test/secrets-env.test.ts`). Right after `cre login`, run
-this one command:
+| Workflow and trigger | What it orchestrated | Monad testnet transaction | Block | Delivered |
+|---|---|---|---:|---|
+| `polaris-collections`, **EVM log trigger** on `PolarisCheckout.Reauthorized` | A buyer re-signed ([`0xf02c45bd…`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002)). The workflow read what the buyer owed, signed a report, and `CollectionsReceiver` collected instalment #1 | [`0x1116fbb4…292c4d`](https://testnet.monadscan.com/tx/0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d) | 66359311 | `result=true` |
+| `polaris-collections`, **cron trigger** | Found due and overdue plans on chain: collected one instalment and liquidated a plan past its grace period | [`0xd7bcf41e…1a97e4`](https://testnet.monadscan.com/tx/0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4) | 66359350 | `result=true` |
+| `polaris-guardian`, **cron trigger** | Read **Chainlink AUSD/USD on Monad mainnet** (`0xE20751C7B5867bCBef815ffc1b284c3f412a9e13`: 0.99982194), read the pool on testnet, and attested "healthy, Pay in 4 open" as `GuardianReceiver` round 1 | [`0x015bd95d…3f9080`](https://testnet.monadscan.com/tx/0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080) | 66359401 | `result=true` |
+| `polaris-underwrite`, **HTTP trigger** | Ran and correctly wrote nothing. With no provider keys, Zerion and Etherscan answered "unauthorized", so it could not confirm the account's first-seen date and sent count, and returned `incomplete` instead of guessing | none (by design) | | |
 
-```bash
-pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002
-```
+The logs of all six runs, the table and `runs.json` are in
+[`workflows/evidence/2026-09-28/`](workflows/evidence/2026-09-28/). The first
+two underwriting runs stopped before running. They exposed two bugs that the
+real CLI and runtime catch and the unit tests could not, both now fixed and
+tested:
+- The evidence script passed a 100-character `--config` path; the CLI's
+  limit is 97 (`cliConfigArg`).
+- zod's `.url()` needs the `URL` constructor, which the CRE WASM runtime does
+  not have, so every URL in a config failed validation (`httpUrl`).
 
-It checks the login, the record, the transmitter's MON, each receiver's
-`simulationTransmitter()` and every secret variable before it sends anything.
-Then it records `cre workflow supported-chains`. That list shows whether
-Monad testnet, mainnet and the log trigger are enabled for the organisation,
-which this machine cannot check yet. It runs four `simulate --broadcast` runs
-(underwriting without the providers that have no key, so Confidential HTTP
-never sends an empty one), reads every hash back from Monad testnet, and
-writes `workflows/evidence/<date>/` (each run's log, `runs.json`,
-`supported-chains.txt`, and a `README.md` table with explorer links; git
-keeps the `.log` files). `--callback <url>` (with `POLARIS_CALLBACK_SECRET`)
-points collections' and underwriting's signed callback at a running Polaris
-API for those runs, so the HTTP capability shows in their logs. Expected
-results, from the state on chain (plan #1 opened at 02:27 UTC on 28 Sep, four
-instalments 60 s apart, one hour of grace):
-
-| Run | Trigger | Expected |
-|---|---|---|
-| `collections-retry` | EVM log: the `Reauthorized` above | it collects what plan #1 has due for the buyer who signed again (`dueTasksFor`) through `CollectionsReceiver`: one transaction |
-| `collections` | cron | it collects what is still due; once plan #1 is past its grace, it liquidates the rest, recovered from the buyer's allowance and the collateral they locked (no bad debt, and the pool is under the guardian's $10,000 floor anyway): one transaction |
-| `underwriting` | HTTP (a freshly signed payload) | **no report** (no provider keys): `incomplete` or `thin`. The payload is a new throwaway account. A report needs `POLARIS_UNDERWRITE_WALLET_KEY` (a consenting wallet with at least 90 days and 10 transactions on Ethereum or Base) and at least a free Etherscan key ([What only you can do](#what-only-you-can-do), step 2) |
-| `guardian` | cron | AUSD/USD ≈ 0.9998, inside $0.995 to $1.005; free cash ≈ $9,800 ≥ $1,000; no bad debt: **open**. It writes round 1 to `GuardianReceiver` `0x4c99…e3Df`: one transaction |
-
-For the demo recording, `collections:loop --broadcast` and `guardian:loop
---broadcast` repeat these every minute into `workflows/evidence/loop/`.
-`retry:listen` keeps the log trigger live (`simulate --listen`). The CLI's
-own trigger replaces `trigger:local` once `CRE_UNDERWRITING_TRIGGER_URL`
-points at it.
+An underwriting report (and the first live Confidential HTTP call) needs a
+free Etherscan API key and a consenting history wallet (see
+[What only you can do](#what-only-you-can-do)). To run everything again from
+this checkout: `pnpm --filter @polaris/cre-workflows evidence`, adding
+`--retry-tx <a Reauthorized transaction>` for the log trigger.
 
 #### The guardian's feed-shaped view
 
@@ -447,7 +434,7 @@ Basic header and Etherscan's POST body:
 | | Status |
 |---|---|
 | The Polaris contracts, including the three CRE receivers | **Deployed on Monad testnet** (28 Sep 2026), every role read back on chain; GuardianReceiver redeployed the same day with the review's fixes. PolarisCheckout's `reauthorize` fixes are in code only (not redeployed) |
-| The three workflows | **Built** (WASM, CLI v1.35.0) and **tested**: 209 unit tests on the SDK's test runtime, and `e2e:local` 12 of 12 against real contracts on a local node. **Not run by the CLI yet**: `simulate --broadcast` waits for `cre login` (above). **Not deployed to a DON**: that needs deploy access (`cre account access`) |
+| The three workflows | **Built** (WASM, CLI v1.35.0) and **tested**: 209 unit tests on the SDK's test runtime, and `e2e:local` 12 of 12 against real contracts on a local node. **Run by the CLI on Monad testnet** (`simulate --broadcast`, 28 Sep 2026): collections on both triggers and the guardian delivered reports; underwriting ran and returned `incomplete` without provider keys ([the runs](#cre-runs-on-monad-testnet-28-sep-2026)). **Not deployed to a DON**: that needs deploy access (`cre account access`) |
 | Where a simulated run's report goes | A real Monad testnet transaction: the CLI signs with the transmitter key and calls Chainlink's `MockKeystoneForwarder`. It carries no DON signatures, so each receiver accepts it only from that transmitter (`tx.origin`) |
 | After a DON deploy | `deploy:monad` with `CRE_FORWARDER=production`, or the owner moves the receivers to the production forwarder. Then `lock-receivers:monad` pins the workflow owner, names and ids and clears the simulation transmitter; it refuses Chainlink's MockKeystoneForwarder (or anything that is not Chainlink's KeystoneForwarder) as the production one. Not done: there is no deployment to lock to |
 | "Verified by Chainlink CRE" on a credit line | Only for a report delivered through Chainlink's KeystoneForwarder (DON-signed). A simulated run's report reads "Chainlink CRE (simulated)", a local one "CRE workflow, local run" (`apps/business` `src/server/cre/provenance.ts`) |
@@ -485,7 +472,7 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 |---|---|---|
 | The WASM builds | `pnpm --filter @polaris/cre-workflows build` | all three compile (no login needed) |
 | Real contracts, every trigger | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 of 12 on a local node |
-| `cre workflow simulate --broadcast` on Monad testnet, with hashes | `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd…` writes logs and hashes to `workflows/evidence/` | *Not yet*: needs `cre login` ([What only you can do](#what-only-you-can-do), step 2) |
+| `cre workflow simulate --broadcast` on Monad testnet, with hashes | `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd…` writes logs and hashes to `workflows/evidence/` | **Done** for collections (log and cron triggers) and the guardian: [`0x1116fbb4…`](https://testnet.monadscan.com/tx/0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d), [`0xd7bcf41e…`](https://testnet.monadscan.com/tx/0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4), [`0x015bd95d…`](https://testnet.monadscan.com/tx/0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080). Underwriting's report needs provider keys ([the runs](#cre-runs-on-monad-testnet-28-sep-2026)) |
 | The receivers' sources on Monadscan | `ETHERSCAN_API_KEY=… pnpm --filter @polarispay/contracts verify:monad` | *Not yet*: needs an Etherscan key (step 1); `VERIFY_DRY_RUN=1` shows all 12 contracts reproduce from source today |
 | Receivers locked to the deployed workflows | `pnpm --filter @polarispay/contracts lock-receivers:monad` | after a DON deploy |
 
@@ -549,18 +536,11 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
    - Optional: a PolarisCheckout redeploy for the two `reauthorize` fixes
      (it moves every address the apps, the indexer and the workflows use, so
      after the freeze). The deployer has about 0.30 MON left.
-2. **Chainlink CRE:** run `pnpm --filter @polaris/cre-workflows cre login`
-   (a browser login, or set `CRE_API_KEY`), and request deploy access
-   (`cre account access`). Then, from this checkout (the transmitter key is
-   in its git-ignored `workflows/.env`; copy that file along to run it from
-   another), the one command:
-   `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002`.
-   For collections and the guardian nothing else is needed: the transmitter
-   is funded and set on every receiver, and every secret variable the CLI
-   resolves is defined for it (empty where there is no key). Commit
-   `workflows/evidence/<date>/` (its `.log` files included) and replace the
-   "none yet" section in [Chainlink CRE](#chainlink-cre-an-orchestration-layer)
-   with its table. Optional:
+2. **Chainlink CRE:** logged in, and the evidence run is done: three CRE
+   reports delivered on Monad testnet on 28 Sep 2026
+   ([the runs](#cre-runs-on-monad-testnet-28-sep-2026)). Still open: request
+   deploy access with `cre account access` (the CLI says it is not enabled).
+   Optional:
    - `--callback http://localhost:3100/api/cre/callback` with a running API
      and `POLARIS_CALLBACK_SECRET` in `workflows/.env` equal to the API's
      `POLARIS_CRE_CALLBACK_SECRET`, so collections' HTTP callback shows in its

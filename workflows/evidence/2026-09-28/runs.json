@@ -1,0 +1,255 @@
+[
+  {
+    "at": "2026-09-28T08:16:20.196Z",
+    "workflow": "collections-retry",
+    "target": "staging-settings",
+    "exitCode": 0,
+    "outcome": "written; log trigger: Reauthorized by 0xd1C7858FCAcD8440c84daef461A91BC15352d667; 1 task(s): collect #1; 1 executed, 0 skipped",
+    "result": {
+      "status": "written",
+      "trigger": {
+        "kind": "log",
+        "event": "Reauthorized",
+        "buyer": "0xd1C7858FCAcD8440c84daef461A91BC15352d667",
+        "txHash": "0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002",
+        "logIndex": 47
+      },
+      "source": "event",
+      "indexerError": null,
+      "note": null,
+      "checked": 1,
+      "tasks": [
+        {
+          "action": "collect",
+          "id": "1"
+        }
+      ],
+      "heldBack": [],
+      "txHash": "0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d",
+      "gasLimit": "326965",
+      "executed": 1,
+      "skipped": 0,
+      "events": 1,
+      "callbackStatus": null
+    },
+    "log": "collections-retry-081620.log",
+    "txs": [
+      {
+        "hash": "0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d",
+        "status": "success",
+        "blockNumber": 66359311,
+        "from": "0xbbb420b7e4b0263d053e00bfd363ed7cf21e2ea6",
+        "to": "0xb9f79d863261869b234c481d1f9a7af84aead192",
+        "gasUsed": 326965,
+        "delivered": [
+          {
+            "receiver": "0x4201c0837f3bb4e0e1a982c5666bf00b5ee145cc",
+            "result": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "at": "2026-09-28T08:16:43.397Z",
+    "workflow": "collections",
+    "target": "staging-settings",
+    "exitCode": 0,
+    "outcome": "written; 2 task(s): collect #1, liquidate #1; 2 executed, 0 skipped; candidates: chain",
+    "result": {
+      "status": "written",
+      "trigger": {
+        "kind": "cron",
+        "scheduledAt": 1790583420
+      },
+      "source": "chain",
+      "indexerError": null,
+      "note": null,
+      "checked": 2,
+      "tasks": [
+        {
+          "action": "collect",
+          "id": "1"
+        },
+        {
+          "action": "liquidate",
+          "id": "1"
+        }
+      ],
+      "heldBack": [],
+      "txHash": "0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4",
+      "gasLimit": "317165",
+      "executed": 2,
+      "skipped": 0,
+      "events": 2,
+      "callbackStatus": null
+    },
+    "log": "collections-081643.log",
+    "txs": [
+      {
+        "hash": "0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4",
+        "status": "success",
+        "blockNumber": 66359350,
+        "from": "0xbbb420b7e4b0263d053e00bfd363ed7cf21e2ea6",
+        "to": "0xb9f79d863261869b234c481d1f9a7af84aead192",
+        "gasUsed": 317165,
+        "delivered": [
+          {
+            "receiver": "0x4201c0837f3bb4e0e1a982c5666bf00b5ee145cc",
+            "result": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "at": "2026-09-28T08:16:56.612Z",
+    "workflow": "underwriting",
+    "target": "staging-settings",
+    "exitCode": 1,
+    "outcome": "failed: ✗ validation error",
+    "result": null,
+    "log": "underwriting-081656.log",
+    "txs": [],
+    "configChanges": {
+      "providersLeftOut": [
+        "nansen",
+        "zerion",
+        "zerionBasicAuth",
+        "etherscan"
+      ],
+      "callback": null
+    }
+  },
+  {
+    "at": "2026-09-28T08:16:57.921Z",
+    "workflow": "guardian",
+    "target": "staging-settings",
+    "exitCode": 0,
+    "outcome": "written (first); healthy; round 1; AUSD/USD 0.99982194 (chainlink)",
+    "result": {
+      "status": "written",
+      "why": "first",
+      "transition": "first",
+      "verdict": {
+        "creditPaused": false,
+        "reasons": 0,
+        "reasonNames": []
+      },
+      "price": {
+        "kind": "chainlink",
+        "chain": "monad-mainnet",
+        "feed": "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13",
+        "description": "AUSD / USD",
+        "roundId": "18446744073709559179",
+        "answer": "0.99982194",
+        "updatedAt": 1790579875,
+        "ageSeconds": 3553
+      },
+      "pool": {
+        "chain": "monad-testnet",
+        "block": "66359392",
+        "observedAt": 1790583428,
+        "freeCash": "10000000138",
+        "totalOwed": "0",
+        "badDebt": "0",
+        "totalOriginated": "200000152",
+        "badDebtAcknowledged": "0"
+      },
+      "thresholds": {
+        "minPrice": "0.995",
+        "maxPrice": "1.005",
+        "minFreeCash": "1000000000",
+        "maxBadDebtBps": 500,
+        "minOriginated": "10000000000",
+        "maxPriceAge": 7200
+      },
+      "before": {
+        "paused": false,
+        "reasons": 0,
+        "poolReasons": 0,
+        "priceReasons": 0,
+        "attestedReasons": 0,
+        "observedAt": 0,
+        "stale": true,
+        "override": "none",
+        "overrideUntil": 0,
+        "maxAttestationAge": 3600
+      },
+      "round": "1",
+      "refusal": null,
+      "txHash": "0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080",
+      "gasLimit": "335786",
+      "note": null
+    },
+    "log": "guardian-081657.log",
+    "txs": [
+      {
+        "hash": "0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080",
+        "status": "success",
+        "blockNumber": 66359401,
+        "from": "0xbbb420b7e4b0263d053e00bfd363ed7cf21e2ea6",
+        "to": "0xb9f79d863261869b234c481d1f9a7af84aead192",
+        "gasUsed": 335786,
+        "delivered": [
+          {
+            "receiver": "0x4c99136634f670cd59e73fc284fed164c662e3df",
+            "result": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "at": "2026-09-28T08:19:53.705Z",
+    "workflow": "underwriting",
+    "target": "staging-settings",
+    "exitCode": 1,
+    "outcome": "failed: ✗ validation error",
+    "result": null,
+    "log": "underwriting-081953.log",
+    "txs": [],
+    "configChanges": {
+      "providersLeftOut": [
+        "nansen",
+        "zerion",
+        "zerionBasicAuth",
+        "etherscan"
+      ],
+      "callback": null
+    }
+  },
+  {
+    "at": "2026-09-28T08:22:25.049Z",
+    "workflow": "underwriting",
+    "target": "staging-settings",
+    "exitCode": 0,
+    "outcome": "incomplete; not final: account.firstSeenAt,account.sentCount",
+    "result": {
+      "status": "incomplete",
+      "user": "0x6bfac61ED492C019aaA3665f596E1f347055E21A",
+      "linkedWallet": null,
+      "reason": "not final: account.firstSeenAt,account.sentCount",
+      "expectedScore": 520,
+      "onChainScore": null,
+      "missing": [
+        "account.firstSeenAt",
+        "account.sentCount"
+      ],
+      "httpCalls": 0,
+      "txHash": null,
+      "gasLimit": null
+    },
+    "log": "underwriting-082225.log",
+    "txs": [],
+    "configChanges": {
+      "providersLeftOut": [
+        "nansen",
+        "zerion",
+        "zerionBasicAuth",
+        "etherscan"
+      ],
+      "callback": null
+    }
+  }
+]
