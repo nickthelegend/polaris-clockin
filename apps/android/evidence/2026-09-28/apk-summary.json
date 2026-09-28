@@ -1,0 +1,16 @@
+{
+  "apk": "dist/polaris-1.0.0-debug.apk",
+  "aapt2": "build-tools 36.1.0",
+  "packageName": "app.polarispay.twa",
+  "versionCode": "1",
+  "versionName": "1.0.0",
+  "minSdk": "28",
+  "targetSdk": "36",
+  "launchableActivity": "app.polarispay.twa.LauncherActivity",
+  "label": "Polaris",
+  "defaultUrl": "https://app.polarispay.app/",
+  "fallbackStrategy": "customtabs",
+  "screenOrientation": "portrait",
+  "verifiedLinkHost": "app.polarispay.app",
+  "assetStatements": "[{ \"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": { \"namespace\": \"web\", \"site\": \"https://app.polarispay.app\" } }]"
+}

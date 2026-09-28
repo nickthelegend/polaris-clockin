@@ -22,7 +22,10 @@ describe("twa-manifest.json", () => {
     assert.equal(manifest.packageId, "app.polarispay.twa");
     assert.equal(manifest.name, "Polaris");
     assert.equal(manifest.launcherName, "Polaris");
-    assert.deepEqual({ host: manifest.host, startUrl: manifest.startUrl }, resolveAppUrl(DEFAULT_APP_URL));
+    // The default is the hosted app; POLARIS_ANDROID_APP_URL may point a
+    // committed manifest elsewhere, but only at a URL a TWA can open.
+    assert.equal(DEFAULT_APP_URL, "https://app.polarispay.app/");
+    assert.deepEqual(resolveAppUrl(`https://${manifest.host}${manifest.startUrl}`), { host: manifest.host, startUrl: manifest.startUrl });
     assert.equal(manifest.display, "standalone");
     assert.equal(manifest.orientation, "portrait");
     assert.equal(manifest.fullScopeUrl, `https://${manifest.host}/`);
