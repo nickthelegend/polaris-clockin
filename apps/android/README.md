@@ -292,7 +292,8 @@ are git-ignored and stay on that machine.
 | Signature | APK Signature Scheme v3 (apksigner's choice for Android 9+), verified by `apksigner verify` |
 | Signing certificate SHA-256 (the local debug key) | `2F:9D:15:55:B9:E7:44:F4:3A:E0:76:AC:A1:60:C9:55:26:2A:3F:60:F2:28:49:71:43:62:9B:D8:61:43:E3:5F` |
 | AAB | `apps/android/dist/polaris-1.0.0-debug.aab`, 1,083,800 bytes, SHA-256 `850f0c76717807e18f3a2bd4557e328d9b51cd518e8db533baba6f045be78791` (for Play it must be signed with an upload key instead) |
-| Gradle | 8.11.1, `BUILD SUCCESSFUL in 5m 15s` (first run, including every download) |
+| Gradle | 8.11.1, `BUILD SUCCESSFUL in 5m 15s` (the first run, including every download) |
+| Reproducible | A second build, with the one command `pnpm --filter @polaris/android build` (Gradle cached, 2m 18s), produced the same APK byte for byte (same SHA-256), and left the working tree clean |
 
 What Android reads from it (`aapt2`, build-tools 36.1.0;
 [`evidence/2026-09-28`](evidence/2026-09-28): `aapt2-badging.txt`,
