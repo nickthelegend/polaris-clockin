@@ -1,0 +1,29 @@
+Reading 19 transactions of the 2026-09-28T11:12:01.426Z run back from Monad testnet
+
+  ok    status 1  Privy relayer        → MerchantRegistry  block 66392905  0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74
+  ok    status 1  harness              → Stablecoin        block 66392909  0x89b8a0de0522a64a1ae5fde80297c63f22c1588bd4983b82f9c10953f4017567
+  ok    status 1  Privy relayer        → PolarisCheckout   block 66393023  0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e
+  ok    status 1  Privy registry admin → MerchantRegistry  block 66393029  0x4f33f626eaf83f9f37c5361f98c6a29e62db22ce24dcbfc4c93299f80f83f640
+  ok    status 1  Privy registry admin → MerchantRegistry  block 66393034  0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1
+  ok    status 1  Privy relayer        → CollateralVault   block 66393041  0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc
+  ok    status 1  Privy relayer        → PolarisCheckout   block 66393057  0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06
+  ok    status 1  Privy relayer        → PolarisPayments   block 66393070  0x5c304b0fb31f96f825f0cce31e4bd62ad10f625cd4db6d27c9ad1cbcca2d739c
+  ok    status 1  Privy relayer        → PolarisCheckout   block 66393078  0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224
+  ok    status 1  Privy relayer        → PolarisLoanEngine block 66393087  0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d
+  ok    status 1  harness              → Stablecoin        block 66393092  0xcaafc22b0d43cd5af633c2357d7f02c2bc3809eaa4f385606726ff9c8602a2e4
+  ok    status 1  Privy relayer        → PolarisCheckout   block 66393099  0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19
+  ok    status 1  Privy relayer        → PolarisSend       block 66393107  0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913
+  ok    status 1  Privy relayer        → PolarisSend       block 66393114  0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a
+  ok    status 1  Privy relayer        → PolarisPayments   block 66393121  0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6
+  ok    status 1  Privy relayer        → Stablecoin        block 66393130  0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48
+  ok    status 1  Privy relayer        → PolarisPayments   block 66392922  0xfb2e5c92f10bb18736d297cb0d559a33ab888c496cc6d1ecf1a26bebb90936ae
+  ok    status 1  Privy relayer        → PolarisPayments   block 66393048  0xb321eda5a1bd9639b6ceca0d423f6bd5ae3cb6173704acb0efdc5eeb36ec3e6e
+  ok    status 1  Privy relayer        → PolarisPayments   block 66393064  0x1d17fb34344ffc183f3d8e345edb51e15749215656a0af714da7dd3797fd5a9a
+
+  ok    0x41b556dEE537D2cfB2b12Fb2C45833Cbbb20a038  0 MON, nonce 0  merchant (registers, is paid, withdraws)
+  ok    0xd516876FB1e2E84A60fe7867B84c0C75168D9bC2  0 MON, nonce 0  the merchant's payout address
+  ok    0xA38c9E92fC91CEAFc6c50eCD2D16F62A61C3a652  0 MON, nonce 0  buyer (Pay now, collateral, Pay in 4, subscribe, pay early, re-sign, send, cancel)
+  ok    0x39B8F8C0a2417b7784D36EC114baD129E0679919  0 MON, nonce 0  send-by-link key (opens and claims the link)
+  ok    0x785764220c1CDa0De85C228566BaD22E00AdBA12  0 MON, nonce 0  the link's recipient
+
+All 19 transactions landed (status 1), each sent to the contract it names; 15 were sent by the Privy relayer 0x8366916019bc5452e62A0D36418ABebB45396aE2. None of the 5 users holds MON or has sent a transaction.

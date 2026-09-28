@@ -1,0 +1,1701 @@
+{
+  "readAt": "2026-09-28T11:14:58.837Z",
+  "appId": "cmuilo290015k0dlafq3pj9x1",
+  "note": "Read back from Privy by scripts/privy/show-live.mjs. Ids and public rules only; the authorization keys are in git-ignored files.",
+  "wallets": {
+    "relayer": {
+      "id": "y8sa671n804anaxznbeneh2q",
+      "address": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "chain_type": "ethereum",
+      "owner_id": "gndg0n76esw2hv2lc0vo5ex9",
+      "policy_ids": [
+        "qqsjm4wxjn9pefv8v4njbmit"
+      ],
+      "additional_signers": [
+        {
+          "signer_id": "fc0zdavaibws3si00wppqfde",
+          "override_policy_ids": [
+            "qqsjm4wxjn9pefv8v4njbmit"
+          ]
+        }
+      ],
+      "created_at": 1790592809350
+    },
+    "registryAdmin": {
+      "id": "jznn8nzfi7xuc2ywij67ktld",
+      "address": "0xa089EeEA5B1625C586380596bde502aB46F3e45F",
+      "chain_type": "ethereum",
+      "owner_id": "gndg0n76esw2hv2lc0vo5ex9",
+      "policy_ids": [
+        "jlkptd8dcc0sfv7exe2qmsf0"
+      ],
+      "additional_signers": [
+        {
+          "signer_id": "w0zj7b62z7iyxsbqmocios2q",
+          "override_policy_ids": [
+            "jlkptd8dcc0sfv7exe2qmsf0"
+          ]
+        }
+      ],
+      "created_at": 1790592810901
+    }
+  },
+  "keyQuorums": [
+    {
+      "id": "gndg0n76esw2hv2lc0vo5ex9",
+      "display_name": "polaris-admin",
+      "authorization_threshold": 1,
+      "keys": 1
+    },
+    {
+      "id": "i6y2ecc7s7l8ydf76fdddn2v",
+      "display_name": "polaris-payout-signer",
+      "authorization_threshold": 1,
+      "keys": 1
+    },
+    {
+      "id": "fc0zdavaibws3si00wppqfde",
+      "display_name": "polaris-relayer",
+      "authorization_threshold": 1,
+      "keys": 1
+    },
+    {
+      "id": "w0zj7b62z7iyxsbqmocios2q",
+      "display_name": "polaris-registry-admin",
+      "authorization_threshold": 1,
+      "keys": 1
+    }
+  ],
+  "payoutSigner": "i6y2ecc7s7l8ydf76fdddn2v",
+  "policies": [
+    {
+      "id": "qqsjm4wxjn9pefv8v4njbmit",
+      "name": "polaris-relayer-10143",
+      "chain_type": "ethereum",
+      "rules": [
+        {
+          "id": "ldcnsh9nt6pbzrvgevpx1i4z",
+          "name": "Never send MON",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "value",
+              "operator": "gt",
+              "value": "0"
+            }
+          ],
+          "action": "DENY"
+        },
+        {
+          "id": "rnvzve5cry3j7xz7vg1a0e8j",
+          "name": "Pay now: PolarisCheckout.pay",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "pay",
+                  "inputs": [
+                    {
+                      "name": "buyer",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "orderId",
+                      "type": "string",
+                      "internalType": "string"
+                    },
+                    {
+                      "name": "validAfter",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validBefore",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [
+                    {
+                      "name": "orderKey",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "pay"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "tlbo1rd2fuc81qds620k3l1f",
+          "name": "Pay in 4: PolarisCheckout.openPlan",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "openPlan",
+                  "inputs": [
+                    {
+                      "name": "intent",
+                      "type": "tuple",
+                      "components": [
+                        {
+                          "name": "buyer",
+                          "type": "address",
+                          "internalType": "address"
+                        },
+                        {
+                          "name": "merchant",
+                          "type": "address",
+                          "internalType": "address"
+                        },
+                        {
+                          "name": "principal",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "installments",
+                          "type": "uint32",
+                          "internalType": "uint32"
+                        },
+                        {
+                          "name": "interval",
+                          "type": "uint64",
+                          "internalType": "uint64"
+                        },
+                        {
+                          "name": "orderId",
+                          "type": "string",
+                          "internalType": "string"
+                        },
+                        {
+                          "name": "nonce",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "deadline",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        }
+                      ],
+                      "internalType": "struct PolarisCheckout.PlanIntent"
+                    },
+                    {
+                      "name": "signature",
+                      "type": "bytes",
+                      "internalType": "bytes"
+                    },
+                    {
+                      "name": "permit",
+                      "type": "tuple",
+                      "components": [
+                        {
+                          "name": "value",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "deadline",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "v",
+                          "type": "uint8",
+                          "internalType": "uint8"
+                        },
+                        {
+                          "name": "r",
+                          "type": "bytes32",
+                          "internalType": "bytes32"
+                        },
+                        {
+                          "name": "s",
+                          "type": "bytes32",
+                          "internalType": "bytes32"
+                        }
+                      ],
+                      "internalType": "struct PolarisCheckout.PermitSignature"
+                    }
+                  ],
+                  "outputs": [
+                    {
+                      "name": "loanId",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    }
+                  ],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "openPlan"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "o41ldnmng0khsblpdovfr9k5",
+          "name": "Subscribe: PolarisCheckout.subscribe",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "subscribe",
+                  "inputs": [
+                    {
+                      "name": "intent",
+                      "type": "tuple",
+                      "components": [
+                        {
+                          "name": "buyer",
+                          "type": "address",
+                          "internalType": "address"
+                        },
+                        {
+                          "name": "merchant",
+                          "type": "address",
+                          "internalType": "address"
+                        },
+                        {
+                          "name": "planId",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "pricePerPeriod",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "periodSeconds",
+                          "type": "uint64",
+                          "internalType": "uint64"
+                        },
+                        {
+                          "name": "orderId",
+                          "type": "string",
+                          "internalType": "string"
+                        },
+                        {
+                          "name": "nonce",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "deadline",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        }
+                      ],
+                      "internalType": "struct PolarisCheckout.SubscribeIntent"
+                    },
+                    {
+                      "name": "signature",
+                      "type": "bytes",
+                      "internalType": "bytes"
+                    },
+                    {
+                      "name": "permit",
+                      "type": "tuple",
+                      "components": [
+                        {
+                          "name": "value",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "deadline",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "v",
+                          "type": "uint8",
+                          "internalType": "uint8"
+                        },
+                        {
+                          "name": "r",
+                          "type": "bytes32",
+                          "internalType": "bytes32"
+                        },
+                        {
+                          "name": "s",
+                          "type": "bytes32",
+                          "internalType": "bytes32"
+                        }
+                      ],
+                      "internalType": "struct PolarisCheckout.PermitSignature"
+                    }
+                  ],
+                  "outputs": [
+                    {
+                      "name": "subId",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    }
+                  ],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "subscribe"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "prklab6fm6sq4qdvj3uqc70l",
+          "name": "Re-sign: PolarisCheckout.reauthorize",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+                "0x3874ef1bcE222755525a96f8284631780b9bC70B"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "reauthorize",
+                  "inputs": [
+                    {
+                      "name": "buyer",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "permit",
+                      "type": "tuple",
+                      "components": [
+                        {
+                          "name": "value",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "deadline",
+                          "type": "uint256",
+                          "internalType": "uint256"
+                        },
+                        {
+                          "name": "v",
+                          "type": "uint8",
+                          "internalType": "uint8"
+                        },
+                        {
+                          "name": "r",
+                          "type": "bytes32",
+                          "internalType": "bytes32"
+                        },
+                        {
+                          "name": "s",
+                          "type": "bytes32",
+                          "internalType": "bytes32"
+                        }
+                      ],
+                      "internalType": "struct PolarisCheckout.PermitSignature"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "reauthorize"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "vkolm6v8x21coqtms1bo5m2q",
+          "name": "Direct pay: PolarisPayments.payWithAuthorization",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "payWithAuthorization",
+                  "inputs": [
+                    {
+                      "name": "payer",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "orderId",
+                      "type": "string",
+                      "internalType": "string"
+                    },
+                    {
+                      "name": "validAfter",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validBefore",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [
+                    {
+                      "name": "paymentId",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "payWithAuthorization"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "ka6fus8pj2a6i9i9sqr8fvjo",
+          "name": "Cancel subscription: cancelWithSignature",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "cancelWithSignature",
+                  "inputs": [
+                    {
+                      "name": "subId",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "cancelWithSignature"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "r0918kloy5zo7scbjj961auu",
+          "name": "Publish plan: PolarisPayments.createPlanFor",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "createPlanFor",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "pricePerPeriod",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "periodSeconds",
+                      "type": "uint64",
+                      "internalType": "uint64"
+                    },
+                    {
+                      "name": "name",
+                      "type": "string",
+                      "internalType": "string"
+                    }
+                  ],
+                  "outputs": [
+                    {
+                      "name": "planId",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    }
+                  ],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "createPlanFor"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "abeszf1jmesdobpy2ihvc8kh",
+          "name": "Pin a price: PolarisPayments.quoteOrder",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+                "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "quoteOrder",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "paymentId",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "quoteOrder"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "hcb8xrjziyai3x8vpf8iki0h",
+          "name": "Send by link: PolarisSend.send",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55",
+                "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "send",
+                  "inputs": [
+                    {
+                      "name": "sender",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "linkKey",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "expiresAt",
+                      "type": "uint64",
+                      "internalType": "uint64"
+                    },
+                    {
+                      "name": "validAfter",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validBefore",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "keyV",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "keyR",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "keyS",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "send"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "send.amount",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "send",
+                  "inputs": [
+                    {
+                      "name": "sender",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "linkKey",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "expiresAt",
+                      "type": "uint64",
+                      "internalType": "uint64"
+                    },
+                    {
+                      "name": "validAfter",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validBefore",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "keyV",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "keyR",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "keyS",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "gte",
+              "value": "100000"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "t7v2u882awm6l9e1bq6fogj2",
+          "name": "Claim a link: PolarisSend.claim",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55",
+                "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "claim",
+                  "inputs": [
+                    {
+                      "name": "linkKey",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "to",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "claim"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "jrcq7z4fze79ps5bt72hkdu8",
+          "name": "Cancel a link: PolarisSend.cancel",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55",
+                "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "cancel",
+                  "inputs": [
+                    {
+                      "name": "linkKey",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "cancel"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "ldujt72g9rl19sth8p4upuig",
+          "name": "Pay early: PolarisLoanEngine.repayWithSig",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a",
+                "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "repayWithSig",
+                  "inputs": [
+                    {
+                      "name": "loanId",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "expectedRepaid",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "signature",
+                      "type": "bytes",
+                      "internalType": "bytes"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "repayWithSig"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "lwo3yz0twfppbqh2an954zsi",
+          "name": "Secure a line: CollateralVault.lockWithPermit",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc",
+                "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "lockWithPermit",
+                  "inputs": [
+                    {
+                      "name": "borrower",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "lockWithPermit"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "lockWithPermit.amount",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "lockWithPermit",
+                  "inputs": [
+                    {
+                      "name": "borrower",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "amount",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "gte",
+              "value": "100000"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "tg80e78b7d0z1vggnrq162l6",
+          "name": "Onboard: MerchantRegistry.registerFor",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "registerFor",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "name",
+                      "type": "string",
+                      "internalType": "string"
+                    },
+                    {
+                      "name": "payoutAddress",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "metadataURI",
+                      "type": "string",
+                      "internalType": "string"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "signature",
+                      "type": "bytes",
+                      "internalType": "bytes"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "registerFor"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "xkimbd028ooy44ohi2deacwc",
+          "name": "Payout address: updatePayoutAddressWithSig",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "updatePayoutAddressWithSig",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "payoutAddress",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "deadline",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "signature",
+                      "type": "bytes",
+                      "internalType": "bytes"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "updatePayoutAddressWithSig"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "ls5kw8asxefuoj4jfzlmzx0b",
+          "name": "Payouts: AUSD transferWithAuthorization",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+                "0x3F9554F15f58Bb5900822224f37A05be81eF9723"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "transferWithAuthorization",
+                  "inputs": [
+                    {
+                      "name": "from",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "to",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "value",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validAfter",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validBefore",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "nonce",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "transferWithAuthorization"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "transferWithAuthorization.value",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "transferWithAuthorization",
+                  "inputs": [
+                    {
+                      "name": "from",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "to",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "value",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validAfter",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "validBefore",
+                      "type": "uint256",
+                      "internalType": "uint256"
+                    },
+                    {
+                      "name": "nonce",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "v",
+                      "type": "uint8",
+                      "internalType": "uint8"
+                    },
+                    {
+                      "name": "r",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    },
+                    {
+                      "name": "s",
+                      "type": "bytes32",
+                      "internalType": "bytes32"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "gte",
+              "value": "100000"
+            }
+          ],
+          "action": "ALLOW"
+        }
+      ],
+      "version": "1.0",
+      "created_at": 1790592809545,
+      "owner_id": "gndg0n76esw2hv2lc0vo5ex9"
+    },
+    {
+      "id": "jlkptd8dcc0sfv7exe2qmsf0",
+      "name": "polaris-registry-admin-10143",
+      "chain_type": "ethereum",
+      "rules": [
+        {
+          "id": "bmjuypnoizvk4v4gdv2p3ei5",
+          "name": "Never send MON",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "value",
+              "operator": "gt",
+              "value": "0"
+            }
+          ],
+          "action": "DENY"
+        },
+        {
+          "id": "w48nrr7qya41a5b4mdytt54x",
+          "name": "Activate a merchant: setActive",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "setActive",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "active",
+                      "type": "bool",
+                      "internalType": "bool"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "setActive"
+            }
+          ],
+          "action": "ALLOW"
+        },
+        {
+          "id": "vgj185d2sgl6s4frwxk5fthz",
+          "name": "Cap a merchant: setMaxOrderValue within cap",
+          "method": "eth_signTransaction",
+          "conditions": [
+            {
+              "field_source": "ethereum_transaction",
+              "field": "to",
+              "operator": "in",
+              "value": [
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+                "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4"
+              ]
+            },
+            {
+              "field_source": "ethereum_transaction",
+              "field": "chain_id",
+              "operator": "eq",
+              "value": "10143"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "function_name",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "setMaxOrderValue",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "maxOrderValue",
+                      "type": "uint128",
+                      "internalType": "uint128"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "eq",
+              "value": "setMaxOrderValue"
+            },
+            {
+              "field_source": "ethereum_calldata",
+              "field": "setMaxOrderValue.maxOrderValue",
+              "abi": [
+                {
+                  "type": "function",
+                  "name": "setMaxOrderValue",
+                  "inputs": [
+                    {
+                      "name": "merchant",
+                      "type": "address",
+                      "internalType": "address"
+                    },
+                    {
+                      "name": "maxOrderValue",
+                      "type": "uint128",
+                      "internalType": "uint128"
+                    }
+                  ],
+                  "outputs": [],
+                  "stateMutability": "nonpayable"
+                }
+              ],
+              "operator": "lte",
+              "value": "1000000000"
+            }
+          ],
+          "action": "ALLOW"
+        }
+      ],
+      "version": "1.0",
+      "created_at": 1790592809822,
+      "owner_id": "gndg0n76esw2hv2lc0vo5ex9"
+    }
+  ]
+}
