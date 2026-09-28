@@ -6,6 +6,7 @@ import {
   Avatar,
   BottomSheet,
   Button,
+  DetailsList,
   IconButton,
   Keypad,
   ListGroup,
@@ -15,6 +16,7 @@ import {
   SecondaryButton,
   Sheet,
   Skeleton,
+  SuccessCheck,
   toast,
   TxRow,
   useIsDesktop,
@@ -38,7 +40,8 @@ import { longDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { type Micros, parseAmount, usd } from "@/lib/money";
 import type { HomeAccount } from "@/lib/prefs";
-import { usePrefs } from "@/lib/prefs";
+import { setPrefs, usePrefs } from "@/lib/prefs";
+import { SenderNameField } from "@/components/sender-name";
 import type { RelayReceipt } from "@/lib/relayer";
 
 export type Recipient =
@@ -72,6 +75,8 @@ export function SendSheet() {
   const [picking, setPicking] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  // Asked once, in the confirm of the first link: the name the claimer sees.
+  const [nameField, setNameField] = useState("");
 
   useEffect(() => prefetchDomains("ausd", "send"), []);
 
@@ -210,11 +215,14 @@ export function SendSheet() {
         onOpenChange={setConfirming}
         title={`Send ${usd(amount, { trim: true })}`}
         summary={
-          recipient.kind === "account"
-            ? `Straight to ${recipient.person.name}'s account. It lands in under a second.`
-            : who
-              ? `A link for ${firstName(who.name)}. Whoever opens it gets the dollars, so share it only with them.`
-              : "A link anyone can claim with Face ID. Share it only with the person it's for."
+          <>
+            {recipient.kind === "account"
+              ? `Straight to ${recipient.person.name}'s account. It lands in under a second.`
+              : who
+                ? `A link for ${firstName(who.name)}. Whoever opens it gets the dollars, so share it only with them.`
+                : "A link anyone can claim with Face ID. Share it only with the person it's for."}
+            {recipient.kind !== "account" && !prefs.name ? <SenderNameField value={nameField} onChange={setNameField} /> : null}
+          </>
         }
         newLabel="Send with Face ID"
         busyLabel={recipient.kind === "account" ? "Sending…" : "Making your link…"}
@@ -223,7 +231,9 @@ export function SendSheet() {
             const receipt = await transferTo(signer, recipient.person, amount);
             setResult({ kind: "sent", receipt, amount, to: recipient.person });
           } else {
-            const link = await createSendLink(signer, amount, senderName || "A friend", window.location.origin);
+            const typed = nameField.trim();
+            if (typed && !prefs.name) setPrefs({ name: typed });
+            const link = await createSendLink(signer, amount, typed || senderName || "A friend", window.location.origin);
             setResult({ kind: "link", link, recipient });
           }
         }}
@@ -256,11 +266,14 @@ export function LinkReady({
   recipient,
   senderName,
   onDone,
+  inline = false,
 }: {
   link: CreatedSendLink;
   recipient: Recipient;
   senderName: string;
   onDone: () => void;
+  /** Render in the dialog it was made in (the desktop Send), not as a sheet on top of it. */
+  inline?: boolean;
 }) {
   const status = useData(() => getSendLink(link.linkKey), [link.linkKey]);
   const [cancelling, setCancelling] = useState(false);
@@ -290,64 +303,86 @@ export function LinkReady({
     }
   }
 
+  const title = state === "claimed" ? "Claimed." : state === "cancelled" ? "Cancelled." : "Link ready.";
+  const subtitle =
+    state === "claimed"
+      ? `${usd(link.amount, { trim: true })} arrived${who ? ` with ${who}` : ""}.`
+      : state === "cancelled"
+        ? "The money is back in your account."
+        : `Whoever opens it gets ${usd(link.amount, { trim: true })}. Share it only with ${who ?? "the person it's for"}.`;
+  const rows = [
+    { label: "Amount", value: usd(link.amount) },
+    { label: "For", value: who ?? "Anyone with the link" },
+    { label: state === "open" ? "Claim by" : "Status", value: state === "open" ? longDate(link.expiresAt) : state === "claimed" ? "Claimed" : "Cancelled" },
+  ];
+  const cancelSheet = (
+    <ConfirmSheet
+      open={cancelling}
+      onOpenChange={setCancelling}
+      title="Cancel this link?"
+      summary={`${usd(link.amount, { trim: true })} comes back to your account, and the link stops working.`}
+      confirmLabel="Cancel link with Face ID"
+      busyLabel="Cancelling…"
+      danger
+      onAccount={async (signer) => {
+        await cancelSendLink(signer, link.linkKey);
+        status.reload();
+      }}
+    />
+  );
+
+  const actions =
+    state === "open" ? (
+      <div className="flex flex-col items-center gap-3">
+        <QrCode value={link.url} size={132} label="QR code of your send link" />
+        <div className="grid w-full grid-cols-2 gap-2">
+          {desktop ? (
+            // Ref E's dark button from 1024px, a peer of Copy (Done is the one lime); the phone keeps its white.
+            <SecondaryButton size="sm" icon={<Share2 />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void share()}>
+              Share link
+            </SecondaryButton>
+          ) : (
+            <Button variant="white" size="md" icon={<Share2 />} onClick={() => void share()}>
+              Share link
+            </Button>
+          )}
+          <Button variant="dark" size="md" icon={<Copy />} className="lg:bg-ui-surface-2 lg:hover:bg-ui-surface-3" onClick={() => void copy()}>
+            Copy
+          </Button>
+        </div>
+        <Button variant="ghost" size="sm" className="text-ui-down" onClick={() => setCancelling(true)}>
+          Cancel link
+        </Button>
+      </div>
+    ) : null;
+
+  // From 1024px the link takes the Send form's place in its one Dialog (as a claim's receipt does).
+  if (inline) {
+    return (
+      <>
+        <div className="flex flex-col items-center gap-2 pt-2 text-center">
+          <SuccessCheck label={title.replace(/\.$/, "")} size={80} />
+          <h2 className="mt-3 text-[34px] leading-none font-semibold tracking-[-0.035em]">{title}</h2>
+          <p role="status" className="max-w-[34ch] text-[15px] leading-[1.45] text-ui-muted">
+            {subtitle}
+          </p>
+          <DetailsList size="sm" items={rows} className="mt-3 w-full text-left" />
+          {actions ? <div className="mt-2 w-full">{actions}</div> : null}
+        </div>
+        <Button variant="lime" size="lg" block onClick={onDone}>
+          Done
+        </Button>
+        {cancelSheet}
+      </>
+    );
+  }
+
   return (
     <>
-      <SuccessSheet
-        open
-        onOpenChange={() => onDone()}
-        snapPoints={["full"]}
-        title={state === "claimed" ? "Claimed." : state === "cancelled" ? "Cancelled." : "Link ready."}
-        subtitle={
-          state === "claimed"
-            ? `${usd(link.amount, { trim: true })} arrived${who ? ` with ${who}` : ""}.`
-            : state === "cancelled"
-              ? "The money is back in your account."
-              : `Whoever opens it gets ${usd(link.amount, { trim: true })}. Share it only with ${who ?? "the person it's for"}.`
-        }
-        rows={[
-          { label: "Amount", value: usd(link.amount) },
-          { label: "For", value: who ?? "Anyone with the link" },
-          { label: state === "open" ? "Claim by" : "Status", value: state === "open" ? longDate(link.expiresAt) : state === "claimed" ? "Claimed" : "Cancelled" },
-        ]}
-        primary={{ label: "Done", onClick: onDone }}
-      >
-        {state === "open" ? (
-          <div className="flex flex-col items-center gap-3">
-            <QrCode value={link.url} size={132} label="QR code of your send link" />
-            <div className="grid w-full grid-cols-2 gap-2">
-              {desktop ? (
-                // Ref E's dark button from 1024px, a peer of Copy (Done is the one lime); the phone keeps its white.
-                <SecondaryButton size="sm" icon={<Share2 />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void share()}>
-                  Share link
-                </SecondaryButton>
-              ) : (
-                <Button variant="white" size="md" icon={<Share2 />} onClick={() => void share()}>
-                  Share link
-                </Button>
-              )}
-              <Button variant="dark" size="md" icon={<Copy />} className="lg:bg-ui-surface-2 lg:hover:bg-ui-surface-3" onClick={() => void copy()}>
-                Copy
-              </Button>
-            </div>
-            <Button variant="ghost" size="sm" className="text-ui-down" onClick={() => setCancelling(true)}>
-              Cancel link
-            </Button>
-          </div>
-        ) : null}
+      <SuccessSheet open onOpenChange={() => onDone()} snapPoints={["full"]} title={title} subtitle={subtitle} rows={rows} primary={{ label: "Done", onClick: onDone }}>
+        {actions}
       </SuccessSheet>
-      <ConfirmSheet
-        open={cancelling}
-        onOpenChange={setCancelling}
-        title="Cancel this link?"
-        summary={`${usd(link.amount, { trim: true })} comes back to your account, and the link stops working.`}
-        confirmLabel="Cancel link with Face ID"
-        busyLabel="Cancelling…"
-        danger
-        onAccount={async (signer) => {
-          await cancelSendLink(signer, link.linkKey);
-          status.reload();
-        }}
-      />
+      {cancelSheet}
     </>
   );
 }

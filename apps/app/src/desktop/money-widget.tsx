@@ -41,12 +41,13 @@ import { useData } from "@/lib/data/hooks";
 import { shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { type Micros, parseAmount, toNumber, usd } from "@/lib/money";
-import { usePrefs } from "@/lib/prefs";
+import { setPrefs, usePrefs } from "@/lib/prefs";
 import type { RelayReceipt } from "@/lib/relayer";
 import { creditFreed } from "@/lib/series";
 import { useNow } from "@/lib/use-now";
 import { n } from "@/lib/view";
 import { firstName, LinkReady, type Recipient } from "@/sheets/send";
+import { SenderNameField } from "@/components/sender-name";
 import { withSample } from "./bits";
 
 export type MoneyTab = "send" | "receive";
@@ -179,11 +180,14 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
   const contacts = useData(() => getContacts(owner), [owner]);
   const profile = useData(() => getProfile(owner), [owner]);
   const prefs = usePrefs();
-  const [value, setValue] = useState("25.00");
+  // Empty (the 0.00 placeholder) until the buyer types: nothing is "more than your balance" before they do.
+  const [value, setValue] = useState("");
   const [picked, setPicked] = useState<Recipient | null>(null);
   const [picking, setPicking] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
+  // Asked once, in the confirm of the first link: the name the claimer sees.
+  const [nameField, setNameField] = useState("");
 
   useEffect(() => prefetchDomains("ausd", "send"), []);
 
@@ -192,13 +196,20 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
   const amount = parseAmount(value || "0") ?? 0n;
   const available = balance.value?.available;
   const tooMuch = available !== undefined && state.status !== "none" && amount > available;
+  // Nothing to send yet: Add money is the way forward.
+  const broke = available === 0n && state.status !== "none";
   const senderName = prefs.name || profile.value?.name || "";
 
   const finish = () => {
     setResult(null);
-    setValue("25.00");
+    setValue("");
     onDone?.();
   };
+
+  // In the Send dialog (desktop /send) the link takes the form's place, rather than a second dialog on top of it.
+  if (!showPay && result?.kind === "link") {
+    return <LinkReady inline link={result.link} recipient={result.recipient} senderName={senderName} onDone={finish} />;
+  }
 
   return (
     <>
@@ -235,9 +246,18 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
           That&apos;s more than your balance.
         </p>
       ) : null}
-      <PrimaryButton size="lg" block icon={<ArrowUpRight />} disabled={amount === 0n || tooMuch} onClick={() => setConfirming(true)}>
-        Send {usd(amount)}
-      </PrimaryButton>
+      {broke ? (
+        <>
+          <PrimaryButton size="lg" block icon={<Plus />} onClick={() => router.push("/add", { scroll: false })}>
+            Add money
+          </PrimaryButton>
+          <p className="px-1 text-[13px] leading-snug text-ui-muted">Your balance is $0.00. Add money, then send it by link or to someone with Polaris.</p>
+        </>
+      ) : (
+        <PrimaryButton size="lg" block icon={<ArrowUpRight />} disabled={amount === 0n || tooMuch} onClick={() => setConfirming(true)}>
+          Send {usd(amount)}
+        </PrimaryButton>
+      )}
       {showPay ? (
         <SecondaryButton size="lg" block iconRight={<ScanLine />} onClick={() => router.push("/pay", { scroll: false })}>
           Pay a Polaris link
@@ -287,11 +307,14 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
         onOpenChange={setConfirming}
         title={`Send ${usd(amount, { trim: true })}`}
         summary={
-          recipient.kind === "account"
-            ? `Straight to ${recipient.person.name}'s account. It lands in under a second.`
-            : who
-              ? `A link for ${firstName(who.name)}. Whoever opens it gets the dollars, so share it only with them.`
-              : "A link anyone can claim with Face ID. Share it only with the person it's for."
+          <>
+            {recipient.kind === "account"
+              ? `Straight to ${recipient.person.name}'s account. It lands in under a second.`
+              : who
+                ? `A link for ${firstName(who.name)}. Whoever opens it gets the dollars, so share it only with them.`
+                : "A link anyone can claim with Face ID. Share it only with the person it's for."}
+            {recipient.kind !== "account" && !prefs.name ? <SenderNameField value={nameField} onChange={setNameField} /> : null}
+          </>
         }
         newLabel="Send with Face ID"
         busyLabel={recipient.kind === "account" ? "Sending…" : "Making your link…"}
@@ -300,7 +323,9 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
             const receipt = await transferTo(signer, recipient.person, amount);
             setResult({ kind: "sent", receipt, amount, to: recipient.person });
           } else {
-            const link = await createSendLink(signer, amount, senderName || "A friend", window.location.origin);
+            const typed = nameField.trim();
+            if (typed && !prefs.name) setPrefs({ name: typed });
+            const link = await createSendLink(signer, amount, typed || senderName || "A friend", window.location.origin);
             setResult({ kind: "link", link, recipient });
           }
         }}
