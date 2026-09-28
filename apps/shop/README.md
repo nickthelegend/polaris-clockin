@@ -49,7 +49,7 @@ is in two files:
 
 | File | Side | Calls |
 |---|---|---|
-| [`src/lib/polaris.ts`](src/lib/polaris.ts) | Server, `polarispay-sdk/server` | `createPolarisServer`, `checkout.sessions.create` (the order's `payRef` as `orderId`, one idempotency key per order and attempt), `checkout.sessions.retrieve`, `webhooks.verify` |
+| [`src/lib/polaris.ts`](src/lib/polaris.ts) | Server, `polarispay-sdk/server` | `createPolarisServer`, `checkout.sessions.create` (the order's `payRef` as `orderId`, one idempotency key per order and attempt), `checkout.sessions.retrieve`, `webhooks.verify`, `credit.guard` |
 | [`src/lib/polaris-client.ts`](src/lib/polaris-client.ts) | Browser, `polarispay-sdk` and `polarispay-sdk/react` | `createPolaris`, `openCheckout` (through `PolarisCheckoutButton`), `pay`, `PolarisMessaging`, `PolarisMark` |
 
 The SDK ships from `dist/`, so it has to be built before the shop runs:
@@ -72,6 +72,16 @@ order, and without it (a forwarded link, a guessed id) the buyer's details
 are masked. Polaris and the chain never see the order id at all: sessions
 and direct payments carry the order's `payRef` (`hcp_…`), which is what
 `PaymentMade` writes on chain and what webhooks name the order by.
+
+**Pay in 4 while Polaris's risk guard has paused it.** Each page reads
+`polaris.credit.guard()` (at most every 10 s, never holding a page up past
+2.5 s, and read as open when the API doesn't answer). While the guard (a
+Chainlink CRE workflow watching the credit pool and the AUSD/USD price) has
+paused new plans, the product line and the bag show *Polaris Pay in 4 is paused
+by our risk guard; pay now works as usual.* (`<PolarisMessaging paused>`), the
+phone buy bar and the home band drop the offer, and the checkout opens on Pay
+now with Pay in 4 marked *Paused* and the same sentence. The hosted checkout
+and the chain apply the guard whatever the page said.
 
 An order becomes paid on `payment.succeeded` (Pay now, and direct wallet
 payments), `plan.opened` (Pay in 4: the store is paid the principal in full

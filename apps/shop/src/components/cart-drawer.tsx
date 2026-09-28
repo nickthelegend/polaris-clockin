@@ -10,6 +10,7 @@ import { QuantityStepper } from "@/components/quantity";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/catalog";
 import { formatUsd } from "@/lib/money";
 import { PolarisMessaging } from "@/lib/polaris-client";
+import { pausedMessage } from "@/lib/polaris-config";
 import { MAX_QUANTITY, useShop } from "@/lib/shop-context";
 
 export function CartDrawer() {
@@ -153,7 +154,7 @@ export function CartDrawer() {
                     {toFree > 0 ? `${formatUsd(toFree)} away from free delivery.` : "Delivery is on us."}
                   </p>
                   {polarisConfig.ok ? (
-                    <PolarisMessaging amount={(subtotal / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} className="mt-3 text-ink-2 [--polaris-message-size:0.9rem]" />
+                    <PolarisMessaging amount={(subtotal / 100).toFixed(2)} aprBps={polarisConfig.payInFourAprBps} paused={pausedMessage(polarisConfig.creditGuard)} className="mt-3 text-ink-2 [--polaris-message-size:0.9rem]" />
                   ) : null}
                   <div className="mt-5 grid gap-2.5">
                     <Link href="/checkout" onClick={closeDrawer} className="btn btn-ink w-full">

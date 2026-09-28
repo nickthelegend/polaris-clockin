@@ -5,7 +5,7 @@ import { CartDrawer } from "@/components/cart-drawer";
 import { DevDrawer } from "@/components/dev-drawer";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
-import { browserConfig } from "@/lib/polaris";
+import { browserConfig, creditGuard } from "@/lib/polaris";
 import { ShopProvider } from "@/lib/shop-context";
 
 export default async function StoreLayout({ children }: { children: ReactNode }) {
@@ -13,7 +13,9 @@ export default async function StoreLayout({ children }: { children: ReactNode })
   // read when a page is served, never baked in when the store is built: a
   // build made without keys, or with other keys, must not stick to them.
   await connection();
-  const polaris = browserConfig();
+  const config = browserConfig();
+  // Polaris's risk guard as the page is served: while it has paused credit, Pay in 4 is off everywhere.
+  const polaris = config.ok ? { ...config, creditGuard: await creditGuard() } : config;
   return (
     <ShopProvider polarisConfig={polaris}>
       <a
