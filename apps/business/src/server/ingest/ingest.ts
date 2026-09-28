@@ -778,6 +778,12 @@ async function subscriptionAndMerchant(subId: string, at: string): Promise<{ sub
   return subscriptionFromChain(subId, at);
 }
 
+/** A subscription charge's line: its checkout's description, and which month it is after the first. */
+function subscriptionDescription(session: CheckoutSessionRecord | null, period: number): string {
+  const what = session?.description?.trim() || "Subscription";
+  return period === 1 ? what : `${what}, period ${period}`;
+}
+
 async function onSubscriptionCharged(log: Decoded, ctx: Ctx): Promise<number> {
   const at = await blockTime(ctx, log.blockNumber);
   const subId = str(log.args.subId);
@@ -814,7 +820,8 @@ async function onSubscriptionCharged(log: Decoded, ctx: Ctx): Promise<number> {
     sessionId: sub.sessionId,
     linkId: null,
     orderId: sub.orderId ?? `sub-${subId}`,
-    description: period === 1 ? "Subscription" : `Subscription, period ${period}`,
+    // What the buyer subscribed to, from its checkout ("Halcyon Coffee Club, monthly · HC-94626"), as Pay now and Pay in 4 do.
+    description: subscriptionDescription(sub.sessionId ? await db.sessions.get(sub.sessionId) : null, period),
     payer: sub.subscriber,
     amountUnits: amount.toString(),
     feeUnits: fee.toString(),

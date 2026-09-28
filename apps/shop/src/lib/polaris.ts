@@ -275,7 +275,8 @@ export function sessionParamsFor(order: Order, origin: string): CheckoutSessionC
   return {
     amount: centsToDecimal(order.total),
     currency: "USD",
-    description: order.kind === "subscription" ? "Halcyon Coffee Club, monthly" : `Halcyon order ${order.number}`,
+    // The merchant's order number rides in the description, so Polaris (the dashboard, the Envio feed, the buyer's app) shows it.
+    description: order.kind === "subscription" ? `Halcyon Coffee Club, monthly · ${order.number}` : `Halcyon order ${order.number}`,
     lineItems,
     // The first mode is the one the checkout opens on. Pay in 4 keeps Pay now
     // as a fallback, so a buyer whose plan isn't approved can still finish.
