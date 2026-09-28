@@ -43,7 +43,7 @@ import { configSchema, onCron, onReauthorized } from "../src/collections/workflo
 import { signCallback } from "../src/shared/callback.ts";
 import { type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
 import { fs } from "../test/helpers/host.ts";
-import { CALLBACK_SECRET_ID, type LocalDeployment, localConfigs } from "./config.ts";
+import { CALLBACK_SECRET_ID, type LocalDeployment, localCollectionsConfig } from "./config.ts";
 
 export type CollectionsJob = {
   rpc: string;
@@ -68,13 +68,7 @@ test("local collections run", async () => {
     underwriting: readJson(join(ROOT, "underwriting", "config.staging.json")),
     guardian: readJson(join(ROOT, "guardian", "config.staging.json")),
   };
-  const { collections } = localConfigs(d, templates, {
-    collectionsEverySeconds: job.everySeconds,
-    guardianEverySeconds: 30,
-    price: "mock",
-    callbackUrl: job.callback?.url ?? null,
-  });
-  const config = configSchema.parse(collections);
+  const config = configSchema.parse(localCollectionsConfig(d, templates, { everySeconds: job.everySeconds, callbackUrl: job.callback?.url ?? null }));
 
   const selector = cre.capabilities.EVMClient.SUPPORTED_CHAIN_SELECTORS[config.chainSelectorName as keyof typeof cre.capabilities.EVMClient.SUPPORTED_CHAIN_SELECTORS];
   const record = bridgeEvm(EvmMock.testInstance(selector), { url: job.rpc, forwarder: config.forwarder, transmitter: d.deployer });

@@ -52,16 +52,21 @@ export const MAINNET_AUSD_USD = {
 export const MONAD_MAINNET_RPC = "https://rpc.monad.xyz";
 export const MONAD_MAINNET_CHAIN_ID = 143;
 
-export type LocalConfigOptions = {
-  /** Seconds between the collections runner's cron runs. */
-  collectionsEverySeconds: number;
-  /** Seconds between the guardian runner's cron runs. */
-  guardianEverySeconds: number;
-  /** Where the guardian reads AUSD/USD. */
-  price: PriceSource;
-  /** The API's callback URL for the workflows' signed callbacks, or null for none. */
+export type CollectionsOptions = {
+  /** Seconds between the runner's cron runs. */
+  everySeconds: number;
+  /** The API's callback URL for the workflow's signed callbacks, or null for none. */
   callbackUrl: string | null;
 };
+
+export type GuardianOptions = {
+  /** Seconds between the runner's cron runs. */
+  everySeconds: number;
+  /** Where the guardian reads AUSD/USD. */
+  price: PriceSource;
+};
+
+type Templates = { collections: unknown; underwriting: unknown; guardian: unknown };
 
 export const CALLBACK_SECRET_ID = "POLARIS_CALLBACK_SECRET";
 
@@ -82,35 +87,46 @@ export function rungWindow(everySeconds: number): number {
   return Math.max(30, everySeconds + Math.ceil(everySeconds / 2));
 }
 
-export function localConfigs(
-  d: LocalDeployment,
-  templates: { collections: unknown; underwriting: unknown; guardian: unknown },
-  o: LocalConfigOptions,
-): { collections: CollectionsConfig; guardian: GuardianConfig } {
+function forwarderOf(d: LocalDeployment): `0x${string}` {
   const forwarder = d.cre?.forwarder ?? d.contracts.MockKeystoneForwarder?.address;
   if (!forwarder) throw new Error("the deployment records no forwarder: local runners deliver through the local chain's own MockKeystoneForwarder");
-  const out = configsFor("local", d, templates, { callback: o.callbackUrl ?? "" }) as { collections: Record<string, unknown>; guardian: Record<string, unknown> };
+  return forwarder;
+}
+
+/** polaris-collections for collections:local: both triggers, candidates from the chain, the runner's pace. */
+export function localCollectionsConfig(d: LocalDeployment, templates: Templates, o: CollectionsOptions): CollectionsConfig {
+  const out = configsFor("local", d, templates, { callback: o.callbackUrl ?? "" }) as { collections: Record<string, unknown> };
   const candidates = out.collections.candidates as { chainBackoff?: { ladderSeconds: number[]; windowSeconds: number } | null } & Record<string, unknown>;
-  const collections = collectionsSchema.parse({
+  return collectionsSchema.parse({
     ...out.collections,
-    schedule: everyCron(o.collectionsEverySeconds),
-    forwarder,
+    schedule: everyCron(o.everySeconds),
+    forwarder: forwarderOf(d),
     // No indexer locally: the chain proposes the candidates.
     candidates: {
       ...candidates,
       indexerUrl: null,
       indexerQuery: null,
-      chainBackoff: candidates.chainBackoff ? { ...candidates.chainBackoff, windowSeconds: rungWindow(o.collectionsEverySeconds) } : null,
+      chainBackoff: candidates.chainBackoff ? { ...candidates.chainBackoff, windowSeconds: rungWindow(o.everySeconds) } : null,
     },
   });
-  const guardian = guardianSchema.parse({
-    ...out.guardian,
-    schedule: everyCron(o.guardianEverySeconds),
-    forwarder,
-    priceFeed: o.price === "mainnet" ? MAINNET_AUSD_USD : out.guardian.priceFeed,
-  });
-  if (o.price === "mock" && guardian.priceFeed.kind !== "mock") {
+}
+
+/**
+ * polaris-guardian for guardian:local. `mainnet` reads Chainlink's AUSD/USD
+ * on Monad mainnet; `mock` reads the local MockAusdUsdFeed the record names,
+ * and refuses a record that calls its feed Chainlink (demo:local rewrites the
+ * record to name the mainnet feed when that is what the runner reads).
+ */
+export function localGuardianConfig(d: LocalDeployment, templates: Templates, o: GuardianOptions): GuardianConfig {
+  const recorded = d.cre?.workflows?.guardian?.priceFeed;
+  if (o.price === "mock" && recorded?.kind !== "mock") {
     throw new Error("the local record's price feed is not the labelled mock: refusing to call it Chainlink");
   }
-  return { collections, guardian };
+  const out = configsFor("local", d, templates, {}) as { guardian: Record<string, unknown> };
+  return guardianSchema.parse({
+    ...out.guardian,
+    schedule: everyCron(o.everySeconds),
+    forwarder: forwarderOf(d),
+    priceFeed: o.price === "mainnet" ? MAINNET_AUSD_USD : out.guardian.priceFeed,
+  });
 }

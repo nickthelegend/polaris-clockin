@@ -5,7 +5,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import { everyCron, localConfigs, MAINNET_AUSD_USD, rungWindow } from "../local/config.ts";
+import { everyCron, localCollectionsConfig, localGuardianConfig, MAINNET_AUSD_USD, rungWindow } from "../local/config.ts";
 import { onRung } from "../src/collections/backoff.ts";
 import { fs } from "./helpers/host.ts";
 
@@ -26,32 +26,41 @@ const deployment = (forwarder?: `0x${string}`) => ({
   contracts: Object.fromEntries(NAMES.map((n, i) => [n, { address: addr(0x2000 + i) }])),
   cre: { forwarderKind: "local", ...(forwarder ? { forwarder } : {}), workflows: { guardian: { name: "polaris-guardian", priceFeed: MOCK_FEED } } },
 });
-const opts = { collectionsEverySeconds: 60, guardianEverySeconds: 30, price: "mainnet" as const, callbackUrl: "http://localhost:3100/api/cre/callback" };
+const collectionsOpts = { everySeconds: 60, callbackUrl: "http://localhost:3100/api/cre/callback" };
+const guardianOpts = { everySeconds: 30, price: "mainnet" as const };
+/** What demo:local writes when the guardian reads the mainnet feed: the record names Chainlink's feed. */
+const MAINNET_RECORD = { chainId: 143, chainSelectorName: "monad-mainnet", address: MAINNET_AUSD_USD.address, decimals: 8, description: "AUSD / USD", kind: "chainlink" };
 
 describe("local runner configs", () => {
   test("deliver through the forwarder the deployment records, else its MockKeystoneForwarder; no indexer", () => {
-    const recorded = localConfigs(deployment(addr(0xf0)), templates(), opts);
-    expect(recorded.collections.forwarder).toBe(addr(0xf0));
-    expect(recorded.guardian.forwarder).toBe(addr(0xf0));
-    const own = localConfigs(deployment(), templates(), opts);
-    expect(own.collections.forwarder).toBe(addr(0x2009));
-    expect(own.collections.candidates.indexerUrl).toBeNull();
-    expect(own.collections.receiver).toBe(addr(0x2004));
-    expect(own.collections.retry).toEqual({ checkout: addr(0x2006), confidence: "FINALIZED" });
-    expect(own.collections.callback).toEqual({ url: opts.callbackUrl, secretId: "POLARIS_CALLBACK_SECRET" });
+    expect(localCollectionsConfig(deployment(addr(0xf0)), templates(), collectionsOpts).forwarder).toBe(addr(0xf0));
+    expect(localGuardianConfig(deployment(addr(0xf0)), templates(), guardianOpts).forwarder).toBe(addr(0xf0));
+    const own = localCollectionsConfig(deployment(), templates(), collectionsOpts);
+    expect(own.forwarder).toBe(addr(0x2009));
+    expect(own.candidates.indexerUrl).toBeNull();
+    expect(own.receiver).toBe(addr(0x2004));
+    expect(own.retry).toEqual({ checkout: addr(0x2006), confidence: "FINALIZED" });
+    expect(own.callback).toEqual({ url: collectionsOpts.callbackUrl, secretId: "POLARIS_CALLBACK_SECRET" });
   });
 
   test("the guardian reads Chainlink AUSD/USD on Monad mainnet, or the labelled local mock, never a mock called Chainlink", () => {
-    expect(localConfigs(deployment(), templates(), opts).guardian.priceFeed).toEqual(MAINNET_AUSD_USD);
-    const mock = localConfigs(deployment(), templates(), { ...opts, price: "mock" }).guardian.priceFeed;
+    expect(localGuardianConfig(deployment(), templates(), guardianOpts).priceFeed).toEqual(MAINNET_AUSD_USD);
+    const mock = localGuardianConfig(deployment(), templates(), { ...guardianOpts, price: "mock" }).priceFeed;
     expect(mock).toEqual({ chainSelectorName: "monad-testnet", address: addr(0x2008), decimals: 8, description: MOCK_FEED.description, kind: "mock" });
-    const mislabelled = deployment();
-    mislabelled.cre.workflows.guardian.priceFeed = { ...MOCK_FEED, kind: "chainlink" };
-    expect(() => localConfigs(mislabelled, templates(), { ...opts, price: "mock" })).toThrow(/refusing to call it Chainlink/);
+    const mainnet = deployment();
+    mainnet.cre.workflows.guardian.priceFeed = MAINNET_RECORD as typeof MOCK_FEED & { chainSelectorName: string };
+    expect(localGuardianConfig(mainnet, templates(), guardianOpts).priceFeed).toEqual(MAINNET_AUSD_USD);
+    expect(() => localGuardianConfig(mainnet, templates(), { ...guardianOpts, price: "mock" })).toThrow(/refusing to call it Chainlink/);
+  });
+
+  test("collections ignores which feed the guardian reads (demo:local's record names the mainnet feed)", () => {
+    const mainnet = deployment();
+    mainnet.cre.workflows.guardian.priceFeed = MAINNET_RECORD as typeof MOCK_FEED & { chainSelectorName: string };
+    expect(localCollectionsConfig(mainnet, templates(), collectionsOpts).receiver).toBe(addr(0x2004));
   });
 
   test("a run that starts late still makes the first rung: the window outlasts the interval", () => {
-    const c = localConfigs(deployment(), templates(), opts).collections;
+    const c = localCollectionsConfig(deployment(), templates(), collectionsOpts);
     const ladder = c.candidates.chainBackoff!;
     expect(ladder.windowSeconds).toBe(rungWindow(60));
     // Due at t=1000; runs every 60 s but each 20 s late. Before, the 30 s window of `configure local` let
@@ -67,6 +76,6 @@ describe("local runner configs", () => {
     expect(everyCron(60)).toBe("0 */1 * * * *");
     expect(everyCron(600)).toBe("0 */10 * * * *");
     expect(() => everyCron(45)).toThrow(/divide a minute/);
-    expect(localConfigs(deployment(), templates(), opts).guardian.schedule).toBe("*/30 * * * * *");
+    expect(localGuardianConfig(deployment(), templates(), guardianOpts).schedule).toBe("*/30 * * * * *");
   });
 });

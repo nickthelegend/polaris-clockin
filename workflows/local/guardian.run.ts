@@ -33,7 +33,7 @@ import { join } from "node:path";
 import { bridgeEvm, bridgeReadOnlyEvm, chainNowMs } from "../e2e/helpers/local-evm.ts";
 import { configSchema, onCron } from "../src/guardian/workflow.ts";
 import { fs } from "../test/helpers/host.ts";
-import { type LocalDeployment, localConfigs, MONAD_MAINNET_CHAIN_ID, MONAD_MAINNET_RPC, type PriceSource } from "./config.ts";
+import { type LocalDeployment, localGuardianConfig, MONAD_MAINNET_CHAIN_ID, MONAD_MAINNET_RPC, type PriceSource } from "./config.ts";
 
 export type GuardianJob = {
   rpc: string;
@@ -59,8 +59,7 @@ test("local guardian run", async () => {
     underwriting: readJson(join(ROOT, "underwriting", "config.staging.json")),
     guardian: readJson(join(ROOT, "guardian", "config.staging.json")),
   };
-  const { guardian } = localConfigs(d, templates, { collectionsEverySeconds: 60, guardianEverySeconds: job.everySeconds, price: job.price, callbackUrl: null });
-  const config = configSchema.parse(guardian);
+  const config = configSchema.parse(localGuardianConfig(d, templates, { everySeconds: job.everySeconds, price: job.price }));
 
   const pool = bridgeEvm(EvmMock.testInstance(SELECTORS[config.chainSelectorName]!), { url: job.rpc, forwarder: config.forwarder, transmitter: d.deployer });
   const feed =
