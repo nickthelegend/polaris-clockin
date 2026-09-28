@@ -13,7 +13,9 @@ month.
   payouts. Built on [Privy](https://privy.io).
 - **The credit engine**: undercollateralized Pay in 4 on Monad at 10% APR (a
   $200 order is 4 × $50.38, nothing due at checkout). The merchant is paid in
-  full up front. Credit is underwritten and instalments are collected by
+  full up front. Credit is underwritten, instalments are collected (and
+  retried the moment a buyer signs again), and new Pay in 4 plans are paused
+  when Chainlink's AUSD/USD depegs or the pool runs short, by three
   [Chainlink CRE](https://docs.chain.link/cre) workflows, using
   [Nansen](https://nansen.ai) and Zerion wallet data, and indexed by
   [Envio](https://envio.dev).
