@@ -353,6 +353,26 @@ describe("Polaris for Business", () => {
     assert.equal(status("business", "cron-auth"), FAIL);
   });
 
+  it("doesn't fail the dev relayer twice: it is a relayer warning, not a production failure", async () => {
+    const devRelayer = (s) => {
+      s.business.relayer = { mode: "local", address: "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69" };
+      s.business.productionReady = false;
+    };
+    const listed = await run((s) => {
+      devRelayer(s);
+      s.business.problems = ["The relayer signs with a raw key."];
+    });
+    assert.equal(listed.status("business", "production-ready"), PASS);
+    assert.equal(listed.status("business", "relayer"), WARN);
+    assert.equal((await run(devRelayer)).status("business", "production-ready"), WARN);
+    const more = await run((s) => {
+      devRelayer(s);
+      s.business.problems = ["The relayer signs with a raw key.", "CRON_SECRET is not set: the cron routes are closed."];
+    });
+    assert.equal(more.status("business", "production-ready"), FAIL);
+    assert.doesNotMatch(more.find("business", "production-ready")[0].message, /raw key/);
+  });
+
   it("fails production problems, and lists them with the cron secret", async () => {
     const { find } = await run((s) => {
       s.business.productionReady = false;

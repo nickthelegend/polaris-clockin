@@ -395,8 +395,14 @@ async function checkBusiness(ctx) {
     if (same(health.publicUrl, origin)) r.pass("public-url", `POLARIS_PUBLIC_URL is ${origin}.`);
     else r.fail("public-url", `POLARIS_PUBLIC_URL is ${health.publicUrl ?? "unset"}, expected ${origin}: merchants' registrations would name the wrong server.`);
 
+    // The dev relayer is always one of production's problems ("The relayer signs with a raw key."); the
+    // relayer check above already warns about it, so on its own it doesn't fail the deployment.
+    const devRelayer = relayer.mode === "local";
+    const problems = (health.problems ?? []).filter((p) => !(devRelayer && /relayer signs with a raw key/i.test(p)));
     if (health.productionReady) r.pass("production-ready", "Nothing production needs is missing.");
-    else if (health.problems) r.fail("production-ready", `Production is missing: ${health.problems.join(" ")}`);
+    else if (health.problems && problems.length === 0) r.pass("production-ready", "Nothing production needs is missing, apart from the dev relayer (above).");
+    else if (health.problems) r.fail("production-ready", `Production is missing: ${problems.join(" ")}`);
+    else if (devRelayer) r.warn("production-ready", "Production reports something missing. The dev relayer is always on that list; pass --cron-secret to see whether anything else is.");
     else r.fail("production-ready", "Production is missing something; pass --cron-secret to see what (or read the server's startup log).");
 
     const build = health.build;
