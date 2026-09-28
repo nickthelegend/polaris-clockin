@@ -1,1 +1,71 @@
 # pnpm --filter @polarispay/contracts check:deployment:monad, 2026-09-28T02:14:37Z (read-only, Monad testnet public RPC)
+
+monadTestnet (chain 10143), packages/contracts/deployments/monad-testnet.json
+
+ok    chain id matches the record  chain 10143, record 10143
+ok    Stablecoin has code  0x3F9554F15f58Bb5900822224f37A05be81eF9723 (5458 bytes)
+ok    ScoreManager has code  0xB3D34eF62Cb64b985C230079D2815787619E6061 (6669 bytes)
+ok    PolarisLoanEngine has code  0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a (14042 bytes)
+ok    PolarisPayments has code  0x7C774CF3E664B10057Cb2dDa66bA298e831292F1 (13487 bytes)
+ok    MerchantRegistry has code  0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4 (6814 bytes)
+ok    CollateralVault has code  0xD0e777f8DfA2E62F500054E85F815fC54fae3E72 (3349 bytes)
+ok    BatchSettlement has code  0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53 (3467 bytes)
+ok    PolarisSend has code  0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55 (6649 bytes)
+ok    PolarisCheckout has code  0x3874ef1bcE222755525a96f8284631780b9bC70B (13811 bytes)
+ok    CollectionsReceiver has code  0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC (7391 bytes)
+ok    UnderwritingReceiver has code  0x523e9791d0e324525F66F91b21B478C18e284a19 (6443 bytes)
+ok    GuardianReceiver has code  0xF8259426519d7908e7AF63f20aea3FfCF52426D8 (10155 bytes)
+ok    CRE simulation forwarder has code  0xB9F79d863261869B234c481D1f9A7af84AeAd192
+ok    ScoreManager is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    PolarisLoanEngine is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    PolarisPayments is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    MerchantRegistry is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    CollateralVault is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    BatchSettlement is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    PolarisCheckout is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    CollectionsReceiver is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    UnderwritingReceiver is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    GuardianReceiver is owned by the deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+ok    ScoreManager: the loan engine writes scores
+ok    ScoreManager: UnderwritingReceiver underwrites
+ok    ScoreManager: the deployer does not underwrite
+ok    ScoreManager: no unsecured line without a DON report (requireUnderwriting)
+ok    ScoreManager: collateral vault  0xD0e777f8DfA2E62F500054E85F815fC54fae3E72
+ok    LoanEngine: PolarisCheckout originates
+ok    LoanEngine: the deployer does not originate
+ok    LoanEngine: collateral vault
+ok    LoanEngine: merchant registry
+ok    CollateralVault: loan engine
+ok    CollateralVault: the loan engine seizes
+ok    PolarisPayments: checkout
+ok    PolarisCheckout: credit guardian is GuardianReceiver  0xF8259426519d7908e7AF63f20aea3FfCF52426D8
+ok    GuardianReceiver: pool is the loan engine
+ok    GuardianReceiver: thresholds match the record  {"minPrice":"99500000","minFreeCash":"1000000000","maxBadDebtBps":500,"maxPriceAge":7200}
+ok    GuardianReceiver: attestation goes stale after the recorded age  3600 s
+ok    GuardianReceiver: feed-shaped view  "Polaris pool health, computed by CRE", 8 decimals
+ok    pool state (info)  free cash 10000.0, owed 0.0, bad debt 0.0, originated 0.0
+ok    guardian status (info)  no attestation yet; Pay in 4 open
+ok    CollectionsReceiver: forwarder  0xB9F79d863261869B234c481D1f9A7af84AeAd192
+ok    CollectionsReceiver: simulation transmitter matches the record  0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+ok    CollectionsReceiver: simulation transmitter is set and is not the deployer  0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+ok    CollectionsReceiver: workflow lock (info)  not locked (simulation)
+ok    UnderwritingReceiver: forwarder  0xB9F79d863261869B234c481D1f9A7af84AeAd192
+ok    UnderwritingReceiver: simulation transmitter matches the record  0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+ok    UnderwritingReceiver: simulation transmitter is set and is not the deployer  0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+ok    UnderwritingReceiver: workflow lock (info)  not locked (simulation)
+ok    GuardianReceiver: forwarder  0xB9F79d863261869B234c481D1f9A7af84AeAd192
+ok    GuardianReceiver: simulation transmitter matches the record  0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+ok    GuardianReceiver: simulation transmitter is set and is not the deployer  0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+ok    GuardianReceiver: workflow lock (info)  not locked (simulation)
+ok    CollectionsReceiver: loan engine and payments
+ok    UnderwritingReceiver: score manager
+ok    relayer: PolarisPayments operator  0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69
+ok    relayer: MerchantRegistry operator
+ok    relayer: BatchSettlement settler
+ok    relayer: does not originate loans
+ok    Stablecoin: 6 decimals, EIP-712 domain "Agora Dollar" v1  Mock AUSD (AUSD), MockAUSD
+ok    Stablecoin: the mock says it is one (ERC-20 name "Mock AUSD")  Mock AUSD
+ok    credit pool (info)  10000.0 held by the loan engine
+ok    demo merchant registered and active  Polaris Demo Studio, cap 1000.0
+
+65 of 65 checks passed.
