@@ -191,7 +191,17 @@
       "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a"
     ],
     "creditGuardian": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
-    "relayer": "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69"
+    "relayer": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+    "previousRelayers": [
+      "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69"
+    ],
+    "relayerGrantTxs": [
+      "0x7e333d47c39290011bfcacf60cc798c100c2bbcdac9a5bf3fa0821e46dbda763",
+      "0xe0625c7668e4d394b0fe95bd6f80812ead4b13612551f587fbae81800b22c528",
+      "0x815671523a70b9c2ac5e86031e3eb0e354a6421c115a73e61a5813c5d2e77a4e"
+    ],
+    "registryAdmin": "0xa089EeEA5B1625C586380596bde502aB46F3e45F",
+    "registryAdminTx": "0x34f00f294ef9da35f43c08bb1606e6dc10a9119cd8ab92632922cf1a60bef710"
   },
   "demo": {
     "merchant": "0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185",

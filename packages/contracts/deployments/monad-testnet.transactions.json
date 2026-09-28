@@ -1,5 +1,5 @@
 {
-  "note": "Every transaction the deployer sent during deploy:monad on 28 Sep 2026 (nonces 0-33), read back from Monad testnet block by block (blocks 66288112-66288420) and decoded against packages/contracts/abi. deployments/monad-testnet.json keeps only the contract creations. Later: the GuardianReceiver redeploy (redeploy-guardian:monad), nonces 39-40. Later: the CollateralVault redeploy (redeploy-vault:monad), nonces 41-45.",
+  "note": "Every transaction the deployer sent during deploy:monad on 28 Sep 2026 (nonces 0-33), read back from Monad testnet block by block (blocks 66288112-66288420) and decoded against packages/contracts/abi. deployments/monad-testnet.json keeps only the contract creations. Later: the GuardianReceiver redeploy (redeploy-guardian:monad), nonces 39-40. Later: the CollateralVault redeploy (redeploy-vault:monad), nonces 41-45. Later: grant-relayer:monad for 0x8366916019bc5452e62A0D36418ABebB45396aE2, nonces 48-50.",
   "chainId": 10143,
   "deployer": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
   "explorer": "https://testnet.monadscan.com",
@@ -290,6 +290,27 @@
       "hash": "0x960c26990a1420f01c4a196cbda530831e1359ca2faa5c69dca8bc11b850993f",
       "contract": "PolarisLoanEngine",
       "call": "setCollateralVault(0xC2F006aE9836a700CE8F1e457d11346cc42e23dc)"
+    },
+    {
+      "nonce": 48,
+      "block": 66390049,
+      "hash": "0x7e333d47c39290011bfcacf60cc798c100c2bbcdac9a5bf3fa0821e46dbda763",
+      "contract": "PolarisPayments",
+      "call": "setOperator(0x8366916019bc5452e62A0D36418ABebB45396aE2, true)"
+    },
+    {
+      "nonce": 49,
+      "block": 66390054,
+      "hash": "0xe0625c7668e4d394b0fe95bd6f80812ead4b13612551f587fbae81800b22c528",
+      "contract": "MerchantRegistry",
+      "call": "setOperator(0x8366916019bc5452e62A0D36418ABebB45396aE2, true)"
+    },
+    {
+      "nonce": 50,
+      "block": 66390059,
+      "hash": "0x815671523a70b9c2ac5e86031e3eb0e354a6421c115a73e61a5813c5d2e77a4e",
+      "contract": "BatchSettlement",
+      "call": "setSettler(0x8366916019bc5452e62A0D36418ABebB45396aE2, true)"
     }
   ]
 }

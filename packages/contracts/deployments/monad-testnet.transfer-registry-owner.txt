@@ -1,0 +1,5 @@
+MerchantRegistry 0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4
+  owner now   0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+  new owner   0xa089EeEA5B1625C586380596bde502aB46F3e45F
+transferOwnership: success in block 66390170 (0x34f00f294ef9da35f43c08bb1606e6dc10a9119cd8ab92632922cf1a60bef710)
+Recorded roles.registryAdmin in F:\Projects\polaris\.claude\worktrees\live\packages\contracts\deployments\monad-testnet.json
