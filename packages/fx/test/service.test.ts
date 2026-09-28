@@ -10,6 +10,8 @@ import { custom, encodeAbiParameters, type Transport } from "viem";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ChainKey, FeedSource } from "../src/feeds.ts";
 import { createFxService, FeedError, type FxServiceOptions, perUsdFromAnswer } from "../src/service.ts";
+import { FX_FEEDS } from "../src/feeds.ts";
+import { FX_MAX_AGE_SECONDS, sourceMaxAgeSeconds } from "../src/limits.ts";
 
 type Call = { chain: ChainKey; method: string; to?: string; data?: string; result: string };
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/recorded-feeds.json", import.meta.url), "utf8")) as {
@@ -190,6 +192,70 @@ describe("the 26-hour limit", () => {
     expect((await s.lookup("ARS")).status).toBe("ok");
     now = (ARS_UPDATED_AT + 27 * 3600) * 1000;
     expect((await s.lookup("ARS")).status).toBe("stale");
+  });
+});
+
+describe("each feed's own heartbeat", () => {
+  const EUR = FX_FEEDS.find((f) => f.currency === "EUR")!;
+  const [monad, polygon] = EUR.sources;
+  const nowS = Math.floor(fixture.recordedAtMs / 1000);
+  const at = () => nowS * 1000;
+  /** Monad's and Polygon's EUR / USD rounds, as the test sets them. */
+  const eur = (monadAgo: number, polygonAgo: number) =>
+    service({
+      at,
+      edit: (chain, method, to, data) => {
+        if (method !== "eth_call" || data !== LATEST_ROUND) return undefined;
+        if (chain === "monad" && to?.toLowerCase() === monad!.address.toLowerCase()) return roundAnswer(1_170_000_000_000_000_000n, BigInt(nowS - monadAgo));
+        // Polygon's rate is 5% off Monad's, so the test can tell which one was served.
+        if (chain === "polygon" && to?.toLowerCase() === polygon!.address.toLowerCase()) return roundAnswer(122_850_000n, BigInt(nowS - polygonAgo));
+        return undefined;
+      },
+    });
+
+  it("gives each source twice its heartbeat, or its heartbeat plus 10 min, never past 26 h", () => {
+    expect(monad).toMatchObject({ chain: "monad", heartbeatSeconds: 240 });
+    expect(sourceMaxAgeSeconds(monad!)).toBe(240 + 600);
+    expect(sourceMaxAgeSeconds(polygon!)).toBe(27 + 600);
+    expect(sourceMaxAgeSeconds({ heartbeatSeconds: 86_400 })).toBe(FX_MAX_AGE_SECONDS);
+    expect(sourceMaxAgeSeconds({ heartbeatSeconds: 3_600 })).toBe(7_200);
+    expect(sourceMaxAgeSeconds({ heartbeatSeconds: 3_600 }, 1_800)).toBe(1_800);
+  });
+
+  // Security review (fx-staleness): a stopped 240 s Monad feed was served as
+  // "ok" for up to 26 h, and the fresher Polygon fallback was never read.
+  it("a Monad feed 25 h old is stale: the fresh Polygon fallback is read and served", async () => {
+    const s = eur(25 * 3600, 10);
+    const result = await s.lookup("EUR");
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") return;
+    expect(result.rate.source.chain).toBe("polygon");
+    expect(result.rate.perUsd).toBeCloseTo(1 / 1.2285, 10);
+    expect(result.rate.maxAgeSeconds).toBe(627);
+    expect(s.errors.map((e) => [e.source.chain, String(e.error)])).toEqual([["monad", expect.stringContaining("stale")]]);
+  });
+
+  it("a Monad feed a few minutes late is still Monad's; both stopped is stale", async () => {
+    const late = await eur(10 * 60, 10).lookup("EUR");
+    expect(late.status === "ok" && late.rate.source.chain).toBe("monad");
+    expect(await eur(20 * 60, 20 * 60).lookup("EUR")).toEqual({ currency: "EUR", status: "stale", rate: null });
+  });
+
+  it("stops serving a cached rate once it ages past its own source's limit", async () => {
+    let now = nowS * 1000;
+    const s = createFxService({
+      transport: replay({
+        edit: (chain, method, to, data) =>
+          chain === "monad" && method === "eth_call" && data === LATEST_ROUND && to?.toLowerCase() === monad!.address.toLowerCase()
+            ? roundAnswer(1_170_000_000_000_000_000n, BigInt(nowS - 60))
+            : undefined,
+      }),
+      now: () => now,
+      cacheMs: 48 * 3600 * 1000,
+    });
+    expect((await s.lookup("EUR")).status).toBe("ok");
+    now = (nowS + 900) * 1000; // 16 min after its update: past Monad's 14 min
+    expect((await s.lookup("EUR")).status).toBe("stale");
   });
 });
 

@@ -72,6 +72,11 @@ export function parseFxLookup(json: unknown): FxLookup | null {
   const rate = json.rate;
   if (!isRecord(rate) || !isRecord(rate.source)) return null;
   const { perUsd, updatedAt, source } = rate;
+  // The rate's own source limit; an older API without it gets the overall 26 h cap.
+  const maxAgeSeconds =
+    typeof rate.maxAgeSeconds === "number" && Number.isInteger(rate.maxAgeSeconds) && rate.maxAgeSeconds > 0
+      ? Math.min(rate.maxAgeSeconds, FX_MAX_AGE_SECONDS)
+      : FX_MAX_AGE_SECONDS;
   if (typeof perUsd !== "number" || !Number.isFinite(perUsd) || perUsd <= 0) return null;
   if (typeof updatedAt !== "number" || !Number.isInteger(updatedAt) || updatedAt <= 0) return null;
   const chain = source.chain as ChainKey;
@@ -82,6 +87,7 @@ export function parseFxLookup(json: unknown): FxLookup | null {
     currency,
     perUsd,
     updatedAt,
+    maxAgeSeconds,
     source: {
       chain,
       chainId: CHAINS[chain].id,

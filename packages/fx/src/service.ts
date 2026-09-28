@@ -18,7 +18,7 @@ import {
   type Transport,
 } from "viem";
 import { CHAINS, type ChainKey, type CurrencyFeeds, FX_FEEDS, type FeedSource, quotesLocalPerUsd } from "./feeds.ts";
-import { FX_CACHE_MS, FX_ERROR_CACHE_MS, FX_MAX_AGE_SECONDS } from "./limits.ts";
+import { FX_CACHE_MS, FX_ERROR_CACHE_MS, FX_MAX_AGE_SECONDS, sourceMaxAgeSeconds } from "./limits.ts";
 
 export interface FxRate {
   /** ISO 4217 code of the local currency. */
@@ -27,6 +27,11 @@ export interface FxRate {
   perUsd: number;
   /** When the feed last updated, in unix seconds (`latestRoundData().updatedAt`). */
   updatedAt: number;
+  /**
+   * How old this feed's rate may get before it counts as stale: its own
+   * heartbeat's limit (limits.ts `sourceMaxAgeSeconds`), at most 26 h.
+   */
+  maxAgeSeconds: number;
   /** The feed the rate came from. */
   source: {
     chain: ChainKey;
@@ -45,7 +50,8 @@ export interface FxRate {
  * none, and the app shows no local amount for any of them.
  *
  * - `no-feed`: Chainlink has no feed for this currency (or it is USD).
- * - `stale`: every feed answered, but the newest update is older than 26 h.
+ * - `stale`: every feed answered, but each one's update is older than its own
+ *   limit (twice its heartbeat, or its heartbeat plus 10 min; at most 26 h).
  * - `unavailable`: no feed could be read (RPC down, wrong chain, bad answer).
  */
 export type FxLookup =
@@ -176,6 +182,7 @@ export function createFxService(options: FxServiceOptions = {}): FxService {
   }
 
   async function read(source: FeedSource, currency: string): Promise<FxRate> {
+    const limit = sourceMaxAgeSeconds(source, maxAgeSeconds);
     const c = client(source.chain);
     const chainId = CHAINS[source.chain].id;
     await once(checkedChains, source.chain, async () => {
@@ -198,11 +205,13 @@ export function createFxService(options: FxServiceOptions = {}): FxService {
       currency,
       perUsd: perUsdFromAnswer(answer, decimals, source.pair),
       updatedAt: updated,
+      maxAgeSeconds: limit,
       source: { chain: source.chain, chainId, address: source.address, pair: source.pair, decimals, roundId: roundId.toString() },
     };
   }
 
-  const isFresh = (rate: FxRate) => now() / 1000 - rate.updatedAt <= maxAgeSeconds;
+  /** Within its own source's limit (a rate from before `maxAgeSeconds` existed on it: the overall cap). */
+  const isFresh = (rate: FxRate) => now() / 1000 - rate.updatedAt <= Math.min(rate.maxAgeSeconds ?? maxAgeSeconds, maxAgeSeconds);
 
   async function resolve(feeds: CurrencyFeeds): Promise<FxLookup> {
     let sawStale = false;

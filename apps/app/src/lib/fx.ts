@@ -80,6 +80,7 @@ export function useFxRate(currency: string | null): FxRate | null {
   useEffect(() => {
     if (currency && currency !== "USD") load(currency);
   }, [currency, now]);
-  if (!rate || now === null || !isFreshRate(rate.updatedAt, now)) return null;
+  // Each rate carries its own feed's limit (a Monad feed's is 14 min, an Ethereum one's 26 h).
+  if (!rate || now === null || !isFreshRate(rate.updatedAt, now, rate.maxAgeSeconds)) return null;
   return rate;
 }

@@ -9,6 +9,7 @@ const ARS: FxLookup = {
     currency: "ARS",
     perUsd: 1612.4065,
     updatedAt: 1_790_543_663,
+    maxAgeSeconds: 93_600,
     source: { chain: "ethereum", chainId: 1, address: "0xBb65fa58BDb7d33e4a3D1A40a7A9BD99E746367b", pair: "USD / ARS", decimals: 8, roundId: "18446744073709551862" },
   },
 };

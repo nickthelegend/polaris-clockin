@@ -54,12 +54,22 @@ describe("parseFxLookup", () => {
       currency: "ARS",
       perUsd: 1612.4065,
       updatedAt: 1_790_543_663,
+      maxAgeSeconds: 93_600,
       source: { chain: "ethereum", chainId: 1, address: "0xBb65fa58BDb7d33e4a3D1A40a7A9BD99E746367b", pair: "USD / ARS", decimals: 8, roundId: "18446744073709551862" },
     },
   };
 
   it("accepts a well-formed rate", () => {
     expect(parseFxLookup(ok)).toEqual(ok);
+  });
+
+  it("keeps the rate's own source limit, and gives an older API's rate the 26 h cap", () => {
+    const monad = { ...ok, rate: { ...ok.rate, maxAgeSeconds: 840 } };
+    expect(parseFxLookup(monad)).toEqual(monad);
+    const { maxAgeSeconds: _, ...older } = ok.rate;
+    expect(parseFxLookup({ ...ok, rate: older })?.rate?.maxAgeSeconds).toBe(26 * 3600);
+    expect(parseFxLookup({ ...ok, rate: { ...ok.rate, maxAgeSeconds: 10 ** 9 } })?.rate?.maxAgeSeconds).toBe(26 * 3600);
+    expect(parseFxLookup({ ...ok, rate: { ...ok.rate, maxAgeSeconds: -5 } })?.rate?.maxAgeSeconds).toBe(26 * 3600);
   });
 
   it("passes the no-rate answers through", () => {
