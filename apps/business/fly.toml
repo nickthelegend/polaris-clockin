@@ -2,7 +2,7 @@
 # has every step. Deploy from the repository root (the build context is the
 # whole pnpm workspace):
 #
-#   fly deploy . --config apps/business/fly.toml --ha=false
+#   fly deploy . --config apps/business/fly.toml --dockerfile apps/business/Dockerfile --ha=false
 #
 # Change `app` to the name you created (`fly apps create <name>`), and the
 # region to one near you. Fill in the public build arguments below; the

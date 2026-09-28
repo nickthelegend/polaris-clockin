@@ -114,33 +114,46 @@ design: every page the browser loads carries them). Fill in:
 
 **1.3 The runtime secrets.** Write them to `apps/business/.env.production`,
 which git ignores (`git check-ignore apps/business/.env.production` prints the
-rule), and import them in one go:
+rule). One `NAME=value` per line, and no comment after a value: `fly secrets
+import` would keep it as part of the value.
 
 ```bash
-# apps/business/.env.production (never commit it)
 PRIVY_APP_ID=<your Privy app id>
 PRIVY_APP_SECRET=<your Privy app secret>
 POLARIS_KEY_PEPPER=<generated in step 0>
 CRON_SECRET=<generated in step 0>
-POLARIS_CHECKOUT_ORIGIN=https://polaris-app.vercel.app        # APP
-POLARIS_PUBLIC_URL=https://polaris-business.fly.dev           # BUSINESS
-# The relayer. Until the Privy server wallet exists (README, "What only you can
-# do", step 4), the testnet deployment's dev relayer 0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69
-# carries payments: its key is TESTNET_RELAYER_PRIVATE_KEY in the repo-root .env.
+POLARIS_CHECKOUT_ORIGIN=https://polaris-app.vercel.app
+POLARIS_PUBLIC_URL=https://polaris-business.fly.dev
 RELAYER_MODE=local
 RELAYER_LOCAL_ALLOW_TESTNET=1
-RELAYER_PRIVATE_KEY=<TESTNET_RELAYER_PRIVATE_KEY>
-# Once `privy:setup-relayer -- --apply` has run, instead:
-# RELAYER_MODE=privy
-# PRIVY_RELAYER_WALLET_ID=…
-# PRIVY_RELAYER_ADDRESS=…
-# PRIVY_RELAYER_AUTH_KEY=…
+RELAYER_PRIVATE_KEY=<the dev relayer's key>
 ```
 
+- `POLARIS_CHECKOUT_ORIGIN` is APP and `POLARIS_PUBLIC_URL` is BUSINESS, with
+  no trailing slash.
+- The relayer: until the Privy server wallet exists (README, "What only you
+  can do", step 4), the testnet deployment's dev relayer
+  `0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69` carries payments; it holds the
+  operator roles. Its key is `TESTNET_RELAYER_PRIVATE_KEY` in the git-ignored
+  repo-root `.env` of the machine that deployed the contracts. If that key is
+  gone, give a new address the roles with `RELAYER_ADDRESS=0x… pnpm --filter
+  @polarispay/contracts grant-relayer:monad` (signed with the deployer's key)
+  and use that address's key instead. Once `pnpm --filter @polaris/business privy:setup-relayer
+  -- --apply` has run, replace the three `RELAYER_*` lines with
+  `RELAYER_MODE=privy`, `PRIVY_RELAYER_WALLET_ID`, `PRIVY_RELAYER_ADDRESS` and
+  `PRIVY_RELAYER_AUTH_KEY`.
+
+Import only the `NAME=value` lines, in one go:
+
 ```bash
-fly secrets import --app polaris-business < apps/business/.env.production
-# PowerShell: Get-Content apps/business/.env.production | fly secrets import --app polaris-business
+grep -E '^[A-Z][A-Z0-9_]*=' apps/business/.env.production | fly secrets import --app polaris-business
 ```
+
+```powershell
+Get-Content apps/business/.env.production | Where-Object { $_ -match '^[A-Z][A-Z0-9_]*=' } | fly secrets import --app polaris-business
+```
+
+`fly secrets list --app polaris-business` shows the names (never the values).
 
 The optional ones (the CRE underwriting trigger, Envio, automatic payouts,
 merchant activation, a faster log source) are in the
@@ -152,11 +165,12 @@ image sets `POLARIS_DB_URL=sqlite:/data/polaris.db`, `POLARIS_WORKERS=1` and
 **1.4 Deploy** (from the repository root):
 
 ```bash
-fly deploy . --config apps/business/fly.toml --ha=false
+fly deploy . --config apps/business/fly.toml --dockerfile apps/business/Dockerfile --ha=false
 ```
 
-`--ha=false` keeps it to the one Machine the volume belongs to (Fly would
-otherwise start a spare). The build installs only `@polaris/business` and the workspace packages it
+The `.` makes the repository root the build context, and `--ha=false` keeps
+it to the one Machine the volume belongs to (Fly would otherwise start a
+spare). The build installs only `@polaris/business` and the workspace packages it
 imports, runs `next build` with Next's standalone output, and ships a
 Node 22 image with no toolchain; the server runs as the unprivileged `node`
 user (the entrypoint only hands the volume to that user). Fly waits for
@@ -209,11 +223,16 @@ onboarding and payouts"); Pay now works at once.
    change needs a redeploy:
 
    ```
-   NEXT_PUBLIC_POLARIS_API_URL=https://polaris-business.fly.dev   # BUSINESS
+   NEXT_PUBLIC_POLARIS_API_URL=https://polaris-business.fly.dev
    NEXT_PUBLIC_CHAIN_ID=10143
-   NEXT_PUBLIC_RP_ID=polarispay.app          # only with your own domain (step 0)
-   NEXT_PUBLIC_PRIVY_APP_ID=<the dashboard's Privy app id>   # optional: "Continue with email"
+   NEXT_PUBLIC_RP_ID=polarispay.app
+   NEXT_PUBLIC_PRIVY_APP_ID=<the dashboard's Privy app id>
    ```
+
+   `NEXT_PUBLIC_POLARIS_API_URL` is BUSINESS. Set `NEXT_PUBLIC_RP_ID` only
+   with your own domain (step 0). `NEXT_PUBLIC_PRIVY_APP_ID` is optional: it
+   adds "Continue with email" (use the dashboard's Privy app). Vercel's
+   **Import .env** accepts these lines pasted as they are.
 
    Never set `NEXT_PUBLIC_DEV_SIGNER` (a production build blanks it anyway),
    `NEXT_PUBLIC_DEV_SIGNER_PERSIST`, `NEXT_PUBLIC_LOCAL_DEMO`,
@@ -241,9 +260,11 @@ Same as step 2 with **Root Directory** `apps/landing`. Its two variables are
 optional (unset, the buttons stay on the page as anchors):
 
 ```
-NEXT_PUBLIC_APP_URL=https://polaris-app.vercel.app              # "Get the app"
-NEXT_PUBLIC_BUSINESS_URL=https://polaris-business.fly.dev       # "Log in", "Start accepting"
+NEXT_PUBLIC_APP_URL=https://polaris-app.vercel.app
+NEXT_PUBLIC_BUSINESS_URL=https://polaris-business.fly.dev
 ```
+
+APP is where "Get the app" leads; BUSINESS is "Log in" and "Start accepting".
 
 `next build` downloads Inter Tight from Google Fonts, which Vercel's builders can reach.
 
@@ -276,14 +297,18 @@ stay "awaiting payment" forever; the deploy check fails on it.
 **4.4 Environment Variables** (Production):
 
 ```
-POLARIS_API_BASE=https://polaris-business.fly.dev                  # BUSINESS
-POLARIS_SECRET_KEY=sk_test_…                                        # secret
-POLARIS_WEBHOOK_SECRET=whsec_…                                      # secret
+POLARIS_API_BASE=https://polaris-business.fly.dev
+POLARIS_SECRET_KEY=sk_test_…
+POLARIS_WEBHOOK_SECRET=whsec_…
 NEXT_PUBLIC_POLARIS_PUBLISHABLE_KEY=pk_test_…
-NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN=https://polaris-app.vercel.app # APP
-POLARIS_MERCHANT_ADDRESS=0x…                                        # the merchant's payout address
-SHOP_URL=https://polaris-shop.vercel.app                            # SHOP
+NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN=https://polaris-app.vercel.app
+POLARIS_MERCHANT_ADDRESS=0x…
+SHOP_URL=https://polaris-shop.vercel.app
 ```
+
+`POLARIS_API_BASE` is BUSINESS, `NEXT_PUBLIC_POLARIS_CHECKOUT_ORIGIN` is APP
+and `SHOP_URL` is SHOP; `POLARIS_MERCHANT_ADDRESS` is the payout address from
+4.1. Mark `POLARIS_SECRET_KEY` and `POLARIS_WEBHOOK_SECRET` **Sensitive**.
 
 **4.5 Deploy.** `https://<SHOP>/api/health` shows how it is wired (never a secret).
 
