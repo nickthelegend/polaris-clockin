@@ -41,6 +41,25 @@ Track 02: Consumer Products & Payments. The plan is in
 
 ---
 
+## Submission
+
+The Metropolis submission kit is in [`docs/submission`](docs/submission):
+
+| File | What it is |
+|---|---|
+| [`writeup.md`](docs/submission/writeup.md) | The write-up: the problem, the product, the first five minutes, how it works, what's new since the foundation import, and one heading per bounty with its requirement, where it is met (code and Monad testnet transactions) and what is not done yet |
+| [`bounty-fields.md`](docs/submission/bounty-fields.md) | Ready-to-paste answers for each bounty's portal fields |
+| [`video-script.md`](docs/submission/video-script.md) | The 3-minute demo: shot list, on-screen text, the command behind each scene |
+| [`profile.md`](docs/submission/profile.md) | Name, one-liner, 50- and 150-word descriptions, track, bounties, tech stack, team |
+| [`diffstat.txt`](docs/submission/diffstat.txt) | `git diff --stat` from the foundation import (`85b29e4`), by folder and in full (`pnpm docs:diffstat` regenerates it) |
+| [`sources.md`](docs/submission/sources.md) | Where each requirement comes from, and what needs the logged-in portal to confirm |
+
+`pnpm docs:check` ([`scripts/check-docs-links.mjs`](scripts/check-docs-links.mjs))
+checks every link in this README and the kit, and every hash and address in
+the kit against the committed deployment and CRE records.
+
+---
+
 ## Run it
 
 Node 22.6+ and pnpm 10.
@@ -150,6 +169,7 @@ the API. Each app's README lists its environment.
 | | `VERIFY_DRY_RUN=1 pnpm --filter @polarispay/contracts verify:monad` | 12 of 12 reproduced from source (PolarisCheckout from the deploy commit, rebuilt from git), ready for Monadscan once an Etherscan key is set |
 | | `pnpm --filter @polaris/business smoke:testnet -- --run` | 10 of 10 (Pay now, Pay in 4, a re-signed approval, relayed on Monad testnet; [hashes](packages/contracts/deployments/monad-testnet.smoke.json)) |
 | Lockfile | `pnpm install --frozen-lockfile` | passes |
+| Docs | `pnpm docs:check`, `pnpm test:scripts` | every link in this README and [`docs/submission`](docs/submission) resolves, every hash in the kit is in the committed evidence; 9 passing |
 
 ---
 
@@ -173,8 +193,8 @@ the API. Each app's README lists its environment.
 | `packages/brand` | The Polaris mark and wordmark |
 | `packages/keeperhub` | The dunning ladder the collections path uses |
 | [`workflows`](workflows/README.md) | The Chainlink CRE workflows: `polaris-underwrite` (HTTP trigger), `polaris-collections` (cron and an EVM log trigger), `polaris-guardian` (cron, reading Chainlink AUSD/USD on Monad mainnet); and their local runners `trigger:local`, `collections:local`, `guardian:local` |
-| `scripts` | `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), the Lottie generators |
-| `docs` | [`plan.md`](docs/plan.md), the design contract (`design/system.md`), research, [`demo`](docs/demo) |
+| `scripts` | `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), `check-docs-links.mjs` (`pnpm docs:check`), `submission-diffstat.mjs` (`pnpm docs:diffstat`), the Lottie generators |
+| `docs` | [`plan.md`](docs/plan.md), the design contract (`design/system.md`), research, [`demo`](docs/demo), the [submission kit](docs/submission) |
 
 ---
 
