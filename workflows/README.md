@@ -830,7 +830,7 @@ overhead added), as on the simulation forwarder on testnet:
 |---|---|
 | The three workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed (28 Sep 2026: collections 2.78 MB with both triggers, underwriting 2.89 MB, guardian 2.74 MB) |
 | `project.yaml` with the `monad-mainnet` read target | accepted: `cre workflow hash -T <target>` loads the settings of every target (a misspelt chain name is refused: `invalid chain name`); `cre workflow hash ./guardian -T staging-settings --public_key <any address>` compiles and hashes the guardian with both chains (28 Sep 2026); `cre workflow build` does not read them |
-| Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`: 192 pass; `e2e:local`: 12 of 12) |
+| Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`: 195 pass; `e2e:local`: 12 of 12) |
 | `cre workflow simulate --broadcast` on Monad testnet | ready (`evidence`, `evidence --retry-tx`, the loops, `retry:listen`); needs `cre login` and a funded `CRE_ETH_PRIVATE_KEY`. Its runs land in [`evidence/`](evidence/). Not run from this branch yet: no login here |
 | `polaris-guardian` | done: cron; Chainlink AUSD/USD read on Monad mainnet (address and decimals checked on chain), the pool on Monad testnet at one finalized block, the verdict re-evaluated by GuardianReceiver, pause and resume of `openPlan` shown on real contracts (`e2e:local`) |
 | The instant retry (EVM log trigger) | done: trigger 1 of `polaris-collections` on `PolarisCheckout.Reauthorized`; shown on real contracts with a real `reauthorize` receipt (`e2e:local`); under the CLI, `simulate:retry` (one past transaction) or `retry:listen` (live) |
