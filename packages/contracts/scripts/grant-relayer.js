@@ -30,6 +30,11 @@ async function main() {
   await send(await at("MerchantRegistry"), "setOperator", [relayer, true]);
   await send(await at("BatchSettlement"), "setSettler", [relayer, true]);
 
+  // The relayer it replaces (the dev adapter's key, before the Privy server wallet) keeps its roles
+  // until an owner revokes them; the record says so rather than forgetting it.
+  if (d.roles.relayer && getAddress(d.roles.relayer) !== relayer) {
+    d.roles.previousRelayers = [...new Set([...(d.roles.previousRelayers ?? []), getAddress(d.roles.relayer)])];
+  }
   d.roles.relayer = relayer;
   writeFileSync(file, `${JSON.stringify(d, null, 2)}\n`);
   console.log(`Relayer ${relayer}: PolarisPayments operator, MerchantRegistry operator, BatchSettlement settler.`);

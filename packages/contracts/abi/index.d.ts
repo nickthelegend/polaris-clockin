@@ -7288,6 +7288,44 @@ export declare const collateralVaultAbi: readonly [
     readonly "inputs": readonly [
       {
         readonly "internalType": "address";
+        readonly "name": "borrower";
+        readonly "type": "address";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "amount";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "deadline";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint8";
+        readonly "name": "v";
+        readonly "type": "uint8";
+      },
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "r";
+        readonly "type": "bytes32";
+      },
+      {
+        readonly "internalType": "bytes32";
+        readonly "name": "s";
+        readonly "type": "bytes32";
+      }
+    ];
+    readonly "name": "lockWithPermit";
+    readonly "outputs": readonly [];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "address";
         readonly "name": "";
         readonly "type": "address";
       }

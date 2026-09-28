@@ -58,9 +58,14 @@ async function checkDeployment(ethers, record) {
     "ScoreManager", "PolarisLoanEngine", "PolarisPayments", "MerchantRegistry", "CollateralVault",
     "BatchSettlement", "PolarisCheckout", "CollectionsReceiver", "UnderwritingReceiver", "GuardianReceiver",
   ].filter((n) => addr(n));
+  // MerchantRegistry may have moved to the registry admin (a Privy server wallet whose policy only
+  // lets it activate and cap merchants: apps/business scripts/transfer-registry-owner.mjs).
+  const registryAdmin = record.roles?.registryAdmin ?? null;
   for (const n of owned) {
     const r = await read(`${n} owner`, async () => (await at(n)).owner());
-    if (r.ok) row(`${n} is owned by the deployer`, same(r.value, owner), r.value);
+    if (!r.ok) continue;
+    if (n === "MerchantRegistry" && registryAdmin) row("MerchantRegistry is owned by the registry admin (Privy)", same(r.value, registryAdmin), r.value);
+    else row(`${n} is owned by the deployer`, same(r.value, owner), r.value);
   }
 
   // ── credit ──────────────────────────────────────────────────────────────
