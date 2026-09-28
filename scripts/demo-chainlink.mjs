@@ -21,10 +21,11 @@
  *   guard raise [price]
  *                  THE DEMO THRESHOLD. The owner raises GuardianReceiver's
  *                  depeg threshold (minPrice) above the real AUSD/USD price
- *                  (default $1.001; Chainlink's feed reads about $0.9998), so
- *                  the guardian's next run pauses new Pay in 4 plans. The
+ *                  (default $1.001; Chainlink's feed reads about $0.9998).
+ *                  GuardianReceiver judges the last attested price by it at
+ *                  once, and the guardian's next run attests the pause. The
  *                  price is never faked; the bar is moved, and every caption
- *                  says "threshold raised for demo". Waits for the pause.
+ *                  says "threshold raised for demo". Waits for the attestation.
  *   guard restore  the thresholds from before `raise` (else the deploy
  *                  defaults); waits for the guardian's next run to resume
  *   guard max-age <seconds>
@@ -217,8 +218,11 @@ const guardian = () => at("GuardianReceiver");
 
 async function thresholdsNow() {
   const t = await reader.readContract({ address: guardian(), abi: abis.guardianReceiverAbi, functionName: "thresholds" });
-  return { minPrice: t.minPrice, minFreeCash: t.minFreeCash, maxBadDebtBps: Number(t.maxBadDebtBps), maxPriceAge: Number(t.maxPriceAge) };
+  return cre.guardianThresholds(t);
 }
+
+/** Thresholds as JSON (bigints as decimal strings), for .demo/chainlink.json. */
+const thresholdsJson = (t) => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, typeof v === "bigint" ? String(v) : v]));
 
 async function creditStatus() {
   const s = await reader.readContract({ address: guardian(), abi: abis.guardianReceiverAbi, functionName: "creditStatus" });
@@ -253,23 +257,25 @@ function lastGuardianRun() {
 async function stepGuardRaise(priceArg) {
   const min = viem.parseUnits(priceArg ?? "1.001", 8);
   const before = await thresholdsNow();
-  if (!state().thresholdsBefore) save({ thresholdsBefore: { ...before, minPrice: String(before.minPrice), minFreeCash: String(before.minFreeCash) } });
+  if (!state().thresholdsBefore) save({ thresholdsBefore: thresholdsJson(before) });
   const { round } = await creditStatus();
-  const hash = await setThresholds({ ...before, minPrice: min });
+  // The band must stay a band: a floor raised past the ceiling takes the ceiling with it.
+  const hash = await setThresholds({ ...before, minPrice: min, maxPrice: before.maxPrice < min ? min : before.maxPrice });
   const run = lastGuardianRun();
   const price = run?.result?.price;
   log(`THRESHOLD RAISED FOR DEMO: the owner set the depeg threshold to ${dollars(min)} (was ${dollars(before.minPrice)}) in tx ${hash}`);
   if (price) log(`the guardian's last read: ${price.kind === "chainlink" ? "Chainlink" : "the local mock"} ${price.description} ${price.answer} (round ${price.roundId}); the price is not touched`);
-  log("waiting for the guardian's next scheduled run…");
+  const now = await creditStatus();
+  log(`GuardianReceiver judges the latest attested price by the new threshold at once: openPlan is ${now.paused ? "paused" : "open"}`);
+  log("waiting for the guardian's next scheduled run to attest it…");
   const s = await waitForVerdict(true, round);
   log(`the guardian attested round ${s.round}: Pay in 4 paused (${reasonWords(s.attestedReasons).join(", ")})`);
 }
 
 async function stepGuardRestore() {
   const saved = state().thresholdsBefore;
-  const t = saved
-    ? { minPrice: BigInt(saved.minPrice), minFreeCash: BigInt(saved.minFreeCash), maxBadDebtBps: saved.maxBadDebtBps, maxPriceAge: saved.maxPriceAge }
-    : { minPrice: cre.GUARDIAN_DEFAULTS.minPrice, minFreeCash: cre.GUARDIAN_DEFAULTS.minFreeCash, maxBadDebtBps: cre.GUARDIAN_DEFAULTS.maxBadDebtBps, maxPriceAge: cre.GUARDIAN_DEFAULTS.maxPriceAge };
+  // A record saved before the ceiling and the originations floor existed takes the defaults for them.
+  const t = cre.guardianThresholds(saved ?? {});
   const { round } = await creditStatus();
   const hash = await setThresholds(t);
   save({ thresholdsBefore: null });
@@ -296,7 +302,10 @@ function reasonWords(mask) {
 async function stepGuardStatus() {
   const [s, t] = await Promise.all([creditStatus(), thresholdsNow()]);
   log(`openPlan: ${s.paused ? `paused (${reasonWords(s.reasons).join(", ")})` : "open"}; attested round ${s.round} ${s.attestedPaused ? "paused" : "healthy"}${s.stale ? ", STALE (fails open)" : ""}; override ${["none", "resume", "pause"][s.overrideMode]}`);
-  log(`thresholds: depeg below ${dollars(t.minPrice)}, free cash under $${(Number(t.minFreeCash) / 1e6).toLocaleString("en-US")}, bad debt over ${t.maxBadDebtBps / 100}% of originations, price older than ${t.maxPriceAge / 3600} h`);
+  log(
+    `thresholds: depeg below ${dollars(t.minPrice)} or above ${dollars(t.maxPrice)}, free cash under $${(Number(t.minFreeCash) / 1e6).toLocaleString("en-US")} (read from the pool, live), ` +
+      `bad debt over ${t.maxBadDebtBps / 100}% of originations once $${(Number(t.minOriginated) / 1e6).toLocaleString("en-US")} is lent, price older than ${t.maxPriceAge / 3600} h`,
+  );
   const run = lastGuardianRun();
   if (run) log(`last run ${run.at}: ${run.result.status} (${run.result.why}), price ${run.result.price.kind} ${run.result.price.answer}`);
 }

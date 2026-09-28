@@ -8,7 +8,7 @@
 //     gets test dollars; the Send form shows the amount in pesos at Chainlink's USD/ARS rate.
 //  2. Halcyon -> Pay in 4 -> Raise your limit: the API fires the CRE underwriting workflow
 //     (trigger:local runs the real polaris-underwrite handler) and the line opens on chain;
-//     the credit screen says "Verified by Chainlink CRE". Pay in 4 opens a plan.
+//     the credit screen names the report ("CRE workflow, local run"). Pay in 4 opens a plan.
 //  3. The buyer's approval to the loan engine is revoked (their own transaction, as a
 //     wallet's revoke would), before payment 1 falls due a minute later.
 //  4. The owner raises the guardian's depeg threshold above the real price (captioned
@@ -301,12 +301,14 @@ async function orderPaid(page, pattern) {
   evidence.loseApproval = (lost.match(/tx (0x[0-9a-f]{64})/) || [])[1] ?? null;
   step("The buyer revoked the loan engine's approval (their own transaction)", Boolean(evidence.loseApproval), evidence.loseApproval ?? "");
 
-  // "Verified by Chainlink CRE" on the credit line.
+  // Where the credit line came from. A local chain's report is a local run: never "Verified by Chainlink CRE",
+  // which only a DON-signed report through Chainlink's KeystoneForwarder earns.
   await app.goto(APP + "/credit", { waitUntil: "networkidle" });
   await settle(app, 3500);
-  const verified = (await app.getByText(/Verified by Chainlink CRE/).count()) > 0;
-  await shot(app, "07-credit-verified-by-chainlink-cre");
-  step("Credit: the line says Verified by Chainlink CRE, with the report's transaction", verified);
+  const localRun = (await app.getByText(/CRE workflow, local run/).count()) > 0;
+  const claimsVerified = (await app.getByText(/Verified by Chainlink CRE/).count()) > 0;
+  await shot(app, "07-credit-cre-local-run", "The line's provenance: the polaris-underwrite report, labelled a local run (a local forwarder, no DON signature)");
+  step("Credit: the line names its report a CRE local run, with its transaction, and does not claim Chainlink verification", localRun && !claimsVerified);
 
   // ── 4. The guardian pauses Pay in 4 (threshold raised for demo), then resumes it ──
   const raised = scene(["guard", "raise", DEMO_MIN_PRICE]);
