@@ -32,6 +32,11 @@ import { DataTable, TableName } from "../trade/DataTable";
 import { GradientLineChart, type GradientPoint } from "../trade/GradientLineChart";
 import { Coin, DollarCoin, PairHeader, PolarisCoin } from "../trade/PairHeader";
 import { FigureRow } from "../trade/FigureRow";
+import { RunList } from "../trade/RunList";
+import { CheckList } from "../composites/CheckList";
+import { Meter } from "../primitives/Meter";
+import { ProvenanceBadge } from "../primitives/Provenance";
+import { TxLink } from "../primitives/TxLink";
 import { PanelCard } from "../trade/PanelCard";
 import { SwapCard, SwapStack, SwapToggle } from "../trade/Swap";
 import { TopNav, WalletPill } from "../trade/TopNav";
@@ -50,6 +55,8 @@ const MORE = [
 ];
 
 const WALLET = "0xA7F3d4B8c62369B0fEa91c2D4e8b7a3f5C1d9E02";
+const TX = "0x4a3f8c21d9e0b7a65f1c2e3d4b5a69788796a5b4c3d2e1f00112233445566779c21";
+const TX2 = "0x9b1e7d3c5a2f4e6d8c0b1a2938475665748392a1b0c9d8e7f6a5b4c3d2e1f0a1b2c3";
 
 /** A day of sales, every 20 minutes: deterministic (no clock, no random), so server and browser agree. */
 const DAY: GradientPoint[] = Array.from({ length: 73 }, (_, i) => {
@@ -336,6 +343,41 @@ export function SectionTrade() {
             <PanelCard variant="filled" title="Collections" subtitle="Chainlink CRE workflow" className="w-full sm:w-[260px]">
               <p className="mt-4 text-[32px] font-medium tracking-[-0.03em]">in 42 s</p>
             </PanelCard>
+          </Specimen>
+          <Specimen label="RunList: what an automated job did, with its transaction">
+            <RunList
+              className="w-full"
+              aria-label="Latest collections runs"
+              items={[
+                { id: "a", tag: "Collected", tone: "lime", title: "2 instalments collected ($100.77)", detail: "Instant retry: 7 s after the buyer signed again", meta: "12 s ago", trailing: <TxLink hash={TX} href="#ref-e" /> },
+                { id: "b", tag: "Dunned", tone: "amber", title: "1 task skipped", detail: "1 dunned: approval lost, buyer asked to sign again", meta: "1 min ago", trailing: <TxLink hash={TX2} /> },
+                { id: "c", tag: "Paused", tone: "red", title: "Attestation refused", detail: "VerdictMismatch", meta: "9 min ago" },
+              ]}
+            />
+          </Specimen>
+          <Specimen label="CheckList · Meter: a guard's checks and how old its last check is">
+            <div className="grid w-full gap-5 sm:grid-cols-2">
+              <CheckList
+                aria-label="The guardian's checks"
+                items={[
+                  { key: "price", label: "AUSD/USD", value: "$0.9998", limit: "at least $0.995", ok: true },
+                  { key: "cash", label: "Free pool cash", value: "$640.00", limit: "at least $1,000.00", ok: false },
+                ]}
+              />
+              <div className="grid content-start gap-2">
+                <p className="text-[13px] text-ui-muted">Last checked 12 min ago, of 60</p>
+                <Meter value={0.2} label="Time since the last check, of the hour allowed" valueText="12 minutes of 60" />
+                <Meter value={0.92} tone="amber" label="Time since the last check" valueText="55 minutes of 60" />
+              </div>
+            </div>
+          </Specimen>
+          <Specimen label="ProvenanceBadge · TxLink: where a figure came from">
+            <ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2, 2026" href="#ref-e" />
+            <ProvenanceBadge size="sm" label="Verified by Chainlink CRE" meta="Oct 2" />
+            <ProvenanceBadge tone="neutral" label="Chainlink CRE (simulated)" meta="Oct 2, 2026" href="#ref-e" />
+            <ProvenanceBadge tone="neutral" size="sm" label="CRE workflow, local run" meta="Oct 2" hash="0x10d38ddb663b14507d34a5af1e5896202c879155c0998b0329e10587f5f12f11" />
+            <TxLink hash={TX} href="#ref-e" />
+            <TxLink hash={TX} href="#ref-e" kind="report">View report</TxLink>
           </Specimen>
         </div>
       </ThemeScope>

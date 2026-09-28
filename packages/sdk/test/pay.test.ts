@@ -1,7 +1,8 @@
 import { Interface, Signature, TypedDataEncoder, Wallet, getAddress, keccak256, solidityPacked, verifyTypedData } from "ethers";
 import { describe, expect, it, vi } from "vitest";
 
-import { AUSD, MONAD_TESTNET, SEPOLIA, type PolarisChain } from "../src/chains.js";
+import { AUSD, MONAD, MONAD_TESTNET, SEPOLIA, type PolarisChain } from "../src/chains.js";
+import { DEPLOYMENTS } from "../src/deployments.js";
 import { createPolaris } from "../src/client.js";
 import { PolarisError } from "../src/errors.js";
 import {
@@ -15,8 +16,12 @@ import { createFakeWallet } from "./helpers/fake-wallet.js";
 
 const PAYMENTS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const MERCHANT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
-/** A deployment of the testnet preset, as it will look once deployments.ts has addresses. */
-const CHAIN: PolarisChain = { ...MONAD_TESTNET, payments: PAYMENTS };
+/**
+ * The testnet preset with a PolarisPayments the fake wallet serves, over
+ * Agora's real AUSD: these tests pin AUSD's own domain and quirks, whichever
+ * dollar the committed deployment brought (a labelled MockAUSD on testnet).
+ */
+const CHAIN: PolarisChain = { ...MONAD_TESTNET, payments: PAYMENTS, stablecoin: AUSD.monadTestnet };
 const iface = new Interface(PAYMENTS_ABI);
 
 function client(provider: unknown, extra: Record<string, unknown> = {}) {
@@ -281,9 +286,11 @@ describe("pay(): gasless through the relayer", () => {
 
 describe("pay(): configuration", () => {
   it("refuses the undeployed Monad preset instead of signing for a zero address", async () => {
-    const fake = createFakeWallet(AUSD.monadTestnet, PAYMENTS);
-    const polaris = createPolaris({ publishableKey: "pk_test_51Hx8yQfT3sLk2Pz", provider: fake.provider });
-    expect(polaris.chain.chainId).toBe(10143);
+    // Monad mainnet has no Polaris deployment (credit stays on testnet), so its preset is all zero placeholders.
+    expect(DEPLOYMENTS.monad.source).toBeNull();
+    const fake = createFakeWallet(AUSD.monad, PAYMENTS);
+    const polaris = createPolaris({ publishableKey: "pk_live_51Hx8yQfT3sLk2Pz", chain: MONAD, provider: fake.provider });
+    expect(polaris.chain.chainId).toBe(143);
     await expect(polaris.pay({ merchant: MERCHANT, amount: "1.00", orderId: "o-13" })).rejects.toMatchObject({
       type: "configuration_error",
       code: "contract_not_deployed",

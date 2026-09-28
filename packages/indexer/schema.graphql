@@ -320,7 +320,7 @@ type Plan {
   failedAttempts: Int!
   "The engine's error: InsufficientAllowance, InsufficientBalance, ..."
   lastFailureReason: String
-  "RESIGN (allowance lost: the buyer signs again), TOP_UP (balance short), OTHER."
+  "allowance_lost (the buyer signs again), insufficient_funds (balance short), other: the CRE workflow's words."
   lastFailureAction: String
   lastFailureAt: Int
   "Recovered at liquidation (allowance, then collateral)."
@@ -684,9 +684,10 @@ type CollectionTask {
   "The decoded revert: InsufficientAllowance, InsufficientBalance, NotDue, LoanNotActive, ..."
   reason: String
   """
-  What the skip means: RESIGN (the buyer must sign a new allowance), TOP_UP
-  (the buyer's balance is short), STALE (the candidate was not actionable;
-  nobody's fault) or OTHER.
+  What the skip means, in the CRE collections workflow's words:
+  allowance_lost (the buyer must sign a new allowance), insufficient_funds
+  (the buyer's balance is short), stale (the candidate was not actionable;
+  nobody's fault) or other.
   """
   reasonAction: String
   reasonData: String
@@ -778,7 +779,7 @@ type Activity {
   canceledBy: String
   "installment.failed: the decoded revert; subscription.canceled: cancelled or lapsed."
   reason: String
-  "installment.failed: RESIGN, TOP_UP or OTHER."
+  "installment.failed: allowance_lost, insufficient_funds or other."
   reasonAction: String
   "payout.paid: where the money went."
   destination: String

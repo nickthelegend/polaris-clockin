@@ -1,5 +1,5 @@
 /**
- * Both workflows, end to end, on a local Monad stand-in (Hardhat, chain
+ * The three workflows, end to end, on a local Monad stand-in (Hardhat, chain
  * 10143) with every Polaris contract deployed by packages/contracts' own
  * deploy script, reports delivered through the mock forwarder planted at
  * Chainlink's simulation-forwarder address:
@@ -9,17 +9,26 @@
  * The workflow code is the code `cre workflow build` compiles, run by the
  * CRE SDK's test runtime; its EVM capability is bridged to the node (see
  * helpers/local-evm.ts) and its HTTP capability answers from the
- * underwriting fixtures. So the receivers decode the exact bytes the
+ * underwriting fixtures. The guardian reads the local chain's MockPriceFeed
+ * (labelled "local mock, not Chainlink") where staging reads Chainlink's
+ * AUSD/USD on Monad mainnet; the log trigger's payload is built from the real
+ * `reauthorize` receipt, as `cre workflow simulate --evm-tx-hash` builds it. So the receivers decode the exact bytes the
  * workflows encode, and ScoreManager and PolarisLoanEngine act on them.
  *
  *   1. underwriting: the account's consent + a Bring-your-history proof → facts → ScoreManager opens a line;
  *      a brand-new account alone is a thin file: no report, no line
- *   2. a Pay in 4 plan opens on that line (PlanIntent + Permit, relayed)
- *   3. collections, candidates from the indexer: instalment 1 collected, webhook posted
- *   4. the buyer revokes the allowance → installment.failed "allowance_lost"
- *   5. the buyer's balance runs dry → installment.failed "insufficient_funds"
- *   6. past grace → the plan is liquidated
- *   7. a report with an action the receiver does not know is skipped, not fatal
+ *   2. guardian: a healthy first attestation (GuardianReceiver decodes and re-evaluates the workflow's
+ *      bytes); the owner raises the depeg threshold → Pay in 4 paused (openPlan reverts
+ *      CreditPausedByGuardian(1)) → restored → resumed; a depeg and a stale round on the local mock
+ *   3. a Pay in 4 plan opens on that line (PlanIntent + Permit, relayed), so the resume is real
+ *   4. collections, candidates from the indexer: instalment 1 collected, webhook posted
+ *   5. the instant retry: allowance revoked → dunned (allowance_lost) → the ladder would wait 6 h →
+ *      the buyer re-signs (PolarisCheckout.reauthorize) → the EVM-log-triggered run collects in the next block
+ *   6. the buyer revokes the allowance → installment.failed "allowance_lost"
+ *   7. the buyer's balance runs dry → installment.failed "insufficient_funds"
+ *   8. past grace → the plan is liquidated
+ *   9. a report with an action the receiver does not know is skipped, not fatal
+ *  10. guardian after that loss: the shortfall is bad debt → Pay in 4 paused; the owner's override lifts it
  *
  * Skipped unless POLARIS_CRE_E2E_RPC and POLARIS_CRE_E2E_DEPLOYMENT are set
  * (scripts/e2e-local.mjs sets them).
@@ -28,10 +37,12 @@
 import { afterAll, describe, expect } from "bun:test";
 import { join } from "node:path";
 import { cre, type CronPayload, type HTTPPayload } from "@chainlink/cre-sdk";
-import { EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
+import { ConfidentialHttpMock, EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import {
   collectionsReceiverAbi,
+  guardianReceiverAbi,
   mockAUSDAbi,
+  mockPriceFeedAbi,
   polarisCheckoutAbi,
   polarisLoanEngineAbi,
   scoreManagerAbi,
@@ -41,6 +52,7 @@ import { linkMessage, scoreFromFacts } from "@polarispay/underwriting/core";
 import {
   type Abi,
   type Address,
+  decodeErrorResult,
   decodeEventLog,
   decodeFunctionResult,
   encodeFunctionData,
@@ -51,15 +63,27 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { classifySkip } from "../src/collections/outcomes.ts";
 import { encodeCollectionsReport } from "../src/collections/tasks.ts";
-import { configSchema as collectionsSchema, type CollectionsConfig, onCron } from "../src/collections/workflow.ts";
+import { REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
+import { configSchema as collectionsSchema, type CollectionsConfig, onCron, onReauthorized } from "../src/collections/workflow.ts";
+import { type Attestation, decodeGuardianReport, guardianReasons, type Thresholds } from "../src/guardian/attestation.ts";
+import { type GuardianConfig, configSchema as guardianSchema, onCron as guardianCron } from "../src/guardian/workflow.ts";
 import { verifyCallback } from "../src/shared/callback.ts";
 import { underwriteConsentMessage } from "../src/underwriting/consent.ts";
 import { decodeUnderwritingReport } from "../src/underwriting/report.ts";
 import { configSchema as underwritingSchema, onHttpTrigger, type UnderwritingConfig } from "../src/underwriting/workflow.ts";
-import { answerFromFixtures, cloneFixtures, type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
+import {
+  answerConfidentialFromFixtures,
+  answerFromFixtures,
+  cloneFixtures,
+  type ConfidentialRequestLike,
+  type CreRequestLike,
+  type SentRequest,
+  toSent,
+  toSentConfidential,
+} from "../test/helpers/fixtures-http.ts";
 import { answerHasura, type Tables } from "../test/helpers/hasura.ts";
 import { fs, requireModule } from "../test/helpers/host.ts";
-import { bridgeEvm, call, chainNowMs, rpcSync, sendTx, travel } from "./helpers/local-evm.ts";
+import { blockTime, bridgeEvm, call, chainNowMs, logTriggerPayload, rpcSync, sendTx, travel } from "./helpers/local-evm.ts";
 
 const RPC = process.env.POLARIS_CRE_E2E_RPC ?? "";
 const DEPLOYMENT = process.env.POLARIS_CRE_E2E_DEPLOYMENT ?? "";
@@ -119,6 +143,8 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
       ]),
     ],
   ]);
+  /** What the Vault DON would hold; the fixture transport ignores the values. */
+  const ENCLAVE_SECRETS = { NANSEN_API_KEY: "local-nansen", ZERION_BASIC_AUTH: "bG9jYWwtemVyaW9uOg==", ETHERSCAN_API_KEY: "local-etherscan" };
   const collectionsConfig = (over: Partial<CollectionsConfig> = {}): CollectionsConfig =>
     collectionsSchema.parse({
       ...JSON.parse(fs.readFileSync(join(ROOT, "collections", "config.local.json"), "utf8")),
@@ -150,6 +176,10 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
       }
       return answerFromFixtures(s, FIXTURES);
     };
+    // The paid providers under `confidentialHttp` (on in config.local.json, as in staging).
+    const enclave = ConfidentialHttpMock.testInstance();
+    enclave.sendRequest = (input) =>
+      answerConfidentialFromFixtures(toSentConfidential(input as unknown as ConfidentialRequestLike, ENCLAVE_SECRETS), FIXTURES);
     return { record, callbacks };
   }
 
@@ -266,6 +296,116 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     expect(read(at("ScoreManager"), scoreManagerAbi, "creditLimitOf", [newcomer.address])).toBe(0n);
   });
 
+// ---------------------------------------------------------------- polaris-guardian
+
+  /** GuardianReceiver.thresholds() now. */
+  const thresholdsNow = (): Thresholds => {
+    const t = read(at("GuardianReceiver"), guardianReceiverAbi, "thresholds") as Thresholds;
+    return {
+      minPrice: t.minPrice,
+      maxPrice: t.maxPrice,
+      minFreeCash: t.minFreeCash,
+      maxBadDebtBps: Number(t.maxBadDebtBps),
+      minOriginated: t.minOriginated,
+      maxPriceAge: Number(t.maxPriceAge),
+    };
+  };
+  const setThresholds = (t: Thresholds) => send(DEPLOYER, at("GuardianReceiver"), guardianReceiverAbi, "setThresholds", [t]);
+  const creditPausedNow = () => read(at("PolarisCheckout"), polarisCheckoutAbi, "creditPaused") as readonly [boolean, number];
+  /** What openPlan does right now, asked with eth_call: the error it reverts with. The guard is its first check. */
+  const openPlanRevert = () => {
+    const intent = { buyer: buyer.address, merchant: d.demo.merchant, principal: 1n, installments: 4, interval: 60n, orderId: "guard-probe", nonce: 0n, deadline: 0n };
+    const permit = { value: 0n, deadline: 0n, v: 27, r: `0x${"11".repeat(32)}` as Hex, s: `0x${"22".repeat(32)}` as Hex };
+    const data = encodeFunctionData({ abi: polarisCheckoutAbi, functionName: "openPlan", args: [intent, "0x", permit] });
+    try {
+      rpcSync(RPC, "eth_call", [{ from: RELAYER, to: at("PolarisCheckout"), data }, "latest"]);
+      return null;
+    } catch (e) {
+      const raw = (e as { data?: unknown }).data;
+      const revert = (typeof raw === "string" ? raw : (raw as { data?: string } | undefined)?.data) as Hex;
+      const err = decodeErrorResult({ abi: polarisCheckoutAbi, data: revert });
+      return { name: err.errorName, args: (err.args ?? []).map((a) => (typeof a === "bigint" ? Number(a) : a)) };
+    }
+  };
+  const guardianConfig = (over: Partial<GuardianConfig> = {}): GuardianConfig =>
+    guardianSchema.parse({ ...JSON.parse(fs.readFileSync(join(ROOT, "guardian", "config.local.json"), "utf8")), ...over });
+  const guard = (over: Partial<GuardianConfig> = {}) => {
+    const { record } = harness();
+    const out = JSON.parse(guardianCron(newTestRuntime(null, { timeProvider: () => chainNowMs(RPC) }, guardianConfig(over)), cronAt()));
+    return { out, record };
+  };
+
+  test("guardian: the first attestation is healthy, and GuardianReceiver decodes and re-evaluates exactly the bytes the workflow wrote", () => {
+    const { out, record } = guard();
+    expect(out).toMatchObject({ status: "written", why: "first", transition: "first", round: "1" });
+    expect(out.verdict).toEqual({ creditPaused: false, reasons: 0, reasonNames: [] });
+    expect(out.price).toMatchObject({ kind: "mock", description: "AUSD / USD (local mock, not Chainlink)", answer: "0.9998" });
+    // The pool and the receiver were read at one block, by number.
+    expect(record.blocks[0]).toMatch(/^0x[0-9a-f]+$/);
+    expect(record.blocks[1]).toBe(record.blocks[0]!);
+    expect(Number(BigInt(record.blocks[0]!))).toBe(Number(out.pool.block));
+
+    // The contract's own decoder and evaluate, on the workflow's bytes.
+    const w = record.writes[0]!;
+    const { attestation } = decodeGuardianReport(w.body);
+    const onChain = read(at("GuardianReceiver"), guardianReceiverAbi, "latestAttestation") as Attestation;
+    expect({ ...onChain, reasons: Number(onChain.reasons) }).toEqual(attestation);
+    expect(Number(read(at("GuardianReceiver"), guardianReceiverAbi, "evaluate", [attestation]))).toBe(guardianReasons(attestation, thresholdsNow()));
+    expect(attestation.freeCash).toBe((read(at("PolarisLoanEngine"), polarisLoanEngineAbi, "poolState") as { freeCash: bigint }).freeCash);
+    // The pool-health feed: free cash in dollars at the attested price, 8 decimals.
+    const [round, answer, , updatedAt] = read(at("GuardianReceiver"), guardianReceiverAbi, "latestRoundData") as readonly [bigint, bigint, bigint, bigint, bigint];
+    expect(round).toBe(1n);
+    expect(answer).toBe((attestation.freeCash * attestation.price) / 1_000_000n);
+    expect(updatedAt).toBe(attestation.observedAt);
+    expect(creditPausedNow()).toEqual([false, 0]);
+    expect(w.gasUsed).toBeLessThanOrEqual(w.gasLimit);
+    track(record, "guardian, first attestation");
+
+    // Nothing new inside the heartbeat: no second write.
+    rpcSync(RPC, "evm_mine", []);
+    const again = guard();
+    expect(again.out).toMatchObject({ status: "unchanged", why: "unchanged", txHash: null });
+    expect(again.record.writes).toHaveLength(0);
+  });
+
+  test("guardian: the owner raises the depeg threshold to $1.001 (for the demo); the next run pauses Pay in 4, and a healthy one resumes it", () => {
+    const normal = thresholdsNow();
+    setThresholds({ ...normal, minPrice: 100_100_000n });
+    const paused = guard();
+    expect(paused.out).toMatchObject({ status: "written", why: "verdict", transition: "paused", thresholds: { minPrice: "1.001" } });
+    expect(paused.out.verdict).toEqual({ creditPaused: true, reasons: 1, reasonNames: ["depeg"] });
+    expect(creditPausedNow()).toEqual([true, 1]);
+    expect(openPlanRevert()).toEqual({ name: "CreditPausedByGuardian", args: [1] });
+    // The feed answers 0 while the attestation paused credit.
+    expect((read(at("GuardianReceiver"), guardianReceiverAbi, "latestRoundData") as readonly bigint[])[1]).toBe(0n);
+    track(paused.record, "guardian, pause");
+
+    setThresholds(normal);
+    const resumed = guard();
+    expect(resumed.out).toMatchObject({ status: "written", why: "verdict", transition: "resumed" });
+    expect(creditPausedNow()).toEqual([false, 0]);
+    // openPlan gets past the guard again (and fails on this probe's own empty signature instead).
+    expect(openPlanRevert()?.name).not.toBe("CreditPausedByGuardian");
+  });
+
+  test("guardian: on the labelled local mock, a real depeg and then a stale round keep credit paused; the recovery resumes it", () => {
+    const feed = at("MockAusdUsdFeed");
+    send(DEPLOYER, feed, mockPriceFeedAbi, "setAnswer", [99_000_000n]);
+    const depeg = guard();
+    expect(depeg.out).toMatchObject({ transition: "paused", verdict: { reasons: 1, reasonNames: ["depeg"] }, price: { answer: "0.99" } });
+
+    // The peg is back, but the round is 2 h 1 s old: a stale price is no price.
+    send(DEPLOYER, feed, mockPriceFeedAbi, "setRound", [99_980_000n, BigInt(Math.floor(chainNowMs(RPC) / 1000) - 7_201)]);
+    const stale = guard();
+    expect(stale.out).toMatchObject({ transition: "reasons-changed", verdict: { creditPaused: true, reasonNames: ["stale_price"] } });
+    expect(creditPausedNow()).toEqual([true, 8]);
+
+    send(DEPLOYER, feed, mockPriceFeedAbi, "setAnswer", [99_980_000n]);
+    const back = guard();
+    expect(back.out).toMatchObject({ transition: "resumed", verdict: { creditPaused: false, reasons: 0 } });
+    expect(creditPausedNow()).toEqual([false, 0]);
+  });
+
   test("pay in 4 opens on that line, from the buyer's two signatures", async () => {
     const token = at("Stablecoin");
     const engine = at("PolarisLoanEngine");
@@ -325,7 +465,7 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
   test("collections, candidates from the indexer: nothing before the due time, instalment 1 when due, the webhook signed", () => {
     const { record, callbacks } = harness(() => ({ Plan: [indexedPlan()], Subscription: [] }));
     const withIndexer = collectionsConfig({
-      candidates: { indexerUrl: INDEXER_URL, indexerQuery: null, indexerLimit: 100, recentWindow: 50, sweepWindow: 0 },
+      candidates: { indexerUrl: INDEXER_URL, indexerQuery: null, indexerLimit: 100, recentWindow: 50, sweepWindow: 0, chainBackoff: null },
     });
     const early = collect(withIndexer);
     expect(early).toMatchObject({ status: "idle", source: "indexer", checked: 0 }); // the indexer proposed nothing yet
@@ -344,6 +484,70 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     const w = record.writes.at(-1)!;
     expect(w.gasUsed).toBeLessThanOrEqual(w.gasLimit);
     track(record, "collections, 1 instalment");
+  });
+
+test("instant retry: a revoked allowance is dunned; the buyer re-signs through PolarisCheckout.reauthorize; the log-triggered run collects in the next block", async () => {
+    const token = at("Stablecoin");
+    const engine = at("PolarisLoanEngine");
+    const checkout = at("PolarisCheckout");
+    const { callbacks, record } = harness();
+    const config = collectionsConfig();
+    expect(config.retry).toEqual({ checkout, confidence: "FINALIZED" }); // configure filled it from the deployment
+
+    // The buyer's allowance is gone when instalment 2 falls due: the cron dunns them.
+    send(buyer.address, token, mockAUSDAbi, "approve", [engine, 0n]);
+    travel(RPC, 60);
+    const dunned = collect(config);
+    expect(dunned.skipped).toBe(1);
+    expect(lastEvents(callbacks)).toEqual([expect.objectContaining({ type: "installment.failed", loanId: loanId.toString(), reason: "allowance_lost" })]);
+    track(record, "collections, 1 skipped (allowance)");
+    // Without the retry, the next cron run after this rung's window would hold them for the next rung, 6 hours on.
+    const later = Math.floor(chainNowMs(RPC) / 1000) + config.candidates.chainBackoff!.windowSeconds + 5;
+    const waiting = JSON.parse(
+      onCron(newTestRuntime(secrets, { timeProvider: () => later * 1000 }, config), { scheduledExecutionTime: { seconds: BigInt(later), nanos: 0 } } as unknown as CronPayload),
+    );
+    // (Read before toMatchObject: bun 1.4 writes its asymmetric matchers into the object it matched.)
+    const nextAttemptAt = Number(waiting.heldBack[0]?.nextAttemptAt);
+    expect(waiting).toMatchObject({ status: "idle", heldBack: [{ action: "collect", id: loanId.toString() }] });
+    expect(nextAttemptAt - later).toBeGreaterThan(5 * 3600);
+
+    // The buyer signs a fresh permit for everything they owe; the relayer submits it.
+    const now = BigInt(Math.floor(chainNowMs(RPC) / 1000));
+    const owed = read(engine, polarisLoanEngineAbi, "activeDebtOf", [buyer.address]) as bigint;
+    const permitMsg = { owner: buyer.address, spender: engine, value: owed, nonce: read(token, mockAUSDAbi, "nonces", [buyer.address]) as bigint, deadline: now + 1800n };
+    const sig = parseSignature(
+      await buyer.signTypedData({
+        domain: { ...d.eip712.Stablecoin!.domain } as never,
+        types: { Permit: d.eip712.Stablecoin!.types.Permit! },
+        primaryType: "Permit",
+        message: permitMsg,
+      }),
+    );
+    const reauth = send(RELAYER, checkout, polarisCheckoutAbi, "reauthorize", [
+      buyer.address,
+      { value: owed, deadline: permitMsg.deadline, v: Number(sig.v), r: sig.r, s: sig.s },
+    ]);
+    // The log the trigger fires on: Reauthorized, after the token's own Approval (so --evm-event-index 1).
+    const index = reauth.logs.findIndex((l) => l.address.toLowerCase() === checkout.toLowerCase() && l.topics[0] === REAUTHORIZED_TOPIC);
+    expect(index).toBe(1);
+
+    const out = JSON.parse(onReauthorized(newTestRuntime(secrets, { timeProvider: () => chainNowMs(RPC) }, config), logTriggerPayload(reauth, index)));
+    expect(out).toMatchObject({
+      status: "written",
+      source: "event",
+      trigger: { kind: "log", event: "Reauthorized", buyer: buyer.address, txHash: reauth.transactionHash },
+      tasks: [{ action: "collect", id: loanId.toString() }],
+      executed: 1,
+      skipped: 0,
+    });
+    const loan = read(engine, polarisLoanEngineAbi, "getLoan", [loanId]) as { installmentsPaid: number };
+    expect(loan.installmentsPaid).toBe(2);
+    expect(lastEvents(callbacks)).toEqual([expect.objectContaining({ type: "installment.collected", loanId: loanId.toString() })]);
+    // Seconds, not hours: the collection is the block after the re-sign.
+    const collected = rpcSync<{ blockNumber: Hex }>(RPC, "eth_getTransactionReceipt", [out.txHash]);
+    expect(Number(BigInt(collected.blockNumber) - BigInt(reauth.blockNumber))).toBe(1);
+    expect(blockTime(RPC, collected.blockNumber) - blockTime(RPC, reauth.blockNumber)).toBeLessThanOrEqual(2);
+    track(record, "retry (log trigger), 1 instalment");
   });
 
   test("dunning: a revoked allowance asks the buyer to sign again; an empty balance asks them to top up", () => {
@@ -368,6 +572,16 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     ]);
     expect(second.skipped).toBe(1);
     track(record, "collections, 1 skipped (dunning)");
+
+    // Past the rung's window and before grace, the chain fallback keeps the ladder: no attempt, no gas.
+    const ladder = collectionsConfig().candidates.chainBackoff!;
+    travel(RPC, ladder.windowSeconds + 5);
+    const third = collect(collectionsConfig());
+    expect(third).toMatchObject({ source: "chain", status: "idle", txHash: null });
+    expect(third.heldBack).toEqual([{ action: "collect", id: loanId.toString(), nextAttemptAt: expect.any(Number) }]);
+    expect(third.heldBack[0].nextAttemptAt).toBeGreaterThan(Math.floor(chainNowMs(RPC) / 1000));
+    // Without the ladder the same run would have paid for another failing collection.
+    expect(collect(collectionsConfig({ candidates: { ...collectionsConfig().candidates, chainBackoff: null } })).skipped).toBe(1);
   });
 
   test("past grace, a plan that cannot be collected is liquidated in the same report", () => {
@@ -406,5 +620,34 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
     const reason = classifySkip((skipped!.args as { reason: Hex }).reason);
     expect(reason).toMatchObject({ class: "other", error: "UnknownAction" });
     rpcSync(RPC, "evm_mine", []);
+  });
+
+  test("guardian after a real loss: the shortfall is bad debt, read from the pool at once; the owner acknowledges it, and only new losses count", () => {
+    const pool = read(at("PolarisLoanEngine"), polarisLoanEngineAbi, "poolState") as { badDebt: bigint; totalOriginated: bigint };
+    expect(pool.badDebt).toBeGreaterThan((pool.totalOriginated * 500n) / 10_000n);
+    const normal = thresholdsNow();
+    // This local pool has lent less than the $10,000 floor: one loss there is not a portfolio, and pauses nobody.
+    expect(pool.totalOriginated).toBeLessThan(normal.minOriginated);
+    expect(creditPausedNow()).toEqual([false, 0]);
+    // Without the floor it pauses Pay in 4 at once: GuardianReceiver reads bad debt from the pool, no report needed.
+    setThresholds({ ...normal, minOriginated: 0n });
+    expect(creditPausedNow()).toEqual([true, 4]);
+    const { out, record } = guard();
+    expect(out).toMatchObject({ status: "written", why: "verdict", transition: "paused" });
+    expect(out.verdict.reasonNames).toEqual(["bad_debt"]);
+    expect(out.pool.badDebt).toBe(pool.badDebt.toString());
+    expect(creditPausedNow()).toEqual([true, 4]);
+    track(record, "guardian, bad-debt pause");
+
+    // Bad debt never falls, so no later report lifts it: the owner acknowledges the loss.
+    send(DEPLOYER, at("GuardianReceiver"), guardianReceiverAbi, "acknowledgeBadDebt", []);
+    expect(creditPausedNow()).toEqual([false, 0]);
+    const status = read(at("GuardianReceiver"), guardianReceiverAbi, "creditStatus") as { paused: boolean; attestedPaused: boolean; badDebtAcknowledged: bigint };
+    expect(status).toMatchObject({ paused: false, attestedPaused: true, badDebtAcknowledged: pool.badDebt });
+    rpcSync(RPC, "evm_mine", []);
+    const after = guard();
+    expect(after.out).toMatchObject({ status: "written", transition: "resumed", pool: { badDebtAcknowledged: pool.badDebt.toString() } });
+    expect(after.out.verdict).toEqual({ creditPaused: false, reasons: 0, reasonNames: [] });
+    setThresholds(normal);
   });
 });

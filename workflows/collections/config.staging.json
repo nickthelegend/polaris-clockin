@@ -1,20 +1,38 @@
 {
   "schedule": "0 * * * * *",
   "chainSelectorName": "monad-testnet",
-  "receiver": null,
-  "loanEngine": null,
-  "payments": null,
+  "receiver": "0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC",
+  "loanEngine": "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a",
+  "payments": "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
   "forwarder": "0xB9F79d863261869B234c481D1f9A7af84AeAd192",
   "candidates": {
     "indexerUrl": null,
     "indexerQuery": null,
     "indexerLimit": 100,
     "recentWindow": 150,
-    "sweepWindow": 60
+    "sweepWindow": 60,
+    "chainBackoff": {
+      "ladderSeconds": [
+        21600,
+        86400,
+        259200,
+        604800
+      ],
+      "windowSeconds": 120
+    }
   },
   "liquidate": true,
   "maxTasksPerReport": 25,
   "checkBatch": 72,
-  "gas": { "overhead": "30000", "headroomBps": 1500, "min": "150000", "max": "8000000" },
-  "callback": null
+  "gas": {
+    "overhead": "30000",
+    "headroomBps": 1500,
+    "min": "150000",
+    "max": "8000000"
+  },
+  "callback": null,
+  "retry": {
+    "confidence": "FINALIZED",
+    "checkout": "0x3874ef1bcE222755525a96f8284631780b9bC70B"
+  }
 }

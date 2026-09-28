@@ -1,0 +1,23 @@
+{
+  "schedule": "0 * * * * *",
+  "chainSelectorName": "monad-testnet",
+  "receiver": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
+  "forwarder": "0xB9F79d863261869B234c481D1f9A7af84AeAd192",
+  "priceFeed": {
+    "chainSelectorName": "monad-mainnet",
+    "address": "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13",
+    "decimals": 8,
+    "description": "AUSD / USD",
+    "kind": "chainlink"
+  },
+  "write": {
+    "heartbeatSeconds": 900,
+    "deviationBps": 1000
+  },
+  "gas": {
+    "overhead": "30000",
+    "headroomBps": 1500,
+    "min": "150000",
+    "max": "1000000"
+  }
+}

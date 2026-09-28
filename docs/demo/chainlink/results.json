@@ -1,0 +1,301 @@
+{
+  "at": "2026-09-28T04:20:42.384Z",
+  "guardianPrice": {
+    "price": "mainnet",
+    "why": "Chainlink AUSD / USD on Monad mainnet via https://rpc.monad.xyz"
+  },
+  "results": [
+    {
+      "name": "a buyer account (the dev signer standing in for Face ID)",
+      "ok": true,
+      "detail": "0xBf168dd3Bfeb5CC333D3b3849CB62537186438B0"
+    },
+    {
+      "name": "FX: /api/fx reads Chainlink's USD / ARS feed",
+      "ok": true,
+      "detail": "1612.4065 ARS per USD, USD / ARS on ethereum 0xBb65fa58BDb7d33e4a3D1A40a7A9BD99E746367b, round 18446744073709551862"
+    },
+    {
+      "name": "FX: the Send form shows the amount in pesos at the Chainlink rate",
+      "ok": true,
+      "detail": "About ≈ ARS 161.241 · Chainlink rate, 7 h ago · indicative"
+    },
+    {
+      "name": "Underwriting: Raise your limit ran the CRE underwriting workflow and opened a line on chain",
+      "ok": true,
+      "detail": "score 697, line $1000.00, report tx 0x8e13ccc8ac792bef9f56ec438ad854a1ae121c48ce65be393246da0b5965b8a0"
+    },
+    {
+      "name": "Pay in 4: a plan opened on chain through PolarisCheckout.openPlan",
+      "ok": true,
+      "detail": "plan 3, tx 0xfb0ea755e2e226bab291c2291a801720e82cead5136519ebacc0630fd9d8568d"
+    },
+    {
+      "name": "The buyer revoked the loan engine's approval (their own transaction)",
+      "ok": true,
+      "detail": "0x164a8db2e191b1bd20159d2003f5fed9888f5c68380ae2365571667ff41799da"
+    },
+    {
+      "name": "Credit: the line names its report a CRE local run, with its transaction, and does not claim Chainlink verification",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Guardian: its next scheduled run paused Pay in 4 on chain (depeg, threshold raised for demo)",
+      "ok": true,
+      "detail": "Chainlink AUSD/USD 0.99978429 < $1.001; attestation round 5, tx 0xd39701c398b077b2bfe5727a79a162dc5652f46eed186152d8e9e30af6a73de8"
+    },
+    {
+      "name": "On chain: PolarisCheckout.creditPaused() is (true, depeg), so openPlan refuses new plans",
+      "ok": true,
+      "detail": "creditPaused() = (true, 1)"
+    },
+    {
+      "name": "Shop: Pay in 4 says it is paused by the risk guard; Pay now is offered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Pay now still works while Pay in 4 is paused",
+      "ok": true,
+      "detail": "/orders/hc_qocbgy7new6fjo2rh4gk?via=polaris"
+    },
+    {
+      "name": "Checkout: on a session that offers Pay in 4, the app shows it paused with the guard's words, and the API refuses it",
+      "ok": true,
+      "detail": "payIn4.available=false, reason \"Pay in 4 is paused by our risk guard; pay now works as usual.\""
+    },
+    {
+      "name": "Guardian: after the owner restored the threshold, the next run resumed Pay in 4",
+      "ok": true,
+      "detail": "round 6, tx 0x187a38cac9fd6e05e3aa2a71cb8c1aea851f2dd657c63e004271924388c3387b"
+    },
+    {
+      "name": "Shop: Pay in 4 is offered again",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Collections: the cron's run could not take payment 1 (lost approval); the plan asks the buyer to sign again",
+      "ok": true,
+      "detail": "lastFailure {\"reason\":\"allowance_lost\",\"at\":\"2026-09-28T04:21:07.000Z\",\"nextAttemptAt\":\"2026-09-28T10:21:07.000Z\"}"
+    },
+    {
+      "name": "Instant retry: Reauthorized fired the collections workflow's log trigger, and payment 1 was collected",
+      "ok": true,
+      "detail": "2 s after signing; reauthorize 0xc5bc8910c5d87ea82f7d6e72950eec49d2894616de193ad059183884bba6a97d, collection 0x47d6845243bee16fee6474d714704a2adae2f8ee67211d5142fb088550a908c6"
+    },
+    {
+      "name": "The collections log shows the log-triggered run that collected",
+      "ok": true,
+      "detail": "2026-09-28T04:20:30.378Z [cre collections] log written: 1 checked, 1 collected, 0 skipped collect #3 tx 0x47d6845243bee16fee6474d714704a2adae2f8ee67211d5142fb088550a908c6"
+    },
+    {
+      "name": "Dashboard: the Chainlink page lists the collections run that followed the re-sign as an instant retry",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "buyer": "0xBf168dd3Bfeb5CC333D3b3849CB62537186438B0",
+    "fx": {
+      "currency": "ARS",
+      "status": "ok",
+      "rate": {
+        "currency": "ARS",
+        "perUsd": 1612.4065,
+        "updatedAt": 1790543663,
+        "maxAgeSeconds": 93600,
+        "source": {
+          "chain": "ethereum",
+          "chainId": 1,
+          "address": "0xBb65fa58BDb7d33e4a3D1A40a7A9BD99E746367b",
+          "pair": "USD / ARS",
+          "decimals": 8,
+          "roundId": "18446744073709551862"
+        }
+      }
+    },
+    "underwriting": {
+      "decision": "applied",
+      "score": 697,
+      "limit": "1000.00",
+      "report": {
+        "by": "Chainlink CRE",
+        "workflow": "polaris-underwrite",
+        "txHash": "0x8e13ccc8ac792bef9f56ec438ad854a1ae121c48ce65be393246da0b5965b8a0",
+        "at": "2026-09-28T04:19:13.000Z",
+        "blockNumber": 111,
+        "explorerUrl": null,
+        "delivery": "local",
+        "forwarder": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+        "label": "CRE workflow, local run"
+      }
+    },
+    "plan": {
+      "id": "3",
+      "openedTxHash": "0xfb0ea755e2e226bab291c2291a801720e82cead5136519ebacc0630fd9d8568d",
+      "intervalSeconds": 60
+    },
+    "loseApproval": "0x164a8db2e191b1bd20159d2003f5fed9888f5c68380ae2365571667ff41799da",
+    "guardianPause": {
+      "log": [
+        "[chainlink] THRESHOLD RAISED FOR DEMO: the owner set the depeg threshold to $1.0010 (was $0.9950) in tx 0xda5d65c921e649f687f2a62fef0ed9a5689148269aadd2d6226737742321f987",
+        "[chainlink] the guardian's last read: Chainlink AUSD / USD 0.99978429 (round 18446744073709559176); the price is not touched",
+        "[chainlink] GuardianReceiver judges the latest attested price by the new threshold at once: openPlan is paused",
+        "[chainlink] waiting for the guardian's next scheduled run to attest it…",
+        "[chainlink] the guardian attested round 5: Pay in 4 paused (depeg)"
+      ],
+      "guard": {
+        "state": "paused",
+        "reasons": [
+          "depeg"
+        ],
+        "round": 4
+      },
+      "run": {
+        "status": "written",
+        "why": "verdict",
+        "transition": "paused",
+        "verdict": {
+          "creditPaused": true,
+          "reasons": 1,
+          "reasonNames": [
+            "depeg"
+          ]
+        },
+        "price": {
+          "kind": "chainlink",
+          "chain": "monad-mainnet",
+          "feed": "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13",
+          "description": "AUSD / USD",
+          "roundId": "18446744073709559176",
+          "answer": "0.99978429",
+          "updatedAt": 1790569071,
+          "ageSeconds": 134
+        },
+        "pool": {
+          "chain": "monad-testnet",
+          "block": "116",
+          "observedAt": 1790569205,
+          "freeCash": "99127500108",
+          "totalOwed": "872500661",
+          "badDebt": "0",
+          "totalOriginated": "1047000795",
+          "badDebtAcknowledged": "0"
+        },
+        "thresholds": {
+          "minPrice": "1.001",
+          "maxPrice": "1.005",
+          "minFreeCash": "1000000000",
+          "maxBadDebtBps": 500,
+          "minOriginated": "10000000000",
+          "maxPriceAge": 7200
+        },
+        "before": {
+          "paused": true,
+          "reasons": 1,
+          "poolReasons": 0,
+          "priceReasons": 1,
+          "attestedReasons": 0,
+          "observedAt": 1790568897,
+          "stale": false,
+          "override": "none",
+          "overrideUntil": 0,
+          "maxAttestationAge": 3600
+        },
+        "round": "5",
+        "refusal": null,
+        "txHash": "0xd39701c398b077b2bfe5727a79a162dc5652f46eed186152d8e9e30af6a73de8",
+        "gasLimit": "180000",
+        "note": null
+      }
+    },
+    "gatePaused": {
+      "paused": true,
+      "reasons": 1
+    },
+    "guardianResume": {
+      "log": [
+        "[chainlink] the owner restored the depeg threshold to $0.9950 in tx 0x194c1b3ff948694061de18e244c582a8ff6628c0db08babbc03d9191f8f11fc4; waiting for the guardian's next scheduled run…",
+        "[chainlink] the guardian attested round 6: healthy, Pay in 4 resumed"
+      ],
+      "guard": {
+        "state": "open",
+        "round": 5
+      },
+      "run": {
+        "status": "written",
+        "why": "verdict",
+        "transition": "resumed",
+        "verdict": {
+          "creditPaused": false,
+          "reasons": 0,
+          "reasonNames": []
+        },
+        "price": {
+          "kind": "chainlink",
+          "chain": "monad-mainnet",
+          "feed": "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13",
+          "description": "AUSD / USD",
+          "roundId": "18446744073709559176",
+          "answer": "0.99978429",
+          "updatedAt": 1790569071,
+          "ageSeconds": 196
+        },
+        "pool": {
+          "chain": "monad-testnet",
+          "block": "124",
+          "observedAt": 1790569267,
+          "freeCash": "99127500108",
+          "totalOwed": "872500661",
+          "badDebt": "0",
+          "totalOriginated": "1047000795",
+          "badDebtAcknowledged": "0"
+        },
+        "thresholds": {
+          "minPrice": "0.995",
+          "maxPrice": "1.005",
+          "minFreeCash": "1000000000",
+          "maxBadDebtBps": 500,
+          "minOriginated": "10000000000",
+          "maxPriceAge": 7200
+        },
+        "before": {
+          "paused": false,
+          "reasons": 0,
+          "poolReasons": 0,
+          "priceReasons": 0,
+          "attestedReasons": 1,
+          "observedAt": 1790569205,
+          "stale": false,
+          "override": "none",
+          "overrideUntil": 0,
+          "maxAttestationAge": 3600
+        },
+        "round": "6",
+        "refusal": null,
+        "txHash": "0x187a38cac9fd6e05e3aa2a71cb8c1aea851f2dd657c63e004271924388c3387b",
+        "gasLimit": "161002",
+        "note": null
+      }
+    },
+    "instantRetry": {
+      "reauthorizeTx": "0xc5bc8910c5d87ea82f7d6e72950eec49d2894616de193ad059183884bba6a97d",
+      "collectionTx": "0x47d6845243bee16fee6474d714704a2adae2f8ee67211d5142fb088550a908c6",
+      "seconds": 2,
+      "signedAt": "2026-09-28T04:21:36.000Z",
+      "collectedAt": "2026-09-28T04:21:38.000Z"
+    },
+    "collectionsLog": [
+      "2026-09-28T04:14:00.637Z [cre collections] cron written: 4 checked, 0 collected, 1 skipped collect #2 tx 0x0b3393b017f50ca6e742676af5648eabfd4a076d649e1ac6264c0030b5c3b81f",
+      "2026-09-28T04:14:30.863Z [cre collections] log trigger: Reauthorized from 0x91678bd4cf2390da645b0e7956e6006048659e95 in 0x497503f688fb879a0d7104598ed65a0beb506088afb9deccc86883d1e1b28b81",
+      "2026-09-28T04:14:30.863Z [cre collections] log trigger: Reauthorized from 0x3bcfb1f6efa8abf95c5137681d9f165c15ced519 in 0x6e6d1c8d154fd0be2f992fe3089c57254bb7f05acfd32a06c11d478217b74a53",
+      "2026-09-28T04:14:31.403Z [cre collections] log written: 1 checked, 1 collected, 0 skipped collect #2 tx 0x76b6d680caa5f911359689db2e5c62d30353b26bc4d21c391a809973e0962c3a",
+      "2026-09-28T04:14:31.879Z [cre collections] log written: 1 checked, 1 collected, 0 skipped collect #1 tx 0x2b7c0ada1bd570813c940e3ebff218bb26777afef46b02f4b7f4f3cccddcb909",
+      "2026-09-28T04:20:00.677Z [cre collections] cron written: 6 checked, 0 collected, 1 skipped collect #3 tx 0xb5395fc40dcbe922e4a8a12491288dd2bd5a2768dc536d20279ebc5732ca8ebb",
+      "2026-09-28T04:20:29.935Z [cre collections] log trigger: Reauthorized from 0xbf168dd3bfeb5cc333d3b3849cb62537186438b0 in 0xc5bc8910c5d87ea82f7d6e72950eec49d2894616de193ad059183884bba6a97d",
+      "2026-09-28T04:20:30.378Z [cre collections] log written: 1 checked, 1 collected, 0 skipped collect #3 tx 0x47d6845243bee16fee6474d714704a2adae2f8ee67211d5142fb088550a908c6"
+    ]
+  }
+}

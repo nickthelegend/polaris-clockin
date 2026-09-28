@@ -11,6 +11,7 @@
   "scripts": {
     "demo:local": "node scripts/demo-local.mjs",
     "demo:e2e": "node scripts/demo-e2e.cjs",
+    "demo:e2e:chainlink": "node scripts/demo-e2e-chainlink.cjs",
     "dev:demo": "pnpm --parallel --filter @polaris/business --filter @polaris/shop dev",
     "contracts:compile": "pnpm --filter @polarispay/contracts compile",
     "contracts:test": "pnpm --filter @polarispay/contracts test"

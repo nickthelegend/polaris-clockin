@@ -103,7 +103,7 @@ const rows: Record<WebhookKind, Activity> = {
     nextAttemptAt: T + 86_400,
     failureReason: "allowance_lost",
     reason: "InsufficientAllowance",
-    reasonAction: "RESIGN",
+    reasonAction: "allowance_lost",
   }),
   "plan.completed": row("plan.completed", { amount: OWED }),
   "plan.liquidated": row("plan.liquidated", { amount: 100_000_076n, recovered: 20_000_000n, reason: "recovered 20000000 of 100000076" }),
@@ -231,7 +231,7 @@ describe("webhook events", () => {
     assert.ok(last.type === "installment.failed");
     assert.equal(last.data.nextAttemptAt, null);
     // A row without the SDK's word for the reason gets it from the action.
-    const older = toWebhookEvent({ ...rows["installment.failed"], failureReason: null, reasonAction: "TOP_UP" }, ctx);
+    const older = toWebhookEvent({ ...rows["installment.failed"], failureReason: null, reasonAction: "insufficient_funds" }, ctx);
     assert.ok(older.type === "installment.failed");
     assert.equal(older.data.reason, "insufficient_funds");
   });

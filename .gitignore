@@ -11,6 +11,8 @@ coverage/
 !.env.example
 
 *.log
+# ...except the CRE evidence: each `cre workflow simulate` log is the proof (workflows/scripts/evidence.mjs, collections-loop.mjs)
+!workflows/evidence/**/*.log
 .DS_Store
 .idea/
 .vscode/*

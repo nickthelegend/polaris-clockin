@@ -1,0 +1,15 @@
+Network   monadTestnet (chain 10143)
+Deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+Balance   0.656676298974212547 MON; needs about 0.354799656 at 102.0 gwei
+Replacing GuardianReceiver 0xF8259426519d7908e7AF63f20aea3FfCF52426D8
+
+GuardianReceiver (today's code)
+  GuardianReceiver       0x4c99136634F670cd59E73fc284fED164C662e3Df  (block 66309279, gas 3409428)
+  PolarisCheckout: credit guardian = 0x4c99136634F670cd59E73fc284fED164C662e3Df  (0xecceaa2ad1f0620c809ec2948cf91e146d75d0875d43b3fbfff72ff4e0ac2d5c)
+
+Spent     0.353010168 MON
+Wrote     F:\Projects\polaris\.claude\worktrees\cl-integration\packages\contracts\deployments\monad-testnet.json
+tx        0x2be128a399ed2034f2fffe8caba46519bc5c6f116625b9cff364977ad27038bf  create deploy  https://testnet.monadscan.com/tx/0x2be128a399ed2034f2fffe8caba46519bc5c6f116625b9cff364977ad27038bf
+tx        0xecceaa2ad1f0620c809ec2948cf91e146d75d0875d43b3fbfff72ff4e0ac2d5c  PolarisCheckout setCreditGuardian(0x4c99136634F670cd59E73fc284fED164C662e3Df)  https://testnet.monadscan.com/tx/0xecceaa2ad1f0620c809ec2948cf91e146d75d0875d43b3fbfff72ff4e0ac2d5c
+
+Next: `pnpm --filter @polaris/cre-workflows configure staging`, then `pnpm --filter @polarispay/contracts check:deployment:monad`.

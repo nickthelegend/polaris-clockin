@@ -3,10 +3,6 @@
 // The per-chain settings the handlers need that no event carries: the loan
 // engine's grace period (for liquidatableAt), the dunning ladder, and the
 // addresses that tell a payout from an internal transfer.
-//
-// PLACEHOLDER: Polaris is not deployed to Monad testnet yet. Every Polaris
-// address below is fake; AUSD and the CRE forwarders are real. Run
-// `pnpm --filter @polarispay/contracts deploy:monad`, then `pnpm generate`.
 
 export type ChainSettings = {
   readonly chainId: number;
@@ -46,26 +42,26 @@ export const DEPLOYMENTS: Readonly<Record<number, ChainSettings>> = {
   10143: {
     "chainId": 10143,
     "network": "monadTestnet",
-    "placeholder": true,
-    "source": null,
-    "startBlock": 0,
+    "placeholder": false,
+    "source": "../contracts/deployments/monad-testnet.json",
+    "startBlock": 66288120,
     "explorer": "https://testnet.monadscan.com",
     "graceSeconds": 3600,
     "feeBps": 50,
     "requireUnderwriting": true,
     "dunningRetrySeconds": [21600, 86400, 259200, 604800],
     "addresses": {
-      "ScoreManager": "0x00000000000000000000000000000000cafe0001",
-      "PolarisLoanEngine": "0x00000000000000000000000000000000cafe0002",
-      "PolarisPayments": "0x00000000000000000000000000000000cafe0003",
-      "MerchantRegistry": "0x00000000000000000000000000000000cafe0004",
-      "CollateralVault": "0x00000000000000000000000000000000cafe0005",
-      "BatchSettlement": "0x00000000000000000000000000000000cafe0006",
-      "PolarisSend": "0x00000000000000000000000000000000cafe0007",
-      "PolarisCheckout": "0x00000000000000000000000000000000cafe0008",
-      "CollectionsReceiver": "0x00000000000000000000000000000000cafe0009",
-      "UnderwritingReceiver": "0x00000000000000000000000000000000cafe0010",
-      "Stablecoin": "0xa9012a055bd4e0edff8ce09f960291c09d5322dc"
+      "ScoreManager": "0xb3d34ef62cb64b985c230079d2815787619e6061",
+      "PolarisLoanEngine": "0xdaf74fa6a5cf2e03df8e12613a8c8bf3a569204a",
+      "PolarisPayments": "0x7c774cf3e664b10057cb2dda66ba298e831292f1",
+      "MerchantRegistry": "0x40a351282c9843c49f5dd788d730a3d9fe7627b4",
+      "CollateralVault": "0xd0e777f8dfa2e62f500054e85f815fc54fae3e72",
+      "BatchSettlement": "0x4f9478c66a82ceb1e1f8fe0117849e3f330cfc53",
+      "PolarisSend": "0x67d336c69881a4f3fa4aaa2909cfcd95178dfc55",
+      "PolarisCheckout": "0x3874ef1bce222755525a96f8284631780b9bc70b",
+      "CollectionsReceiver": "0x4201c0837f3bb4e0e1a982c5666bf00b5ee145cc",
+      "UnderwritingReceiver": "0x523e9791d0e324525f66f91b21b478c18e284a19",
+      "Stablecoin": "0x3f9554f15f58bb5900822224f37a05be81ef9723"
     },
     "creForwarders": [
       "0xb9f79d863261869b234c481d1f9a7af84aead192",

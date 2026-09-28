@@ -1,22 +1,31 @@
 /**
- * One run of the `polaris-collections` workflow handler (its cron trigger)
- * on the CRE SDK's test runtime, against a local chain.
- * `scripts/local-collections.mjs` runs this file with `bun test` on a timer
- * (the SDK's capability mocks exist only inside its `test()` scope), then
- * posts the callbacks it captured.
+ * One run of the `polaris-collections` workflow on the CRE SDK's test
+ * runtime, against a local chain, from either of its two triggers:
+ *
+ * - `cron`: `onCron`, the scheduled run (due instalments and renewals);
+ * - `log`: `onReauthorized`, the EVM log trigger on PolarisCheckout's
+ *   `Reauthorized`, handed the log from the transaction's real receipt (as
+ *   `cre workflow simulate --evm-tx-hash <tx> --evm-event-index <i>` builds
+ *   it from Monad testnet): the instant retry after a buyer signs again.
+ *
+ * `scripts/local-collections.mjs` runs this file with `bun test` (the SDK's
+ * capability mocks exist only inside its `test()` scope): on a timer for the
+ * cron, and for each `Reauthorized` log the local chain emits.
  *
  * It is the workflow code `cre workflow build` compiles, run as
  * `cre workflow simulate --broadcast` would run it:
  *
+ * - config: the staging template filled from the deployment record
+ *   (./config.ts), with the deployment's own MockKeystoneForwarder;
  * - candidates from the chain (`loanCount`, `subscriptionCount` and a window
  *   of ids): no indexer locally;
  * - EVM: the local node (e2e/helpers/local-evm.ts), the report delivered
- *   through the deployment's MockKeystoneForwarder by its simulation
- *   transmitter; CollectionsReceiver collects the instalments that are due;
+ *   through the MockKeystoneForwarder by the deployer, the local simulation
+ *   transmitter; CollectionsReceiver collects what is due;
  * - the workflow's signed `collections.run` callback (when a task moved or
- *   failed): captured, and returned for the server to deliver; and a signed
- *   `collections.heartbeat` for every run, idle or not, so the dashboard's
- *   Collections card knows the runner is alive.
+ *   failed): captured, and returned for the runner to deliver; and, for a
+ *   cron run, a signed `collections.heartbeat`, idle or not, so the
+ *   dashboard's Collections card knows the runner is alive.
  *
  * Input and output are files named in the environment (LOCAL_COLLECTIONS_IN,
  * LOCAL_COLLECTIONS_OUT).
@@ -27,51 +36,42 @@ import type { CronPayload } from "@chainlink/cre-sdk";
 import { cre } from "@chainlink/cre-sdk";
 import { EvmMock, HttpActionsMock, newTestRuntime, test } from "@chainlink/cre-sdk/test";
 import { join } from "node:path";
-import type { Address } from "viem";
-import { bridgeEvm, chainNowMs } from "../e2e/helpers/local-evm.ts";
+import type { Hex } from "viem";
+import { bridgeEvm, chainNowMs, logTriggerPayload, type RpcReceipt, rpcSync } from "../e2e/helpers/local-evm.ts";
+import { REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
+import { configSchema, onCron, onReauthorized } from "../src/collections/workflow.ts";
 import { signCallback } from "../src/shared/callback.ts";
-import { configSchema, onCron } from "../src/collections/workflow.ts";
 import { type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
 import { fs } from "../test/helpers/host.ts";
+import { CALLBACK_SECRET_ID, type LocalDeployment, localCollectionsConfig } from "./config.ts";
 
-type Job = {
+export type CollectionsJob = {
   rpc: string;
   deploymentFile: string;
   callback: { url: string; secret: string } | null;
-};
-
-type Deployment = {
-  chainId: number;
-  deployer: Address;
-  contracts: Record<string, { address: Address }>;
+  /** Seconds between cron runs (sets the dunning ladder's window). */
+  everySeconds: number;
+  trigger: { kind: "cron" } | { kind: "log"; txHash: Hex };
 };
 
 const IN = process.env.LOCAL_COLLECTIONS_IN ?? "";
 const OUT = process.env.LOCAL_COLLECTIONS_OUT ?? "";
+const ROOT = join(import.meta.dir, "..");
+const readJson = (p: string) => JSON.parse(fs.readFileSync(p, "utf8"));
 
 test("local collections run", async () => {
   expect(IN && OUT).toBeTruthy();
-  const job = JSON.parse(fs.readFileSync(IN, "utf8")) as Job;
-  const d = JSON.parse(fs.readFileSync(job.deploymentFile, "utf8")) as Deployment;
-  const at = (name: string) => {
-    const a = d.contracts[name]?.address;
-    if (!a) throw new Error(`the deployment has no ${name}`);
-    return a;
+  const job = readJson(IN) as CollectionsJob;
+  const d = readJson(job.deploymentFile) as LocalDeployment;
+  const templates = {
+    collections: readJson(join(ROOT, "collections", "config.staging.json")),
+    underwriting: readJson(join(ROOT, "underwriting", "config.staging.json")),
+    guardian: readJson(join(ROOT, "guardian", "config.staging.json")),
   };
-  const local = JSON.parse(fs.readFileSync(join(import.meta.dir, "..", "collections", "config.local.json"), "utf8"));
-  const SECRET_ID = "POLARIS_CALLBACK_SECRET";
-  const config = configSchema.parse({
-    ...local,
-    receiver: at("CollectionsReceiver"),
-    loanEngine: at("PolarisLoanEngine"),
-    payments: at("PolarisPayments"),
-    forwarder: at("MockKeystoneForwarder"),
-    candidates: { ...local.candidates, indexerUrl: null },
-    callback: job.callback ? { url: job.callback.url, secretId: SECRET_ID } : null,
-  });
+  const config = configSchema.parse(localCollectionsConfig(d, templates, { everySeconds: job.everySeconds, callbackUrl: job.callback?.url ?? null }));
 
   const selector = cre.capabilities.EVMClient.SUPPORTED_CHAIN_SELECTORS[config.chainSelectorName as keyof typeof cre.capabilities.EVMClient.SUPPORTED_CHAIN_SELECTORS];
-  const record = bridgeEvm(EvmMock.testInstance(selector), { url: job.rpc, forwarder: at("MockKeystoneForwarder"), transmitter: d.deployer });
+  const record = bridgeEvm(EvmMock.testInstance(selector), { url: job.rpc, forwarder: config.forwarder, transmitter: d.deployer });
   const callbacks: SentRequest[] = [];
   const http = HttpActionsMock.testInstance();
   http.sendRequest = (input) => {
@@ -83,14 +83,26 @@ test("local collections run", async () => {
     return { statusCode: 404 };
   };
 
-  const secrets = new Map([["main", new Map([[SECRET_ID, job.callback?.secret ?? "unused"]])]]);
+  const secrets = new Map([["main", new Map([[CALLBACK_SECRET_ID, job.callback?.secret ?? "unused"]])]]);
   // The DON's clock is the chain's (the runner mines a block first, so it is now).
-  const nowMs = chainNowMs(job.rpc);
-  const payload = { scheduledExecutionTime: { seconds: BigInt(Math.floor(nowMs / 1000)), nanos: 0 } } as unknown as CronPayload;
-  const result = JSON.parse(onCron(newTestRuntime(secrets, { timeProvider: () => chainNowMs(job.rpc) }, config), payload));
+  const runtime = () => newTestRuntime(secrets, { timeProvider: () => chainNowMs(job.rpc) }, config);
+  let result: { status: string; checked: number; tasks: unknown[]; executed: number; skipped: number; txHash: string | null };
+  if (job.trigger.kind === "log") {
+    const receipt = rpcSync<RpcReceipt | null>(job.rpc, "eth_getTransactionReceipt", [job.trigger.txHash]);
+    if (!receipt) throw new Error(`no receipt for ${job.trigger.txHash}`);
+    const checkout = config.retry?.checkout?.toLowerCase();
+    // The log's position in the receipt, as --evm-event-index counts it.
+    const index = receipt.logs.findIndex((l) => l.address.toLowerCase() === checkout && l.topics[0]?.toLowerCase() === REAUTHORIZED_TOPIC);
+    if (index < 0) throw new Error(`${job.trigger.txHash} has no Reauthorized log from PolarisCheckout ${config.retry?.checkout}`);
+    result = JSON.parse(onReauthorized(runtime(), logTriggerPayload(receipt, index)));
+  } else {
+    const nowMs = chainNowMs(job.rpc);
+    const payload = { scheduledExecutionTime: { seconds: BigInt(Math.floor(nowMs / 1000)), nanos: 0 } } as unknown as CronPayload;
+    result = JSON.parse(onCron(runtime(), payload));
+  }
 
   const sent = callbacks.map((c) => ({ url: c.url, body: c.body ?? "", signature: c.headers["polaris-signature"] ?? c.headers["Polaris-Signature"] ?? "" }));
-  if (job.callback) {
+  if (job.callback && job.trigger.kind === "cron") {
     const seconds = Math.floor(chainNowMs(job.rpc) / 1000);
     const body = JSON.stringify({
       id: `heartbeat-${seconds}`,

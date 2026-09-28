@@ -26,12 +26,14 @@ import {
   Plus,
   Settings2,
   Sparkles,
+  Workflow,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { BusinessLogo } from "@/components/app/brand";
+import { CreditGuardBanner } from "@/components/dashboard/guard-banner";
 import { useAuth } from "@/lib/auth-context";
 import { shortAddress } from "@/lib/data/format";
 import type { Merchant } from "@/lib/data/types";
@@ -50,6 +52,7 @@ export const NAV = [
 /** Behind "More", like the reference's "Market" dropdown. */
 export const MORE = [
   { key: "developers", label: "Developers", href: "/dashboard/developers", icon: <CodeXml />, description: "API keys, webhooks, the SDK" },
+  { key: "chainlink", label: "Chainlink", href: "/dashboard/chainlink", icon: <Workflow />, description: "CRE workflows, the risk guard" },
   { key: "settings", label: "Settings", href: "/dashboard/settings", icon: <Settings2 />, description: "Business, payout wallet, test mode" },
 ];
 
@@ -116,7 +119,10 @@ export function DashboardShell({ merchant, children }: { merchant: Merchant; chi
         }
       />
       <main id="content" tabIndex={-1} className="px-4 pt-2 pb-16 outline-none sm:px-6 lg:px-10 lg:pt-0 xl:px-14 xl:pb-14">
-        <div className="mx-auto w-full max-w-[1480px]">{children}</div>
+        <div className="mx-auto w-full max-w-[1480px]">
+          <CreditGuardBanner className="mb-6" />
+          {children}
+        </div>
       </main>
     </AppFrame>
   );

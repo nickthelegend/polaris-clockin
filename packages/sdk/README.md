@@ -106,6 +106,22 @@ backoff and `Retry-After`) are still safe.
 The session's current state, including `payment` once it's paid. Use it on your
 success page to show "Paid" without waiting for the webhook.
 
+### `credit.guard()`
+
+Whether a buyer can start a new Pay in 4 plan right now. Polaris's risk guard
+(a Chainlink CRE workflow that watches the credit pool and the AUSD/USD price)
+pauses new plans on chain when either is unhealthy; Pay now and Subscribe keep
+working, and plans already open keep collecting.
+
+```ts
+const guard = await polaris.credit.guard();
+// { state: "paused", paused: true, reasons: ["depeg"], message: "Pay in 4 is paused by our risk guard; pay now works as usual.", checkedAt, ageSeconds, readAt }
+```
+
+While `paused`, show Pay in 4 as unavailable with `message` (and pass it to
+`<PolarisMessaging paused>`); the hosted checkout does the same. `state` is
+`stale` or `never` when the guard is late: it then blocks nothing.
+
 ### Errors
 
 Everything throws `PolarisError` with `type`, `code`, `status`, `param` and
@@ -329,6 +345,8 @@ import { PolarisProvider, PolarisMessaging, PolarisCheckoutButton, PolarisPayBut
   first in a week; nothing today), the total and the interest, how it works,
   and the credit line's terms. It renders nothing outside
   `minAmount`–`maxAmount` (default $1–$5,000). `theme="dark"` for a dark popover.
+  `paused` (true, or `credit.guard()`'s `message`) says *"✦ Polaris Pay in 4 is
+  paused by our risk guard; pay now works as usual."* instead of the offer.
 - **`<PolarisPayButton>`**: direct wallet pay with stage labels (*Confirm in
   your wallet*, *Paying…*) and a *View receipt* link.
 - **`usePolarisCheckout()`**: `{ status, result, error, busy, open, redirect, cancel, reset }`
@@ -483,6 +501,10 @@ when `modes` includes `"subscribe"`.
 
 `Authorization: Bearer sk_test_…`. **200** `{ "data": CheckoutSession }`, **404**
 `not_found`.
+
+### `GET {baseUrl}/api/public/credit-guard`
+
+Public, no key needed. **200** `{ "data": CreditGuardStatus }` (`credit.guard()` above).
 
 ### Relay: `POST {relayUrl}` (direct pay)
 

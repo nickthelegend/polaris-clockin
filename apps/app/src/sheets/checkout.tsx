@@ -22,11 +22,14 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { MerchantAvatar } from "@/components/avatars";
 import { BringHistorySheet } from "@/components/bring-history";
 import { ConfirmSheet } from "@/components/confirm-sheet";
+import { GuardPausedNotice, GuardStaleLine } from "@/components/credit-guard-note";
+import { LocalEquivalent } from "@/components/local-equivalent";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SuccessSheet } from "@/components/success-sheet";
 import { CheckoutDesktop, CheckoutMissing } from "@/desktop/checkout";
 import { type PayMode, payLink } from "@/lib/actions";
 import { useAccountState, useOwner } from "@/lib/account/hooks";
+import { laterPausedMessage } from "@/lib/credit-guard";
 import { announceReady, cancelCheckout, expireCheckout, isPopupCheckout, merchantReturnUrl, postCompleted, returnToMerchant } from "@/lib/checkout-return";
 import { describeDuration, describeInterval, dueAt, getBalance, getCreditLine, type PaymentLink } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
@@ -46,17 +49,20 @@ export function merchantLine(link: PaymentLink): string {
   return [link.merchant.category, link.merchant.city].filter(Boolean).join(" · ");
 }
 
-/** The mode a checkout opens on: the one the merchant's page chose, when the link offers it. */
+/** The mode a checkout opens on: the one the merchant's page chose, when the link offers it (and Pay in 4 isn't paused). */
 export function initialMode(link: PaymentLink): PayMode {
-  const modes = modesOf(link);
+  const modes = modesOf(link).filter((m) => !(m === "later" && laterPaused(link)));
   const preferred = link.session?.preferredMode;
   return preferred && modes.includes(preferred) ? preferred : (modes[0] ?? "now");
 }
 
+/** Why Pay in 4 is shown but can't be chosen: the risk guard (the Chainlink CRE guardian) has paused new plans. */
+export const laterPaused = laterPausedMessage;
+
 export function modesOf(link: PaymentLink): PayMode[] {
   const modes: PayMode[] = [];
   if (link.modes.now) modes.push("now");
-  if (link.modes.later) modes.push("later");
+  if (link.modes.later || laterPaused(link)) modes.push("later");
   if (link.modes.subscription) modes.push("subscription");
   return modes;
 }
@@ -80,6 +86,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
 
   const later = link.modes.later;
   const sub = link.modes.subscription;
+  const paused = laterPaused(link);
   const available = balance.value?.available;
   // What leaves the dollar account today. Pay in 4 takes nothing at checkout:
   // the merchant is paid from the credit pool, the first payment is a week on.
@@ -173,13 +180,17 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
         className="-mt-2 shrink-0 px-5"
       />
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-3 pt-1">
-        <Card variant="raised" radius="tile" padding="md" className="flex items-center gap-4">
-          <MerchantAvatar name={link.merchant.name} size="lg" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] text-ui-muted">Total</p>
-            <Money value={n(link.amount)} dim="cents" className="mt-1 text-[36px] leading-none font-semibold tracking-[-0.03em]" />
+        <Card variant="raised" radius="tile" padding="md">
+          <div className="flex items-center gap-4">
+            <MerchantAvatar name={link.merchant.name} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[14px] text-ui-muted">Total</p>
+              <Money value={n(link.amount)} dim="cents" className="mt-1 text-[36px] leading-none font-semibold tracking-[-0.03em]" />
+            </div>
+            {later ? <Badge tone="lime">Pay in 4</Badge> : sub ? <Badge tone="purple">Monthly</Badge> : null}
           </div>
-          {later ? <Badge tone="lime">Pay in 4</Badge> : sub ? <Badge tone="purple">Monthly</Badge> : null}
+          {/* Under the whole row: the badge leaves the figure's column too narrow for it. */}
+          <LocalEquivalent amount={link.amount} className="mt-3 block text-[13px]" />
         </Card>
 
         {modes.length > 1 ? (
@@ -194,7 +205,11 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
           </Card>
         ) : null}
 
-        <KeyValueGrid items={grid} />
+        {mode === "later" && paused ? (
+          <GuardPausedNotice message={paused} onPayNow={link.modes.now ? () => setMode("now") : undefined} payNowLabel={`Pay ${usd(link.amount, { trim: true })} now`} />
+        ) : (
+          <KeyValueGrid items={grid} />
+        )}
         <DetailsList items={details} />
 
         {mode === "later" && later && credit.value ? (
@@ -216,6 +231,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
                 year, {usd(later.total)} in total.
               </p>
             )}
+            <GuardStaleLine guard={link.session?.creditGuard} />
             {!credit.value.historyLinked ? (
               <Button variant="outline" size="md" icon={<TrendingUp />} onClick={() => setRaising(true)}>
                 Raise your limit
@@ -236,7 +252,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
             key={m}
             variant={m === "now" ? "lime" : "purple"}
             size="lg"
-            disabled={short(m)}
+            disabled={short(m) || (m === "later" && paused !== null)}
             onClick={() => {
               setMode(m);
               // Over the limit, Pay in 4 first shows the limit and the way to raise it.

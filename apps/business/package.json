@@ -12,6 +12,7 @@
     "typecheck": "node scripts/ensure-deps.mjs && tsc --noEmit",
     "test": "node scripts/ensure-deps.mjs && vitest run",
     "e2e:local": "node scripts/e2e-local.mjs",
+    "smoke:testnet": "node scripts/smoke-testnet.mjs",
     "dev:merchant": "node scripts/dev-merchant.mjs",
     "privy:setup-relayer": "node scripts/privy/setup-relayer.mjs",
     "privy:setup-payouts": "node scripts/privy/setup-payouts.mjs",

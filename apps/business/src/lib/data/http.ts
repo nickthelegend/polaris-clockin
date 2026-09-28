@@ -1,3 +1,6 @@
+import type { ChainlinkOverview } from "./chainlink";
+import { placeholderChainlink } from "./chainlink-sample";
+import type { CreditGuard } from "./guard";
 import { DataError, isSessionEnded, type DashboardData, type PayoutRun } from "./source";
 import type {
   ApiKey,
@@ -104,6 +107,12 @@ export function createHttpData(getAccessToken: TokenSource, options: HttpDataOpt
     getRegistration: () => call<RegistrationStep>("/api/merchant/registration"),
     submitRegistration: (input) => call<{ merchant: Merchant }>("/api/merchant/registration", { method: "POST", body: input }),
     getOverview: () => call<Overview>("/api/overview"),
+    getChainlink: async () => {
+      const overview = await call<ChainlinkOverview>("/api/chainlink");
+      // Nothing deployed on this server: the page shows the labelled sample instead of empty cards.
+      return overview.deployed ? overview : placeholderChainlink();
+    },
+    getCreditGuard: () => call<CreditGuard>("/api/public/credit-guard"),
     listLinks: () => call<PaymentLink[]>("/api/links"),
     createLink: (input) => call<PaymentLink>("/api/links", { method: "POST", body: input }),
     deactivateLink: (linkId) => call<PaymentLink>(`/api/links/${id(linkId)}`, { method: "PATCH", body: { active: false } }),

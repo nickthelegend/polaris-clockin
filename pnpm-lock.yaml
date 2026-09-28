@@ -24,6 +24,9 @@ importers:
       '@polaris/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@polaris/fx':
+        specifier: workspace:*
+        version: link:../../packages/fx
       '@polaris/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -378,6 +381,22 @@ importers:
         version: 7.0.2
 
   packages/db:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.4)(jiti@2.7.0)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(lightningcss@1.32.0)(tsx@4.21.0)
+
+  packages/fx:
+    dependencies:
+      viem:
+        specifier: 2.56.9
+        version: 2.56.9(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.6.5)
     devDependencies:
       '@types/node':
         specifier: ^22.20.1

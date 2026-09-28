@@ -3,9 +3,12 @@ import "server-only";
 import { newId, randomBase62, type CheckoutSessionRecord, type LinkRecord, type MerchantRecord } from "@polaris/db";
 import { encodeFunctionData, encodePacked, getAddress, keccak256, parseEventLogs, type Address, type Hex } from "viem";
 
+import { GUARD_PAUSED_MESSAGE } from "@/lib/data/guard";
+
 import { iausdAbi, merchantRegistryAbi, polarisCheckoutAbi, polarisPaymentsAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { centsToUnits, formatCents, formatUnits, installmentAmounts, quotePlanLocally } from "../chain/money";
+import { creditGuard } from "../cre/guardian";
 import { getDb } from "../db";
 import { getConfig, type ServerConfig } from "../env";
 import { HttpError } from "../http";
@@ -306,15 +309,20 @@ export async function publicSession(id: string, options: { buyer?: Address | nul
   const amountUnits = centsToUnits(session.amountCents);
   let payIn4 = null;
   if (session.modes.includes("later")) {
+    // The CRE guardian's verdict, as PolarisCheckout.openPlan applies it (fails open when it can't be read).
+    const guard = await creditGuard();
     const { interest, total } = quotePlanLocally(amountUnits, config.payIn4.installments, config.payIn4.intervalSeconds);
     let reason: string | null = null;
     if (session.amountCents < config.payIn4.minCents) reason = `Pay in 4 starts at $${formatCents(config.payIn4.minCents)}.`;
     else if (session.amountCents > config.payIn4.maxCents) reason = `Pay in 4 goes up to $${formatCents(config.payIn4.maxCents)}.`;
     else if (config.relayer.mode === "off") reason = "Pay in 4 isn't available right now.";
+    else if (guard.paused) reason = GUARD_PAUSED_MESSAGE;
     else if (!(await canOriginate(session.chain.merchant, amountUnits))) reason = "This business can't offer Pay in 4 for this amount yet.";
     payIn4 = {
       available: reason === null,
       reason,
+      /** The credit guard behind a pause, and when it last checked (a stale guard leaves Pay in 4 on). */
+      guard: { state: guard.state, paused: guard.paused, checkedAt: guard.checkedAt, ageSeconds: guard.ageSeconds, readAt: guard.readAt },
       installments: config.payIn4.installments,
       intervalSeconds: config.payIn4.intervalSeconds,
       aprBps: 1000,

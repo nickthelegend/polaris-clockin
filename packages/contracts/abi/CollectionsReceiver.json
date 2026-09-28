@@ -15,10 +15,20 @@
         "internalType": "contract IChargeableSubscriptions",
         "name": "_payments",
         "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "_simulationTransmitter",
+        "type": "address"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "inputs": [],
+    "name": "ForwarderCheckDisabled",
+    "type": "error"
   },
   {
     "inputs": [
@@ -98,6 +108,17 @@
       }
     ],
     "name": "InvalidWorkflowName",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "origin",
+        "type": "address"
+      }
+    ],
+    "name": "NotSimulationTransmitter",
     "type": "error"
   },
   {
@@ -292,6 +313,19 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "transmitter",
+        "type": "address"
+      }
+    ],
+    "name": "SimulationTransmitterSet",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "uint8",
         "name": "action",
         "type": "uint8"
@@ -415,6 +449,37 @@
         "internalType": "bool[]",
         "name": "ready",
         "type": "bool[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "borrower",
+        "type": "address"
+      }
+    ],
+    "name": "dueTasksFor",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint8",
+            "name": "action",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "id",
+            "type": "uint256"
+          }
+        ],
+        "internalType": "struct CollectionsReceiver.Task[]",
+        "name": "tasks",
+        "type": "tuple[]"
       }
     ],
     "stateMutability": "view",
@@ -586,6 +651,32 @@
     "name": "setForwarderAddress",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "transmitter",
+        "type": "address"
+      }
+    ],
+    "name": "setSimulationTransmitter",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "simulationTransmitter",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

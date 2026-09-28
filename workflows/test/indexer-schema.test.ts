@@ -95,14 +95,32 @@ describe("configure --indexer", () => {
     network: "monadTestnet",
     chainId: 10143,
     contracts: Object.fromEntries(
-      ["Stablecoin", "ScoreManager", "PolarisLoanEngine", "PolarisPayments", "CollectionsReceiver", "UnderwritingReceiver"].map((n, i) => [
-        n,
-        { address: `0x${(0x1000 + i).toString(16).padStart(40, "0")}` },
-      ]),
+      [
+        "Stablecoin",
+        "ScoreManager",
+        "PolarisLoanEngine",
+        "PolarisPayments",
+        "CollectionsReceiver",
+        "UnderwritingReceiver",
+        "PolarisCheckout",
+        "GuardianReceiver",
+      ].map((n, i) => [n, { address: `0x${(0x1000 + i).toString(16).padStart(40, "0")}` }]),
     ),
-    cre: { forwarderKind: "simulation", forwarder: FORWARDERS.simulation },
+    cre: {
+      forwarderKind: "simulation",
+      forwarder: FORWARDERS.simulation,
+      workflows: {
+        guardian: {
+          priceFeed: { chainSelectorName: "monad-mainnet", address: "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13", decimals: 8, description: "AUSD / USD", kind: "chainlink" },
+        },
+      },
+    },
   };
-  const templates = { collections: json("collections/config.staging.json"), underwriting: json("underwriting/config.staging.json") };
+  const templates = {
+    collections: json("collections/config.staging.json"),
+    underwriting: json("underwriting/config.staging.json"),
+    guardian: json("guardian/config.staging.json"),
+  };
   const sentQuery = (collections: unknown) => {
     const cfg = collectionsSchema.parse(collections);
     return JSON.parse(candidatesRequestBody(cfg.candidates.indexerQuery ?? DUE_CANDIDATES_QUERY, NOW, cfg.candidates.indexerLimit)).query as string;

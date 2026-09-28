@@ -5,18 +5,24 @@
  * JSON-RPC synchronously, one `curl` per call. It plays what
  * `cre workflow simulate --broadcast` plays (the CLI's FakeEVMChain):
  *
- *   callContract / estimateGas   eth_call / eth_estimateGas ("finalized" reads the head: a local node has no lag)
+ *   callContract / estimateGas   eth_call / eth_estimateGas, at the block asked for ("finalized"
+ *                                reads the head: a local node has no lag; a number reads that block)
+ *   headerByNumber               eth_getBlockByNumber: number and timestamp
  *   writeReport                  MockKeystoneForwarder.report(receiver, rawReport, context, sigs),
  *                                sent by the broadcasting key with the workflow's gas limit, and
  *                                reported as SUCCESS whenever the transaction landed, even if the
  *                                receiver reverted inside it: exactly the simulator's masking,
  *                                which the workflows must see through.
  *   getTransactionReceipt        eth_getTransactionReceipt
+ *
+ * `logTriggerPayload` builds what an EVM log trigger hands its handler from a
+ * real receipt, as `cre workflow simulate --evm-tx-hash <tx> --evm-event-index <i>`
+ * does from Monad testnet.
  */
 
-import { hexToBase64 } from "@chainlink/cre-sdk";
+import { blockNumber, type EVMLog, hexToBase64, protoBigIntToBigint } from "@chainlink/cre-sdk";
 import type { EvmMock } from "@chainlink/cre-sdk/test";
-import { type Address, encodeFunctionData, type Hex, parseAbi } from "viem";
+import { type Address, encodeFunctionData, type Hex, hexToBytes, numberToBytes, parseAbi } from "viem";
 import { childProcess } from "../../test/helpers/host.ts";
 
 const hex = (bytes: Uint8Array | undefined): Hex => `0x${Buffer.from(bytes ?? new Uint8Array()).toString("hex")}`;
@@ -49,8 +55,9 @@ interface RpcLog {
   transactionHash: Hex;
   blockHash: Hex;
 }
-interface RpcReceipt {
+export interface RpcReceipt {
   status: Hex;
+  blockNumber: Hex;
   gasUsed: Hex;
   transactionIndex: Hex;
   blockHash: Hex;
@@ -61,15 +68,36 @@ interface RpcReceipt {
 export interface BridgeRecord {
   writes: Array<{ receiver: Address; txHash: Hex; gasLimit: bigint; gasUsed: bigint; body: Hex }>;
   reads: number;
+  /** The block tag or number of every eth_call, in order. */
+  blocks: string[];
+}
+
+/**
+ * The JSON-RPC block for a capability request's block number: the negative
+ * sentinels (LATEST -2, LAST_FINALIZED -3) are the head on a local node, a
+ * positive number is that block.
+ */
+function blockTag(b: { absVal: Uint8Array; sign: bigint } | undefined): string {
+  if (!b || b.sign < 0n) return "latest";
+  return `0x${protoBigIntToBigint(b).toString(16)}`;
 }
 
 /** Route the SDK's EVM mock to the node at `url`. */
 export function bridgeEvm(evm: EvmMock, p: { url: string; forwarder: Address; transmitter: Address }): BridgeRecord {
-  const record: BridgeRecord = { writes: [], reads: 0 };
+  const record: BridgeRecord = { writes: [], reads: 0, blocks: [] };
   evm.callContract = (req) => {
     record.reads++;
-    const result = rpcSync<Hex>(p.url, "eth_call", [{ from: hex(req.call?.from), to: hex(req.call?.to), data: hex(req.call?.data) }, "latest"]);
+    const tag = blockTag(req.blockNumber);
+    record.blocks.push(tag);
+    const result = rpcSync<Hex>(p.url, "eth_call", [{ from: hex(req.call?.from), to: hex(req.call?.to), data: hex(req.call?.data) }, tag]);
     return { data: hexToBase64(result) };
+  };
+  evm.headerByNumber = (req) => {
+    record.reads++;
+    const b = rpcSync<{ number: Hex; timestamp: Hex; hash: Hex; parentHash: Hex }>(p.url, "eth_getBlockByNumber", [blockTag(req.blockNumber), false]);
+    return {
+      header: { timestamp: BigInt(b.timestamp).toString(), blockNumber: blockNumber(BigInt(b.number)), hash: hexToBase64(b.hash), parentHash: hexToBase64(b.parentHash) },
+    };
   };
   evm.estimateGas = (req) => {
     record.reads++;
@@ -115,6 +143,71 @@ export function bridgeEvm(evm: EvmMock, p: { url: string; forwarder: Address; tr
     };
   };
   return record;
+}
+
+/**
+ * A public chain's EVM capability for reads only: the guardian's second EVM
+ * client, which reads Chainlink's AUSD/USD on Monad mainnet. `callContract`
+ * and `headerByNumber` go to `url` (the "last finalized" sentinel reads the
+ * chain's `finalized` block, as the DON would); anything that writes or
+ * estimates a write throws, so a local run can never send a transaction to a
+ * public chain. The node must answer `eth_chainId` with `chainId`.
+ */
+export function bridgeReadOnlyEvm(evm: EvmMock, p: { url: string; chainId: number }): { reads: number } {
+  const chain = Number(BigInt(rpcSync<Hex>(p.url, "eth_chainId")));
+  if (chain !== p.chainId) throw new Error(`${p.url} is chain ${chain}, not ${p.chainId}`);
+  const record = { reads: 0 };
+  const tag = (b: { absVal: Uint8Array; sign: bigint } | undefined): string => {
+    if (!b) return "finalized";
+    if (b.sign < 0n) return protoBigIntToBigint(b) === -2n ? "latest" : "finalized";
+    return `0x${protoBigIntToBigint(b).toString(16)}`;
+  };
+  evm.callContract = (req) => {
+    record.reads++;
+    const result = rpcSync<Hex>(p.url, "eth_call", [{ to: hex(req.call?.to), data: hex(req.call?.data) }, tag(req.blockNumber)]);
+    return { data: hexToBase64(result) };
+  };
+  evm.headerByNumber = (req) => {
+    record.reads++;
+    const b = rpcSync<{ number: Hex; timestamp: Hex; hash: Hex; parentHash: Hex }>(p.url, "eth_getBlockByNumber", [tag(req.blockNumber), false]);
+    return {
+      header: { timestamp: BigInt(b.timestamp).toString(), blockNumber: blockNumber(BigInt(b.number)), hash: hexToBase64(b.hash), parentHash: hexToBase64(b.parentHash) },
+    };
+  };
+  const refuse = (what: string) => () => {
+    throw new Error(`${what} on chain ${p.chainId}: this bridge only reads (a local run never writes to a public chain)`);
+  };
+  evm.writeReport = refuse("writeReport");
+  evm.estimateGas = refuse("estimateGas");
+  return record;
+}
+
+/**
+ * What an EVM log trigger hands its handler, from a landed transaction's
+ * receipt: the log at `index` among the receipt's logs (the simulator's
+ * `--evm-event-index` counts the same way), with its transaction, block and
+ * position.
+ */
+export function logTriggerPayload(receipt: RpcReceipt, index: number): EVMLog {
+  const l = receipt.logs[index];
+  if (!l) throw new Error(`event index ${index} out of range, transaction has ${receipt.logs.length} log events`);
+  return {
+    address: hexToBytes(l.address),
+    topics: l.topics.map((t) => hexToBytes(t)),
+    txHash: hexToBytes(l.transactionHash),
+    blockHash: hexToBytes(l.blockHash),
+    data: hexToBytes(l.data),
+    eventSig: hexToBytes(l.topics[0] ?? "0x"),
+    blockNumber: { absVal: numberToBytes(BigInt(l.blockNumber)), sign: 1n },
+    txIndex: Number(BigInt(l.transactionIndex)),
+    index: Number(BigInt(l.logIndex)),
+    removed: false,
+  } as unknown as EVMLog;
+}
+
+/** A block's timestamp in unix seconds. */
+export function blockTime(url: string, block: Hex | "latest"): number {
+  return Number(BigInt(rpcSync<{ timestamp: Hex }>(url, "eth_getBlockByNumber", [block, false]).timestamp));
 }
 
 /** The latest block's timestamp, in milliseconds: the DON clock the runtime should show. */

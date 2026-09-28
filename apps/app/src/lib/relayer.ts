@@ -84,6 +84,13 @@ export type TransferRequest = { to: Person; authorization: Signed<Authorization>
 /** PolarisLoanEngine.repayWithSig: pay a plan early. */
 export type PayEarlyRequest = { planId: string; loanId: bigint; borrower: Address; repay: Signed<RepayIntent> };
 
+/**
+ * PolarisCheckout.reauthorize: the borrower's ERC-2612 permit to the loan
+ * engine, signed again after a collection failed for a lost approval. Its
+ * Reauthorized event starts the collections workflow's instant retry.
+ */
+export type ReauthorizeRequest = { buyer: Address; permit: Signed<Permit> };
+
 export interface Relayer {
   payNow(request: PayNowRequest): Promise<RelayReceipt>;
   openPlan(request: OpenPlanRequest): Promise<RelayReceipt>;
@@ -94,6 +101,7 @@ export interface Relayer {
   cancelSubscription(request: CancelSubscriptionRequest): Promise<RelayReceipt>;
   transfer(request: TransferRequest): Promise<RelayReceipt>;
   payEarly(request: PayEarlyRequest): Promise<RelayReceipt>;
+  reauthorize(request: ReauthorizeRequest): Promise<RelayReceipt>;
 }
 
 export type RelayErrorReason = "insufficient-funds" | "over-limit" | "invalid-signature" | "already-settled" | "expired" | "unavailable";
@@ -128,6 +136,8 @@ const REASONS: Record<string, RelayErrorReason> = {
   already_used: "already-settled",
   link_used: "already-settled",
   payment_in_progress: "already-settled",
+  nothing_owed: "already-settled",
+  already_authorised: "already-settled",
 };
 
 type RelayResponse = {
@@ -245,6 +255,7 @@ const httpRelayer: Relayer = {
       deadline: str(repay.message.deadline),
       signature: repay.signature,
     }),
+  reauthorize: ({ buyer, permit }) => relay({ type: "reauthorize", buyer, permit: permitBody(permit) }),
 };
 
 /* ── The stub: shapes only, sample ledger, no network ───────────────────── */
@@ -331,6 +342,11 @@ const stubRelayer: Relayer = {
   async payEarly({ planId, repay }) {
     assertSignature(repay);
     return settle((tx) => mockLedger.payEarly(planId, tx));
+  },
+  // The offline demo never loses an approval (its plans have no collections), so nothing changes.
+  async reauthorize({ permit }) {
+    assertSignature(permit);
+    return settle(() => undefined);
   },
 };
 

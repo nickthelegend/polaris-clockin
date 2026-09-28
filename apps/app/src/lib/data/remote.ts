@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { type Address, getAddress, type Hex } from "viem";
 import { api } from "../api";
+import { type ApiCreditGuard, toGuardView } from "../credit-guard";
 import type { PaymentLink } from "./types";
 
 /**
@@ -34,6 +35,8 @@ type PublicSession = {
     principalUnits: string;
     totalUnits: string;
     schedule: Array<{ amountUnits: string }>;
+    /** The risk guard behind a pause, and when it last checked. */
+    guard?: ApiCreditGuard | null;
   } | null;
   subscription: { planId: string | null; pricePerPeriodUnits: string; periodSeconds: number; periodsAuthorised: number } | null;
   chain: { chainId: number; merchant: Address; orderId: string; amountUnits: string };
@@ -84,6 +87,7 @@ export function toPaymentLink(s: PublicSession): PaymentLink {
       cancelUrl: s.cancelUrl,
       expiresAt: Date.parse(s.expiresAt),
       payLaterUnavailable: s.modes.includes("later") && !s.payIn4?.available ? (s.payIn4?.reason ?? "Pay in 4 isn't available right now.") : null,
+      creditGuard: s.payIn4?.guard ? toGuardView(s.payIn4.guard) : null,
       preferredMode: s.modes[0] === "subscribe" ? "subscription" : (s.modes[0] ?? null),
       payment: s.payment,
     },

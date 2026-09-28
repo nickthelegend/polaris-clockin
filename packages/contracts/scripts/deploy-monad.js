@@ -13,8 +13,13 @@
  * Order: stablecoin, ScoreManager, PolarisLoanEngine, PolarisPayments,
  * MerchantRegistry, CollateralVault, BatchSettlement, PolarisSend,
  * PolarisCheckout, (MockKeystoneForwarder, local only), CollectionsReceiver,
- * UnderwritingReceiver; then roles; then the demo merchant (registered by its
- * own signature) and two subscription plans; then the credit pool.
+ * UnderwritingReceiver, GuardianReceiver (with its thresholds), (MockPriceFeed
+ * as MockAusdUsdFeed, local only); then roles, including the checkout's
+ * credit guardian; then the demo merchant (registered by its own signature)
+ * and two subscription plans; then the credit pool.
+ *
+ * After the CRE workflows are deployed (their ids exist only then), lock the
+ * receivers to them with `lock-receivers:monad` (scripts/lock-receivers.js).
  *
  * Environment (all optional; the repo-root .env is read by hardhat.config.js):
  *   DEPLOYER_PRIVATE_KEY        testnet deployer (scripts/deployer.js creates one)
@@ -28,10 +33,10 @@
  *   CRE_FORWARDER               "simulation" (testnet default: Chainlink's
  *                               MockKeystoneForwarder, for `cre workflow simulate
  *                               --broadcast`) or "production" (KeystoneForwarder,
- *                               once Early Access lands)
+ *                               once deploy access is granted)
  *   CRE_SIMULATION_TRANSMITTER  the address of CRE_ETH_PRIVATE_KEY, the key
  *                               `cre workflow simulate --broadcast` signs with: the
- *                               only origin UnderwritingReceiver accepts while on
+ *                               only origin the three receivers accept while on
  *                               the mock forwarder. Required for "simulation"
  *                               (read from CRE_ETH_PRIVATE_KEY in the environment
  *                               or .env when unset) and never the deployer. A
@@ -44,6 +49,17 @@
  *   DEMO_MERCHANT_PRIVATE_KEY   testnet demo merchant (created in .env if missing)
  *   POOL_SEED_AUSD              credit pool target in dollars (testnet 10000,
  *                               local 100000); testnet seeds what the deployer holds
+ *   GUARD_MIN_PRICE             GuardianReceiver: lowest AUSD/USD that is not a
+ *                               depeg, in dollars (0.995)
+ *   GUARD_MAX_PRICE             highest AUSD/USD that is not a depeg (1.005)
+ *   GUARD_MIN_FREE_CASH_AUSD    least free pool cash, in dollars (1000)
+ *   GUARD_MAX_BAD_DEBT_BPS      most bad debt, basis points of lifetime
+ *                               originations (500)
+ *   GUARD_MIN_ORIGINATED_AUSD   lifetime originations, in dollars, before the
+ *                               bad-debt ratio applies (10000)
+ *   GUARD_MAX_PRICE_AGE_SECONDS oldest the cited AUSD/USD round may be (7200)
+ *   GUARD_MAX_ATTESTATION_AGE_SECONDS  past this the guardian's attestation is
+ *                               stale and Pay in 4 fails open (3600)
  */
 
 "use strict";
@@ -52,6 +68,7 @@ const { writeFileSync, mkdirSync } = require("node:fs");
 const { join } = require("node:path");
 const hre = require("hardhat");
 const { Wallet, ZeroAddress, getAddress, formatEther, parseUnits } = require("ethers");
+const { GUARDIAN_DEFAULTS, GUARDIAN_PRICE_DECIMALS } = require("../lib/cre");
 
 const { deployPolaris, MONAD_TESTNET } = require("../lib/deploy");
 const { ensureEnvKey, readEnvValue } = require("./lib/env");
@@ -69,6 +86,7 @@ async function roughDeploymentGas() {
   const names = [
     "ScoreManager", "PolarisLoanEngine", "PolarisPayments", "MerchantRegistry", "CollateralVault",
     "BatchSettlement", "PolarisSend", "PolarisCheckout", "CollectionsReceiver", "UnderwritingReceiver",
+    "GuardianReceiver",
   ];
   let gas = 0n;
   for (const n of names) {
@@ -82,8 +100,8 @@ async function roughDeploymentGas() {
 }
 
 /**
- * The only transaction origin UnderwritingReceiver accepts reports from while
- * it sits behind a simulation forwarder.
+ * The only transaction origin the receivers (collections, underwriting,
+ * guardian) accept reports from while they sit behind a simulation forwarder.
  *
  * Chainlink's MockKeystoneForwarder is a public contract anyone can call, so
  * under it the receiver's one guard is `tx.origin == simulationTransmitter`.
@@ -157,6 +175,7 @@ async function buildConfig(networkName, deployer) {
   }
 
   return {
+    ...guardianConfig(env),
     tokenMode,
     tokenAddress: tokenMode === "ausd" ? MONAD_TESTNET.AUSD : undefined,
     treasury: env.TREASURY ? getAddress(env.TREASURY) : deployer.address,
@@ -171,6 +190,32 @@ async function buildConfig(networkName, deployer) {
     demoMerchant,
     poolSeed: parseUnits(String(num(env.POOL_SEED_AUSD, local ? 100_000 : 10_000)), 6),
     mintToDeployer: local ? parseUnits("1000000", 6) : 0n,
+  };
+}
+
+/**
+ * GuardianReceiver's thresholds and staleness from the environment, with
+ * lib/cre.js GUARDIAN_DEFAULTS (decisions 9 and 10, the $1.005 ceiling and
+ * the $10,000 floor for the bad-debt ratio) for any unset.
+ */
+function guardianConfig(env = process.env) {
+  const set = (v) => v !== undefined && v !== "";
+  const int = (name, fallback) => {
+    if (!set(env[name])) return fallback;
+    const n = Number(env[name]);
+    if (!Number.isInteger(n) || n < 0) throw new Error(`${name} must be a whole number`);
+    return n;
+  };
+  return {
+    guardianThresholds: {
+      minPrice: set(env.GUARD_MIN_PRICE) ? parseUnits(String(env.GUARD_MIN_PRICE), GUARDIAN_PRICE_DECIMALS) : GUARDIAN_DEFAULTS.minPrice,
+      maxPrice: set(env.GUARD_MAX_PRICE) ? parseUnits(String(env.GUARD_MAX_PRICE), GUARDIAN_PRICE_DECIMALS) : GUARDIAN_DEFAULTS.maxPrice,
+      minFreeCash: set(env.GUARD_MIN_FREE_CASH_AUSD) ? parseUnits(String(env.GUARD_MIN_FREE_CASH_AUSD), 6) : GUARDIAN_DEFAULTS.minFreeCash,
+      maxBadDebtBps: int("GUARD_MAX_BAD_DEBT_BPS", GUARDIAN_DEFAULTS.maxBadDebtBps),
+      minOriginated: set(env.GUARD_MIN_ORIGINATED_AUSD) ? parseUnits(String(env.GUARD_MIN_ORIGINATED_AUSD), 6) : GUARDIAN_DEFAULTS.minOriginated,
+      maxPriceAge: int("GUARD_MAX_PRICE_AGE_SECONDS", GUARDIAN_DEFAULTS.maxPriceAge),
+    },
+    maxAttestationAge: int("GUARD_MAX_ATTESTATION_AGE_SECONDS", GUARDIAN_DEFAULTS.maxAttestationAge),
   };
 }
 
@@ -241,4 +286,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildConfig, deploymentFile, simulationTransmitterFor, LOCAL_NETWORKS };
+module.exports = { buildConfig, deploymentFile, simulationTransmitterFor, guardianConfig, LOCAL_NETWORKS };

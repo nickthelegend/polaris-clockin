@@ -47,6 +47,12 @@ export { PageDots } from "./primitives/PageDots";
 export type { PageDotsProps } from "./primitives/PageDots";
 export { ScanFrame } from "./primitives/ScanFrame";
 export type { ScanFrameProps } from "./primitives/ScanFrame";
+export { TxLink, shortHash } from "./primitives/TxLink";
+export type { TxLinkProps } from "./primitives/TxLink";
+export { ProvenanceBadge } from "./primitives/Provenance";
+export type { ProvenanceBadgeProps } from "./primitives/Provenance";
+export { Meter } from "./primitives/Meter";
+export type { MeterProps, MeterTone } from "./primitives/Meter";
 
 // Composites
 export { StatCard } from "./composites/StatCard";
@@ -77,6 +83,8 @@ export { CodeBlock } from "./composites/CodeBlock";
 export type { CodeBlockProps, CodeSample } from "./composites/CodeBlock";
 export { PhoneFrame } from "./composites/PhoneFrame";
 export type { PhoneFrameProps } from "./composites/PhoneFrame";
+export { CheckList } from "./composites/CheckList";
+export type { CheckListProps, CheckItem } from "./composites/CheckList";
 
 // Charts
 export { Sparkline } from "./charts/Sparkline";
@@ -125,6 +133,8 @@ export { PanelCard } from "./trade/PanelCard";
 export type { PanelCardProps } from "./trade/PanelCard";
 export { FigureRow } from "./trade/FigureRow";
 export type { FigureRowProps } from "./trade/FigureRow";
+export { RunList } from "./trade/RunList";
+export type { RunListProps, RunItem } from "./trade/RunList";
 
 // One route, two layouts: the phone's below 1024px, ref E's desktop from 1024px
 export { Adaptive, useAdaptive, useIsDesktop, DESKTOP_QUERY } from "./trade/Adaptive";

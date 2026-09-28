@@ -22,6 +22,9 @@ import type {
   Payout,
 } from "./types";
 
+import type { ChainlinkOverview } from "./chainlink";
+import type { CreditGuard } from "./guard";
+
 /** What "Pay out now" did: paid, skipped (nothing to send) or failed, in words. */
 export type PayoutRun = { result: "paid" | "skipped" | "failed"; detail?: string };
 
@@ -45,6 +48,15 @@ export interface DashboardData {
   submitRegistration(input: { signature?: `0x${string}`; deadline?: string }): Promise<{ merchant: Merchant }>;
 
   getOverview(): Promise<Overview>;
+
+  /**
+   * The Chainlink page: the CRE workflows, their latest reports on Monad and
+   * the credit guard. On a server with nothing deployed, labelled sample data
+   * (`sample: true`).
+   */
+  getChainlink(): Promise<ChainlinkOverview>;
+  /** The credit guard now: whether new Pay in 4 plans are paused, and why. */
+  getCreditGuard(): Promise<CreditGuard>;
 
   listLinks(): Promise<PaymentLink[]>;
   createLink(input: CreateLinkInput): Promise<PaymentLink>;

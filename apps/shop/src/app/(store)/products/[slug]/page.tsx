@@ -8,7 +8,8 @@ import { ProductGallery } from "@/components/product-gallery";
 import { PurchasePanel } from "@/components/purchase-panel";
 import { PRODUCTS, categoryName, getProductBySlug } from "@/lib/catalog";
 import { formatUsd } from "@/lib/money";
-import { payInFourApr } from "@/lib/polaris";
+import { creditGuard, payInFourApr } from "@/lib/polaris";
+import { pausedMessage } from "@/lib/polaris-config";
 import { PolarisMessaging } from "@/lib/polaris-client";
 
 export function generateStaticParams() {
@@ -29,6 +30,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     .slice(0, 3);
   const subscription = Boolean(product.recurring);
   const aprBps = payInFourApr();
+  const paused = pausedMessage(await creditGuard());
 
   return (
     <>
@@ -65,7 +67,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             {subscription ? (
               <p className="mt-2 text-[0.95rem] text-muted">Delivery included, billed monthly.</p>
             ) : (
-              <PolarisMessaging amount={(product.price / 100).toFixed(2)} aprBps={aprBps} className="mt-2 text-ink-2" />
+              <PolarisMessaging amount={(product.price / 100).toFixed(2)} aprBps={aprBps} paused={paused} className="mt-2 text-ink-2" />
             )}
 
             <PurchasePanel product={product} aprBps={aprBps} />

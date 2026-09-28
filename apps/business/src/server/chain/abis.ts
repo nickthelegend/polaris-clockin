@@ -7,8 +7,10 @@ import "server-only";
  * event arguments.
  */
 export {
+  aggregatorV3InterfaceAbi,
   batchSettlementAbi,
   collectionsReceiverAbi,
+  guardianReceiverAbi,
   iausdAbi,
   merchantRegistryAbi,
   polarisCheckoutAbi,

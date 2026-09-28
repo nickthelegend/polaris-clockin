@@ -12,7 +12,7 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -47,8 +47,18 @@ function isAddress(value) {
   return typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value);
 }
 
-function load(network) {
-  const path = join(deploymentsDir, network.file);
+/**
+ * A contract's address in a deployment record. packages/contracts' deploy
+ * scripts write `{ address, blockNumber, txHash, ... }` per contract (the
+ * Monad records); the older Sepolia records wrote the bare address string.
+ * Both are read.
+ */
+export function addressOf(entry) {
+  return entry !== null && typeof entry === "object" ? entry.address : entry;
+}
+
+export function load(network, dir = deploymentsDir) {
+  const path = join(dir, network.file);
   const contracts = Object.fromEntries(Object.values(NAMES).map((field) => [field, ZERO]));
   if (!existsSync(path)) {
     return { network: network.key, chainId: network.chainId, source: null, deployedAt: null, stablecoin: null, contracts };
@@ -60,16 +70,17 @@ function load(network) {
   }
   const found = json.contracts ?? {};
   for (const [name, field] of Object.entries(NAMES)) {
-    const address = found[name];
+    const address = addressOf(found[name]);
     if (address === undefined) continue;
     if (!isAddress(address)) throw new Error(`${network.file}: ${name} is not an address: ${address}`);
     contracts[field] = address;
   }
   let stablecoin = null;
   for (const name of STABLECOIN_NAMES) {
-    if (found[name] !== undefined) {
-      if (!isAddress(found[name])) throw new Error(`${network.file}: ${name} is not an address: ${found[name]}`);
-      stablecoin = found[name];
+    const address = addressOf(found[name]);
+    if (address !== undefined) {
+      if (!isAddress(address)) throw new Error(`${network.file}: ${name} is not an address: ${JSON.stringify(found[name])}`);
+      stablecoin = address;
       break;
     }
   }
@@ -83,7 +94,7 @@ function load(network) {
   };
 }
 
-function render(records) {
+export function render(records) {
   const body = records
     .map((r) => {
       const contracts = Object.entries(r.contracts)
@@ -131,16 +142,24 @@ ${body}
 `;
 }
 
-const next = render(NETWORKS.map(load));
+export { NETWORKS };
 
-if (process.argv.includes("--check")) {
-  const current = existsSync(outFile) ? readFileSync(outFile, "utf8").replaceAll("\r\n", "\n") : "";
-  if (current !== next) {
-    console.error("src/deployments.ts is stale. Run: pnpm --filter polarispay-sdk gen:deployments");
-    process.exit(1);
+function main() {
+  const next = render(NETWORKS.map((n) => load(n)));
+  if (process.argv.includes("--check")) {
+    const current = existsSync(outFile) ? readFileSync(outFile, "utf8").replaceAll("\r\n", "\n") : "";
+    if (current !== next) {
+      console.error("src/deployments.ts is stale. Run: pnpm --filter polarispay-sdk gen:deployments");
+      process.exit(1);
+    }
+    console.log("src/deployments.ts is up to date.");
+  } else {
+    writeFileSync(outFile, next);
+    console.log(`Wrote ${relative(process.cwd(), outFile)}`);
   }
-  console.log("src/deployments.ts is up to date.");
-} else {
-  writeFileSync(outFile, next);
-  console.log(`Wrote ${relative(process.cwd(), outFile)}`);
 }
+
+// Run only as a script: the tests import load() and render(). (Windows paths
+// compare without case: a drive letter may arrive as f: or F:.)
+const same = (a, b) => (process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b);
+if (process.argv[1] && same(resolve(process.argv[1]), fileURLToPath(import.meta.url))) main();

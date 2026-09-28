@@ -1,6 +1,6 @@
 /**
  * Everything around the money: send-by-link, merchant payouts and balances,
- * batch settlements, the buyer's credit line, CRE reports and roles.
+ * batch settlements, the buyer's credit line, forwarder reports (simulated events) and roles.
  */
 
 import { encodeErrorResult, parseAbi } from "viem";
@@ -107,7 +107,7 @@ describe("Credit line", () => {
   const history = account(0x4157);
   const errors = parseAbi(["error StaleEvidence()"]);
 
-  it("opens a line from a CRE underwriting report and explains every move", async () => {
+  it("opens a line from an underwriting report's events (simulated) and explains every move", async () => {
     const sim = new Sim();
     // At deploy: underwriting required, collateral counts.
     sim
@@ -156,7 +156,7 @@ describe("Credit line", () => {
   });
 });
 
-describe("CRE reports and roles", () => {
+describe("forwarder reports (simulated) and roles", () => {
   it("records a report the receiver reverted, and only our receivers' reports", async () => {
     const sim = new Sim();
     sim
