@@ -17,17 +17,22 @@
  *
  * The verdict is a bitmask, and `creditPaused == (reasons != 0)`:
  *
- *   1  depeg        price < minPrice
+ *   1  depeg        price < minPrice, or price > maxPrice
  *   2  low cash     freeCash < minFreeCash
- *   4  bad debt     badDebt > floor(totalOriginated * maxBadDebtBps / 10000)
+ *   4  bad debt     totalOriginated >= minOriginated, and bad debt beyond what the
+ *                   owner acknowledged > floor(totalOriginated * maxBadDebtBps / 10000)
  *   8  stale price  priceUpdatedAt == 0, or observedAt - priceUpdatedAt > maxPriceAge
  *
  * GuardianReceiver.evaluate is the same formula, and the receiver refuses a
  * report whose verdict differs from its own (`VerdictMismatch`), so the two
- * computations check each other. `guardianReasons` below is held to
- * packages/contracts/lib/cre.js `guardianReasons` (which the contract suite
- * fuzzes against `evaluate`) on random inputs in test/guardian.test.ts, and to
- * the contract itself in the local end-to-end run.
+ * computations check each other. It also refuses one whose low-cash and
+ * bad-debt bits are not the live pool's (`PoolMismatch`): those two it reads
+ * from the pool itself whenever PolarisCheckout asks, so what the DON is
+ * trusted for is the price, the one input from another chain.
+ * `guardianReasons` below is held to packages/contracts/lib/cre.js
+ * `guardianReasons` (which the contract suite fuzzes against `evaluate`) on
+ * random inputs in test/guardian.test.ts, and to the contract itself in the
+ * local end-to-end run.
  */
 
 import { decodeAbiParameters, encodeAbiParameters, type Hex, parseAbiParameters } from "viem";
@@ -45,6 +50,11 @@ export const REASON = {
   /** Only in GuardianReceiver.isCreditPaused / creditStatus: the owner forced a pause. Never in a report. */
   OWNER_PAUSE: 0x80,
 } as const;
+
+/** The reasons GuardianReceiver takes from the attestation: the price, read on Monad mainnet. */
+export const PRICE_REASONS = REASON.DEPEG | REASON.STALE_PRICE;
+/** The reasons GuardianReceiver reads from the pool itself, live (a report must agree with them). */
+export const POOL_REASONS = REASON.LOW_CASH | REASON.BAD_DEBT;
 
 const REASON_WORDS: ReadonlyArray<[number, string]> = [
   [REASON.DEPEG, "depeg"],
@@ -75,10 +85,14 @@ export interface PoolState {
 export interface Thresholds {
   /** Lowest AUSD/USD that is not a depeg, PRICE_DECIMALS decimals. */
   minPrice: bigint;
+  /** Highest AUSD/USD that is not a depeg (an upward break, or a faulty answer), PRICE_DECIMALS decimals. */
+  maxPrice: bigint;
   /** Least free pool cash, stablecoin base units. */
   minFreeCash: bigint;
   /** Most bad debt, in basis points of lifetime originations. */
   maxBadDebtBps: number;
+  /** Lifetime originations, base units, below which the bad-debt ratio is not applied. */
+  minOriginated: bigint;
   /** Oldest the cited price may be at observation, seconds. */
   maxPriceAge: number;
 }
@@ -126,24 +140,50 @@ export function decodeGuardianReport(hex: Hex): { kind: number; attestation: Att
   return { kind, attestation: { ...a } };
 }
 
-/** GuardianReceiver.evaluate: the reason bits for `a` under `t`, 0 when healthy. */
-export function guardianReasons(
-  a: Pick<Attestation, "price" | "freeCash" | "badDebt" | "totalOriginated" | "priceUpdatedAt" | "observedAt">,
+/**
+ * GuardianReceiver's pool reasons (low cash, bad debt) for `pool` under `t`,
+ * counting only bad debt beyond `badDebtAcknowledged` (`acknowledgeBadDebt`).
+ */
+export function poolReasons(
+  pool: Pick<PoolState, "freeCash" | "badDebt" | "totalOriginated">,
   t: Thresholds,
+  badDebtAcknowledged = 0n,
 ): number {
   let reasons = 0;
-  if (a.price < t.minPrice) reasons |= REASON.DEPEG;
-  if (a.freeCash < t.minFreeCash) reasons |= REASON.LOW_CASH;
-  // Math.mulDiv floors, and bad debt is an integer, so this comparison is exact.
-  if (a.badDebt > (a.totalOriginated * BigInt(t.maxBadDebtBps)) / 10_000n) reasons |= REASON.BAD_DEBT;
+  if (pool.freeCash < t.minFreeCash) reasons |= REASON.LOW_CASH;
+  if (pool.totalOriginated >= t.minOriginated) {
+    const unacknowledged = pool.badDebt > badDebtAcknowledged ? pool.badDebt - badDebtAcknowledged : 0n;
+    // Math.mulDiv floors, and bad debt is an integer, so this comparison is exact.
+    if (unacknowledged > (pool.totalOriginated * BigInt(t.maxBadDebtBps)) / 10_000n) reasons |= REASON.BAD_DEBT;
+  }
+  return reasons;
+}
+
+/** GuardianReceiver's price reasons (depeg below or above the band, stale price) for the attested round. */
+export function priceReasons(a: Pick<Attestation, "price" | "priceUpdatedAt" | "observedAt">, t: Thresholds): number {
+  let reasons = 0;
+  if (a.price < t.minPrice || a.price > t.maxPrice) reasons |= REASON.DEPEG;
   if (a.priceUpdatedAt === 0n || (a.observedAt > a.priceUpdatedAt && a.observedAt - a.priceUpdatedAt > BigInt(t.maxPriceAge))) {
     reasons |= REASON.STALE_PRICE;
   }
   return reasons;
 }
 
+/** GuardianReceiver.evaluate: the reason bits for `a` under `t` and the acknowledged bad debt, 0 when healthy. */
+export function guardianReasons(
+  a: Pick<Attestation, "price" | "freeCash" | "badDebt" | "totalOriginated" | "priceUpdatedAt" | "observedAt">,
+  t: Thresholds,
+  badDebtAcknowledged = 0n,
+): number {
+  return poolReasons(a, t, badDebtAcknowledged) | priceReasons(a, t);
+}
+
 /** The whole attestation, its verdict filled in the way GuardianReceiver requires. */
-export function buildAttestation(p: { round: PriceRound; pool: PoolState; observedAt: bigint }, t: Thresholds): Attestation {
+export function buildAttestation(
+  p: { round: PriceRound; pool: PoolState; observedAt: bigint },
+  t: Thresholds,
+  badDebtAcknowledged = 0n,
+): Attestation {
   const a = {
     priceRoundId: p.round.roundId,
     price: p.round.answer,
@@ -154,34 +194,53 @@ export function buildAttestation(p: { round: PriceRound; pool: PoolState; observ
     totalOriginated: p.pool.totalOriginated,
     observedAt: p.observedAt,
   };
-  const reasons = guardianReasons(a, t);
+  const reasons = guardianReasons(a, t, badDebtAcknowledged);
   return { ...a, creditPaused: reasons !== 0, reasons };
 }
 
+/** int192's largest value: GuardianReceiver's round answer saturates there. */
+export const INT192_MAX = (1n << 191n) - 1n;
+
 /**
  * What GuardianReceiver's feed-shaped view answers for an accepted
- * attestation: free cash in US dollars at the attested price, with
- * PRICE_DECIMALS decimals, or 0 when the attestation paused credit.
- * `cashScale` is 10 ** the stablecoin's decimals (the receiver's `cashScale()`).
+ * attestation: the pool's free cash when the report lands (`freeCash`, which
+ * the receiver reads from the pool, not the report; the attestation's own by
+ * default) in US dollars at the attested price, with PRICE_DECIMALS decimals,
+ * or 0 when the attestation paused credit. Saturates at int192's maximum, as
+ * the receiver does. `cashScale` is 10 ** the stablecoin's decimals.
  */
-export function lendableUsd(a: Pick<Attestation, "freeCash" | "price" | "creditPaused">, cashScale: bigint): bigint {
+export function lendableUsd(
+  a: Pick<Attestation, "freeCash" | "price" | "creditPaused">,
+  cashScale: bigint,
+  freeCash: bigint = a.freeCash,
+): bigint {
   if (a.creditPaused || a.price <= 0n) return 0n;
-  return (a.freeCash * a.price) / cashScale;
+  const usd = (freeCash * a.price) / cashScale;
+  return usd > INT192_MAX ? INT192_MAX : usd;
 }
 
 /** GuardianReceiver.creditStatus(), trimmed to what the write policy and the result use. */
 export interface GuardState {
-  /** What PolarisCheckout.openPlan applies now (owner override and staleness included). */
+  /** What PolarisCheckout.openPlan applies now (owner override, the live pool and staleness included). */
   paused: boolean;
   reasons: number;
   attestedPaused: boolean;
   attestedReasons: number;
   /** The latest attestation's observedAt; 0 when there is none. */
   observedAt: bigint;
+  /** No attestation, or older than maxAttestationAge: its price reasons fail open. */
   stale: boolean;
+  /** The override in force now (a forced resume past its end reads NONE). */
   overrideMode: number;
   maxAttestationAge: number;
   round: bigint;
+  /** When the forced resume in force ends; 0 when there is none. */
+  overrideUntil?: bigint;
+  /** Low cash and bad debt, from the pool now. */
+  poolReasons?: number;
+  /** Depeg and stale price, from the latest attestation under today's thresholds; 0 once stale. */
+  priceReasons?: number;
+  badDebtAcknowledged?: bigint;
 }
 
 /**

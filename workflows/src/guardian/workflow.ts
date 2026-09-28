@@ -6,25 +6,31 @@
  *   1. The pool. One finalized block of the pool's chain (Monad testnet): its
  *      header (number and timestamp), then, at that number,
  *      `GuardianReceiver.currentInputs()` (PolarisLoanEngine's free cash,
- *      what buyers owe, bad debt, lifetime originations, and the thresholds
- *      the owner set on chain), `creditStatus()` and `latestAttestation()`.
+ *      what buyers owe, bad debt, lifetime originations; the thresholds the
+ *      owner set on chain; the bad debt the owner acknowledged),
+ *      `creditStatus()` and `latestAttestation()`.
  *   2. The peg. Chainlink's AUSD/USD Data Feed on Monad MAINNET (chain 143;
  *      Monad testnet has no AUSD feed), read with a second EVM client:
  *      `decimals()` and `description()` checked against the config, then
  *      `latestRoundData()` at mainnet's last finalized block.
  *   3. The verdict (./attestation.ts, the same formula as
- *      GuardianReceiver.evaluate): depeg, low free cash, bad debt, stale price.
+ *      GuardianReceiver.evaluate): depeg (below $0.995 or above $1.005 by
+ *      default), low free cash, bad debt, stale price.
  *   4. The write, when it says something new (a changed verdict, the
  *      heartbeat, a large move: ./attestation.ts `writeDecision`): one signed
  *      report through the forwarder, gas sized from its own estimate, and the
  *      receipt read back for `CreditGuardUpdated` or `AttestationRefused`.
  *
  * What it moves: PolarisCheckout.openPlan asks GuardianReceiver before each
- * new Pay in 4 plan and refuses while the attested verdict is "paused"
- * (`CreditPausedByGuardian(reasons)`). A healthy report after a pause resumes
- * credit (a bad-debt pause excepted: bad debt never falls, so the owner lifts
- * it). Pay now, Send and Subscribe never ask. A guardian that stops reporting
- * fails open once its attestation is older than `maxAttestationAge`.
+ * new Pay in 4 plan and refuses while it says "paused"
+ * (`CreditPausedByGuardian(reasons)`). The receiver takes only the price from
+ * this report: depeg and stale price come from the latest attestation (and
+ * fail open once it is older than `maxAttestationAge`), while low cash and
+ * bad debt it reads from the pool itself on every call, and it refuses a
+ * report whose pool verdict is not the live pool's. So this workflow is what
+ * brings the mainnet price to the testnet pool; it cannot pause or resume
+ * credit on the pool's figures by its own say. Pay now, Send and Subscribe
+ * never ask.
  *
  * The thresholds are read from the chain every run, so the owner can change
  * them (`setThresholds`) without touching the workflow: the demo raises the
@@ -118,10 +124,31 @@ export interface GuardianResult {
     /** Seconds between the round's update and the pool block; 0 if the round is newer. */
     ageSeconds: number;
   };
-  pool: { chain: string; block: string; observedAt: number; freeCash: string; totalOwed: string; badDebt: string; totalOriginated: string };
-  thresholds: { minPrice: string; minFreeCash: string; maxBadDebtBps: number; maxPriceAge: number };
-  /** The receiver before this run: what openPlan applied, the latest attestation, the owner's override. */
-  before: { paused: boolean; reasons: number; attestedReasons: number; observedAt: number; stale: boolean; override: string; maxAttestationAge: number };
+  pool: {
+    chain: string;
+    block: string;
+    observedAt: number;
+    freeCash: string;
+    totalOwed: string;
+    badDebt: string;
+    totalOriginated: string;
+    /** Bad debt the owner acknowledged: only bad debt beyond it counts. */
+    badDebtAcknowledged: string;
+  };
+  thresholds: { minPrice: string; maxPrice: string; minFreeCash: string; maxBadDebtBps: number; minOriginated: string; maxPriceAge: number };
+  /** The receiver before this run: what openPlan applied, and why (the live pool, the latest price), the latest attestation, the owner's override. */
+  before: {
+    paused: boolean;
+    reasons: number;
+    poolReasons: number;
+    priceReasons: number;
+    attestedReasons: number;
+    observedAt: number;
+    stale: boolean;
+    override: string;
+    overrideUntil: number;
+    maxAttestationAge: number;
+  };
   /** The feed round this attestation became, when accepted. */
   round: string | null;
   /** The receiver's refusal, decoded, when refused. */
@@ -141,6 +168,20 @@ interface CreditStatusRaw {
   overrideMode: number;
   maxAttestationAge: number;
   round: bigint;
+  overrideUntil: bigint;
+  poolReasons: number;
+  priceReasons: number;
+  badDebtAcknowledged: bigint;
+}
+
+/** GuardianReceiver.thresholds() as viem decodes it (uint16 and uint32 as numbers). */
+interface ThresholdsRaw {
+  minPrice: bigint;
+  maxPrice: bigint;
+  minFreeCash: bigint;
+  maxBadDebtBps: number;
+  minOriginated: bigint;
+  maxPriceAge: number;
 }
 
 /** The feed read, with its identity checked against the config first. */
@@ -185,14 +226,20 @@ export function onCron(runtime: Runtime<GuardianConfig>, _payload: CronPayload):
   // 1. The pool, every read at one finalized block of its chain.
   const head = finalizedHeader(runtime, evm);
   const block = atBlock(head.number);
-  const [state, limits] = readContract(runtime, evm, {
+  const [state, limits, acknowledged] = readContract(runtime, evm, {
     address: cfg.receiver,
     abi: guardianReceiverAbi,
     functionName: "currentInputs",
     block,
-  }) as readonly [PoolState, { minPrice: bigint; minFreeCash: bigint; maxBadDebtBps: number; maxPriceAge: number }];
+  }) as readonly [PoolState, ThresholdsRaw, bigint];
   const raw = readContract(runtime, evm, { address: cfg.receiver, abi: guardianReceiverAbi, functionName: "creditStatus", block }) as CreditStatusRaw;
-  const status: GuardState = { ...raw, overrideMode: Number(raw.overrideMode), maxAttestationAge: Number(raw.maxAttestationAge) };
+  const status: GuardState = {
+    ...raw,
+    overrideMode: Number(raw.overrideMode),
+    maxAttestationAge: Number(raw.maxAttestationAge),
+    poolReasons: Number(raw.poolReasons),
+    priceReasons: Number(raw.priceReasons),
+  };
   const latest =
     status.observedAt === 0n
       ? null
@@ -204,11 +251,13 @@ export function onCron(runtime: Runtime<GuardianConfig>, _payload: CronPayload):
   // 3. The verdict, by the thresholds on chain.
   const thresholds: Thresholds = {
     minPrice: limits.minPrice,
+    maxPrice: limits.maxPrice,
     minFreeCash: limits.minFreeCash,
     maxBadDebtBps: Number(limits.maxBadDebtBps),
+    minOriginated: limits.minOriginated,
     maxPriceAge: Number(limits.maxPriceAge),
   };
-  const attestation = buildAttestation({ round, pool: state, observedAt: head.timestamp }, thresholds);
+  const attestation = buildAttestation({ round, pool: state, observedAt: head.timestamp }, thresholds, acknowledged);
   const decision = writeDecision(attestation, status, latest, cfg.write);
   const transition = transitionOf(attestation, status);
 
@@ -218,7 +267,8 @@ export function onCron(runtime: Runtime<GuardianConfig>, _payload: CronPayload):
     `${source} on ${cfg.priceFeed.chainSelectorName}: ${decimal(round.answer, PRICE_DECIMALS)} (round ${round.roundId}, updated ${age}s before the pool block)`,
   );
   runtime.log(
-    `pool at ${cfg.chainSelectorName} block ${head.number}: free cash ${state.freeCash}, owed ${state.totalOwed}, bad debt ${state.badDebt} of ${state.totalOriginated} originated (base units)`,
+    `pool at ${cfg.chainSelectorName} block ${head.number}: free cash ${state.freeCash}, owed ${state.totalOwed}, bad debt ${state.badDebt} of ${state.totalOriginated} originated (base units)` +
+      (acknowledged > 0n ? `, ${acknowledged} of it acknowledged` : ""),
   );
   const words = reasonNames(attestation.reasons);
   runtime.log(`verdict: ${attestation.creditPaused ? `pause Pay in 4 (${words.join(", ")})` : "healthy"}; ${transition}; ${decision.why}`);
@@ -228,7 +278,8 @@ export function onCron(runtime: Runtime<GuardianConfig>, _payload: CronPayload):
     );
   }
   if (status.overrideMode !== OVERRIDE.NONE) {
-    note(`the owner's override (${OVERRIDE_NAME[status.overrideMode]}) decides openPlan, whatever this attestation says`);
+    const until = status.overrideMode === OVERRIDE.FORCE_RESUME && status.overrideUntil ? ` until ${status.overrideUntil}` : "";
+    note(`the owner's override (${OVERRIDE_NAME[status.overrideMode]}${until}) decides openPlan, whatever this attestation says`);
   }
 
   const result: GuardianResult = {
@@ -254,20 +305,26 @@ export function onCron(runtime: Runtime<GuardianConfig>, _payload: CronPayload):
       totalOwed: state.totalOwed.toString(),
       badDebt: state.badDebt.toString(),
       totalOriginated: state.totalOriginated.toString(),
+      badDebtAcknowledged: acknowledged.toString(),
     },
     thresholds: {
       minPrice: decimal(thresholds.minPrice, PRICE_DECIMALS),
+      maxPrice: decimal(thresholds.maxPrice, PRICE_DECIMALS),
       minFreeCash: thresholds.minFreeCash.toString(),
       maxBadDebtBps: thresholds.maxBadDebtBps,
+      minOriginated: thresholds.minOriginated.toString(),
       maxPriceAge: thresholds.maxPriceAge,
     },
     before: {
       paused: status.paused,
       reasons: status.reasons,
+      poolReasons: status.poolReasons ?? 0,
+      priceReasons: status.priceReasons ?? 0,
       attestedReasons: status.attestedReasons,
       observedAt: Number(status.observedAt),
       stale: status.stale,
       override: OVERRIDE_NAME[status.overrideMode] ?? String(status.overrideMode),
+      overrideUntil: Number(status.overrideUntil ?? 0n),
       maxAttestationAge: status.maxAttestationAge,
     },
     round: null,
@@ -310,7 +367,8 @@ export function onCron(runtime: Runtime<GuardianConfig>, _payload: CronPayload):
     if (ev.eventName === "AttestationRefused") {
       result.status = "refused";
       result.refusal = refusalText(ev.args.reason as Hex);
-      // VerdictMismatch after a threshold change between the read and the write: the next run reads the new ones.
+      // VerdictMismatch after a threshold change, or PoolMismatch after the pool crossed one, between the
+      // read and the write: the next run reads the chain anew. isCreditPaused already applies both.
       note(`GuardianReceiver refused the attestation: ${result.refusal}`);
       return finish(result);
     }

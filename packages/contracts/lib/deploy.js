@@ -227,8 +227,8 @@ async function deployPolaris(hre, cfg, log = () => {}) {
   log("  LoanEngine: originator = PolarisCheckout (only), vault, registry");
   log("  PolarisPayments: checkout = PolarisCheckout");
   log(
-    `  PolarisCheckout: credit guardian = GuardianReceiver (depeg < ${Number(guardianThresholds.minPrice) / 1e8} or > ${Number(guardianThresholds.maxPrice) / 1e8}, ` +
-      `cash < ${Number(guardianThresholds.minFreeCash) / 1e6}, bad debt > ${guardianThresholds.maxBadDebtBps / 100}% once ${Number(guardianThresholds.minOriginated) / 1e6} is lent, ` +
+    `  PolarisCheckout: credit guardian = GuardianReceiver (depeg < $${Number(guardianThresholds.minPrice) / 1e8} or > $${Number(guardianThresholds.maxPrice) / 1e8}, ` +
+      `cash < $${Number(guardianThresholds.minFreeCash) / 1e6}, bad debt > ${guardianThresholds.maxBadDebtBps / 100}% once $${Number(guardianThresholds.minOriginated) / 1e6} is lent, ` +
       `price older than ${guardianThresholds.maxPriceAge}s; price stale after ${maxAttestationAge}s)`
   );
 

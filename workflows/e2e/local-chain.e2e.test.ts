@@ -299,9 +299,16 @@ describe.skipIf(!enabled)("on a local Monad stand-in, through the simulation for
 // ---------------------------------------------------------------- polaris-guardian
 
   /** GuardianReceiver.thresholds() now. */
-  const thresholdsNow = () => {
+  const thresholdsNow = (): Thresholds => {
     const t = read(at("GuardianReceiver"), guardianReceiverAbi, "thresholds") as Thresholds;
-    return { minPrice: t.minPrice, minFreeCash: t.minFreeCash, maxBadDebtBps: Number(t.maxBadDebtBps), maxPriceAge: Number(t.maxPriceAge) };
+    return {
+      minPrice: t.minPrice,
+      maxPrice: t.maxPrice,
+      minFreeCash: t.minFreeCash,
+      maxBadDebtBps: Number(t.maxBadDebtBps),
+      minOriginated: t.minOriginated,
+      maxPriceAge: Number(t.maxPriceAge),
+    };
   };
   const setThresholds = (t: Thresholds) => send(DEPLOYER, at("GuardianReceiver"), guardianReceiverAbi, "setThresholds", [t]);
   const creditPausedNow = () => read(at("PolarisCheckout"), polarisCheckoutAbi, "creditPaused") as readonly [boolean, number];
@@ -615,9 +622,16 @@ test("instant retry: a revoked allowance is dunned; the buyer re-signs through P
     rpcSync(RPC, "evm_mine", []);
   });
 
-  test("guardian after a real loss: the liquidation's shortfall is bad debt, the next run pauses Pay in 4, and only the owner lifts it", () => {
+  test("guardian after a real loss: the shortfall is bad debt, read from the pool at once; the owner acknowledges it, and only new losses count", () => {
     const pool = read(at("PolarisLoanEngine"), polarisLoanEngineAbi, "poolState") as { badDebt: bigint; totalOriginated: bigint };
     expect(pool.badDebt).toBeGreaterThan((pool.totalOriginated * 500n) / 10_000n);
+    const normal = thresholdsNow();
+    // This local pool has lent less than the $10,000 floor: one loss there is not a portfolio, and pauses nobody.
+    expect(pool.totalOriginated).toBeLessThan(normal.minOriginated);
+    expect(creditPausedNow()).toEqual([false, 0]);
+    // Without the floor it pauses Pay in 4 at once: GuardianReceiver reads bad debt from the pool, no report needed.
+    setThresholds({ ...normal, minOriginated: 0n });
+    expect(creditPausedNow()).toEqual([true, 4]);
     const { out, record } = guard();
     expect(out).toMatchObject({ status: "written", why: "verdict", transition: "paused" });
     expect(out.verdict.reasonNames).toEqual(["bad_debt"]);
@@ -625,13 +639,15 @@ test("instant retry: a revoked allowance is dunned; the buyer re-signs through P
     expect(creditPausedNow()).toEqual([true, 4]);
     track(record, "guardian, bad-debt pause");
 
-    // Bad debt never falls, so no healthy report can follow: the owner decides.
-    send(DEPLOYER, at("GuardianReceiver"), guardianReceiverAbi, "setOverride", [1]); // ForceResume
+    // Bad debt never falls, so no later report lifts it: the owner acknowledges the loss.
+    send(DEPLOYER, at("GuardianReceiver"), guardianReceiverAbi, "acknowledgeBadDebt", []);
     expect(creditPausedNow()).toEqual([false, 0]);
-    const status = read(at("GuardianReceiver"), guardianReceiverAbi, "creditStatus") as { paused: boolean; attestedPaused: boolean; overrideMode: number };
-    expect(status).toMatchObject({ paused: false, attestedPaused: true, overrideMode: 1 });
+    const status = read(at("GuardianReceiver"), guardianReceiverAbi, "creditStatus") as { paused: boolean; attestedPaused: boolean; badDebtAcknowledged: bigint };
+    expect(status).toMatchObject({ paused: false, attestedPaused: true, badDebtAcknowledged: pool.badDebt });
     rpcSync(RPC, "evm_mine", []);
-    expect(guard().out.note).toContain("the owner's override (force_resume) decides openPlan");
-    send(DEPLOYER, at("GuardianReceiver"), guardianReceiverAbi, "setOverride", [0]);
+    const after = guard();
+    expect(after.out).toMatchObject({ status: "written", transition: "resumed", pool: { badDebtAcknowledged: pool.badDebt.toString() } });
+    expect(after.out.verdict).toEqual({ creditPaused: false, reasons: 0, reasonNames: [] });
+    setThresholds(normal);
   });
 });

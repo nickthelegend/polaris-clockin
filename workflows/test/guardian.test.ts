@@ -19,8 +19,13 @@ import {
   encodeGuardianReport,
   type GuardState,
   guardianReasons,
+  INT192_MAX,
   lendableUsd,
+  POOL_REASONS,
+  poolReasons,
   PRICE_DECIMALS,
+  PRICE_REASONS,
+  priceReasons,
   REASON,
   reasonNames,
   REPORT_KIND_GUARDIAN,
@@ -35,17 +40,34 @@ const creLib = requireModule("@polarispay/contracts/lib/cre") as {
   REPORT_KIND: { GUARDIAN: number };
   WORKFLOW_NAMES: { GUARDIAN: string };
   GUARDIAN_REASON: Record<string, number>;
-  GUARDIAN_DEFAULTS: { minPrice: bigint; minFreeCash: bigint; maxBadDebtBps: number; maxPriceAge: number; maxAttestationAge: number };
+  GUARDIAN_DEFAULTS: {
+    minPrice: bigint;
+    maxPrice: bigint;
+    minFreeCash: bigint;
+    maxBadDebtBps: number;
+    minOriginated: bigint;
+    maxPriceAge: number;
+    maxAttestationAge: number;
+  };
+  GUARDIAN_PRICE_REASONS: number;
+  GUARDIAN_POOL_REASONS: number;
   GUARDIAN_PRICE_DECIMALS: number;
   AUSD_USD_FEED_MONAD_MAINNET: { address: string; decimals: number; description: string; chainSelectorName: string };
   encodeGuardianReport(a: object): string;
   decodeGuardianReport(body: string): { kind: number; attestation: Record<string, unknown> };
-  guardianReasons(a: object, t: object): number;
+  guardianReasons(a: object, t: object, acknowledged?: bigint): number;
   workflowNameBytes10(name: string): string;
 };
 
 const D = creLib.GUARDIAN_DEFAULTS;
-const DEFAULTS: Thresholds = { minPrice: D.minPrice, minFreeCash: D.minFreeCash, maxBadDebtBps: D.maxBadDebtBps, maxPriceAge: D.maxPriceAge };
+const DEFAULTS: Thresholds = {
+  minPrice: D.minPrice,
+  maxPrice: D.maxPrice,
+  minFreeCash: D.minFreeCash,
+  maxBadDebtBps: D.maxBadDebtBps,
+  minOriginated: D.minOriginated,
+  maxPriceAge: D.maxPriceAge,
+};
 const T0 = 1_790_000_000n;
 
 /** A healthy attestation: the real AUSD price on 28 Sep 2026, a $100k pool. */
@@ -57,7 +79,8 @@ const healthy = (over: Partial<Attestation> = {}): Attestation => {
     freeCash: 100_000_000_000n,
     totalOwed: 2_000_000_000n,
     badDebt: 0n,
-    totalOriginated: 5_000_000_000n,
+    // $20,000 lent: past the $10,000 floor, so the bad-debt ratio applies.
+    totalOriginated: 20_000_000_000n,
     observedAt: T0,
     ...over,
   };
@@ -127,11 +150,22 @@ describe("the verdict", () => {
     // Low cash: strictly below minFreeCash.
     expect(guardianReasons(healthy({ freeCash: DEFAULTS.minFreeCash }), DEFAULTS)).toBe(0);
     expect(guardianReasons(healthy({ freeCash: DEFAULTS.minFreeCash - 1n }), DEFAULTS)).toBe(REASON.LOW_CASH);
-    // Bad debt: strictly above floor(originated x 5%).
-    expect(guardianReasons(healthy({ badDebt: 250_000_000n }), DEFAULTS)).toBe(0);
-    expect(guardianReasons(healthy({ badDebt: 250_000_001n }), DEFAULTS)).toBe(REASON.BAD_DEBT);
-    expect(guardianReasons(healthy({ totalOriginated: 19n, badDebt: 0n }), DEFAULTS)).toBe(0);
-    expect(guardianReasons(healthy({ totalOriginated: 19n, badDebt: 1n }), DEFAULTS)).toBe(REASON.BAD_DEBT); // floor(19 x 5%) = 0
+    // Depeg: strictly above maxPrice too.
+    expect(guardianReasons(healthy({ price: DEFAULTS.maxPrice }), DEFAULTS)).toBe(0);
+    expect(guardianReasons(healthy({ price: DEFAULTS.maxPrice + 1n }), DEFAULTS)).toBe(REASON.DEPEG);
+    // Bad debt: strictly above floor(originated x 5%), once minOriginated has been lent.
+    expect(guardianReasons(healthy({ badDebt: 1_000_000_000n }), DEFAULTS)).toBe(0);
+    expect(guardianReasons(healthy({ badDebt: 1_000_000_001n }), DEFAULTS)).toBe(REASON.BAD_DEBT);
+    const floorless = { ...DEFAULTS, minOriginated: 0n };
+    expect(guardianReasons(healthy({ totalOriginated: 19n, badDebt: 0n }), floorless)).toBe(0);
+    expect(guardianReasons(healthy({ totalOriginated: 19n, badDebt: 1n }), floorless)).toBe(REASON.BAD_DEBT); // floor(19 x 5%) = 0
+    // Under the floor one loss is not a portfolio: everything lent, lost, is no bad-debt pause.
+    expect(guardianReasons(healthy({ totalOriginated: DEFAULTS.minOriginated - 1n, badDebt: DEFAULTS.minOriginated - 1n }), DEFAULTS)).toBe(0);
+    expect(guardianReasons(healthy({ totalOriginated: DEFAULTS.minOriginated, badDebt: DEFAULTS.minOriginated }), DEFAULTS)).toBe(REASON.BAD_DEBT);
+    // Acknowledged bad debt does not count; only what comes after it.
+    expect(guardianReasons(healthy({ badDebt: 1_500_000_000n }), DEFAULTS, 500_000_000n)).toBe(0);
+    expect(guardianReasons(healthy({ badDebt: 1_500_000_001n }), DEFAULTS, 500_000_000n)).toBe(REASON.BAD_DEBT);
+    expect(guardianReasons(healthy({ badDebt: 0n }), DEFAULTS, 500_000_000n)).toBe(0);
     // Stale price: older than maxPriceAge, or never updated; a round newer than the pool block is fresh.
     expect(guardianReasons(healthy({ priceUpdatedAt: T0 - 7_200n }), DEFAULTS)).toBe(0);
     expect(guardianReasons(healthy({ priceUpdatedAt: T0 - 7_201n }), DEFAULTS)).toBe(REASON.STALE_PRICE);
@@ -139,8 +173,14 @@ describe("the verdict", () => {
     expect(guardianReasons(healthy({ priceUpdatedAt: T0 + 30n }), DEFAULTS)).toBe(0);
     // Everything at once.
     expect(
-      guardianReasons(healthy({ price: 1n, freeCash: 0n, badDebt: 10n, totalOriginated: 10n, priceUpdatedAt: 0n }), DEFAULTS),
+      guardianReasons(healthy({ price: 1n, freeCash: 0n, badDebt: 10n, totalOriginated: 10n, priceUpdatedAt: 0n }), floorless),
     ).toBe(REASON.DEPEG | REASON.LOW_CASH | REASON.BAD_DEBT | REASON.STALE_PRICE);
+    // Which of them the receiver takes from the report, and which it reads from the pool.
+    expect(PRICE_REASONS).toBe(creLib.GUARDIAN_PRICE_REASONS);
+    expect(POOL_REASONS).toBe(creLib.GUARDIAN_POOL_REASONS);
+    expect(PRICE_REASONS | POOL_REASONS).toBe(REASON.DEPEG | REASON.LOW_CASH | REASON.BAD_DEBT | REASON.STALE_PRICE);
+    expect(priceReasons(healthy({ price: 1n, priceUpdatedAt: 0n }), DEFAULTS)).toBe(REASON.DEPEG | REASON.STALE_PRICE);
+    expect(poolReasons(healthy({ freeCash: 0n, badDebt: 20_000_000_000n }), DEFAULTS)).toBe(REASON.LOW_CASH | REASON.BAD_DEBT);
   });
 
   test("the demo's raised threshold ($1.001) turns the real AUSD price into a depeg", () => {
@@ -158,23 +198,27 @@ describe("the verdict", () => {
       return v < 0n ? 0n : v;
     };
     for (let i = 0; i < 5_000; i++) {
+      const minPrice = BigInt(1 + Math.floor(next() * 200_000_000));
       const t: Thresholds = {
-        minPrice: BigInt(1 + Math.floor(next() * 200_000_000)),
+        minPrice,
+        maxPrice: minPrice + BigInt(Math.floor(next() * 1_000_000)),
         minFreeCash: BigInt(Math.floor(next() * 5_000_000_000)),
         maxBadDebtBps: Math.floor(next() * 10_001),
+        minOriginated: next() < 0.3 ? 0n : BigInt(Math.floor(next() * 1e12)),
         maxPriceAge: 1 + Math.floor(next() * 86_400),
       };
       const observedAt = T0 + BigInt(Math.floor(next() * 1_000));
-      const totalOriginated = BigInt(Math.floor(next() * 1e12));
+      const totalOriginated = next() < 0.2 ? nearNonNegative(t.minOriginated, 2n) : BigInt(Math.floor(next() * 1e12));
+      const acknowledged = next() < 0.5 ? 0n : BigInt(Math.floor(next() * 1e9));
       const a = {
-        price: near(t.minPrice, 3n),
+        price: next() < 0.5 ? near(t.minPrice, 3n) : near(t.maxPrice, 3n),
         freeCash: nearNonNegative(t.minFreeCash, 3n),
-        badDebt: nearNonNegative((totalOriginated * BigInt(t.maxBadDebtBps)) / 10_000n, 2n),
+        badDebt: nearNonNegative((totalOriginated * BigInt(t.maxBadDebtBps)) / 10_000n + acknowledged, 2n),
         totalOriginated,
         priceUpdatedAt: next() < 0.02 ? 0n : observedAt - near(BigInt(t.maxPriceAge), 2n),
         observedAt,
       };
-      expect(guardianReasons(a, t)).toBe(creLib.guardianReasons(a, t));
+      expect(guardianReasons(a, t, acknowledged)).toBe(creLib.guardianReasons(a, t, acknowledged));
     }
   });
 
@@ -184,10 +228,13 @@ describe("the verdict", () => {
     expect(reasonNames(REASON.OWNER_PAUSE)).toEqual(["owner_pause"]);
   });
 
-  test("the feed-shaped answer: free cash in dollars at the attested price, 0 while paused", () => {
+  test("the feed-shaped answer: free cash in dollars at the attested price, 0 while paused, saturating like the receiver", () => {
     expect(lendableUsd(healthy(), 1_000_000n)).toBe((100_000_000_000n * 99_982_564n) / 1_000_000n);
     expect(decimal(lendableUsd(healthy(), 1_000_000n), 8)).toBe("99982.564");
     expect(lendableUsd(healthy({ price: 1n, creditPaused: true }), 1_000_000n)).toBe(0n);
+    // The receiver values the pool's free cash when the report lands, not the report's figure.
+    expect(lendableUsd(healthy(), 1_000_000n, 50_000_000_000n)).toBe((50_000_000_000n * 99_982_564n) / 1_000_000n);
+    expect(lendableUsd(healthy(), 1_000_000n, 1n << 250n)).toBe(INT192_MAX);
   });
 
   test("decimal() renders fixed point without floats", () => {

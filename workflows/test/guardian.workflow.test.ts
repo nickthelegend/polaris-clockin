@@ -33,8 +33,16 @@ const baseConfig = (over: Partial<GuardianConfig> = {}): GuardianConfig =>
     ...over,
   });
 
-const DEFAULTS: Thresholds = { minPrice: 99_500_000n, minFreeCash: 1_000_000_000n, maxBadDebtBps: 500, maxPriceAge: 7_200 };
-const POOL = { freeCash: 100_000_000_000n, totalOwed: 2_000_000_000n, badDebt: 0n, totalOriginated: 5_000_000_000n };
+const DEFAULTS: Thresholds = {
+  minPrice: 99_500_000n,
+  maxPrice: 100_500_000n,
+  minFreeCash: 1_000_000_000n,
+  maxBadDebtBps: 500,
+  minOriginated: 10_000_000_000n,
+  maxPriceAge: 7_200,
+};
+/** $20,000 lent, so the bad-debt ratio ($10,000 floor) applies. */
+const POOL = { freeCash: 100_000_000_000n, totalOwed: 2_000_000_000n, badDebt: 0n, totalOriginated: 20_000_000_000n };
 /** Chainlink AUSD/USD's latestRoundData on Monad mainnet, 28 Sep 2026. */
 const ROUND = { roundId: 18_446_744_073_709_559_171n, answer: 99_982_564n, updatedAt: 1_790_026_776n };
 
@@ -56,6 +64,9 @@ interface Chain {
   latest?: Attestation | null;
   stale?: boolean;
   overrideMode?: number;
+  overrideUntil?: bigint;
+  /** Bad debt the owner acknowledged (currentInputs' third value). */
+  acknowledged?: bigint;
   maxAttestationAge?: number;
   transmitter?: Address;
   /** What the receiver does with a report: accept (default), refuse with an error, or revert (ReportProcessed false). */
@@ -83,7 +94,7 @@ function fakeChains(chain: Chain = {}) {
     return { header: { timestamp: NOW.toString(), blockNumber: blockNumber(BLOCK), hash: b64(fakeTxHash("block")), parentHash: b64(fakeTxHash("parent")) } };
   };
   const guardian = addContractMock(testnet, { address: RECEIVER, abi: guardianReceiverAbi });
-  guardian.currentInputs = () => [chain.pool ?? POOL, t];
+  guardian.currentInputs = () => [chain.pool ?? POOL, t, chain.acknowledged ?? 0n];
   guardian.creditStatus = () => ({
     paused: latest ? latest.creditPaused : false,
     reasons: latest ? latest.reasons : 0,
@@ -94,6 +105,10 @@ function fakeChains(chain: Chain = {}) {
     overrideMode: chain.overrideMode ?? 0,
     maxAttestationAge: chain.maxAttestationAge ?? 3600,
     round: latest ? 4n : 0n,
+    overrideUntil: chain.overrideUntil ?? 0n,
+    poolReasons: latest ? latest.reasons & (REASON.LOW_CASH | REASON.BAD_DEBT) : 0,
+    priceReasons: latest ? latest.reasons & (REASON.DEPEG | REASON.STALE_PRICE) : 0,
+    badDebtAcknowledged: chain.acknowledged ?? 0n,
   });
   guardian.latestAttestation = () => latest;
   if (chain.transmitter) guardian.simulationTransmitter = () => chain.transmitter;
@@ -198,7 +213,7 @@ describe("polaris-guardian", () => {
   test("the owner raises the depeg threshold to $1.001 on chain: the real price pauses Pay in 4 at once", () => {
     const seen = fakeChains({ thresholds: { ...DEFAULTS, minPrice: 100_100_000n }, latest: held(60n) });
     const { out } = run();
-    expect(out).toMatchObject({ status: "written", why: "verdict", transition: "paused", thresholds: { minPrice: "1.001" } });
+    expect(out).toMatchObject({ status: "written", why: "verdict", transition: "paused", thresholds: { minPrice: "1.001", maxPrice: "1.005" } });
     expect(out.verdict).toEqual({ creditPaused: true, reasons: REASON.DEPEG, reasonNames: ["depeg"] });
     expect(seen.reports[0]).toMatchObject({ creditPaused: true, reasons: REASON.DEPEG, price: ROUND.answer });
   });
@@ -211,13 +226,32 @@ describe("polaris-guardian", () => {
   });
 
   test("every reason the pool can give: low cash, bad debt, a stale price", () => {
-    fakeChains({ pool: { ...POOL, freeCash: 999_999_999n, badDebt: 300_000_000n }, round: { ...ROUND, updatedAt: NOW - 7_201n } });
+    fakeChains({ pool: { ...POOL, freeCash: 999_999_999n, badDebt: 1_000_000_001n }, round: { ...ROUND, updatedAt: NOW - 7_201n } });
     const { out } = run();
     expect(out.verdict).toEqual({
       creditPaused: true,
       reasons: REASON.LOW_CASH | REASON.BAD_DEBT | REASON.STALE_PRICE,
       reasonNames: ["low_cash", "bad_debt", "stale_price"],
     });
+  });
+
+  test("the receiver's rules, read from the chain: the ceiling, the originations floor, the acknowledged bad debt", () => {
+    // Above $1.005 is a depeg too.
+    fakeChains({ round: { ...ROUND, answer: 125_000_000n } });
+    expect(run().out.verdict).toMatchObject({ creditPaused: true, reasons: REASON.DEPEG });
+    // One loss on a young pool ($5,000 lent, all of it lost): under the $10,000 floor, no bad-debt pause.
+    fakeChains({ pool: { ...POOL, badDebt: 5_000_000_000n, totalOriginated: 5_000_000_000n } });
+    expect(run().out.verdict).toMatchObject({ creditPaused: false, reasons: 0 });
+    // $1,001 lost of $20,000: paused, until the owner acknowledges $1,000 of it.
+    const lost = { ...POOL, badDebt: 1_001_000_000n };
+    fakeChains({ pool: lost });
+    expect(run().out.verdict).toMatchObject({ creditPaused: true, reasons: REASON.BAD_DEBT });
+    const seen = fakeChains({ pool: lost, acknowledged: 1_000_000_000n });
+    const { out, logs } = run();
+    expect(out.verdict).toMatchObject({ creditPaused: false, reasons: 0 });
+    expect(out.pool).toMatchObject({ badDebt: "1001000000", badDebtAcknowledged: "1000000000" });
+    expect(seen.reports[0]).toMatchObject({ badDebt: 1_001_000_000n, reasons: 0 });
+    expect(logs.join("\n")).toContain("1000000000 of it acknowledged");
   });
 
   test("an unchanged verdict inside the heartbeat writes nothing; past it, or on a large move, it is re-attested", () => {
@@ -265,6 +299,10 @@ describe("polaris-guardian", () => {
   test("says so when the owner's override decides, or when the heartbeat outlives the attestation", () => {
     fakeChains({ latest: held(60n), overrideMode: 2 });
     expect(run().out.note).toContain("the owner's override (force_pause) decides openPlan");
+    fakeChains({ latest: held(60n), overrideMode: 1, overrideUntil: NOW + 600n });
+    const resumed = run().out;
+    expect(resumed.note).toContain(`the owner's override (force_resume until ${NOW + 600n}) decides openPlan`);
+    expect(resumed.before).toMatchObject({ override: "force_resume", overrideUntil: Number(NOW + 600n) });
     fakeChains({ latest: held(60n), maxAttestationAge: 600 });
     expect(run().out.note).toContain("credit fails open, before it is re-attested");
   });
