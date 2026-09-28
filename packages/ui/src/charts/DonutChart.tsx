@@ -91,7 +91,9 @@ export function DonutChart({
     const s1 = Math.max(s0 + 0.0005, a1 - trim);
     const mid = (a0 + a1) / 2;
     return { d, i, share, s0, s1, mid };
-  });
+  })
+    // A segment worth nothing takes no room: no dot, no gap, no tag where two others meet.
+    .filter((seg) => seg.d.value > 0);
 
   const reveal = animate && !reduced;
   const shown = focus !== null ? data[focus] : null;
