@@ -493,7 +493,7 @@ test("instant retry: a revoked allowance is dunned; the buyer re-signs through P
     const dunned = collect(config);
     expect(dunned.skipped).toBe(1);
     expect(lastEvents(callbacks)).toEqual([expect.objectContaining({ type: "installment.failed", loanId: loanId.toString(), reason: "allowance_lost" })]);
-    track(record, "collections, 1 skipped (allowance lost)");
+    track(record, "collections, 1 skipped (allowance)");
     // Without the retry, the next cron run after this rung's window would hold them for the next rung, 6 hours on.
     const later = Math.floor(chainNowMs(RPC) / 1000) + config.candidates.chainBackoff!.windowSeconds + 5;
     const waiting = JSON.parse(
