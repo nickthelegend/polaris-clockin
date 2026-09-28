@@ -1,7 +1,12 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { collections, openStore } from "@polaris/db";
 import { describe, expect, it } from "vitest";
 
 // @ts-expect-error: a plain ESM script with no type declarations.
-import { keysFrom, markdownFrom, preflight, privyRelayerFrom, relayerModeFrom } from "../scripts/smoke-testnet.mjs";
+import { keysFrom, markdownFrom, preflight, privyRelayerFrom, relayerModeFrom, relaysOfKind } from "../scripts/smoke-testnet.mjs";
 
 /**
  * smoke:testnet's refusals: it writes to Monad testnet only, only against
@@ -85,5 +90,46 @@ describe("smoke:testnet with the Privy relayer", () => {
     expect(md).toMatch(/| 1 | Pay now | buyer | Privy relayer | PolarisCheckout |/);
     expect(md).toMatch(/| buyer | 0 | 0 | 0 | 0 |/);
     expect(md).toMatch(/payment.succeeded/);
+  });
+});
+
+describe("smoke:testnet reading the server's own relays", () => {
+  it("finds one kind (not an indexed field), oldest first, only those with a transaction that didn't fail", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "polaris-smoke-test-"));
+    const dbUrl = `sqlite:${join(dir, "polaris.db")}`;
+    try {
+      const store = openStore(dbUrl);
+      const relays = collections(store).relays;
+      const row = (id: string, kind: string, createdAt: string, over: Record<string, unknown> = {}) =>
+        relays.insert({
+          id,
+          kind,
+          state: "confirmed",
+          signer: null,
+          to: "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+          txHash: `0x${id.charCodeAt(0).toString(16).padStart(64, "0")}`,
+          blockNumber: 1,
+          sessionId: null,
+          merchantId: null,
+          result: null,
+          error: null,
+          createdAt,
+          updatedAt: createdAt,
+          ...over,
+        } as never);
+      await row("b", "activateMerchant", "2026-09-28T10:00:02.000Z");
+      await row("a", "activateMerchant", "2026-09-28T10:00:01.000Z");
+      await row("c", "quoteOrder", "2026-09-28T10:00:00.000Z");
+      await row("d", "activateMerchant", "2026-09-28T10:00:03.000Z", { state: "failed" });
+      await row("e", "activateMerchant", "2026-09-28T10:00:04.000Z", { txHash: null, state: "pending" });
+      store.close();
+
+      const found = await relaysOfKind(dbUrl, "activateMerchant");
+      expect(found.map((r: { id: string }) => r.id)).toEqual(["a", "b"]);
+      expect((await relaysOfKind(dbUrl, "quoteOrder")).map((r: { id: string }) => r.id)).toEqual(["c"]);
+      expect(await relaysOfKind(dbUrl, "lockCollateral")).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

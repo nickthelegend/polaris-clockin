@@ -1,0 +1,25 @@
+
+Relayer policy proof on chain 10143
+───────────────────────────────────
+  expect allowed  PolarisCheckout.pay (on the list)
+  expect allowed  AUSD transferWithAuthorization of 100000 base units (the minimum)
+  expect allowed  CollateralVault.lockWithPermit of 100000 base units (a secured line, no MON)
+  expect denied   CollateralVault.lockWithPermit of 0
+  expect denied   CollateralVault.seize (the loan engine's call, not the relayer's)
+  expect denied   AUSD transferWithAuthorization of 0 (free gas for strangers)
+  expect denied   the same call carrying 1 wei of MON
+  expect denied   the same call to another contract
+  expect denied   AUSD approve(attacker, max)
+  expect denied   a plain MON transfer
+  PASS  allowed  PolarisCheckout.pay (on the list)
+  PASS  allowed  AUSD transferWithAuthorization of 100000 base units (the minimum)
+  PASS  allowed  CollateralVault.lockWithPermit of 100000 base units (a secured line, no MON)
+  PASS  denied   CollateralVault.lockWithPermit of 0  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+  PASS  denied   CollateralVault.seize (the loan engine's call, not the relayer's)  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+  PASS  denied   AUSD transferWithAuthorization of 0 (free gas for strangers)  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+  PASS  denied   the same call carrying 1 wei of MON  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+  PASS  denied   the same call to another contract  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+  PASS  denied   AUSD approve(attacker, max)  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+  PASS  denied   a plain MON transfer  (400 {"error":"RPC request denied due to policy violation","code":"policy_violation"})
+
+The policy allows the listed call and denies the rest.

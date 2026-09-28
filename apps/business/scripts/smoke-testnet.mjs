@@ -789,16 +789,17 @@ async function main() {
 }
 
 /** What the server's relayer sent of one kind, from its own store (id, txHash), oldest first. */
-async function relaysOfKind(dbUrl, kind) {
+export async function relaysOfKind(dbUrl, kind) {
   const { collections, openStore } = await import("@polaris/db");
   // The server has the same SQLite file open: a read that meets its write lock is tried again.
   for (let attempt = 0; ; attempt++) {
     let store = null;
     try {
       store = openStore(dbUrl);
-      const rows = await collections(store).relays.find({ kind });
+      // `kind` is not an indexed field of relays: read them all (a smoke run's store holds a few dozen).
+      const rows = await collections(store).relays.find({}, { orderBy: "createdAt" });
       return rows
-        .filter((r) => r.txHash && r.state !== "failed")
+        .filter((r) => r.kind === kind && r.txHash && r.state !== "failed")
         .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
         .map((r) => ({ id: r.id, txHash: r.txHash, to: r.to }));
     } catch (error) {

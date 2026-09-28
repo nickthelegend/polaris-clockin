@@ -17,7 +17,9 @@
     "privy:setup-relayer": "node scripts/privy/setup-relayer.mjs",
     "privy:setup-payouts": "node scripts/privy/setup-payouts.mjs",
     "privy:prove-policy": "node scripts/privy/prove-policy.mjs",
-    "privy:smoke": "node scripts/privy/smoke-monad.mjs"
+    "privy:smoke": "node scripts/privy/smoke-monad.mjs",
+    "privy:smoke:harness": "node scripts/privy/smoke-harness.mjs",
+    "privy:fund": "node scripts/privy/fund-testnet.mjs"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "5.3.0",
