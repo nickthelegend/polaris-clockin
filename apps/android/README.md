@@ -19,18 +19,21 @@ item 20). The installable PWA is the same app. This one installs from an APK
 PRF extension (rpId `polarispay.app`), and the key is derived from it in the
 browser.
 
-- **A TWA *is* Chrome.** The page runs in the user's Chrome, at its real
-  origin, `https://app.polarispay.app`. So WebAuthn, Google Password Manager's
-  passkeys and PRF behave exactly as they do in a Chrome tab.
+- **A TWA *is* the browser.** The page runs in the user's Chrome (or another
+  browser that hosts TWAs), at its real origin, `https://app.polarispay.app`.
+  So WebAuthn, Google Password Manager's passkeys and PRF behave exactly as
+  they do in a Chrome tab.
 - **One account everywhere.** The same passkey opens the same account in
   Chrome, in the installed PWA and in this app.
 - **Nothing to add for passkeys.** A native app calling Credential Manager
   would need a `get_login_creds` statement on `polarispay.app`. A TWA doesn't.
-- **No WebView, ever.** A WebView doesn't get Google Password Manager's
-  passkeys or PRF. So when Chrome can't host a TWA, the app falls back to a
-  Custom Tab (`fallbackType: customtabs`), which is also Chrome.
-- **Android 9 or later** (`minSdkVersion 28`): Mera's PRF needs it, so the app
-  won't install where Face ID couldn't work.
+- **No WebView, ever.** In a WebView, passkeys work only if the app wires
+  them up itself, and PRF there is unproven. So when no browser can host a
+  TWA, the app falls back to a Custom Tab (`fallbackType: customtabs`), which
+  is the browser itself.
+- **Android 9 or later** (`minSdkVersion 28`): the floor Mera's docs give for
+  passkeys with PRF on Android, so the app won't install where Face ID
+  couldn't work.
 - **Privy works as on the web.** The app runs the hosted **web** bundle, so
   *Continue with email* uses the web Privy client, and Privy sees the web
   origin. The Privy **Android** app client
@@ -135,9 +138,9 @@ The generated project is a normal Gradle project, so Android Studio opens
 
    Or copy the APK to the phone and open it, and allow the file manager to
    install unknown apps.
-4. Open **Polaris**. Chrome must be installed, as it is on almost every
-   Android phone. A phone without it opens the app as a Custom Tab in the
-   default browser.
+4. Open **Polaris**. It needs a browser that hosts Trusted Web Activities,
+   which Chrome, installed on almost every Android phone, does. Without one,
+   it opens as a Custom Tab in the default browser.
 
 An APK signed with one key can't be installed over one signed with another.
 `adb uninstall app.polarispay.twa` removes the old one first.
@@ -153,7 +156,8 @@ POLARIS_ANDROID_APP_URL=https://staging.polarispay.app/ pnpm --filter @polaris/a
 
 That rewrites `twa-manifest.json`, including the host, the start URL and the
 icon URLs, and regenerates the project. Commit the diff if it's the new
-default, or `git checkout apps/android` to go back. The URL must be https with
+default, or go back with
+`git checkout -- apps/android/twa-manifest.json apps/android/manifest-checksum.txt apps/android/app`. The URL must be https with
 no port, because a TWA only opens https and Android matches the bare host. The
 site at that URL must also serve `/.well-known/assetlinks.json` (next
 section).

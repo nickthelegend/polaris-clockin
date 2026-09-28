@@ -69,8 +69,9 @@ describe("twa-manifest.json", () => {
   });
 
   it("keeps Face ID working: Custom Tabs as the fallback, never a WebView, and Android 9 or later", () => {
-    // A WebView has no passkeys from Google Password Manager (and no PRF); a
-    // Custom Tab is Chrome itself. Mera's PRF needs Android 9 (API 28).
+    // In a WebView passkeys work only if the app wires them up, and PRF there
+    // is unproven; a Custom Tab is the browser itself. Mera's docs put PRF on
+    // Android at Android 9 (API 28).
     assert.equal(manifest.fallbackType, "customtabs");
     assert.ok(manifest.minSdkVersion >= 28);
     assert.equal(manifest.enableNotifications, false, "the web app sends no notifications");
