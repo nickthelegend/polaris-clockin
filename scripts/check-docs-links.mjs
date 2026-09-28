@@ -20,8 +20,13 @@
  *     appears in the committed evidence (EVIDENCE below: the deployment
  *     records, the CRE runs, the workflows' configs), and every shortened
  *     one ("0x1116fbb4…292c4d", "0x4201…45CC") matches one that does.
+ *  4. Every fenced ```text block (a paste-ready portal answer) is at most
+ *     4,000 characters, the portal's limit.
  *
- * And in every file: a link whose text is a shortened hash or address
+ * And in every file: a full GitHub URL into this repository (the origin
+ * remote, …/blob/<ref>/<path>) is checked like a relative link from the
+ * repository root, code blocks included; and a link whose text is a
+ * shortened hash or address
  * ([`0x1116fbb4…292c4d`](https://…/tx/0x1116…)) must shorten the one in its
  * own URL.
  *
@@ -221,6 +226,62 @@ export function shortLinkMismatches(text) {
   return out;
 }
 
+/**
+ * Full GitHub URLs into this repository (…/blob/<ref>/<path>, …/tree/<ref>/<path>)
+ * anywhere in the text, code blocks included: the paste-ready answers carry
+ * them, and they must name files that exist.
+ * @param {string} text
+ * @param {string | null} base e.g. "https://github.com/owner/repo"
+ * @returns {{ line: number, target: string }[]} target: the repository-relative path, with any #fragment
+ */
+export function repoUrlsOf(text, base) {
+  const out = [];
+  if (!base) return out;
+  const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`${escaped}/(?:blob|tree)/[^/\\s)]+/([^\\s)\`"'<>]+)`, "gi");
+  text.split(/\r?\n/).forEach((line, index) => {
+    for (const m of line.matchAll(re)) out.push({ line: index + 1, target: m[1].replace(/[.,;:]+$/, "") });
+  });
+  return out;
+}
+
+/** The portal's limit for one bounty answer (docs/submission/sources.md, "The portal"). */
+export const ANSWER_LIMIT = 4000;
+
+/**
+ * Every fenced ```text block (a paste-ready answer) and its length.
+ * @param {string} markdown
+ * @returns {{ line: number, length: number }[]}
+ */
+export function answersOf(markdown) {
+  const out = [];
+  let open = null;
+  markdown.split(/\r?\n/).forEach((line, index) => {
+    if (open === null) {
+      if (/^\s*```text\s*$/.test(line)) open = { line: index + 1, lines: [] };
+    } else if (/^\s*```\s*$/.test(line)) {
+      out.push({ line: open.line, length: open.lines.join("\n").length });
+      open = null;
+    } else open.lines.push(line);
+  });
+  return out;
+}
+
+/** This repository on GitHub, from the origin remote, or null. */
+function githubBase() {
+  try {
+    const url = execFileSync("git", ["remote", "get-url", "origin"], {
+      cwd: REPO,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    const m = /github\.com[:/]([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(url);
+    return m ? `https://github.com/${m[1]}/${m[2]}` : null;
+  } catch {
+    return null;
+  }
+}
+
 /** @param {string} p a repository-relative path */
 const toPosix = (p) => p.split(sep).join("/");
 
@@ -276,10 +337,56 @@ function main() {
     return anchorCache.get(abs);
   };
 
+  const base = githubBase();
   const failures = [];
   let checked = 0;
   let external = 0;
   let refs = 0;
+  let urls = 0;
+  let answers = 0;
+
+  /**
+   * One link: the file or folder must be published, and a #fragment must be
+   * a heading of the Markdown file it names.
+   * @param {string} file the Markdown file the link is in (absolute)
+   * @param {string} rel the same, repository-relative
+   * @param {number} line
+   * @param {string} target the link as written
+   * @param {boolean} fromRoot resolve against the repository root, not the file's folder
+   */
+  const checkTarget = (file, rel, line, target, fromRoot) => {
+    const hash = target.indexOf("#");
+    const rawPath = hash < 0 ? target : target.slice(0, hash);
+    const fragment = hash < 0 ? "" : target.slice(hash + 1);
+    let path;
+    try {
+      path = decodeURIComponent(rawPath.split("?")[0]);
+    } catch {
+      failures.push(`${rel}:${line}  ${target}  (not a valid URL path)`);
+      return;
+    }
+    const abs = path === "" ? file : fromRoot || path.startsWith("/") ? join(REPO, path) : resolve(dirname(file), path);
+    const inRepo = toPosix(relative(REPO, abs));
+    if (inRepo.startsWith("..")) {
+      failures.push(`${rel}:${line}  ${target}  (outside the repository)`);
+      return;
+    }
+    const target_ = posix.normalize(inRepo).replace(/\/$/, "");
+    if (path !== "" && !published.has(target_) && !dirs.has(target_)) {
+      failures.push(`${rel}:${line}  ${target}  (${existsSync(abs) ? "exists here, but git would not publish it" : "no such file or folder"})`);
+      return;
+    }
+    if (fragment && /\.md$/i.test(abs)) {
+      let anchor;
+      try {
+        anchor = decodeURIComponent(fragment).toLowerCase();
+      } catch {
+        anchor = fragment.toLowerCase();
+      }
+      if (!anchorsFor(abs).has(anchor)) failures.push(`${rel}:${line}  ${target}  (no heading "#${anchor}" in ${target_ || rel})`);
+    }
+  };
+
   for (const file of files) {
     const rel = toPosix(relative(REPO, file));
     const text = readFileSync(file, "utf8");
@@ -289,38 +396,19 @@ function main() {
         continue;
       }
       checked++;
-      const hash = target.indexOf("#");
-      const rawPath = hash < 0 ? target : target.slice(0, hash);
-      const fragment = hash < 0 ? "" : target.slice(hash + 1);
-      let path;
-      try {
-        path = decodeURIComponent(rawPath.split("?")[0]);
-      } catch {
-        failures.push(`${rel}:${line}  ${target}  (not a valid URL path)`);
-        continue;
-      }
-      const abs = path === "" ? file : path.startsWith("/") ? join(REPO, path) : resolve(dirname(file), path);
-      const inRepo = toPosix(relative(REPO, abs));
-      if (inRepo.startsWith("..")) {
-        failures.push(`${rel}:${line}  ${target}  (outside the repository)`);
-        continue;
-      }
-      const target_ = posix.normalize(inRepo).replace(/\/$/, "");
-      if (path !== "" && !published.has(target_) && !dirs.has(target_)) {
-        failures.push(`${rel}:${line}  ${target}  (${existsSync(abs) ? "exists here, but git would not publish it" : "no such file or folder"})`);
-        continue;
-      }
-      if (fragment && /\.md$/i.test(abs)) {
-        let anchor;
-        try {
-          anchor = decodeURIComponent(fragment).toLowerCase();
-        } catch {
-          anchor = fragment.toLowerCase();
-        }
-        if (!anchorsFor(abs).has(anchor)) failures.push(`${rel}:${line}  ${target}  (no heading "#${anchor}" in ${target_ || rel})`);
-      }
+      checkTarget(file, rel, line, target, false);
+    }
+    for (const { line, target } of repoUrlsOf(text, base)) {
+      urls++;
+      checkTarget(file, rel, line, target, true);
     }
     if (rel.startsWith("docs/submission/")) {
+      for (const answer of answersOf(text)) {
+        answers++;
+        if (answer.length > ANSWER_LIMIT) {
+          failures.push(`${rel}:${answer.line}  a pasted answer of ${answer.length} characters (the portal takes ${ANSWER_LIMIT})`);
+        }
+      }
       for (const { line, value } of hexRefsOf(text)) {
         refs++;
         if (!inEvidence(value, known)) failures.push(`${rel}:${line}  ${value}  (not in the committed evidence)`);
@@ -332,7 +420,7 @@ function main() {
   }
 
   console.log(
-    `${files.length} files: ${checked} relative links checked, ${external} external links not fetched, ${refs} hashes and addresses checked against ${known.size} in the evidence.`,
+    `${files.length} files: ${checked} relative links and ${urls} links to ${base ?? "the repository on GitHub"} checked; ${external} external links not fetched; ${refs} hashes and addresses checked against ${known.size} in the evidence; ${answers} pasted answers within ${ANSWER_LIMIT} characters.`,
   );
   if (failures.length) {
     console.error(`\n${failures.length} problem(s):\n${failures.map((f) => `  ${f}`).join("\n")}`);

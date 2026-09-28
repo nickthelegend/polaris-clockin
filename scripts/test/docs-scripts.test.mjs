@@ -2,7 +2,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { anchorsOf, hexRefsOf, inEvidence, isExternal, linksOf, shortLinkMismatches, slug } from "../check-docs-links.mjs";
+import {
+  ANSWER_LIMIT,
+  anchorsOf,
+  answersOf,
+  hexRefsOf,
+  inEvidence,
+  isExternal,
+  linksOf,
+  repoUrlsOf,
+  shortLinkMismatches,
+  slug,
+} from "../check-docs-links.mjs";
 import { folderOf, summarise, toMarkdown } from "../submission-diffstat.mjs";
 
 test("slug follows GitHub's heading anchors", () => {
@@ -82,6 +93,32 @@ test("shortLinkMismatches catches a shortened hash that is not its own link's", 
   assert.deepEqual(shortLinkMismatches("x\n" + bad), [{ line: 2, short: "0xef12c071…68a4c", full }]);
   const address = "[`0x4201…45CC`](https://testnet.monadscan.com/address/0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC)";
   assert.deepEqual(shortLinkMismatches(address), []);
+});
+
+test("repoUrlsOf finds this repository's file URLs, in code blocks too", () => {
+  const base = "https://github.com/nickthelegend/polaris-monad";
+  const text = [
+    "See https://github.com/nickthelegend/polaris-monad/blob/main/workflows/README.md#simulate.",
+    "```text",
+    "Code: https://github.com/nickthelegend/polaris-monad/tree/main/packages/indexer",
+    "```",
+    "Not ours: https://github.com/someone/else/blob/main/README.md",
+    "The repository itself: https://github.com/nickthelegend/polaris-monad",
+  ].join("\n");
+  assert.deepEqual(repoUrlsOf(text, base), [
+    { line: 1, target: "workflows/README.md#simulate" },
+    { line: 3, target: "packages/indexer" },
+  ]);
+  assert.deepEqual(repoUrlsOf(text, null), []);
+});
+
+test("answersOf measures each fenced text block", () => {
+  const long = "x".repeat(ANSWER_LIMIT + 1);
+  const md = ["# Q", "```text", "short answer", "```", "```bash", "not an answer", "```", "```text", long, "```"].join("\n");
+  assert.deepEqual(answersOf(md), [
+    { line: 2, length: 12 },
+    { line: 8, length: ANSWER_LIMIT + 1 },
+  ]);
 });
 
 test("folderOf groups apps and packages by name", () => {
