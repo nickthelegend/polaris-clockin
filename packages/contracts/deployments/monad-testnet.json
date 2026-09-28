@@ -133,10 +133,10 @@
       ]
     },
     "GuardianReceiver": {
-      "address": "0xF8259426519d7908e7AF63f20aea3FfCF52426D8",
-      "blockNumber": 66288166,
-      "txHash": "0xe717c54d4ce41e4164ded7ddbb31e65a40c666ec94b4d056842d2dd0f35f2369",
-      "gasUsed": "2826621",
+      "address": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
+      "blockNumber": 66309279,
+      "txHash": "0x2be128a399ed2034f2fffe8caba46519bc5c6f116625b9cff364977ad27038bf",
+      "gasUsed": "3409428",
       "abi": "abi/GuardianReceiver.json",
       "args": [
         "0xB9F79d863261869B234c481D1f9A7af84AeAd192",
@@ -144,12 +144,15 @@
         "0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6",
         {
           "minPrice": "99500000",
+          "maxPrice": "100500000",
           "minFreeCash": "1000000000",
           "maxBadDebtBps": 500,
+          "minOriginated": "10000000000",
           "maxPriceAge": 7200
         },
         3600
-      ]
+      ],
+      "sourceCommit": "62aa43f4bfe768bb7320727e1f8c254deadc5e2d"
     }
   },
   "config": {
@@ -163,8 +166,10 @@
     "requireUnderwriting": true,
     "guardian": {
       "minPrice": "99500000",
+      "maxPrice": "100500000",
       "minFreeCash": "1000000000",
       "maxBadDebtBps": 500,
+      "minOriginated": "10000000000",
       "maxPriceAge": 7200,
       "maxAttestationAge": 3600
     }
@@ -184,7 +189,7 @@
     "vaultSeizers": [
       "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a"
     ],
-    "creditGuardian": "0xF8259426519d7908e7AF63f20aea3FfCF52426D8",
+    "creditGuardian": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
     "relayer": "0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69"
   },
   "demo": {
@@ -241,7 +246,7 @@
       "guardian": {
         "name": "polaris-guardian",
         "nameBytes10": "0x64383734313635346335",
-        "receiver": "0xF8259426519d7908e7AF63f20aea3FfCF52426D8",
+        "receiver": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
         "report": "abi.encode(uint8 kind = 3, tuple(uint80 priceRoundId,int256 price,uint64 priceUpdatedAt,uint256 freeCash,uint256 totalOwed,uint256 badDebt,uint256 totalOriginated,uint64 observedAt,bool creditPaused,uint8 reasons) attestation)",
         "reasons": {
           "DEPEG": 1,
@@ -265,11 +270,11 @@
           "kind": "chainlink"
         },
         "pool": "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a",
-        "view": "currentInputs() returns ((uint256 freeCash,uint256 totalOwed,uint256 badDebt,uint256 totalOriginated) state, (int256 minPrice,uint256 minFreeCash,uint16 maxBadDebtBps,uint32 maxPriceAge) limits)",
+        "view": "currentInputs() returns ((uint256 freeCash,uint256 totalOwed,uint256 badDebt,uint256 totalOriginated) state, (int256 minPrice,int256 maxPrice,uint256 minFreeCash,uint16 maxBadDebtBps,uint256 minOriginated,uint32 maxPriceAge) limits, uint256 acknowledgedBadDebt)",
         "feed": {
           "description": "Polaris pool health, computed by CRE",
           "decimals": 8,
-          "address": "0xF8259426519d7908e7AF63f20aea3FfCF52426D8"
+          "address": "0x4c99136634F670cd59E73fc284fED164C662e3Df"
         }
       }
     }
@@ -589,5 +594,35 @@
     }
   },
   "abiDir": "packages/contracts/abi",
-  "explorer": "https://testnet.monadscan.com"
+  "explorer": "https://testnet.monadscan.com",
+  "redeploys": [
+    {
+      "at": "2026-09-28T03:59:42.945Z",
+      "contract": "GuardianReceiver",
+      "replaced": {
+        "address": "0xF8259426519d7908e7AF63f20aea3FfCF52426D8",
+        "txHash": "0xe717c54d4ce41e4164ded7ddbb31e65a40c666ec94b4d056842d2dd0f35f2369",
+        "sourceCommit": "020484b2aea74bde3f2cbc918d534dbda1348723"
+      },
+      "address": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
+      "sourceCommit": "62aa43f4bfe768bb7320727e1f8c254deadc5e2d",
+      "why": "Judge and security review (28 Sep 2026): the pool is read live, only the price is the DON's; bad-debt floor and acknowledgement; ForceResume ends; thresholds apply at once; the $1.005 ceiling",
+      "txs": [
+        {
+          "nonce": 39,
+          "block": 66309279,
+          "hash": "0x2be128a399ed2034f2fffe8caba46519bc5c6f116625b9cff364977ad27038bf",
+          "contract": "create",
+          "call": "deploy"
+        },
+        {
+          "nonce": 40,
+          "block": 66309290,
+          "hash": "0xecceaa2ad1f0620c809ec2948cf91e146d75d0875d43b3fbfff72ff4e0ac2d5c",
+          "contract": "PolarisCheckout",
+          "call": "setCreditGuardian(0x4c99136634F670cd59E73fc284fED164C662e3Df)"
+        }
+      ]
+    }
+  ]
 }

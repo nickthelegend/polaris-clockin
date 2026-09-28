@@ -1,7 +1,7 @@
 {
   "schedule": "0 * * * * *",
   "chainSelectorName": "monad-testnet",
-  "receiver": "0xF8259426519d7908e7AF63f20aea3FfCF52426D8",
+  "receiver": "0x4c99136634F670cd59E73fc284fED164C662e3Df",
   "forwarder": "0xB9F79d863261869B234c481D1f9A7af84AeAd192",
   "priceFeed": {
     "chainSelectorName": "monad-mainnet",
