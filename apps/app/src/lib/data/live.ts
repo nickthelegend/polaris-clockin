@@ -1,10 +1,11 @@
 import { type Address, getAddress, type Hex, parseAbi, zeroAddress } from "viem";
+import { accountCreatedAt } from "../account";
 import { api } from "../api";
 import { publicClient } from "../chain";
 import { resolveContract } from "../domains";
 import type { Micros } from "../money";
 import { prefsName } from "../prefs";
-import { hasDataListeners, notifyDataChanged, onDataChanged } from "./changes";
+import { dataGeneration, hasDataListeners, notifyDataChanged, onDataChanged } from "./changes";
 import { getRemotePaymentLink } from "./remote";
 import type {
   ActivityItem,
@@ -30,7 +31,11 @@ import type {
  *   provider behind it (Nansen, Zerion).
  * - Plans, subscriptions, activity: `GET /api/public/buyers/{owner}`, the
  *   records the API's chain sync keeps from PlanOpened, PaymentMade and the
- *   subscription events.
+ *   subscription events, and every other dollar in or out of the account
+ *   (`moves`: money added, transfers, send links made and claimed,
+ *   instalments), read from the chain's AUSD and PolarisSend logs.
+ * - Member since: when this device created the account (Face ID's record,
+ *   or the dev signer's), or its first move on chain.
  * - A send link: `PolarisSend.linkOf(linkKey)` and `keyUsed(linkKey)`.
  *
  * Contacts are a local address book the app doesn't keep yet: none, rather
@@ -49,6 +54,8 @@ type CreditStatus = {
   onChain: { underwritten: boolean; declined: boolean; score: number; creditLimitUnits: string; activeDebtUnits?: string } | null;
   decision: {
     status: "applied" | "refused" | "thin";
+    score?: number | null;
+    at?: string;
     reason: string | null;
     linkedWallet: Address | null;
     explanation: { reasons: Array<{ text: string; points: number | null; provider: string | null }> } | null;
@@ -78,6 +85,19 @@ type BuyerBook = {
     createdAt: string;
   }>;
   payments: Array<{ id: string; kind: "now" | "later"; merchant: ApiMerchant; amountUnits: string; txHash: Hex; createdAt: string }>;
+  /** Older APIs leave it out. */
+  moves?: Array<{
+    id: string;
+    kind: "added" | "received" | "sent" | "sent-link" | "claimed" | "link-returned" | "payment" | "refund" | "instalment";
+    direction: "in" | "out";
+    amountUnits: string;
+    counterparty: Address;
+    txHash: Hex;
+    linkKey: Address | null;
+    settledAs: "claimed" | "returned" | null;
+    settledAt: string | null;
+    at: string;
+  }>;
 };
 
 /** How the underwriting package names its providers. */
@@ -141,6 +161,45 @@ function toSubscription(s: BuyerBook["subscriptions"][number]): Subscription {
   };
 }
 
+const short = (a: Address) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+
+type Move = NonNullable<BuyerBook["moves"]>[number];
+
+/** A move the payment rows don't already show, as the row the buyer reads. */
+function moveRow(m: Move, merchants: Map<string, Merchant>): ActivityItem | null {
+  const base = { id: `move-${m.id}`, direction: m.direction, amount: BigInt(m.amountUnits), at: Date.parse(m.at), txHash: m.txHash, status: "settled" as const };
+  const merchant = merchants.get(m.counterparty.toLowerCase());
+  const who = merchant ? { kind: "merchant" as const, name: merchant.name } : { kind: "person" as const, name: short(m.counterparty) };
+  switch (m.kind) {
+    case "added":
+      return { ...base, kind: "added", title: "Added money", detail: "To your dollar account", counterparty: { kind: "polaris", name: "Added money" } };
+    case "received":
+      return { ...base, kind: "received", title: who.name, detail: "Received", counterparty: who };
+    case "sent":
+      return { ...base, kind: "sent", title: who.name, detail: "Sent", counterparty: who };
+    case "sent-link":
+      return {
+        ...base,
+        kind: "sent-link",
+        title: "Link for anyone",
+        detail: m.settledAs === "claimed" ? "Claimed" : m.settledAs === "returned" ? "Cancelled" : "Waiting to be claimed",
+        counterparty: { kind: "polaris", name: "Link for anyone" },
+        ...(m.linkKey ? { linkKey: getAddress(m.linkKey) } : {}),
+        ...(m.settledAt ? { settledAt: Date.parse(m.settledAt) } : {}),
+      };
+    case "claimed":
+      return { ...base, kind: "claimed", title: "Sent by link", detail: "Link claimed", counterparty: { kind: "polaris", name: "Send link" } };
+    case "link-returned":
+      return { ...base, kind: "refund", title: "Link cancelled", detail: "Back in your account", counterparty: { kind: "polaris", name: "Link cancelled" } };
+    case "refund":
+      return { ...base, kind: "refund", title: merchant?.name ?? "Refund", detail: "Refund", counterparty: { kind: "merchant", name: merchant?.name ?? "Refund" } };
+    case "instalment":
+      return { ...base, kind: "instalment", title: "Pay in 4", detail: "Instalment paid", counterparty: { kind: "polaris", name: "Pay in 4" } };
+    case "payment":
+      return null;
+  }
+}
+
 function toActivity(book: BuyerBook): ActivityItem[] {
   const items: ActivityItem[] = book.payments.map((p) => ({
     id: `pay-${p.id}`,
@@ -154,22 +213,85 @@ function toActivity(book: BuyerBook): ActivityItem[] {
     txHash: p.txHash,
     status: "settled",
   }));
+  const merchants = new Map<string, Merchant>();
+  for (const r of [...book.plans, ...book.subscriptions, ...book.payments]) merchants.set(r.merchant.address.toLowerCase(), merchantOf(r.merchant));
+  const shown = new Set(book.payments.map((p) => p.txHash.toLowerCase()));
+  const moves = book.moves ?? [];
+  for (const m of moves) {
+    const row = moveRow(m, merchants);
+    if (row) items.push(row);
+  }
+  // A payment's transfers the payment rows don't cover (a subscription's monthly charge): one row per transaction.
+  const unshown = new Map<string, Move[]>();
+  for (const m of moves) if (m.kind === "payment" && !shown.has(m.txHash.toLowerCase())) unshown.set(m.txHash, [...(unshown.get(m.txHash) ?? []), m]);
+  for (const [txHash, parts] of unshown) {
+    const to = parts.map((p) => merchants.get(p.counterparty.toLowerCase())).find((m): m is Merchant => m !== undefined);
+    const subscribed = to !== undefined && book.subscriptions.some((s) => s.merchant.address.toLowerCase() === to.address.toLowerCase());
+    items.push({
+      id: `move-${parts[0]!.id}`,
+      kind: subscribed ? "subscription" : "payment",
+      title: to?.name ?? "Payment",
+      detail: subscribed ? "Subscription" : "Paid in full",
+      direction: "out",
+      amount: parts.reduce((s, p) => s + BigInt(p.amountUnits), 0n),
+      at: Date.parse(parts[0]!.at),
+      counterparty: to ? { kind: "merchant", name: to.name } : { kind: "polaris", name: "Payment" },
+      txHash: txHash as Hex,
+      status: "settled",
+    });
+  }
   return items.sort((a, b) => b.at - a.at);
 }
 
-async function book(owner: Address): Promise<BuyerBook> {
-  return api<BuyerBook>(`/api/public/buyers/${owner}`);
+type Shared<T> = Map<string, { generation: number; at: number; value: Promise<T> }>;
+
+/**
+ * One request per owner per change: every screen reads the book when data
+ * changes (a relay, a review, the 15 s tick), and they share it. A read more
+ * than a few seconds after the last one fetches again.
+ */
+function shared<T>(cache: Shared<T>, key: string, read: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
+  if (hit && hit.generation === dataGeneration() && Date.now() - hit.at < 5_000) return hit.value;
+  const value = read();
+  cache.set(key, { generation: dataGeneration(), at: Date.now(), value });
+  value.catch(() => {
+    if (cache.get(key)?.value === value) cache.delete(key);
+  });
+  return value;
+}
+
+const books: Shared<BuyerBook> = new Map();
+const credits: Shared<CreditStatus> = new Map();
+
+function book(owner: Address): Promise<BuyerBook> {
+  return shared(books, owner.toLowerCase(), () => api<BuyerBook>(`/api/public/buyers/${owner}`));
+}
+
+function creditStatus(owner: Address): Promise<CreditStatus> {
+  return shared(credits, owner.toLowerCase(), () => api<CreditStatus>(`/api/public/credit/${owner}`));
+}
+
+/** The first thing the chain shows for this owner, in ms, or null. */
+function firstSeen(b: BuyerBook): number | null {
+  const times = [
+    ...(b.moves ?? []).map((m) => Date.parse(m.at)),
+    ...b.payments.map((p) => Date.parse(p.createdAt)),
+    ...b.plans.map((p) => p.startedAt * 1000),
+    ...b.subscriptions.map((s) => Date.parse(s.createdAt)),
+  ].filter((t) => Number.isFinite(t));
+  return times.length ? Math.min(...times) : null;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
-/** Tell every screen to read again: after a relay or a review, and every 15 s while one is open. */
-export const notifyLiveDataChanged = notifyDataChanged;
-
 export const liveData: PolarisData = {
-  async getProfile(): Promise<Profile> {
-    // The name is the one the buyer chose on this device (their send links carry it); nothing else is known.
-    return { name: prefsName(), memberSince: Date.now() };
+  async getProfile(owner): Promise<Profile> {
+    // The name is the one the buyer chose on this device (their send links carry it).
+    const created = accountCreatedAt(owner);
+    const seen = owner ? await book(owner).then(firstSeen, () => null) : null;
+    const known = [created, seen].filter((t): t is number => t !== null);
+    return { name: prefsName(), memberSince: known.length ? Math.min(...known) : Date.now() };
   },
 
   async getBalance(owner): Promise<Balance> {
@@ -180,9 +302,21 @@ export const liveData: PolarisData = {
   },
 
   async getCreditLine(owner): Promise<CreditLine> {
-    const empty: CreditLine = { limit: 0n, available: 0n, used: 0n, score: 0, aprBps: APR_BPS, nextPayment: null, reasons: [], historyLinked: false, openingCap: 0n };
+    const empty: CreditLine = {
+      limit: 0n,
+      available: 0n,
+      used: 0n,
+      score: 0,
+      aprBps: APR_BPS,
+      nextPayment: null,
+      reasons: [],
+      historyLinked: false,
+      openingCap: OPENING_CAP,
+      openedAt: null,
+      openingScore: null,
+    };
     if (!owner) return empty;
-    const [status, plans] = await Promise.all([api<CreditStatus>(`/api/public/credit/${owner}`), book(owner).then((b) => b.plans.map(toPlan))]);
+    const [status, plans] = await Promise.all([creditStatus(owner), book(owner).then((b) => b.plans.map(toPlan))]);
     const limit = BigInt(status.onChain?.creditLimitUnits ?? "0");
     const used = BigInt(status.onChain?.activeDebtUnits ?? "0");
     let nextPayment: CreditLine["nextPayment"] = null;
@@ -209,6 +343,9 @@ export const liveData: PolarisData = {
       historyLinked: Boolean(status.decision?.linkedWallet),
       // ScoreManager caps an opening line at $1,000; paying on time raises it from there.
       openingCap: limit > OPENING_CAP ? limit : OPENING_CAP,
+      // The line and its score start at the CRE decision that opened them.
+      openedAt: limit > 0n && status.decision?.status === "applied" && status.decision.at ? Date.parse(status.decision.at) : null,
+      openingScore: status.decision?.status === "applied" ? (status.decision.score ?? null) : null,
     };
   },
 

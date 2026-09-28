@@ -56,6 +56,10 @@ export type CreditLine = {
   historyLinked: boolean;
   /** The opening line never goes past this; higher tiers come from repaying. */
   openingCap: Micros;
+  /** When the line opened (the CRE decision); null when not known. The sample book leaves it out. */
+  openedAt?: number | null;
+  /** The score the line opened with; its history starts there. */
+  openingScore?: number | null;
 };
 
 export type Instalment = {
@@ -122,6 +126,8 @@ export type ActivityItem = {
   planId?: string;
   /** A send link's key, so its sender can take an unclaimed link back. */
   linkKey?: Address;
+  /** A sent link: when it was claimed (or taken back). */
+  settledAt?: number;
 };
 
 export type PlanOffer = {

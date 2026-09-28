@@ -410,6 +410,19 @@ export function signOut(opts: { forget?: boolean } = {}): void {
   emit();
 }
 
+/**
+ * When the account on this device was created (Face ID's record, or the dev
+ * signer's), or null when it isn't this address's or isn't known (an email
+ * account). Never prompts.
+ */
+export function accountCreatedAt(address: Address | null): number | null {
+  if (typeof window === "undefined" || !address) return null;
+  const mine = (a: Address | null | undefined) => Boolean(a) && a!.toLowerCase() === address.toLowerCase();
+  if (DEV_SIGNER) return devModule && mine(devModule.devStoredAddress()) ? devModule.devCreatedAt() : null;
+  const stored = loadStoredAccount();
+  return stored && mine(stored.address) ? stored.createdAt : null;
+}
+
 /** The device's public Face ID account record (Mera path only). */
 export function storedAccount(): StoredAccount | null {
   return typeof window === "undefined" || DEV_SIGNER ? null : loadStoredAccount();

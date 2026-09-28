@@ -272,13 +272,20 @@ export function notices(
         id: `in-${a.id}`,
         at: a.at,
         kind: "in",
-        title: a.kind === "added" ? `${usd(a.amount)} added` : a.kind === "refund" ? `${usd(a.amount)} back in your account` : `${usd(a.amount)} from ${a.title}`,
+        title:
+          a.kind === "added"
+            ? `${usd(a.amount)} added`
+            : a.kind === "refund"
+              ? `${usd(a.amount)} back in your account`
+              : a.kind === "claimed" && a.counterparty.kind === "polaris"
+                ? `${usd(a.amount)} received by link`
+                : `${usd(a.amount)} from ${a.title}`,
         detail: a.kind === "claimed" ? "You claimed their link" : a.detail,
         href: `/activity/${a.id}`,
       });
     }
     if (a.kind === "sent-link" && a.detail === "Claimed") {
-      list.push({ id: `claimed-${a.id}`, at: a.at, kind: "claimed", title: "Your link was claimed", detail: `${usd(a.amount)} arrived`, href: `/activity/${a.id}` });
+      list.push({ id: `claimed-${a.id}`, at: a.settledAt ?? a.at, kind: "claimed", title: "Your link was claimed", detail: `${usd(a.amount)} arrived`, href: `/activity/${a.id}` });
     }
     if (a.kind === "plan-opened") {
       const plan = plans.find((p) => p.id === a.planId);

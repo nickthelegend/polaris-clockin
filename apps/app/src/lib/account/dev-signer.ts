@@ -81,6 +81,12 @@ export function devStoredAddress(): Hex | null {
   return record ? privateKeyToAccount(record.privateKey).address : null;
 }
 
+/** When the dev account was created, for "Member since". */
+export function devCreatedAt(): number | null {
+  assertEnabled();
+  return read()?.createdAt ?? null;
+}
+
 export function devForget(): void {
   assertEnabled();
   try {

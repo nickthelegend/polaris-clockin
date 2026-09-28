@@ -23,7 +23,7 @@ import { useRouter } from "next/navigation";
 import { type ReactNode, useMemo, useState } from "react";
 import { useAccounts } from "@/components/accounts";
 import { useOwner } from "@/lib/account/hooks";
-import { getActivity, getPlans } from "@/lib/data";
+import { getActivity, getPlans, getProfile, SAMPLE_DATA } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { toNumber } from "@/lib/money";
 import { type HomeAccount, setPrefs } from "@/lib/prefs";
@@ -74,6 +74,7 @@ function BalanceChart({ className }: { className?: string }) {
   const owner = useOwner();
   const activity = useData(() => getActivity(owner), [owner]);
   const plans = useData(() => getPlans(owner), [owner]);
+  const profile = useData(() => getProfile(owner), [owner]);
   const { selected, balance, credit } = useAccounts();
   const account: HomeAccount = selected?.id ?? "dollar";
   const [frame, setFrame] = useState<Frame>("1w");
@@ -87,8 +88,10 @@ function BalanceChart({ className }: { className?: string }) {
     if (!now) return null;
     if (account === "boost") return emptySeries(frame, now);
     if (account === "later") return credit && plans.value ? creditSeries(credit, plans.value.plans, frame, now) : null;
-    return balance && activity.value ? balanceSeries(toNumber(balance.available), activity.value, frame, now) : null;
-  }, [account, frame, now, balance, credit, activity.value, plans.value]);
+    // A real account's line starts when it was opened (never a week it didn't exist); the sample book draws the whole frame.
+    if (!balance || !activity.value || (!SAMPLE_DATA && !profile.value)) return null;
+    return balanceSeries(toNumber(balance.available), activity.value, frame, now, SAMPLE_DATA ? undefined : (profile.value?.memberSince ?? null));
+  }, [account, frame, now, balance, credit, activity.value, plans.value, profile.value]);
 
   const time = timeLabel(frame);
   const f = FRAMES[frame];
@@ -113,7 +116,13 @@ function BalanceChart({ className }: { className?: string }) {
         delta={chip ? chip.delta : undefined}
         deltaSuffix={f.suffix}
         deltaLabel={chip?.label}
-        deltaTitle={series ? `From ${dollars(series.start)} at the start of ${f.title}` : undefined}
+        deltaTitle={
+          series
+            ? now && series.points[0] && series.points[0].t > now - f.span + 60_000
+              ? `From ${dollars(series.start)} when it opened`
+              : `From ${dollars(series.start)} at the start of ${f.title}`
+            : undefined
+        }
         badge={withSample()}
         valueTitle={`${what}, now`}
         right={<TimeframeChips options={["1h", "24h", "1w", "1m"] as const} value={frame} onValueChange={setFrame} aria-label="Timeframe" />}
@@ -169,7 +178,9 @@ function BalanceChart({ className }: { className?: string }) {
  * change today". FigureRow adds the suffix only to a figure (`delta` a
  * number), so a finished label passes `delta: null`.
  */
-function chipFor(series: Series, suffix: string): { delta: number | null; label?: string } {
+function chipFor(series: Series, suffix: string): { delta: number | null; label?: string } | null {
+  // A history the moves don't explain claims no change at all.
+  if (!series.explained) return null;
   const change = series.end - series.start;
   if (Math.abs(change) < 0.005) return { delta: 0, label: "No change" };
   if (series.deltaPct !== null && Math.abs(series.deltaPct) < 1000) return { delta: series.deltaPct };

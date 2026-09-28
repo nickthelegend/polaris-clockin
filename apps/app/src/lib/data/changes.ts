@@ -5,6 +5,12 @@
  */
 
 const listeners = new Set<() => void>();
+let generation = 0;
+
+/** Bumped on every change: reads made in one generation can share one request. */
+export function dataGeneration(): number {
+  return generation;
+}
 
 export function onDataChanged(listener: () => void): () => void {
   listeners.add(listener);
@@ -12,6 +18,7 @@ export function onDataChanged(listener: () => void): () => void {
 }
 
 export function notifyDataChanged(): void {
+  generation++;
   for (const listener of listeners) listener();
 }
 
