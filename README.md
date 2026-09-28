@@ -24,11 +24,15 @@ Built for [Monad Metropolis](https://monad.xyz/developers/hackathons/metropolis)
 Track 02: Consumer Products & Payments. The plan is in
 [`docs/plan.md`](docs/plan.md).
 
-> **Status (28 Sep 2026):** the whole product runs end to end on a local chain
-> with one command (`pnpm demo:local`, below). Nothing is deployed to Monad
-> testnet yet: the deployer holds 5 MON (checked 28 Sep, nonce 0) but has not
-> deployed, and there is no testnet AUSD, so a deploy now would use the
-> labelled MockAUSD (see [What only you can do](#what-only-you-can-do)).
+> **Status (28 Sep 2026):** Polaris is live on **Monad testnet**. Every
+> contract is deployed and wired, and read back on chain (65 of 65), and the
+> smoke test ran Pay now and Pay in 4 through the API and the relayer. The
+> addresses are in [Monad testnet deployment](#monad-testnet-deployment). The
+> dollar there is a clearly labelled **mock** (`MockAUSD`), because the
+> deployer held no testnet AUSD. The whole product also runs end to end on a
+> local chain with one command (`pnpm demo:local`, below). The Chainlink CRE
+> workflows are built and tested, but their `simulate --broadcast` runs on
+> Monad testnet wait for `cre login` ([Chainlink CRE](#chainlink-cre-an-orchestration-layer)).
 
 ---
 
@@ -119,16 +123,16 @@ the API. Each app's README lists its environment.
 
 | Package | Command | Result on this branch |
 |---|---|---|
-| Contracts | `pnpm --filter @polarispay/contracts test` | 516 passing |
-| `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 148 passing; ESM and CJS builds |
+| Contracts | `pnpm --filter @polarispay/contracts test` | 524 passing |
+| `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 151 passing; ESM and CJS builds |
 | Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 263 passing |
 | Gateway | `pnpm --filter @polarispay/gateway test` | 7 passing |
 | `@polaris/db` | `pnpm --filter @polaris/db test` | 29 passing |
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
-| CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 195 passing; all three workflows compile to WASM |
-| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 226 passing; the API auth check covers every route |
-| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 5 passing (the Chainlink states); 43 signature checks against the Solidity typehashes |
+| CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 196 passing; all three workflows compile to WASM |
+| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 230 passing; the API auth check covers every route |
+| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 8 passing (the Chainlink states, the dollar it signs for); 43 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 88 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
 | Chainlink FX rates | `pnpm --filter @polaris/fx test`, `typecheck` (`check:live` reads every feed) | 41 passing |
@@ -137,6 +141,8 @@ the API. Each app's README lists its environment.
 | | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
 | | `pnpm --filter @polarispay/contracts e2e:local` | all twelve flows (the credit guard and `reauthorize` among them); the buyer, sender and freelancer never hold MON |
 | | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 passing (all three workflows and every trigger against real contracts on a local node) |
+| Monad testnet | `pnpm --filter @polarispay/contracts check:deployment:monad` | 65 of 65 (every address has code, every role and threshold as recorded; read-only) |
+| | `pnpm --filter @polaris/business smoke:testnet -- --run` | 10 of 10 (Pay now, Pay in 4, a re-signed approval, relayed on Monad testnet; [hashes](packages/contracts/deployments/monad-testnet.smoke.json)) |
 | Lockfile | `pnpm install --frozen-lockfile` | passes |
 
 ---
@@ -166,10 +172,76 @@ the API. Each app's README lists its environment.
 
 ---
 
+## Monad testnet deployment
+
+Deployed on 28 Sep 2026 by `pnpm --filter @polarispay/contracts deploy:monad`
+from `0x6Df4a0b84BD608123D1f3412709AcaC69523c115` (34 transactions, 2.94 MON).
+The files behind it:
+
+- the record:
+  [`packages/contracts/deployments/monad-testnet.json`](packages/contracts/deployments/monad-testnet.json)
+- the script's output:
+  [`monad-testnet.deploy.txt`](packages/contracts/deployments/monad-testnet.deploy.txt)
+- every transaction, decoded:
+  [`monad-testnet.transactions.json`](packages/contracts/deployments/monad-testnet.transactions.json)
+- the read-back, 65 of 65 checks:
+  [`monad-testnet.check.txt`](packages/contracts/deployments/monad-testnet.check.txt)
+
+Chain 10143; explorer [testnet.monadscan.com](https://testnet.monadscan.com).
+
+| Contract | Address | Deployed in |
+|---|---|---|
+| Stablecoin: **MockAUSD**, a mock dollar for the testnet demo, labelled "Mock AUSD" (anyone can mint it; the deployer held no testnet AUSD, decision 24) | [`0x3F9554F15f58Bb5900822224f37A05be81eF9723`](https://testnet.monadscan.com/address/0x3F9554F15f58Bb5900822224f37A05be81eF9723) | [`0x117e473e…`](https://testnet.monadscan.com/tx/0x117e473ec59c69168cbd4a3901e140ee2af3d8e4593ca5af2e46b69866367239) |
+| ScoreManager | [`0xB3D34eF62Cb64b985C230079D2815787619E6061`](https://testnet.monadscan.com/address/0xB3D34eF62Cb64b985C230079D2815787619E6061) | [`0xef12c071…`](https://testnet.monadscan.com/tx/0xef12c0718ccb1fb7f2552d143e8de507f568a4646627c892caeff017be70854c) |
+| PolarisLoanEngine (the credit pool: 10,000 mock dollars) | [`0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a`](https://testnet.monadscan.com/address/0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a) | [`0xe8c4f3bf…`](https://testnet.monadscan.com/tx/0xe8c4f3bf90429faea48931eb0b5c2da008bc691ebe0f9921b865f654d56a374f) |
+| PolarisPayments | [`0x7C774CF3E664B10057Cb2dDa66bA298e831292F1`](https://testnet.monadscan.com/address/0x7C774CF3E664B10057Cb2dDa66bA298e831292F1) | [`0x056b4738…`](https://testnet.monadscan.com/tx/0x056b47385754c208dc2d696b9ce4b8fe7c2090dc844c3bc75b8dde194609e18e) |
+| MerchantRegistry | [`0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4`](https://testnet.monadscan.com/address/0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4) | [`0x50637e33…`](https://testnet.monadscan.com/tx/0x50637e33dde8b8ba6401ac9c9a0dc1714d0ba0c1e649dc381d18ecabb9c636fa) |
+| CollateralVault | [`0xD0e777f8DfA2E62F500054E85F815fC54fae3E72`](https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72) | [`0xcbd8ef90…`](https://testnet.monadscan.com/tx/0xcbd8ef906cbdc850f01c534c8610b5dbc29ac63ed84a054ab408a78423a70fb9) |
+| BatchSettlement | [`0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53`](https://testnet.monadscan.com/address/0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53) | [`0x28d8c131…`](https://testnet.monadscan.com/tx/0x28d8c131cc2b7bb3fe9aa5805e5e9af32274ba17fb04302752a8dbea7f81d083) |
+| PolarisSend | [`0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55`](https://testnet.monadscan.com/address/0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55) | [`0x9f81549c…`](https://testnet.monadscan.com/tx/0x9f81549cd07cf46f018c77f175f596ab7cf535f484f87bf6079ce57fb84924b9) |
+| PolarisCheckout | [`0x3874ef1bcE222755525a96f8284631780b9bC70B`](https://testnet.monadscan.com/address/0x3874ef1bcE222755525a96f8284631780b9bC70B) | [`0x5df03907…`](https://testnet.monadscan.com/tx/0x5df039074ed9a5b6e11c517955b42393a430d369a12c554096316a1d64dc020c) |
+| CollectionsReceiver (CRE) | [`0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC`](https://testnet.monadscan.com/address/0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC) | [`0x0ac454dd…`](https://testnet.monadscan.com/tx/0x0ac454dd6f28fea4ef998bbf63f0cc72e9d84ecc4cf725b8077dd3cf04bcc379) |
+| UnderwritingReceiver (CRE) | [`0x523e9791d0e324525F66F91b21B478C18e284a19`](https://testnet.monadscan.com/address/0x523e9791d0e324525F66F91b21B478C18e284a19) | [`0xf643b392…`](https://testnet.monadscan.com/tx/0xf643b392792f7f2a0c07edbf8e91a469e463fd065a9ef5d40b8bc59862f64c4a) |
+| GuardianReceiver (CRE) | [`0xF8259426519d7908e7AF63f20aea3FfCF52426D8`](https://testnet.monadscan.com/address/0xF8259426519d7908e7AF63f20aea3FfCF52426D8) | [`0xe717c54d…`](https://testnet.monadscan.com/tx/0xe717c54d4ce41e4164ded7ddbb31e65a40c666ec94b4d056842d2dd0f35f2369) |
+
+| Also on Monad testnet | Address |
+|---|---|
+| Chainlink's simulation forwarder, which the receivers trust | [`0xB9F79d863261869B234c481D1f9A7af84AeAd192`](https://testnet.monadscan.com/address/0xB9F79d863261869B234c481D1f9A7af84AeAd192) |
+| CRE simulation transmitter (`CRE_ETH_PRIVATE_KEY`, 1 MON) | [`0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6`](https://testnet.monadscan.com/address/0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6) |
+| Dev relayer (the Privy server wallet's stand-in; PolarisPayments and MerchantRegistry operator, BatchSettlement settler) | [`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69) |
+| Demo merchant "Polaris Demo Studio" (registered by its own signature, active, $1,000 cap; subscription plans #1 and #2) | [`0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185`](https://testnet.monadscan.com/address/0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185) |
+
+**The smoke test** (`pnpm --filter @polaris/business smoke:testnet -- --run`,
+10 of 10, every hash in
+[`monad-testnet.smoke.json`](packages/contracts/deployments/monad-testnet.smoke.json)):
+Polaris for Business ran against this deployment with the dev relayer, and a
+fresh buyer signed each step:
+
+- **Pay now** $25: [`0x5d533afe…`](https://testnet.monadscan.com/tx/0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2),
+  followed by a `payment.succeeded` webhook verified with polarispay-sdk.
+- **Pay in 4** $200: [`0x4af42348…`](https://testnet.monadscan.com/tx/0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d),
+  plan #1, followed by a `plan.opened` webhook.
+- A lost approval **signed again**: [`0xf02c45bd…`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002),
+  which emitted `Reauthorized`.
+
+The buyer's Pay in 4 line is secured: the buyer locked $202 in
+CollateralVault itself. An unsecured line needs the CRE underwriting report,
+which waits for `cre login`. Apart from those two calls and one approval,
+the buyer sent nothing: every Polaris step was a signature the dev relayer
+carried.
+
+The SDK presets (`packages/sdk/src/deployments.ts`), the indexer
+(`packages/indexer/config.yaml`, from block 66288120), the CRE staging configs
+and the apps' `.env.example` files carry these addresses; tests hold each of
+them to the record.
+
+---
+
 ## Bounty evidence
 
 What each sponsor asks for, where this repository meets it, and how to check.
-"Local" means the `pnpm demo:local` chain; nothing is on Monad testnet yet.
+"Local" means the `pnpm demo:local` chain; "testnet" means the
+[Monad testnet deployment](#monad-testnet-deployment).
 
 ### Monad (Track 02: consumer products and payments)
 
@@ -177,7 +249,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 |---|---|---|
 | A consumer payments product on Monad | Pay by link, Pay now, Pay in 4, subscriptions, send by link, payouts: `packages/contracts/contracts/PolarisCheckout.sol`, `PolarisSend.sol`, `apps/app`, `apps/business` | `pnpm demo:local`, `docs/demo` |
 | Gasless for the user | Every buyer action is an EIP-712 / ERC-3009 signature relayed by `apps/business` `POST /api/relay`; the buyer holds no MON | `pnpm --filter @polarispay/contracts e2e:local` (buyer, sender and freelancer end with 0 MON) |
-| Contract addresses on a Monad network | *Not yet*: `deploy:monad` is ready and refuses mainnet | [What only you can do](#what-only-you-can-do), step 1 |
+| Contract addresses on a Monad network | Monad testnet, 28 Sep 2026: [every address and transaction](#monad-testnet-deployment) (`deploy:monad` refuses mainnet) | `pnpm --filter @polarispay/contracts check:deployment:monad` (65 of 65); `pnpm --filter @polaris/business smoke:testnet -- --run` (10 of 10) |
 
 ### Agora: AUSD cross-border payments
 
@@ -205,48 +277,162 @@ What each sponsor asks for, where this repository meets it, and how to check.
 
 ### Chainlink CRE: an orchestration layer
 
-Three CRE workflows (`@chainlink/cre-sdk` 1.22.0, CLI v1.35.0), between them
-using all three trigger types (HTTP, cron, EVM log), orchestrate Polaris's credit. Each ends in a signed report that
-Chainlink's forwarder delivers to a receiver on Monad, and each report changes
-what the product does. Full reference: [`workflows/README.md`](workflows/README.md).
+Three CRE workflows (`@chainlink/cre-sdk` 1.22.0, CLI v1.35.0) run Polaris's
+credit. Between them they use all three trigger types (HTTP, cron and EVM
+log). Each run ends in a signed report that Chainlink's forwarder delivers to
+a Polaris receiver on Monad, and every report changes what the product does
+next: whether a buyer gets a line, whether an instalment is collected, and
+whether a new Pay in 4 plan can open. The full reference is
+[`workflows/README.md`](workflows/README.md).
 
-| Capability | Workflow and trigger | What it does on chain | Code | Seen working |
-|---|---|---|---|---|
-| Underwriting | `polaris-underwrite`, **HTTP trigger**, fired by the API when a buyer taps Raise your limit | `UnderwritingReceiver` → `ScoreManager` scores the attested facts and opens the line (lines open only from these reports) | `workflows/src/underwriting/`, `packages/contracts/contracts/cre/UnderwritingReceiver.sol` | [`04-underwrite-limit-raised`](docs/demo/chainlink/04-underwrite-limit-raised.png), [`07-credit-verified-by-chainlink-cre`](docs/demo/chainlink/07-credit-verified-by-chainlink-cre.png) |
-| Collections | `polaris-collections`, **cron** | `CollectionsReceiver` collects due Pay in 4 instalments and subscription renewals, liquidates past grace; failures are dunned | `workflows/src/collections/workflow.ts`, `CollectionsReceiver.sol` | [`14-app-home-sign-again`](docs/demo/chainlink/14-app-home-sign-again.png) (a failed collection, dunned) |
-| Instant retry | `polaris-collections`, **EVM log trigger** on `PolarisCheckout.Reauthorized` | A buyer whose approval was lost signs once (`reauthorize`, relayed); the log fires a run that collects in the next block, not at the 6 h rung | `workflows/src/collections/retry.ts`, `PolarisCheckout.reauthorize` | [`17-app-plan-collected`](docs/demo/chainlink/17-app-plan-collected.png), [`19-dashboard-chainlink-runs`](docs/demo/chainlink/19-dashboard-chainlink-runs.png) |
-| Risk guard | `polaris-guardian`, **cron**, two chains in one run: **Chainlink AUSD/USD on Monad mainnet** and the pool on Monad testnet | `GuardianReceiver` re-evaluates the verdict; `PolarisCheckout.openPlan` refuses new Pay in 4 plans while it says paused (`CreditPausedByGuardian`); Pay now, Send and Subscribe never ask; stale fails open | `workflows/src/guardian/`, `GuardianReceiver.sol` | [`08-dashboard-chainlink-paused`](docs/demo/chainlink/08-dashboard-chainlink-paused.png) to [`13-shop-pay-in-4-resumed`](docs/demo/chainlink/13-shop-pay-in-4-resumed.png) |
-| Pool health feed | `GuardianReceiver` is also an `AggregatorV3Interface`: "Polaris pool health, computed by CRE" (not a Chainlink feed or Proof of Reserve) | `latestRoundData()` = lendable cash at the attested price, 0 while paused | `GuardianReceiver.sol` | the dashboard's Pool health feed panel |
-| Confidential HTTP | `polaris-underwrite`'s Nansen, Zerion and Etherscan calls, behind `confidentialHttp` (on in staging and local, off in production until the DON serves it) | keeps provider keys out of node memory once deployed | `workflows/src/underwriting/evidence.ts` | unit tests only (see its limits in the workflows README) |
-| Local currency (Data Feeds, not CRE) | `packages/fx` reads Chainlink FX feeds server-side (Monad mainnet for EUR, GBP, JPY, CHF, CAD; Ethereum, Polygon, Base for 18 more) | none: read only, labelled indicative | `packages/fx`, `apps/app/src/app/api/fx` | [`01-fx-send-ars`](docs/demo/chainlink/01-fx-send-ars.png) |
+| Workflow | What it orchestrates | Trigger | CRE capabilities used | Code | Receiver on Monad testnet |
+|---|---|---|---|---|---|
+| `polaris-underwrite` | A buyer's credit line. The API fires it when the buyer taps **Raise your limit**. It checks the buyer's consent and history-wallet proof, gathers wallet facts (Nansen, Zerion, Etherscan, public RPCs), and refuses thin files. It attests the facts, and `ScoreManager` scores them on chain. Unsecured lines open only from these reports (`requireUnderwriting`). | **HTTP** | HTTP trigger; HTTP client with consensus; **Confidential HTTP** (a switch); EVM read (`profileOf`, `linkedUserOf`, `balanceOf`); signed report → EVM write | `workflows/src/underwriting/`, `workflows/underwriting/main.ts` | `UnderwritingReceiver` [`0x523e…4a19`](https://testnet.monadscan.com/address/0x523e9791d0e324525F66F91b21B478C18e284a19) |
+| `polaris-collections` | Every due Pay in 4 instalment and subscription renewal, plus liquidation past grace. It finds candidates (Envio, or the chain), checks each with `checkTasks`, and backs off along the dunning ladder. Failures are reported to the API through a signed callback. | **Cron** (every minute in staging, daily in production) | Cron trigger; EVM read; HTTP (Envio, the callback); signed report → EVM write | `workflows/src/collections/workflow.ts`, `tasks.ts`, `backoff.ts` | `CollectionsReceiver` [`0x4201…45CC`](https://testnet.monadscan.com/address/0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC) |
+| `polaris-collections` (instant retry) | A buyer whose approval was lost signs once (`PolarisCheckout.reauthorize`, relayed). The `Reauthorized` log starts a run that collects what that buyer owes (`dueTasksFor`) in the next block, without waiting for the 6-hour rung. | **EVM log** on `PolarisCheckout.Reauthorized` (finalized) | Log trigger; EVM read; signed report → EVM write | `workflows/src/collections/retry.ts`, `PolarisCheckout.reauthorize` | the same `CollectionsReceiver` |
+| `polaris-guardian` | The risk guard. It reads **Chainlink AUSD/USD on Monad mainnet** and the pool on Monad testnet in one run. Its verdict is depeg (< $0.995), free cash (< $1,000), bad debt (> 5%) or a stale price (> 2 h). `GuardianReceiver` re-checks every verdict. `PolarisCheckout.openPlan` refuses new Pay in 4 plans while it says paused; Pay now, Send and Subscribe never ask. A stale verdict fails open. | **Cron** (every minute in staging, every 10 min in production) | Cron trigger; EVM reads on **two chains** (mainnet feed, testnet pool at one finalized block); signed report → EVM write | `workflows/src/guardian/`, `workflows/guardian/main.ts` | `GuardianReceiver` [`0xF825…26D8`](https://testnet.monadscan.com/address/0xF8259426519d7908e7AF63f20aea3FfCF52426D8) |
 
-**End to end, headless** (`DEMO_FAST_PLANS=1 pnpm demo:local`, then
-`pnpm demo:e2e:chainlink`; [`docs/demo/chainlink`](docs/demo/chainlink/README.md)):
-**18 of 18 steps passed** (28 Sep 2026): an Argentine buyer sees the Send amount
-in pesos at Chainlink's USD / ARS rate; Raise your limit runs `polaris-underwrite`
-and opens a $1,000 line on chain ("Verified by Chainlink CRE"); Pay in 4 opens a
-plan; the owner raises the depeg threshold to $1.001 (**threshold raised for
-demo**, captioned on every paused screen) and the guardian's next scheduled run,
-reading Chainlink AUSD/USD 0.99983039 on Monad mainnet, pauses new Pay in 4 plans
-on chain (`creditPaused() = (true, 1)`): the shop, the checkout and the dashboard
-say so, and Pay now still goes through; restored, the next run resumes it; the
-buyer who revoked their approval is dunned by the collections cron, signs once,
-and the `Reauthorized` log trigger collects the payment **2 s later**.
+Two related pieces use Chainlink but are not CRE workflows:
 
-**How it runs today.** Without a CRE login, `demo:local` runs each workflow's
-real handler (the code `cre workflow build` compiles to WASM) on the CRE SDK's
-test runtime against the local chain: `trigger:local` for the HTTP trigger,
-`collections:local` for the cron and the `Reauthorized` log trigger,
-`guardian:local` for the guardian, which reads the real AUSD/USD feed on Monad
-mainnet (reads only; `DEMO_GUARDIAN_PRICE=mock` for offline). They are not the
-CLI or a DON.
+- **The pool health feed.** `GuardianReceiver` is also an
+  `AggregatorV3Interface`. It is labelled "Polaris pool health, computed by
+  CRE". It is not a Chainlink feed and not Proof of Reserve.
+- **Local currency.** `packages/fx` reads Chainlink FX Data Feeds server-side
+  (it does not use CRE); see the Agora table above.
+
+#### On Monad testnet (chain 10143)
+
+The receivers are deployed and wired, and the smoke test drove real
+transactions through them (see [Monad testnet deployment](#monad-testnet-deployment)).
+`pnpm --filter @polarispay/contracts check:deployment:monad` reads all of it
+back (65 of 65,
+[`monad-testnet.check.txt`](packages/contracts/deployments/monad-testnet.check.txt)).
+
+| What | Address or transaction |
+|---|---|
+| Chainlink simulation forwarder (`cre workflow simulate --broadcast`) | [`0xB9F79d863261869B234c481D1f9A7af84AeAd192`](https://testnet.monadscan.com/address/0xB9F79d863261869B234c481D1f9A7af84AeAd192) (Chainlink's `MockKeystoneForwarder`) |
+| Chainlink production forwarder (deployed workflows, not used yet) | [`0xF8344CFd5c43616a4366C34E3EEE75af79a74482`](https://testnet.monadscan.com/address/0xF8344CFd5c43616a4366C34E3EEE75af79a74482) |
+| Chainlink AUSD/USD, **Monad mainnet** (143), read by the guardian | [`0xE20751C7B5867bCBef815ffc1b284c3f412a9e13`](https://monadscan.com/address/0xE20751C7B5867bCBef815ffc1b284c3f412a9e13) ("AUSD / USD", 8 decimals; 0.99982777 at 02:17:49 UTC, 28 Sep 2026) |
+| The simulation transmitter: the one origin each receiver accepts behind the public forwarder (a dedicated key, never the deployer) | [`0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6`](https://testnet.monadscan.com/address/0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6), funded with 1 testnet MON: [`0x0497a290…`](https://testnet.monadscan.com/tx/0x0497a2903d8730c2990e1d7384ca62c39a61a4f99b33e3e91dc29650417818d1) |
+| `CollectionsReceiver` deployed | [`0x0ac454dd…`](https://testnet.monadscan.com/tx/0x0ac454dd6f28fea4ef998bbf63f0cc72e9d84ecc4cf725b8077dd3cf04bcc379) (block 66288157) |
+| `UnderwritingReceiver` deployed; made `ScoreManager`'s only underwriter | [`0xf643b392…`](https://testnet.monadscan.com/tx/0xf643b392792f7f2a0c07edbf8e91a469e463fd065a9ef5d40b8bc59862f64c4a); [`setUnderwriter` `0xe1b8cd62…`](https://testnet.monadscan.com/tx/0xe1b8cd6239b37762715285fde08a0ca771815af2ea8e9250ab44ebaa1b02cfcd) |
+| `GuardianReceiver` deployed (decision 9's thresholds); made `PolarisCheckout`'s credit guard | [`0xe717c54d…`](https://testnet.monadscan.com/tx/0xe717c54d4ce41e4164ded7ddbb31e65a40c666ec94b4d056842d2dd0f35f2369); [`setCreditGuardian` `0x324d2028…`](https://testnet.monadscan.com/tx/0x324d202836ef5acfaa012eb79c60353e9b6e95066fd9ebb4a7357c19db272664) |
+| A Pay in 4 plan opened, with the guardian asked first (no attestation yet, so it failed open by design) | [`0x4af42348…`](https://testnet.monadscan.com/tx/0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d) (plan #1, 4 × $50.00, 60 s apart) |
+| A real `Reauthorized` log, the instant retry's trigger input (log 1 of the receipt) | [`0xf02c45bd…`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002) |
+| The workflows' staging configs, filled from the deployment | `workflows/{collections,underwriting,guardian}/config.staging.json` (`configure staging`; a test holds them to the record) |
+
+#### CRE runs on Monad testnet: not yet (waiting for `cre login`)
+
+`cre workflow simulate` needs a CRE login, and this machine has none
+(`cre whoami`, 28 Sep 2026: "not logged in"). Everything else is in place: the
+deployment, the configs, and the funded transmitter key (`CRE_ETH_PRIVATE_KEY`
+in the git-ignored `workflows/.env`). A real `Reauthorized` transaction for the
+log trigger also exists. **No CRE transaction hash or simulate log exists
+yet, and none is shown here.** Right after `cre login`, run this one command:
+
+```bash
+pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002
+```
+
+It checks the login, the record, the transmitter's MON and each receiver's
+`simulationTransmitter()` before it sends anything. Then it records `cre
+workflow supported-chains`. That list shows whether Monad testnet, mainnet and
+the log trigger are enabled for the organisation, which this machine cannot
+check yet. It runs four `simulate --broadcast` runs, reads every hash back from
+Monad testnet, and writes `workflows/evidence/<date>/` (each run's log,
+`runs.json`, `supported-chains.txt`, and a `README.md` table with explorer
+links). Expected results, from the state on chain now:
+
+| Run | Trigger | Expected |
+|---|---|---|
+| `collections-retry` | EVM log: the `Reauthorized` above | plan #1's instalments are due, so it collects instalment 1 through `CollectionsReceiver`: one transaction |
+| `collections` | cron | it collects the next due instalment. Past the 1-hour grace, it also liquidates the rest from the buyer's allowance, with no bad debt: one transaction |
+| `underwriting` | HTTP (a freshly signed payload) | **thin, no report**: the payload is a new throwaway account. A report needs `POLARIS_UNDERWRITE_WALLET_KEY` (a wallet with a history) and provider keys in `workflows/.env` |
+| `guardian` | cron | AUSD/USD ≈ 0.9998 ≥ 0.995, free cash ≈ $9,800 ≥ $1,000, no bad debt: **open**. It writes round 1 to `GuardianReceiver`: one transaction |
+
+For the demo recording, `collections:loop --broadcast` and `guardian:loop
+--broadcast` repeat these every minute into `workflows/evidence/loop/`.
+`retry:listen` keeps the log trigger live (`simulate --listen`). The CLI's
+own trigger replaces `trigger:local` once `CRE_UNDERWRITING_TRIGGER_URL`
+points at it.
+
+#### The guardian's feed-shaped view
+
+`GuardianReceiver` serves the guardian's verdict as a feed any contract can
+read, labelled `description() = "Polaris pool health, computed by CRE"`
+(8 decimals, `version() = 1`):
+
+- `latestRoundData()` returns one round per attestation. `answer` is the
+  pool's lendable cash in dollars at the attested AUSD/USD price, and 0 while
+  paused. `startedAt` and `updatedAt` are when the workflow observed it.
+  Before the first attestation it returns all zeros, like a new Chainlink
+  aggregator.
+- `getRoundData(id)` reads past rounds. `isCreditPaused()`, `creditStatus()`
+  and `latestAttestation()` give the verdict and its reasons (depeg 1, low
+  cash 2, bad debt 4, stale price 8, owner pause 128). `currentInputs()` is
+  the workflow's own read of the pool and the thresholds.
+- On Monad testnet now: `latestRound() = 0` (no CRE run yet), so
+  `creditPaused() = (false, 0)` (failing open). `currentInputs()` gives free
+  cash $9,800, owed $200.000152, bad debt 0, and thresholds 0.995 / $1,000 /
+  500 bps / 7,200 s.
+
+#### Confidential HTTP: what it buys and what it costs
+
+With `confidentialHttp: true` (staging and local), the paid provider calls
+(Nansen, Zerion, Etherscan) go through CRE's Confidential HTTP. The
+workflow sends `{{.NANSEN_API_KEY}}`-style placeholders, and the enclave
+fills them from the Vault DON, so no node ever holds a provider key. Each
+provider is also called once instead of once per node, which Nansen's
+10 free credits a day can afford. **The trade-off:** the DON trusts one
+enclave's answer. With the switch off, every node calls the provider and the
+report carries the median, so one bad response is outvoted. With it on, the
+facts are only as good as the one response the enclave got. Production keeps
+it off until a deployed run shows Monad's DON serves the capability. Public
+RPC calls always stay on the plain HTTP client. Details, including Zerion's
+Basic header and Etherscan's POST body:
+[`workflows/README.md`](workflows/README.md#confidential-http).
+
+#### Simulated versus deployed, exactly
+
+| | Status |
+|---|---|
+| The Polaris contracts, including the three CRE receivers | **Deployed on Monad testnet** (28 Sep 2026), every role read back on chain |
+| The three workflows | **Built** (WASM, CLI v1.35.0) and **tested**: 196 unit tests on the SDK's test runtime, and `e2e:local` 12 of 12 against real contracts on a local node. **Not run by the CLI yet**: `simulate --broadcast` waits for `cre login` (above). **Not deployed to a DON**: that needs deploy access (`cre account access`) |
+| Where a simulated run's report goes | A real Monad testnet transaction: the CLI signs with the transmitter key and calls Chainlink's `MockKeystoneForwarder`. It carries no DON signatures, so each receiver accepts it only from that transmitter (`tx.origin`) |
+| After a DON deploy | `deploy:monad` with `CRE_FORWARDER=production`, or the owner moves the receivers to the production forwarder. Then `lock-receivers:monad` pins the workflow owner, names and ids and clears the simulation transmitter. Not done: there is no deployment to lock to |
+| AUSD/USD | **Real**: Chainlink's feed on Monad mainnet, read only; nothing writes to mainnet |
+| The dollar on testnet | **Mock**: `MockAUSD` ("Mock AUSD"), because the deployer held no testnet AUSD for the pool (decision 24) |
+| The relayer on testnet | **The dev adapter** (a generated testnet key, `RELAYER_MODE=local` with `RELAYER_LOCAL_ALLOW_TESTNET=1`), standing in for the Privy server wallet, which does not exist yet |
+| The demo's pause | The owner raises the depeg threshold above the real price ("threshold raised for demo"). The price is never faked |
+
+**End to end on a local chain, headless** (`DEMO_FAST_PLANS=1 pnpm demo:local`,
+then `pnpm demo:e2e:chainlink`; [`docs/demo/chainlink`](docs/demo/chainlink/README.md)):
+**18 of 18 steps passed** (28 Sep 2026).
+
+- An Argentine buyer sees the Send amount in pesos at Chainlink's USD / ARS
+  rate.
+- Raise your limit runs `polaris-underwrite` and opens a $1,000 line on chain
+  ("Verified by Chainlink CRE"). Pay in 4 then opens a plan.
+- The owner raises the depeg threshold to $1.001 (**threshold raised for
+  demo**, captioned on every paused screen). The guardian's next scheduled
+  run reads Chainlink AUSD/USD 0.99983039 on Monad mainnet and pauses new
+  Pay in 4 plans on chain (`creditPaused() = (true, 1)`). The shop, the
+  checkout and the dashboard say so, and Pay now still goes through. Once the
+  threshold is restored, the next run resumes Pay in 4.
+- A buyer who revoked their approval is dunned by the collections cron and
+  signs once. The `Reauthorized` log trigger collects the payment **2 s
+  later**.
+
+Those runs are each workflow's real handler (the code `cre workflow build`
+compiles) on the CRE SDK's test runtime: `trigger:local`,
+`collections:local` and `guardian:local`. They are not the CLI or a DON.
 
 | Also | Where | Verify |
 |---|---|---|
 | The WASM builds | `pnpm --filter @polaris/cre-workflows build` | all three compile (no login needed) |
 | Real contracts, every trigger | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 of 12 on a local node |
-| `cre workflow simulate --broadcast` on Monad testnet, with hashes | `pnpm --filter @polaris/cre-workflows evidence` writes logs and hashes to `workflows/evidence/` | *Not yet*: needs `cre login` and a Monad testnet deployment ([What only you can do](#what-only-you-can-do), steps 1 and 2) |
-| Receivers locked to the deployed workflows | `pnpm --filter @polarispay/contracts lock-receivers:monad` | after deploy |
+| `cre workflow simulate --broadcast` on Monad testnet, with hashes | `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd…` writes logs and hashes to `workflows/evidence/` | *Not yet*: needs `cre login` ([What only you can do](#what-only-you-can-do), step 2) |
+| Receivers locked to the deployed workflows | `pnpm --filter @polarispay/contracts lock-receivers:monad` | after a DON deploy |
 
 ### Nansen: a product powered by its data
 
@@ -268,6 +454,11 @@ CLI or a DON.
 
 - **Everything on-chain in `docs/demo` is a local Hardhat chain**, deployed by
   the same script as testnet. Receipts there link nowhere (no explorer).
+- **On Monad testnet** the contracts are real, but the dollar is `MockAUSD`
+  (a labelled mock anyone can mint), and the relayer is the dev adapter's
+  generated key, not the Privy server wallet. The smoke test's Pay in 4 line
+  is secured by collateral, because no CRE underwriting report has run there
+  yet.
 - **The dev signer** stands in for Face ID in the demo (a key kept in the
   browser; badge on every screen).
 - **The CRE runs** in the demo are the real workflow handlers on the SDK's test
@@ -288,21 +479,23 @@ CLI or a DON.
 
 ## What only you can do
 
-1. **Monad testnet:** the deployer `0x6Df4a0b84BD608123D1f3412709AcaC69523c115`
-   holds 5 MON; get testnet AUSD from Agora (else deploy with the labelled
-   MockAUSD, `AUSD_MODE=mock`). Then `pnpm --filter @polarispay/contracts deploy:monad` (with
-   `CRE_SIMULATION_TRANSMITTER` set to a dedicated CRE key, never the
-   deployer), `fund-pool:monad`, `verify:monad`; then
-   `pnpm --filter polarispay-sdk gen:deployments`,
-   `node packages/indexer/scripts/generate.mjs` and
-   `pnpm --filter @polaris/cre-workflows configure staging`, and commit the
-   deployment record and the regenerated files.
-2. **Chainlink CRE:** `pnpm --filter @polaris/cre-workflows cre login` (or
-   `CRE_API_KEY`), request deploy access (`cre account access`), and after
-   step 1 run `pnpm --filter @polaris/cre-workflows evidence` (each workflow
-   once with `simulate --broadcast` on Monad testnet; logs and hashes land in
-   `workflows/evidence/`) and `collections:loop --broadcast` for the demo;
-   point `CRE_UNDERWRITING_TRIGGER_URL` at the CLI's trigger.
+1. **Monad testnet:** done on 28 Sep 2026 ([the deployment](#monad-testnet-deployment)).
+   What is left: real AUSD. If Agora sends testnet AUSD, a redeploy with
+   `AUSD_MODE=ausd` (or `fund-pool:monad` on a real-AUSD deployment) replaces
+   the mock dollar. `verify:monad` publishes the sources on Monadscan once an
+   `ETHERSCAN_API_KEY` is set. The deployer has about 0.65 MON left.
+2. **Chainlink CRE:** run `pnpm --filter @polaris/cre-workflows cre login`
+   (or set `CRE_API_KEY`), and request deploy access (`cre account access`).
+   Then run the one command:
+   `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002`.
+   It needs nothing else: the transmitter key is in `workflows/.env`,
+   funded, and set on every receiver. That file is git-ignored, so copy it
+   along to run this from another checkout. Its expected results are in
+   [Chainlink CRE](#chainlink-cre-an-orchestration-layer). An underwriting
+   report (not just "thin") also needs `POLARIS_UNDERWRITE_WALLET_KEY` and
+   the provider keys (step 3). For the demo recording, add
+   `collections:loop --broadcast` and point `CRE_UNDERWRITING_TRIGGER_URL`
+   at the CLI's trigger.
 3. **Nansen, Zerion, Etherscan:** create API keys (ask Nansen for credits) and
    run `pnpm --filter @polarispay/underwriting record --linked <a consenting wallet>`
    to replace the synthesized fixtures.

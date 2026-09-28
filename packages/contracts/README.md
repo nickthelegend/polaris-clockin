@@ -96,13 +96,14 @@ send 167k, claim 63k, an underwriting report 142k, a guardian attestation 121k
 | `cre/PolarisReceiver` | What the three receivers add to the template: the simulation transmitter guard, a refusal to run with the forwarder check off, the report-kind check. |
 | `cre/ReceiverTemplate`, `cre/IReceiver`, `interfaces/AggregatorV3Interface` | Chainlink's, verbatim (MIT). |
 | `cre/MockKeystoneForwarder`, `cre/MockPriceFeed` | Local stand-ins for Chainlink's mock forwarder and the AUSD/USD feed. Tests, `e2e:local` and local chains only. |
-| `MockAUSD` | Local AUSD: 6 decimals, ERC-2612, ERC-3009, AUSD's EIP-712 name `"Agora Dollar"`. Never on a public network. |
+| `MockAUSD` | A mock AUSD: 6 decimals, ERC-2612, ERC-3009, AUSD's EIP-712 name `"Agora Dollar"`, ERC-20 name "Mock AUSD", open `mint`. Local chains, and Monad testnet's labelled stand-in while the deployer holds no real AUSD (`AUSD_MODE=mock`, decision 24). Never mainnet. |
 
 ## Interfaces for the SDK, relayer, indexer and CRE workflows
 
 **ABIs**: `abi/<Name>.json`, and typed indexes (`import { polarisCheckoutAbi } from "@polarispay/contracts/abi"`;
 the `.d.ts` gives viem full inference). Regenerate with `pnpm --filter @polarispay/contracts abi`; a test fails if they drift.
-**Deployment**: `deployments/monad-testnet.json` (written by `deploy:monad`; not yet deployed),
+**Deployment**: `deployments/monad-testnet.json` (written by `deploy:monad`, deployed 28 Sep 2026; read it back with
+`check:deployment:monad`, which checks every address and role on chain; `monad-testnet.transactions.json` decodes all 34 of its transactions),
 `deployments/monad-local.json` (each local run; git-ignored). Each holds every address with its block and
 transaction, ABI paths, `eip712` (domain and struct types per contract), `roles`, `cre` and `demo`.
 **Signing types**: `lib/eip712.js`. **CRE encoders**: `lib/cre.js`.
