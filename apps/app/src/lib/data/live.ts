@@ -91,7 +91,7 @@ type BuyerBook = {
     status: "active" | "canceled" | "lapsed";
     createdAt: string;
   }>;
-  payments: Array<{ id: string; kind: "now" | "later"; merchant: ApiMerchant; amountUnits: string; txHash: Hex; createdAt: string }>;
+  payments: Array<{ id: string; kind: "now" | "later" | "subscription"; merchant: ApiMerchant; amountUnits: string; txHash: Hex; createdAt: string }>;
   /** Older APIs leave it out. */
   moves?: Array<{
     id: string;
@@ -227,9 +227,9 @@ function moveRow(m: Move, merchants: Map<string, Merchant>): ActivityItem | null
 function toActivity(book: BuyerBook): ActivityItem[] {
   const items: ActivityItem[] = book.payments.map((p) => ({
     id: `pay-${p.id}`,
-    kind: p.kind === "later" ? "plan-opened" : "payment",
+    kind: p.kind === "later" ? "plan-opened" : p.kind === "subscription" ? "subscription" : "payment",
     title: p.merchant.name,
-    detail: p.kind === "later" ? "Pay in 4" : "Paid in full",
+    detail: p.kind === "later" ? "Pay in 4" : p.kind === "subscription" ? "Subscription" : "Paid in full",
     direction: "out",
     amount: BigInt(p.amountUnits),
     at: Date.parse(p.createdAt),

@@ -233,7 +233,7 @@ const COLUMNS: TableColumn<Plan>[] = [
     header: "Buyer",
     render: (p) => (
       <TableName
-        className="max-w-[min(52vw,340px)]"
+        className="max-w-[min(44vw,236px)]"
         icon={<BuyerCoin address={p.buyer} />}
         title={
           <span className="flex min-w-0 items-center gap-2">

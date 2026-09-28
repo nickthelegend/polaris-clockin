@@ -67,7 +67,7 @@ export function PaymentName({ p, sub }: { p: Payment; sub?: boolean | "fold" }) 
   return (
     <TableName
       // Never wider than the table can give it: a long item or order line truncates instead of pushing Amount off screen.
-      className="max-w-[min(52vw,340px)]"
+      className="max-w-[min(44vw,236px)]"
       icon={<BuyerCoin address={p.buyer} />}
       title={
         <span className="flex min-w-0 items-center gap-2">
