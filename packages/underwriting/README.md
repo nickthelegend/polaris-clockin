@@ -356,17 +356,23 @@ typecheck) and the key added per provider; then `underwrite()` derives the
 Facts, and the DON agrees on them field by field:
 
 ```ts
-import { accountRecipe, all, linkedRecipe, runSync, underwrite } from "@polarispay/underwriting/core";
+import { accountRecipe, linkedRecipe, runSync, underwrite } from "@polarispay/underwriting/core";
 
 const now = Math.floor(runtime.now().getTime() / 1000); // DON time, identical on every node
-const [account, linked] = runSync(all([accountRecipe(user, { now, accountBalance }), linkedRecipe(wallet, { now })]), send);
-const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked.evidence, linkVerified });
+// `send` makes one provider request through CRE's HTTP client (the workflow's creSender, evidence.ts).
+const send = creSender(nodeRuntime, req, log);
+const account = runSync(accountRecipe(user, { now, accountBalance }), send);
+// The linked wallet only when the buyer brought one ("Bring your history").
+const linked = wallet ? runSync(linkedRecipe(wallet, { now }), send) : null;
+const out = underwrite({ user, observedAt: now, account: account.evidence, linked: linked?.evidence ?? null, linkVerified });
 if (!out.final) return; // no report: missing evidence is never attested as zero
 if (!out.attest) return { status: "thin", gaps: out.decision.thinFile }; // a thin file: no report, no retry
 runtime.report(prepareReportRequest(out.report)); // abi.encode(uint8 2, [(user, linkedWallet, Facts)])
 ```
 
-`linkVerified` is the workflow's own check of the wallet's signature over
+The workflow itself runs both recipes at once with `all(...)` when there is a
+wallet (`observe()` in `workflows/src/underwriting/evidence.ts`, the code to
+copy). `linkVerified` is the workflow's own check of the wallet's signature over
 `linkMessage(...)`, done before any provider call. The report the workflow
 signs is the deployed `UnderwritingReceiver`'s batch,
 `abi.encode(uint8 2, (address user, address linkedWallet, Facts)[])`, not
