@@ -45,6 +45,14 @@ const WORKFLOW_NAMES = { COLLECTIONS: "polaris-collections", UNDERWRITING: "pola
 /** GuardianReceiver reason bits. OWNER_PAUSE only ever appears in isCreditPaused/creditStatus, never in a report. */
 const GUARDIAN_REASON = { DEPEG: 1, LOW_CASH: 2, BAD_DEBT: 4, STALE_PRICE: 8, OWNER_PAUSE: 0x80 };
 
+/**
+ * Which reasons come from where (GuardianReceiver.PRICE_REASONS / POOL_REASONS):
+ * the price reasons from the attestation (the DON's read of Monad mainnet),
+ * the pool reasons from the pool itself, live, in the same call.
+ */
+const GUARDIAN_PRICE_REASONS = GUARDIAN_REASON.DEPEG | GUARDIAN_REASON.STALE_PRICE;
+const GUARDIAN_POOL_REASONS = GUARDIAN_REASON.LOW_CASH | GUARDIAN_REASON.BAD_DEBT;
+
 /** GuardianReceiver.Override. */
 const GUARDIAN_OVERRIDE = { NONE: 0, FORCE_RESUME: 1, FORCE_PAUSE: 2 };
 
@@ -52,18 +60,40 @@ const GUARDIAN_OVERRIDE = { NONE: 0, FORCE_RESUME: 1, FORCE_PAUSE: 2 };
 const GUARDIAN_PRICE_DECIMALS = 8;
 
 /**
- * Decision 9's thresholds, the deploy defaults: AUSD/USD below $0.995, free pool
- * cash below $1,000, bad debt above 5% of lifetime originations, a price older
- * than 2 hours. Stablecoin amounts are 6-decimal base units.
+ * The deploy defaults. Decision 9's: AUSD/USD below $0.995, free pool cash
+ * below $1,000, bad debt above 5% of lifetime originations, a price older than
+ * 2 hours. And two the security review added: AUSD/USD above $1.005 is a
+ * depeg too (an upward break, or a faulty answer), and the bad-debt ratio
+ * applies only once $10,000 has been lent (on a young pool one loss is a large
+ * share of everything lent). Stablecoin amounts are 6-decimal base units.
  */
 const GUARDIAN_DEFAULTS = {
   minPrice: 99_500_000n,
+  maxPrice: 100_500_000n,
   minFreeCash: 1_000_000_000n,
   maxBadDebtBps: 500,
+  minOriginated: 10_000_000_000n,
   maxPriceAge: 7_200,
-  /** Past this, the latest attestation is stale and credit fails open (decision 10). */
+  /** Past this, the latest attestation is stale and its price reasons fail open (decision 10). */
   maxAttestationAge: 3_600,
 };
+
+/** GuardianReceiver.Thresholds, in its field order (setThresholds, thresholds(), ThresholdsSet). */
+const GUARDIAN_THRESHOLD_FIELDS = ["minPrice", "maxPrice", "minFreeCash", "maxBadDebtBps", "minOriginated", "maxPriceAge"];
+
+/** A thresholds object as GuardianReceiver takes it, from any mix of defaults and overrides. */
+function guardianThresholds(t = {}) {
+  const given = typeof t?.toObject === "function" ? t.toObject() : t;
+  const m = { ...GUARDIAN_DEFAULTS, ...given };
+  return {
+    minPrice: BigInt(m.minPrice),
+    maxPrice: BigInt(m.maxPrice),
+    minFreeCash: BigInt(m.minFreeCash),
+    maxBadDebtBps: Number(m.maxBadDebtBps),
+    minOriginated: BigInt(m.minOriginated),
+    maxPriceAge: Number(m.maxPriceAge),
+  };
+}
 
 /** Chainlink AUSD/USD on Monad mainnet (chain 143), read by the guardian workflow (decision 11). */
 const AUSD_USD_FEED_MONAD_MAINNET = {
@@ -169,31 +199,52 @@ function reportKind(body) {
 }
 
 /**
- * GuardianReceiver.evaluate in JavaScript: the reason bits for an attestation
- * under `thresholds` (defaults: GUARDIAN_DEFAULTS). 0 means healthy.
+ * GuardianReceiver's pool reasons in JavaScript (low cash, bad debt) for a
+ * pool state under `thresholds`, counting only bad debt beyond
+ * `badDebtAcknowledged`.
  */
-function guardianReasons(a, thresholds = GUARDIAN_DEFAULTS) {
-  // An ethers Result (GuardianReceiver.thresholds()) spreads as indices only.
-  const given = typeof thresholds?.toObject === "function" ? thresholds.toObject() : thresholds;
-  const t = { ...GUARDIAN_DEFAULTS, ...given };
+function guardianPoolReasons(pool, thresholds = GUARDIAN_DEFAULTS, badDebtAcknowledged = 0n) {
+  const t = guardianThresholds(thresholds);
   const big = (v) => BigInt(v);
   let reasons = 0;
-  if (big(a.price) < big(t.minPrice)) reasons |= GUARDIAN_REASON.DEPEG;
-  if (big(a.freeCash) < big(t.minFreeCash)) reasons |= GUARDIAN_REASON.LOW_CASH;
-  if (big(a.badDebt) > (big(a.totalOriginated) * big(t.maxBadDebtBps)) / 10_000n) reasons |= GUARDIAN_REASON.BAD_DEBT;
+  if (big(pool.freeCash) < t.minFreeCash) reasons |= GUARDIAN_REASON.LOW_CASH;
+  const originated = big(pool.totalOriginated);
+  if (originated >= t.minOriginated) {
+    const ack = big(badDebtAcknowledged);
+    const unacknowledged = big(pool.badDebt) > ack ? big(pool.badDebt) - ack : 0n;
+    if (unacknowledged > (originated * BigInt(t.maxBadDebtBps)) / 10_000n) reasons |= GUARDIAN_REASON.BAD_DEBT;
+  }
+  return reasons;
+}
+
+/** GuardianReceiver's price reasons in JavaScript (depeg below or above the band, stale price). */
+function guardianPriceReasons(a, thresholds = GUARDIAN_DEFAULTS) {
+  const t = guardianThresholds(thresholds);
+  const big = (v) => BigInt(v);
+  let reasons = 0;
+  if (big(a.price) < t.minPrice || big(a.price) > t.maxPrice) reasons |= GUARDIAN_REASON.DEPEG;
   const observedAt = big(a.observedAt);
   const updatedAt = big(a.priceUpdatedAt);
-  if (updatedAt === 0n || (observedAt > updatedAt && observedAt - updatedAt > big(t.maxPriceAge))) {
+  if (updatedAt === 0n || (observedAt > updatedAt && observedAt - updatedAt > BigInt(t.maxPriceAge))) {
     reasons |= GUARDIAN_REASON.STALE_PRICE;
   }
   return reasons;
 }
 
 /**
+ * GuardianReceiver.evaluate in JavaScript: the reason bits for an attestation
+ * under `thresholds` (defaults: GUARDIAN_DEFAULTS; an ethers Result is fine)
+ * and the bad debt the owner acknowledged. 0 means healthy.
+ */
+function guardianReasons(a, thresholds = GUARDIAN_DEFAULTS, badDebtAcknowledged = 0n) {
+  return guardianPoolReasons(a, thresholds, badDebtAcknowledged) | guardianPriceReasons(a, thresholds);
+}
+
+/**
  * Build a whole attestation from its inputs, with the verdict filled in the
  * way GuardianReceiver requires (creditPaused == reasons != 0).
  */
-function buildAttestation({ price, priceRoundId, priceUpdatedAt, pool, observedAt }, thresholds = GUARDIAN_DEFAULTS) {
+function buildAttestation({ price, priceRoundId, priceUpdatedAt, pool, observedAt }, thresholds = GUARDIAN_DEFAULTS, badDebtAcknowledged = 0n) {
   const a = {
     priceRoundId: big0(priceRoundId),
     price: big0(price),
@@ -204,7 +255,7 @@ function buildAttestation({ price, priceRoundId, priceUpdatedAt, pool, observedA
     totalOriginated: big0(pool.totalOriginated),
     observedAt: big0(observedAt),
   };
-  a.reasons = guardianReasons(a, thresholds);
+  a.reasons = guardianReasons(a, thresholds, badDebtAcknowledged);
   a.creditPaused = a.reasons !== 0;
   return a;
 }
@@ -257,9 +308,15 @@ module.exports = {
   ACTION,
   WORKFLOW_NAMES,
   GUARDIAN_REASON,
+  GUARDIAN_PRICE_REASONS,
+  GUARDIAN_POOL_REASONS,
   GUARDIAN_OVERRIDE,
   GUARDIAN_PRICE_DECIMALS,
   GUARDIAN_DEFAULTS,
+  GUARDIAN_THRESHOLD_FIELDS,
+  guardianThresholds,
+  guardianPoolReasons,
+  guardianPriceReasons,
   AUSD_USD_FEED_MONAD_MAINNET,
   TASKS_TYPE,
   FACTS_TYPE,

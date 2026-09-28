@@ -304,13 +304,15 @@ async function main() {
 
   // 6. The credit guard ------------------------------------------------
   console.log("Credit guard (mock forwarder attestations, hand-built from a local stand-in AUSD/USD feed; no CRE workflow)");
-  const thresholds = await guardian.thresholds();
   const attest = async (price) => {
     await tx.send(feed, "setAnswer", [price]);
     const [roundId, answer, , updatedAt] = await feed.latestRoundData();
+    // The workflow's own read: the pool, the thresholds, the bad debt acknowledged.
+    const [pool, thresholds, acknowledged] = await guardian.currentInputs();
     const a = cre.buildAttestation(
-      { price: answer, priceRoundId: roundId, priceUpdatedAt: updatedAt, pool: await engine.poolState(), observedAt: await now() },
-      thresholds
+      { price: answer, priceRoundId: roundId, priceUpdatedAt: updatedAt, pool, observedAt: await now() },
+      thresholds,
+      acknowledged
     );
     const receipt = await report(guardian.target, cre.encodeGuardianReport(a), cre.WORKFLOW_NAMES.GUARDIAN);
     const [updated] = events(receipt, guardian, "CreditGuardUpdated");

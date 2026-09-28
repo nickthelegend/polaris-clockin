@@ -7,6 +7,12 @@
  * transmitter, as `cre workflow simulate --broadcast` delivers them. The price
  * comes from a local MockPriceFeed standing in for Chainlink's AUSD/USD feed on
  * Monad mainnet. Tests are named for what each refuses or guarantees.
+ *
+ * What the receiver trusts the DON for is the price alone: low cash and bad
+ * debt are read from the pool in the same call (never stale, never set or
+ * cleared by a report), and a report whose pool verdict is not the live
+ * pool's is refused. A PoolDouble stands in for the pool where a test needs
+ * pool figures no loan book here would reach.
  */
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
@@ -24,12 +30,10 @@ const MONTH = 30 * DAY;
 const { DEPEG, LOW_CASH, BAD_DEBT, STALE_PRICE, OWNER_PAUSE } = cre.GUARDIAN_REASON;
 const OVERRIDE = cre.GUARDIAN_OVERRIDE;
 
-const DEFAULTS = {
-  minPrice: cre.GUARDIAN_DEFAULTS.minPrice,
-  minFreeCash: cre.GUARDIAN_DEFAULTS.minFreeCash,
-  maxBadDebtBps: cre.GUARDIAN_DEFAULTS.maxBadDebtBps,
-  maxPriceAge: cre.GUARDIAN_DEFAULTS.maxPriceAge,
-};
+/** lib/cre.js GUARDIAN_DEFAULTS as GuardianReceiver.Thresholds. */
+const DEFAULTS = cre.guardianThresholds();
+/** The same thresholds as `thresholds()` returns them, in field order. */
+const tuple = (t) => cre.GUARDIAN_THRESHOLD_FIELDS.map((f) => BigInt(t[f]));
 
 async function deployStack() {
   const [owner, relayer, merchant, treasury, stranger, don, workflowOwner] = await ethers.getSigners();
@@ -86,26 +90,39 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
 
   /**
    * An attestation of the pool now at the feed's latest round, with the
-   * verdict computed as the workflow does, against the thresholds the
-   * guardian holds now, unless `fields` overrides it.
+   * verdict computed as the workflow does from `currentInputs()` (the pool,
+   * the thresholds the guardian holds now, the bad debt acknowledged),
+   * unless `fields` overrides it.
    */
-  async function attestation(fields = {}) {
-    const thresholds = await s.guardian.thresholds();
+  async function attestation(fields = {}, guardian = s.guardian) {
+    const [pool, thresholds, acknowledged] = await guardian.currentInputs();
     const [roundId, answer, , updatedAt] = await s.feed.latestRoundData();
-    const pool = await s.engine.poolState();
     const a = cre.buildAttestation(
       { price: answer, priceRoundId: roundId, priceUpdatedAt: updatedAt, pool, observedAt: await now() },
-      thresholds
+      thresholds,
+      acknowledged
     );
     const merged = { ...a, ...fields };
     if (!("reasons" in fields) && !("creditPaused" in fields)) {
-      merged.reasons = cre.guardianReasons(merged, thresholds);
+      merged.reasons = cre.guardianReasons(merged, thresholds, acknowledged);
       merged.creditPaused = merged.reasons !== 0;
     }
     return merged;
   }
 
   const attest = async (fields, opts) => deliver(s.guardian, cre.encodeGuardianReport(await attestation(fields)), opts);
+
+  /** A GuardianReceiver over a PoolDouble whose figures the test sets. */
+  async function guardianOverDouble(thresholds = DEFAULTS) {
+    const pool = await (await ethers.getContractFactory("PoolDouble")).deploy(await s.ausd.getAddress());
+    const guardian = await (await ethers.getContractFactory("GuardianReceiver")).deploy(
+      s.forwarder, pool, s.don.address, thresholds, cre.GUARDIAN_DEFAULTS.maxAttestationAge
+    );
+    return { pool, guardian };
+  }
+
+  /** The owner's forced resume, lasting `seconds` from the next block. */
+  const resumeFor = async (guardian, seconds = 3_600) => guardian.setOverride(OVERRIDE.FORCE_RESUME, (await now()) + BigInt(seconds));
 
   /** A fresh gasless buyer with a credit line; returns what openPlan needs. */
   async function planArgs(buyer, principal = AUSD(100)) {
@@ -176,19 +193,13 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer)))).to.emit(s.checkout, "PlanOpened");
     });
 
-    it("pauses for low pool cash, bad debt and a stale price too, and reports every reason at once", async () => {
-      // Low cash: a pool of $50,000 against a $60,000 floor.
+    it("pauses for low pool cash and a stale price too, and reports every reason at once", async () => {
+      // Low cash: a pool of $50,000 against a $60,000 floor. Read from the pool, it pauses before any report.
       await s.guardian.setThresholds({ ...DEFAULTS, minFreeCash: AUSD(60_000) });
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(LOW_CASH)]);
       await attest();
       expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(LOW_CASH)]);
       await s.guardian.setThresholds(DEFAULTS);
-
-      // Bad debt above 5% of lifetime originations (a report of such a pool).
-      await time.increase(10);
-      await attest({ badDebt: AUSD(51), totalOriginated: AUSD(1_000) });
-      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(BAD_DEBT)]);
-      await time.increase(10);
-      await attest({ badDebt: AUSD(50), totalOriginated: AUSD(1_000) }); // exactly 5% is not above it
       expect(await s.guardian.isCreditPaused()).to.deep.equal([false, 0n]);
 
       // A price round older than two hours at observation.
@@ -197,15 +208,36 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       await attest();
       expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(STALE_PRICE)]);
 
-      // Everything at once.
+      // Everything the engine's pool can show at once: a depeg, a stale price, low cash.
+      await s.guardian.setThresholds({ ...DEFAULTS, minFreeCash: AUSD(60_000) });
       await s.feed.setRound(PRICE("0.97"), (await now()) - 3n * 3600n);
       await time.increase(10);
-      await attest({ freeCash: AUSD(10), badDebt: AUSD(100), totalOriginated: AUSD(100) });
-      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG | LOW_CASH | BAD_DEBT | STALE_PRICE)]);
+      await attest();
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG | LOW_CASH | STALE_PRICE)]);
       const buyer = await newBuyer();
       await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer))))
         .to.be.revertedWithCustomError(s.checkout, "CreditPausedByGuardian")
-        .withArgs(DEPEG | LOW_CASH | BAD_DEBT | STALE_PRICE);
+        .withArgs(DEPEG | LOW_CASH | STALE_PRICE);
+      const st = await s.guardian.creditStatus();
+      expect([st.poolReasons, st.priceReasons]).to.deep.equal([BigInt(LOW_CASH), BigInt(DEPEG | STALE_PRICE)]);
+    });
+
+    it("bad debt above 5% of lifetime originations pauses, from the pool itself, with every reason at once", async () => {
+      const { pool, guardian } = await guardianOverDouble();
+      // $20,000 lent, $1,001 lost (just over 5%), $500 of free cash.
+      await pool.setState(AUSD(500), AUSD(3_000), AUSD(1_001), AUSD(20_000));
+      expect(await guardian.isCreditPaused()).to.deep.equal([true, BigInt(LOW_CASH | BAD_DEBT)]);
+      await pool.setState(AUSD(5_000), AUSD(3_000), AUSD(1_000), AUSD(20_000)); // exactly 5% is not above it
+      expect(await guardian.isCreditPaused()).to.deep.equal([false, 0n]);
+
+      await pool.setState(AUSD(10), AUSD(100), AUSD(10_000), AUSD(10_000));
+      await s.feed.setRound(PRICE("0.97"), (await now()) - 3n * 3600n);
+      const a = await attestation({}, guardian);
+      expect(a.reasons).to.equal(DEPEG | LOW_CASH | BAD_DEBT | STALE_PRICE);
+      const r = await deliver(guardian, cre.encodeGuardianReport(a));
+      expect(r.ok).to.equal(true);
+      expect(await guardian.latestRound()).to.equal(1n);
+      expect(await guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG | LOW_CASH | BAD_DEBT | STALE_PRICE)]);
     });
 
     it("refuses a verdict that is not the chain's own: the workflow cannot call a depegged pool healthy, or pause a healthy one", async () => {
@@ -223,6 +255,48 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       }
       expect(await s.guardian.latestRound()).to.equal(0n);
       expect(await s.guardian.isCreditPaused()).to.deep.equal([false, 0n]);
+    });
+
+    // Judge finding (GuardianReceiver trusted the report's pool figures): whoever
+    // produced a report could pause credit by reporting freeCash = 0, or keep it
+    // open through a real shortfall.
+    it("refuses a report whose pool is not the chain's: no free cash against a funded pool cannot pause credit", async () => {
+      const lie = await attestation({ freeCash: 0n }); // the verdict recomputed: LOW_CASH, self-consistent
+      expect(lie.reasons).to.equal(LOW_CASH);
+      const r = await deliver(s.guardian, cre.encodeGuardianReport(lie));
+      expect(r.ok).to.equal(true, "refused by event, not by revert");
+      expect(refusal(r.receipt).args.reason).to.equal(s.guardian.interface.encodeErrorResult("PoolMismatch", [LOW_CASH, 0]));
+      expect(await s.guardian.latestRound()).to.equal(0n);
+      expect(await s.checkout.creditPaused()).to.deep.equal([false, 0n]);
+      const buyer = await newBuyer();
+      await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer)))).to.emit(s.checkout, "PlanOpened");
+
+      // Nor keep it open through a real shortfall: the pool reads low, the report says ample.
+      await s.guardian.setThresholds({ ...DEFAULTS, minFreeCash: AUSD(60_000) });
+      const ample = await attestation({ freeCash: AUSD(70_000) });
+      expect(ample.reasons).to.equal(0);
+      const r2 = await deliver(s.guardian, cre.encodeGuardianReport(ample));
+      expect(refusal(r2.receipt).args.reason).to.equal(s.guardian.interface.encodeErrorResult("PoolMismatch", [0, LOW_CASH]));
+      expect(await s.checkout.creditPaused()).to.deep.equal([true, BigInt(LOW_CASH)]);
+    });
+
+    it("never fails open on the pool: low cash and bad debt apply with no attestation, or a stale one", async () => {
+      const { pool, guardian } = await guardianOverDouble({ ...DEFAULTS, minOriginated: 0n });
+      await pool.setState(AUSD(50_000), 0n, 0n, 0n);
+      expect((await guardian.creditStatus()).stale).to.equal(true);
+      expect(await guardian.isCreditPaused()).to.deep.equal([false, 0n]);
+      await pool.setState(AUSD(999), AUSD(100), 0n, AUSD(100));
+      expect(await guardian.isCreditPaused()).to.deep.equal([true, BigInt(LOW_CASH)], "no attestation yet");
+      await pool.setState(AUSD(50_000), 0n, AUSD(6), AUSD(100));
+      expect(await guardian.isCreditPaused()).to.deep.equal([true, BigInt(BAD_DEBT)], "no attestation yet");
+
+      // A depeg attested, then gone stale: the price reason fails open, the pool's does not.
+      await s.feed.setAnswer(PRICE("0.9"));
+      await deliver(guardian, cre.encodeGuardianReport(await attestation({}, guardian)));
+      expect(await guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG | BAD_DEBT)]);
+      await time.increase(3_601);
+      const st = await guardian.creditStatus();
+      expect([st.stale, st.paused, st.reasons, st.poolReasons, st.priceReasons]).to.deep.equal([true, true, BigInt(BAD_DEBT), BigInt(BAD_DEBT), 0n]);
     });
 
     it("refuses a replayed, out-of-order, future-dated or already stale attestation", async () => {
@@ -278,7 +352,7 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
     it("forces a pause over a healthy attestation, forces a resume over a depeg, and hands back to the attestations", async () => {
       const buyer = await newBuyer();
       await attest();
-      await expect(s.guardian.setOverride(OVERRIDE.FORCE_PAUSE)).to.emit(s.guardian, "CreditGuardOverridden").withArgs(OVERRIDE.FORCE_PAUSE);
+      await expect(s.guardian.setOverride(OVERRIDE.FORCE_PAUSE, 0)).to.emit(s.guardian, "CreditGuardOverridden").withArgs(OVERRIDE.FORCE_PAUSE, 0);
       await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer))))
         .to.be.revertedWithCustomError(s.checkout, "CreditPausedByGuardian")
         .withArgs(OWNER_PAUSE);
@@ -286,27 +360,99 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       await s.feed.setAnswer(PRICE("0.9"));
       await time.increase(10);
       await attest();
-      await s.guardian.setOverride(OVERRIDE.FORCE_RESUME);
+      await resumeFor(s.guardian);
       expect(await s.guardian.isCreditPaused()).to.deep.equal([false, 0n]);
       const st = await s.guardian.creditStatus();
       expect([st.overrideMode, st.attestedPaused]).to.deep.equal([BigInt(OVERRIDE.FORCE_RESUME), true]);
       await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer)))).to.emit(s.checkout, "PlanOpened");
 
-      await s.guardian.setOverride(OVERRIDE.NONE);
+      await s.guardian.setOverride(OVERRIDE.NONE, 0);
       expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG)]);
+    });
+
+    // Security review F1: ForceResume switched off every reason with no end, so
+    // a resume set for one borrower's default outlived a later depeg.
+    it("a forced resume ends by itself, at most a day ahead; a pause and None take no end", async () => {
+      const t0 = await now();
+      for (const until of [0n, t0, t0 + BigInt(DAY) + 100n]) {
+        await expect(s.guardian.setOverride(OVERRIDE.FORCE_RESUME, until)).to.be.revertedWithCustomError(s.guardian, "InvalidOverride");
+      }
+      for (const mode of [OVERRIDE.FORCE_PAUSE, OVERRIDE.NONE]) {
+        await expect(s.guardian.setOverride(mode, t0 + 100n)).to.be.revertedWithCustomError(s.guardian, "InvalidOverride");
+      }
+      await s.feed.setAnswer(PRICE("0.9"));
+      await attest();
+      const until = (await now()) + 600n;
+      await expect(s.guardian.setOverride(OVERRIDE.FORCE_RESUME, until)).to.emit(s.guardian, "CreditGuardOverridden").withArgs(OVERRIDE.FORCE_RESUME, until);
+      let st = await s.guardian.creditStatus();
+      expect([st.paused, st.overrideMode, st.overrideUntil]).to.deep.equal([false, BigInt(OVERRIDE.FORCE_RESUME), until]);
+      await time.increaseTo(until);
+      st = await s.guardian.creditStatus();
+      expect([st.paused, st.reasons, st.overrideMode, st.overrideUntil]).to.deep.equal([true, BigInt(DEPEG), BigInt(OVERRIDE.NONE), 0n]);
+      expect(await s.guardian.activeOverride()).to.equal(BigInt(OVERRIDE.NONE));
+      expect(await s.guardian.overrideMode()).to.equal(BigInt(OVERRIDE.FORCE_RESUME), "as set; activeOverride() is what applies");
+    });
+
+    // Security review F1, on the real engine: one $100 plan, the pool's only
+    // origination, defaults with nothing recovered: 100% bad debt.
+    it("one default on a young pool does not pause everyone; acknowledged bad debt lifts a bad-debt pause, and a depeg still pauses", async () => {
+      const buyer = await newBuyer();
+      await s.owner.sendTransaction({ to: buyer.address, value: ethers.parseEther("1") });
+      await s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer, AUSD(100))));
+      const loanId = await s.engine.loanCount();
+      await s.ausd.connect(buyer).approve(s.engine, 0);
+      await time.increase(WEEK + DAY + 10);
+      await s.engine.liquidate(loanId);
+      await s.feed.setAnswer(PRICE("0.9998")); // a fresh round after the weeks that passed
+      const pool = await s.engine.poolState();
+      expect(pool.badDebt).to.equal(pool.totalOriginated);
+
+      // Under the $10,000 floor the ratio is not applied: one loss is not a portfolio.
+      expect(pool.totalOriginated < DEFAULTS.minOriginated).to.equal(true);
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([false, 0n]);
+      // Without the floor, the loss pauses Pay in 4 for every buyer, as it did before.
+      await s.guardian.setThresholds({ ...DEFAULTS, minOriginated: 0n });
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(BAD_DEBT)]);
+      await attest();
+      await time.increase(60);
+      await attest();
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(BAD_DEBT)], "later reports don't lift it");
+
+      // The owner acknowledges the loss: only bad debt beyond it counts from now on.
+      await expect(s.guardian.acknowledgeBadDebt()).to.emit(s.guardian, "BadDebtAcknowledged").withArgs(pool.badDebt);
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([false, 0n]);
+      const [, , acknowledged] = await s.guardian.currentInputs();
+      expect(acknowledged).to.equal(pool.badDebt);
+      expect((await s.guardian.creditStatus()).badDebtAcknowledged).to.equal(pool.badDebt);
+
+      // ...and a depeg still pauses: nothing about the price was switched off.
+      await s.feed.setAnswer(PRICE("0.90"));
+      await time.increase(60);
+      const depeg = await attest();
+      expect(depeg.ok).to.equal(true);
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG)]);
+      await expect(s.checkout.connect(s.relayer).openPlan(...(await planArgs(await newBuyer()))))
+        .to.be.revertedWithCustomError(s.checkout, "CreditPausedByGuardian")
+        .withArgs(DEPEG);
+      await expect(s.guardian.connect(s.stranger).acknowledgeBadDebt()).to.be.revertedWithCustomError(s.guardian, "OwnableUnauthorizedAccount");
     });
 
     it("sets the thresholds and the staleness with events, within sane bounds, and only the owner can", async () => {
       // Decision 28: a demo raises the peg threshold so the real price trips it.
-      const demo = { ...DEFAULTS, minPrice: PRICE("1.001") };
-      await expect(s.guardian.setThresholds(demo))
-        .to.emit(s.guardian, "ThresholdsSet")
-        .withArgs(demo.minPrice, demo.minFreeCash, demo.maxBadDebtBps, demo.maxPriceAge);
-      expect(await s.guardian.thresholds()).to.deep.equal([demo.minPrice, demo.minFreeCash, BigInt(demo.maxBadDebtBps), BigInt(demo.maxPriceAge)]);
+      const demo = { ...DEFAULTS, minPrice: PRICE("1.001"), maxPrice: PRICE("1.01") };
+      await expect(s.guardian.setThresholds(demo)).to.emit(s.guardian, "ThresholdsSet").withArgs(tuple(demo));
+      expect(await s.guardian.thresholds()).to.deep.equal(tuple(demo));
       await attest();
       expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG)]);
 
-      for (const bad of [{ minPrice: 0n }, { minPrice: -1n }, { minPrice: PRICE("2.01") }, { maxBadDebtBps: 10_001 }, { maxPriceAge: 0 }]) {
+      for (const bad of [
+        { minPrice: 0n },
+        { minPrice: -1n },
+        { minPrice: PRICE("1.01"), maxPrice: PRICE("1.005") },
+        { maxPrice: PRICE("2.01") },
+        { maxBadDebtBps: 10_001 },
+        { maxPriceAge: 0 },
+      ]) {
         await expect(s.guardian.setThresholds({ ...DEFAULTS, ...bad })).to.be.revertedWithCustomError(s.guardian, "InvalidThresholds");
       }
       for (const age of [0, 7 * DAY + 1]) {
@@ -315,12 +461,53 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       for (const call of [
         () => s.guardian.connect(s.stranger).setThresholds(DEFAULTS),
         () => s.guardian.connect(s.stranger).setMaxAttestationAge(60),
-        () => s.guardian.connect(s.stranger).setOverride(OVERRIDE.FORCE_RESUME),
+        () => s.guardian.connect(s.stranger).setOverride(OVERRIDE.FORCE_PAUSE, 0),
         () => s.guardian.connect(s.stranger).setSimulationTransmitter(s.stranger.address),
         () => s.checkout.connect(s.stranger).setCreditGuardian(ethers.ZeroAddress),
       ]) {
         await expect(call()).to.be.revertedWithCustomError(s.guardian, "OwnableUnauthorizedAccount");
       }
+    });
+
+    // Security review F3: the stored verdict was returned as is, so a threshold
+    // change did nothing until the next accepted report.
+    it("a threshold change applies at once to the latest attestation's price, both ways", async () => {
+      await attest(); // AUSD $0.9998: healthy
+      await s.guardian.setThresholds({ ...DEFAULTS, minPrice: PRICE("1.001") });
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG)], "raised: paused with no new report");
+      await attest();
+      await s.guardian.setThresholds(DEFAULTS);
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([false, 0n], "restored: open with no new report");
+      const st = await s.guardian.creditStatus();
+      expect([st.attestedPaused, st.attestedReasons, st.priceReasons]).to.deep.equal([true, BigInt(DEPEG), 0n], "the record keeps what the workflow said");
+    });
+
+    // Security review F4: the price only had a floor, and an absurd answer made
+    // every round write revert, so a faulty feed could only ever go stale.
+    it("a price above the ceiling is a depeg, and no answer makes a round write revert", async () => {
+      await s.feed.setAnswer(PRICE("1.25"));
+      expect((await attestation()).reasons).to.equal(DEPEG);
+      const up = await attest();
+      expect(up.ok).to.equal(true);
+      expect(await s.guardian.isCreditPaused()).to.deep.equal([true, BigInt(DEPEG)]);
+
+      await s.feed.setAnswer((1n << 200n) + 7n);
+      await time.increase(10);
+      const absurd = await attest();
+      expect(absurd.ok).to.equal(true, "the forwarder recorded result=true");
+      expect(await s.guardian.latestRound()).to.equal(2n);
+      const [, answer] = await s.guardian.latestRoundData();
+      expect(answer).to.equal(0n, "paused: nothing to lend");
+
+      // A healthy price against an enormous balance saturates instead of reverting.
+      const { pool, guardian } = await guardianOverDouble();
+      await pool.setState(ethers.MaxUint256 / 3n, 0n, 0n, 0n);
+      await s.feed.setAnswer(PRICE("1"));
+      const a = await attestation({}, guardian);
+      expect(a.reasons).to.equal(0);
+      expect((await deliver(guardian, cre.encodeGuardianReport(a))).ok).to.equal(true);
+      const [, big] = await guardian.latestRoundData();
+      expect(big).to.equal((1n << 191n) - 1n);
     });
 
     it("the checkout's guardian is the owner's to set, must be a contract, and can be removed", async () => {
@@ -352,14 +539,32 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       expect([st.paused, st.reasonWords, st.thresholds.minPrice]).to.deep.equal([true, ["depeg"], "100100000"]);
       expect(st.latest.price).to.equal(PRICE("0.9998").toString());
 
-      await runGuardianAction(s.guardian, "override", { override: "resume" });
+      await runGuardianAction(s.guardian, "override", { override: "resume", resumeSeconds: 600 });
       st = await guardianStatus(s.guardian);
       expect([st.paused, st.override]).to.deep.equal([false, "resume"]);
+      expect(st.overrideUntil - Number(await now())).to.be.within(598, 600);
+      for (const resumeSeconds of [0, 24 * 3600 + 1, "soon"]) {
+        let bad;
+        try {
+          await runGuardianAction(s.guardian, "override", { override: "resume", resumeSeconds });
+        } catch (e) {
+          bad = e;
+        }
+        expect(bad?.message, String(resumeSeconds)).to.match(/GUARD_RESUME_SECONDS/);
+      }
       await runGuardianAction(s.guardian, "override", { override: "none" });
       await runGuardianAction(s.guardian, "thresholds", { config: guardianConfig({}) });
       await runGuardianAction(s.guardian, "max-age", { config: guardianConfig({ GUARD_MAX_ATTESTATION_AGE_SECONDS: "900" }) });
       st = await guardianStatus(s.guardian);
-      expect([st.thresholds.minPrice, st.maxAttestationAge, st.override]).to.deep.equal(["99500000", 900, "none"]);
+      expect([st.thresholds.minPrice, st.thresholds.maxPrice, st.thresholds.minOriginated, st.maxAttestationAge, st.override]).to.deep.equal([
+        "99500000",
+        "100500000",
+        "10000000000",
+        900,
+        "none",
+      ]);
+      await runGuardianAction(s.guardian, "acknowledge");
+      expect((await guardianStatus(s.guardian)).badDebtAcknowledged).to.equal("0");
 
       expect(reasonWords(DEPEG | STALE_PRICE | OWNER_PAUSE)).to.deep.equal(["depeg", "stale price", "paused by the owner"]);
       let err;
@@ -420,7 +625,20 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
         priceUpdatedAt: pick(0n, t0, t0 - 7_200n, t0 - 7_201n, t0 - BigInt(Math.floor(rnd() * 20_000))),
         observedAt: t0,
       }));
-      const thresholdSets = [DEFAULTS, { minPrice: PRICE("1.001"), minFreeCash: 0n, maxBadDebtBps: 0, maxPriceAge: 1 }, { ...DEFAULTS, maxBadDebtBps: 10_000 }];
+      // Edges of the ceiling and the originations floor.
+      edges.push(
+        { price: DEFAULTS.maxPrice, freeCash: AUSD(5_000), badDebt: 0n, totalOriginated: 0n, priceUpdatedAt: t0, observedAt: t0 },
+        { price: DEFAULTS.maxPrice + 1n, freeCash: AUSD(5_000), badDebt: 0n, totalOriginated: 0n, priceUpdatedAt: t0, observedAt: t0 },
+        { price: PRICE("1"), freeCash: AUSD(5_000), badDebt: AUSD(501), totalOriginated: DEFAULTS.minOriginated - 1n, priceUpdatedAt: t0, observedAt: t0 },
+        { price: PRICE("1"), freeCash: AUSD(5_000), badDebt: AUSD(501), totalOriginated: DEFAULTS.minOriginated, priceUpdatedAt: t0, observedAt: t0 },
+        { price: PRICE("1"), freeCash: AUSD(5_000), badDebt: AUSD(500), totalOriginated: DEFAULTS.minOriginated, priceUpdatedAt: t0, observedAt: t0 }
+      );
+      const thresholdSets = [
+        DEFAULTS,
+        { minPrice: PRICE("1.001"), maxPrice: PRICE("1.001"), minFreeCash: 0n, maxBadDebtBps: 0, minOriginated: 0n, maxPriceAge: 1 },
+        { ...DEFAULTS, maxBadDebtBps: 10_000, maxPrice: PRICE("2") },
+        { ...DEFAULTS, minOriginated: AUSD(1_000) },
+      ];
       for (const th of thresholdSets) {
         await s.guardian.setThresholds(th);
         for (const x of [...edges, ...random]) {
@@ -432,10 +650,24 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
       }
     });
 
-    it("the workflow's one read on the pool's chain returns the pool state and the thresholds", async () => {
-      const [state, limits] = await s.guardian.currentInputs();
+    it("evaluate() and guardianReasons() count only bad debt beyond what the owner acknowledged", async () => {
+      const { pool, guardian } = await guardianOverDouble({ ...DEFAULTS, minOriginated: 0n });
+      await pool.setState(AUSD(5_000), 0n, AUSD(60), AUSD(1_000));
+      await guardian.acknowledgeBadDebt();
+      const t0 = await now();
+      for (const badDebt of [0n, AUSD(50), AUSD(60), AUSD(110), AUSD(111)]) {
+        const a = { priceRoundId: 1n, price: PRICE("1"), priceUpdatedAt: t0, freeCash: AUSD(5_000), totalOwed: 0n, badDebt, totalOriginated: AUSD(1_000), observedAt: t0, creditPaused: false, reasons: 0 };
+        const want = cre.guardianReasons(a, { ...DEFAULTS, minOriginated: 0n }, AUSD(60));
+        expect(Number(await guardian.evaluate(a)), String(badDebt)).to.equal(want);
+        expect(want, String(badDebt)).to.equal(badDebt > AUSD(110) ? BAD_DEBT : 0);
+      }
+    });
+
+    it("the workflow's one read on the pool's chain returns the pool state, the thresholds and the acknowledged bad debt", async () => {
+      const [state, limits, acknowledged] = await s.guardian.currentInputs();
       expect(state).to.deep.equal([AUSD(50_000), 0n, 0n, 0n]);
-      expect(limits).to.deep.equal([DEFAULTS.minPrice, DEFAULTS.minFreeCash, BigInt(DEFAULTS.maxBadDebtBps), BigInt(DEFAULTS.maxPriceAge)]);
+      expect(limits).to.deep.equal(tuple(DEFAULTS));
+      expect(acknowledged).to.equal(0n);
     });
   });
 
@@ -546,11 +778,11 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
 
     it("plans already open are still collected, repaid and re-signed", async () => {
       // Open a plan first under a forced resume, then hand back to the pause.
-      await s.guardian.setOverride(OVERRIDE.FORCE_RESUME);
+      await resumeFor(s.guardian);
       const buyer = await newBuyer();
       await s.checkout.connect(s.relayer).openPlan(...(await planArgs(buyer)));
       const loanId = await s.engine.loanCount();
-      await s.guardian.setOverride(OVERRIDE.NONE);
+      await s.guardian.setOverride(OVERRIDE.NONE, 0);
       await time.increase(WEEK);
       await attest(); // still depegged (and the price a week old): paused
       expect(await s.checkout.creditPaused()).to.deep.equal([true, BigInt(DEPEG | STALE_PRICE)]);

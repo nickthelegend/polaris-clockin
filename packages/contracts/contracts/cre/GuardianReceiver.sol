@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
 import {PolarisReceiver} from "./PolarisReceiver.sol";
 import {AggregatorV3Interface} from "../interfaces/AggregatorV3Interface.sol";
@@ -25,16 +24,18 @@ interface IPolarisPool {
 
 /**
  * @title GuardianReceiver
- * @notice Receives the Chainlink CRE `polaris-guardian` workflow's signed pool
- *         attestation, and with it decides whether PolarisCheckout may open
- *         new Pay in 4 plans. Pay now, Send and Subscribe never ask it.
+ * @notice Receives the Chainlink CRE `polaris-guardian` workflow's signed
+ *         attestation of the AUSD peg, and with the pool's own figures decides
+ *         whether PolarisCheckout may open new Pay in 4 plans. Pay now, Send
+ *         and Subscribe never ask it.
  *
  * @dev The workflow runs on a cron. Each run it reads, in one DON:
  *        - Chainlink's AUSD/USD feed on Monad MAINNET (latestRoundData), the
  *          real price of the real coin (the testnet has no AUSD feed);
  *        - the pool on Monad testnet: `currentInputs()` here returns the loan
  *          engine's `poolState()` (free cash, what buyers owe, bad debt,
- *          lifetime originations) and this contract's thresholds;
+ *          lifetime originations), this contract's thresholds, and the bad
+ *          debt the owner has acknowledged;
  *      computes the verdict, reaches consensus, and writes one report.
  *
  *      Report body (after the forwarder strips the 109-byte header):
@@ -46,52 +47,67 @@ interface IPolarisPool {
  *      `price` is the feed's answer with PRICE_DECIMALS (8) decimals, and
  *      `priceRoundId` and `priceUpdatedAt` are that round's, so anyone can
  *      check the cited round on the mainnet feed. The pool figures are the
- *      DON's read of the engine at `observedAt` (unix seconds; the timestamp
- *      of the testnet block read is the recommended source). The engine's own
- *      views stay the live truth.
+ *      DON's read of the engine at `observedAt`.
  *
- *      The verdict: `reasons` is a bitmask and `creditPaused == (reasons != 0)`.
- *        REASON_DEPEG        1  price < minPrice
+ *      The reasons, a bitmask (`creditPaused == (reasons != 0)`):
+ *        REASON_DEPEG        1  price < minPrice, or price > maxPrice
  *        REASON_LOW_CASH     2  freeCash < minFreeCash
- *        REASON_BAD_DEBT     4  badDebt > maxBadDebtBps of totalOriginated
+ *        REASON_BAD_DEBT     4  totalOriginated >= minOriginated, and bad debt
+ *                               beyond what the owner acknowledged is more than
+ *                               maxBadDebtBps of totalOriginated
  *        REASON_STALE_PRICE  8  priceUpdatedAt == 0, or observedAt - priceUpdatedAt > maxPriceAge
- *      `evaluate(a)` is that formula against the current thresholds. Every
- *      report is re-evaluated here and refused (`AttestationRefused`, with
- *      `VerdictMismatch`) unless the workflow's verdict is exactly the chain's,
- *      so the two computations check each other and the thresholds on chain
- *      are the only policy. A threshold change between the workflow's read and
- *      its write gets one report refused; the next run uses the new values.
+ *
+ *      What the DON is trusted for, and what it is not. Only the price comes
+ *      from another chain, so only the price reasons (depeg, stale price) are
+ *      taken from the attestation. Low cash and bad debt are facts of this
+ *      chain, so `isCreditPaused()` computes them from `pool.poolState()` in
+ *      the same call, every time: they never go stale and never fail open,
+ *      and no report can set or clear them. The price reasons are judged by
+ *      today's thresholds, so a threshold change applies at once, not at the
+ *      next report.
+ *
+ *      Every report is checked twice before it is accepted. Its verdict must
+ *      be exactly `evaluate(a)`, the formula applied to its own figures under
+ *      the thresholds on chain (else `VerdictMismatch`), so the workflow's
+ *      computation and the chain's check each other. And its pool verdict
+ *      (low cash, bad debt) must be the live pool's (else `PoolMismatch`), so
+ *      a report cannot claim a pool the chain does not have: a report that
+ *      says there is no free cash, against a funded pool, is refused. A
+ *      threshold change, or the pool crossing one, between the workflow's
+ *      read and its write gets one report refused; the next run reads anew.
  *
  *      Why bad debt is measured against lifetime originations, not against
  *      what buyers owe today: bad debt is cumulative and never falls, while
- *      what buyers owe falls every time a plan is repaid. Against the book
- *      outstanding, a quiet week with no new plans would push the ratio past
- *      the limit with no new loss, and once credit paused the book could only
- *      shrink, so it could never lift. Against lifetime originations the ratio
- *      moves only with new losses or new lending: the standard cumulative loss
- *      rate. A bad-debt pause does not lift by itself (losses are permanent);
- *      resuming is the owner's call (`setOverride`). Depeg, low cash and a
- *      stale price lift on the next healthy report.
+ *      what buyers owe falls every time a plan is repaid. Against lifetime
+ *      originations the ratio moves only with new losses or new lending: the
+ *      standard cumulative loss rate. Two guards keep one default from
+ *      stopping everyone: the ratio applies only once `minOriginated` has
+ *      been lent (on a young pool one loss is a large share), and the owner
+ *      can acknowledge the bad debt so far (`acknowledgeBadDebt`), after which
+ *      only new losses count. Neither touches the depeg or stale-price checks.
  *
  *      Freshness. A report is refused when it is out of order (not newer than
  *      the latest), from more than MAX_CLOCK_SKEW in the future, or already
  *      older than `maxAttestationAge`. Past `maxAttestationAge` the latest
- *      attestation is stale and credit FAILS OPEN: `isCreditPaused()` says
- *      open, because a guardian that stopped reporting (a simulate-only
- *      setup runs nothing on a schedule) must not lock Pay in 4.
+ *      attestation is stale and its price reasons FAIL OPEN: a guardian that
+ *      stopped reporting (a simulate-only setup runs nothing on a schedule)
+ *      must not lock Pay in 4. The pool reasons still apply.
  *
- *      Owner override: `setOverride(ForcePause)` pauses credit whatever the
- *      attestation says (reason REASON_OWNER_PAUSE), `setOverride(ForceResume)`
- *      opens it whatever the attestation says, `setOverride(None)` follows
- *      the attestations again. Each is an event.
+ *      Owner override: `setOverride(ForcePause, 0)` pauses credit whatever
+ *      the guard says (reason REASON_OWNER_PAUSE) until set back.
+ *      `setOverride(ForceResume, until)` opens it whatever the guard says,
+ *      but only until `until`, at most MAX_FORCE_RESUME ahead, so a forgotten
+ *      resume cannot outlive a later depeg. `setOverride(None, 0)` follows
+ *      the guard again. Each is an event.
  *
  *      Pool health as a feed. This contract is an AggregatorV3Interface, so an
  *      app or contract that reads Chainlink feeds reads it the same way:
  *      description "Polaris pool health, computed by CRE", 8 decimals. Each
  *      accepted attestation is a round, and its answer is what the pool can
- *      lend now, in US dollars: free cash valued at the attested AUSD/USD
- *      price, or 0 when the attestation paused credit. startedAt and
- *      updatedAt are the attestation's `observedAt`. A round never changes
+ *      lend at that moment, in US dollars: the pool's free cash when the
+ *      report landed (read from the pool, not the report), valued at the
+ *      attested AUSD/USD price, or 0 when the verdict paused credit. startedAt
+ *      and updatedAt are the attestation's `observedAt`. A round never changes
  *      after it is written, so an owner override or staleness is not in it;
  *      `creditStatus()` has those. It is a Polaris attestation computed by a
  *      CRE workflow, not a Chainlink Data Feed or Proof of Reserve.
@@ -107,11 +123,19 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
     uint8 public constant REASON_STALE_PRICE = 8;
     /// Only in `isCreditPaused` / `creditStatus`: the owner forced a pause.
     uint8 public constant REASON_OWNER_PAUSE = 0x80;
+    /// The reasons taken from the attestation (the cross-chain price).
+    uint8 public constant PRICE_REASONS = REASON_DEPEG | REASON_STALE_PRICE;
+    /// The reasons read from the pool itself, live.
+    uint8 public constant POOL_REASONS = REASON_LOW_CASH | REASON_BAD_DEBT;
 
     /// How far past the block an observation may be dated (DON and chain clocks).
     uint32 public constant MAX_CLOCK_SKEW = 5 minutes;
     /// Longest `maxAttestationAge` the owner may set.
     uint32 public constant MAX_ATTESTATION_AGE_LIMIT = 7 days;
+    /// Longest a forced resume may last.
+    uint32 public constant MAX_FORCE_RESUME = 1 days;
+    /// Highest `maxPrice` the owner may set: $2, PRICE_DECIMALS decimals.
+    int256 public constant PRICE_CEILING = 2 * 10 ** 8;
 
     enum Override {
         None,
@@ -138,14 +162,21 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         uint8 reasons;
     }
 
-    /// The policy. Defaults (decision 9): $0.995, $1,000, 5%, 2 hours.
+    /// The policy. Defaults: decision 9 ($0.995, $1,000, 5%, 2 hours), a
+    /// $1.005 ceiling, and the bad-debt ratio from $10,000 lent.
     struct Thresholds {
         /// Lowest AUSD/USD price that is not a depeg, PRICE_DECIMALS decimals.
         int256 minPrice;
+        /// Highest AUSD/USD price that is not a depeg (an upward break, or a
+        /// faulty answer), PRICE_DECIMALS decimals; at most PRICE_CEILING.
+        int256 maxPrice;
         /// Least free pool cash, stablecoin base units.
         uint256 minFreeCash;
         /// Most bad debt, in basis points of lifetime originations.
         uint16 maxBadDebtBps;
+        /// Lifetime originations, stablecoin base units, below which the
+        /// bad-debt ratio is not applied: on a young pool one loss is a large share.
+        uint256 minOriginated;
         /// Oldest the cited price may be at observation, seconds.
         uint32 maxPriceAge;
     }
@@ -161,12 +192,22 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         uint8 attestedReasons;
         /// The latest attestation's observedAt; 0 when there is none.
         uint64 observedAt;
-        /// No attestation, or older than maxAttestationAge: credit fails open.
+        /// No attestation, or older than maxAttestationAge: the price reasons fail open.
         bool stale;
+        /// The override in force now (a forced resume past its end reads None).
         Override overrideMode;
         uint32 maxAttestationAge;
         /// Rounds written so far (the feed's latest round id).
         uint80 round;
+        /// When the forced resume in force ends; 0 when there is none.
+        uint64 overrideUntil;
+        /// Low cash and bad debt, from the pool now (never stale).
+        uint8 poolReasons;
+        /// Depeg and stale price, from the latest attestation under today's
+        /// thresholds; 0 once it is stale.
+        uint8 priceReasons;
+        /// Bad debt the owner acknowledged; only bad debt beyond it counts.
+        uint256 badDebtAcknowledged;
     }
 
     /// A feed round, packed in one slot.
@@ -180,9 +221,14 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
     uint256 public immutable cashScale;
 
     Thresholds private _thresholds;
-    /// Past this age the latest attestation is stale and credit fails open.
+    /// Past this age the latest attestation is stale and its price reasons fail open.
     uint32 public maxAttestationAge;
+    /// The override as set; `activeOverride()` is the one in force.
     Override public overrideMode;
+    /// When a forced resume ends (unix seconds); 0 for the other modes.
+    uint64 public overrideUntil;
+    /// Bad debt the owner acknowledged (`acknowledgeBadDebt`), stablecoin base units.
+    uint256 public badDebtAcknowledged;
 
     Attestation private _latest;
     uint80 public latestRound;
@@ -192,19 +238,23 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
     event CreditGuardUpdated(uint80 indexed round, bool indexed creditPaused, uint8 reasons, Attestation attestation);
     /// A report was well formed but refused; `reason` is one of the errors below. Nothing changed.
     event AttestationRefused(uint64 observedAt, bytes reason);
-    event ThresholdsSet(int256 minPrice, uint256 minFreeCash, uint16 maxBadDebtBps, uint32 maxPriceAge);
+    event ThresholdsSet(Thresholds thresholds);
     event MaxAttestationAgeSet(uint32 maxAttestationAge);
-    event CreditGuardOverridden(Override mode);
+    event CreditGuardOverridden(Override mode, uint64 until);
+    event BadDebtAcknowledged(uint256 badDebt);
 
     error ZeroAddress();
     error InvalidThresholds();
     error InvalidMaxAttestationAge(uint32 maxAttestationAge);
+    error InvalidOverride(Override mode, uint64 until);
     error RoundNotFound(uint80 roundId);
     /// Refusals, delivered as `AttestationRefused.reason`.
     error ObservationInFuture(uint64 observedAt, uint256 blockTimestamp);
     error AttestationOutOfOrder(uint64 observedAt, uint64 latestObservedAt);
     error AttestationTooOld(uint64 observedAt, uint32 maxAttestationAge);
     error VerdictMismatch(bool reportedPaused, uint8 reportedReasons, uint8 computedReasons);
+    /// The report's low-cash and bad-debt verdict is not the live pool's.
+    error PoolMismatch(uint8 reportedPoolReasons, uint8 livePoolReasons);
 
     constructor(
         address forwarder,
@@ -232,11 +282,30 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         _setMaxAttestationAge(age);
     }
 
-    /// @notice Force credit paused or open whatever the attestations say, or
-    ///         (None) follow them again.
-    function setOverride(Override mode) external onlyOwner {
+    /**
+     * @notice Force credit paused (`until` 0) or open (`until` in the next
+     *         MAX_FORCE_RESUME) whatever the guard says, or (None, `until` 0)
+     *         follow the guard again.
+     */
+    function setOverride(Override mode, uint64 until) external onlyOwner {
+        bool ok = mode == Override.ForceResume
+            ? until > block.timestamp && until <= block.timestamp + MAX_FORCE_RESUME
+            : until == 0;
+        if (!ok) revert InvalidOverride(mode, until);
         overrideMode = mode;
-        emit CreditGuardOverridden(mode);
+        overrideUntil = until;
+        emit CreditGuardOverridden(mode, until);
+    }
+
+    /**
+     * @notice Acknowledge the pool's bad debt so far: from now on only bad
+     *         debt beyond it counts toward REASON_BAD_DEBT. For a pause the
+     *         owner has looked into; it leaves every other reason alone.
+     */
+    function acknowledgeBadDebt() external onlyOwner {
+        uint256 badDebt = pool.poolState().badDebt;
+        badDebtAcknowledged = badDebt;
+        emit BadDebtAcknowledged(badDebt);
     }
 
     // -----------------------------------------------------------------
@@ -245,14 +314,24 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
 
     /// @inheritdoc ICreditGuard
     function isCreditPaused() public view returns (bool paused, uint8 reasons) {
-        Override mode = overrideMode;
+        Override mode = activeOverride();
         if (mode == Override.ForcePause) return (true, REASON_OWNER_PAUSE);
-        if (mode == Override.ForceResume || isStale()) return (false, 0);
-        return (_latest.creditPaused, _latest.reasons);
+        if (mode == Override.ForceResume) return (false, 0);
+        Thresholds memory t = _thresholds;
+        reasons = _poolReasons(pool.poolState(), t);
+        if (!isStale()) reasons |= _priceReasons(_latest, t);
+        paused = reasons != 0;
+    }
+
+    /// @notice The override in force now: a forced resume past `overrideUntil` is None.
+    function activeOverride() public view returns (Override) {
+        Override mode = overrideMode;
+        if (mode == Override.ForceResume && block.timestamp >= overrideUntil) return Override.None;
+        return mode;
     }
 
     /// @notice True when there is no attestation or the latest is older than
-    ///         `maxAttestationAge`: credit then fails open.
+    ///         `maxAttestationAge`: its price reasons then fail open.
     function isStale() public view returns (bool) {
         uint64 observedAt = _latest.observedAt;
         return observedAt == 0 || block.timestamp > uint256(observedAt) + maxAttestationAge;
@@ -264,9 +343,14 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         s.attestedReasons = _latest.reasons;
         s.observedAt = _latest.observedAt;
         s.stale = isStale();
-        s.overrideMode = overrideMode;
+        s.overrideMode = activeOverride();
         s.maxAttestationAge = maxAttestationAge;
         s.round = latestRound;
+        s.overrideUntil = s.overrideMode == Override.ForceResume ? overrideUntil : 0;
+        Thresholds memory t = _thresholds;
+        s.poolReasons = _poolReasons(pool.poolState(), t);
+        s.priceReasons = s.stale ? 0 : _priceReasons(_latest, t);
+        s.badDebtAcknowledged = badDebtAcknowledged;
     }
 
     function latestAttestation() external view returns (Attestation memory) {
@@ -278,25 +362,30 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
     }
 
     /// @notice The workflow's one read on the pool's chain: the engine's pool
-    ///         state now, and the thresholds to judge it by.
-    function currentInputs() external view returns (IPolarisPool.PoolState memory state, Thresholds memory limits) {
-        return (pool.poolState(), _thresholds);
+    ///         state now, the thresholds to judge it by, and the bad debt the
+    ///         owner acknowledged.
+    function currentInputs()
+        external
+        view
+        returns (IPolarisPool.PoolState memory state, Thresholds memory limits, uint256 acknowledgedBadDebt)
+    {
+        return (pool.poolState(), _thresholds, badDebtAcknowledged);
     }
 
     /**
-     * @notice The verdict for `a` under the current thresholds: the reason
-     *         bits, 0 when healthy. The workflow's `reasons` must equal it.
+     * @notice The verdict for `a` under the current thresholds and the bad
+     *         debt acknowledged: the reason bits, 0 when healthy. The
+     *         workflow's `reasons` must equal it.
      */
     function evaluate(Attestation memory a) public view returns (uint8 reasons) {
         Thresholds memory t = _thresholds;
-        if (a.price < t.minPrice) reasons |= REASON_DEPEG;
-        if (a.freeCash < t.minFreeCash) reasons |= REASON_LOW_CASH;
-        // badDebt / totalOriginated > maxBadDebtBps / 10_000, exactly (bad
-        // debt is an integer, so comparing it to the floored limit is exact).
-        if (a.badDebt > Math.mulDiv(a.totalOriginated, t.maxBadDebtBps, 10_000)) reasons |= REASON_BAD_DEBT;
-        if (a.priceUpdatedAt == 0 || (a.observedAt > a.priceUpdatedAt && a.observedAt - a.priceUpdatedAt > t.maxPriceAge)) {
-            reasons |= REASON_STALE_PRICE;
-        }
+        IPolarisPool.PoolState memory s = IPolarisPool.PoolState({
+            freeCash: a.freeCash,
+            totalOwed: a.totalOwed,
+            badDebt: a.badDebt,
+            totalOriginated: a.totalOriginated
+        });
+        return _poolReasons(s, t) | _priceReasons(a, t);
     }
 
     // -----------------------------------------------------------------
@@ -346,7 +435,8 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         _requireKind(report, REPORT_KIND);
         (, Attestation memory a) = abi.decode(report, (uint8, Attestation));
 
-        bytes memory refusal = _refusal(a);
+        IPolarisPool.PoolState memory live = pool.poolState();
+        bytes memory refusal = _refusal(a, live);
         if (refusal.length != 0) {
             emit AttestationRefused(a.observedAt, refusal);
             return;
@@ -355,12 +445,12 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         _latest = a;
         uint80 round = latestRound + 1;
         latestRound = round;
-        _rounds[round] = Round({answer: SafeCast.toInt192(SafeCast.toInt256(_lendableUsd(a))), observedAt: a.observedAt});
+        _rounds[round] = Round({answer: _lendableUsd(a, live.freeCash), observedAt: a.observedAt});
         emit CreditGuardUpdated(round, a.creditPaused, a.reasons, a);
     }
 
     /// Why `a` can't be accepted, as an encoded error; empty when it can.
-    function _refusal(Attestation memory a) private view returns (bytes memory) {
+    function _refusal(Attestation memory a, IPolarisPool.PoolState memory live) private view returns (bytes memory) {
         if (a.observedAt > block.timestamp + MAX_CLOCK_SKEW) {
             return abi.encodeWithSelector(ObservationInFuture.selector, a.observedAt, block.timestamp);
         }
@@ -375,23 +465,53 @@ contract GuardianReceiver is PolarisReceiver, AggregatorV3Interface, ICreditGuar
         if (a.reasons != computed || a.creditPaused != (computed != 0)) {
             return abi.encodeWithSelector(VerdictMismatch.selector, a.creditPaused, a.reasons, computed);
         }
+        uint8 livePool = _poolReasons(live, _thresholds);
+        if ((computed & POOL_REASONS) != livePool) {
+            return abi.encodeWithSelector(PoolMismatch.selector, computed & POOL_REASONS, livePool);
+        }
         return "";
     }
 
-    /// The feed's answer: free cash in dollars (PRICE_DECIMALS) at the attested
-    /// price, or 0 when the attestation paused credit.
-    function _lendableUsd(Attestation memory a) private view returns (uint256) {
+    /// Low cash and bad debt for pool state `s` under `t`.
+    function _poolReasons(IPolarisPool.PoolState memory s, Thresholds memory t) private view returns (uint8 reasons) {
+        if (s.freeCash < t.minFreeCash) reasons |= REASON_LOW_CASH;
+        if (s.totalOriginated >= t.minOriginated) {
+            uint256 acknowledged = badDebtAcknowledged;
+            uint256 unacknowledged = s.badDebt > acknowledged ? s.badDebt - acknowledged : 0;
+            // unacknowledged / totalOriginated > maxBadDebtBps / 10_000, exactly
+            // (bad debt is an integer, so comparing it to the floored limit is exact).
+            if (unacknowledged > Math.mulDiv(s.totalOriginated, t.maxBadDebtBps, 10_000)) reasons |= REASON_BAD_DEBT;
+        }
+    }
+
+    /// Depeg and stale price for the attested round under `t`.
+    function _priceReasons(Attestation memory a, Thresholds memory t) private pure returns (uint8 reasons) {
+        if (a.price < t.minPrice || a.price > t.maxPrice) reasons |= REASON_DEPEG;
+        if (a.priceUpdatedAt == 0 || (a.observedAt > a.priceUpdatedAt && a.observedAt - a.priceUpdatedAt > t.maxPriceAge)) {
+            reasons |= REASON_STALE_PRICE;
+        }
+    }
+
+    /// The feed's answer: `freeCash` in dollars (PRICE_DECIMALS) at the
+    /// attested price, or 0 when the attestation paused credit. Saturates at
+    /// int192's maximum, so no balance can make a round write revert.
+    function _lendableUsd(Attestation memory a, uint256 freeCash) private view returns (int192) {
+        // Not paused, so minPrice <= price <= maxPrice <= PRICE_CEILING, and price > 0.
         if (a.creditPaused) return 0;
-        // Not paused, so price >= minPrice > 0.
-        return Math.mulDiv(a.freeCash, uint256(a.price), cashScale);
+        (bool ok, uint256 product) = Math.tryMul(freeCash, uint256(a.price));
+        uint256 usd = ok ? product / cashScale : type(uint256).max;
+        uint256 cap = uint256(uint192(type(int192).max));
+        return usd > cap ? type(int192).max : int192(int256(usd));
     }
 
     function _setThresholds(Thresholds memory t) private {
-        if (t.minPrice <= 0 || t.minPrice > int256(2 * 10 ** PRICE_DECIMALS) || t.maxBadDebtBps > 10_000 || t.maxPriceAge == 0) {
+        if (
+            t.minPrice <= 0 || t.maxPrice < t.minPrice || t.maxPrice > PRICE_CEILING || t.maxBadDebtBps > 10_000 || t.maxPriceAge == 0
+        ) {
             revert InvalidThresholds();
         }
         _thresholds = t;
-        emit ThresholdsSet(t.minPrice, t.minFreeCash, t.maxBadDebtBps, t.maxPriceAge);
+        emit ThresholdsSet(t);
     }
 
     function _setMaxAttestationAge(uint32 age) private {

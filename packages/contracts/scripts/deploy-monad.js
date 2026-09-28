@@ -51,9 +51,12 @@
  *                               local 100000); testnet seeds what the deployer holds
  *   GUARD_MIN_PRICE             GuardianReceiver: lowest AUSD/USD that is not a
  *                               depeg, in dollars (0.995)
+ *   GUARD_MAX_PRICE             highest AUSD/USD that is not a depeg (1.005)
  *   GUARD_MIN_FREE_CASH_AUSD    least free pool cash, in dollars (1000)
  *   GUARD_MAX_BAD_DEBT_BPS      most bad debt, basis points of lifetime
  *                               originations (500)
+ *   GUARD_MIN_ORIGINATED_AUSD   lifetime originations, in dollars, before the
+ *                               bad-debt ratio applies (10000)
  *   GUARD_MAX_PRICE_AGE_SECONDS oldest the cited AUSD/USD round may be (7200)
  *   GUARD_MAX_ATTESTATION_AGE_SECONDS  past this the guardian's attestation is
  *                               stale and Pay in 4 fails open (3600)
@@ -192,7 +195,8 @@ async function buildConfig(networkName, deployer) {
 
 /**
  * GuardianReceiver's thresholds and staleness from the environment, with
- * decision 9 and 10's defaults (lib/cre.js GUARDIAN_DEFAULTS).
+ * lib/cre.js GUARDIAN_DEFAULTS (decisions 9 and 10, the $1.005 ceiling and
+ * the $10,000 floor for the bad-debt ratio) for any unset.
  */
 function guardianConfig(env = process.env) {
   const set = (v) => v !== undefined && v !== "";
@@ -205,8 +209,10 @@ function guardianConfig(env = process.env) {
   return {
     guardianThresholds: {
       minPrice: set(env.GUARD_MIN_PRICE) ? parseUnits(String(env.GUARD_MIN_PRICE), GUARDIAN_PRICE_DECIMALS) : GUARDIAN_DEFAULTS.minPrice,
+      maxPrice: set(env.GUARD_MAX_PRICE) ? parseUnits(String(env.GUARD_MAX_PRICE), GUARDIAN_PRICE_DECIMALS) : GUARDIAN_DEFAULTS.maxPrice,
       minFreeCash: set(env.GUARD_MIN_FREE_CASH_AUSD) ? parseUnits(String(env.GUARD_MIN_FREE_CASH_AUSD), 6) : GUARDIAN_DEFAULTS.minFreeCash,
       maxBadDebtBps: int("GUARD_MAX_BAD_DEBT_BPS", GUARDIAN_DEFAULTS.maxBadDebtBps),
+      minOriginated: set(env.GUARD_MIN_ORIGINATED_AUSD) ? parseUnits(String(env.GUARD_MIN_ORIGINATED_AUSD), 6) : GUARDIAN_DEFAULTS.minOriginated,
       maxPriceAge: int("GUARD_MAX_PRICE_AGE_SECONDS", GUARDIAN_DEFAULTS.maxPriceAge),
     },
     maxAttestationAge: int("GUARD_MAX_ATTESTATION_AGE_SECONDS", GUARDIAN_DEFAULTS.maxAttestationAge),

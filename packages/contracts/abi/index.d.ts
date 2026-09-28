@@ -9309,6 +9309,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "type": "int256";
           },
           {
+            readonly "internalType": "int256";
+            readonly "name": "maxPrice";
+            readonly "type": "int256";
+          },
+          {
             readonly "internalType": "uint256";
             readonly "name": "minFreeCash";
             readonly "type": "uint256";
@@ -9317,6 +9322,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "internalType": "uint16";
             readonly "name": "maxBadDebtBps";
             readonly "type": "uint16";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "minOriginated";
+            readonly "type": "uint256";
           },
           {
             readonly "internalType": "uint32";
@@ -9404,6 +9414,22 @@ export declare const guardianReceiverAbi: readonly [
       }
     ];
     readonly "name": "InvalidMaxAttestationAge";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "enum GuardianReceiver.Override";
+        readonly "name": "mode";
+        readonly "type": "uint8";
+      },
+      {
+        readonly "internalType": "uint64";
+        readonly "name": "until";
+        readonly "type": "uint64";
+      }
+    ];
+    readonly "name": "InvalidOverride";
     readonly "type": "error";
   },
   {
@@ -9511,39 +9537,28 @@ export declare const guardianReceiverAbi: readonly [
   {
     readonly "inputs": readonly [
       {
+        readonly "internalType": "uint8";
+        readonly "name": "reportedPoolReasons";
+        readonly "type": "uint8";
+      },
+      {
+        readonly "internalType": "uint8";
+        readonly "name": "livePoolReasons";
+        readonly "type": "uint8";
+      }
+    ];
+    readonly "name": "PoolMismatch";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
         readonly "internalType": "uint80";
         readonly "name": "roundId";
         readonly "type": "uint80";
       }
     ];
     readonly "name": "RoundNotFound";
-    readonly "type": "error";
-  },
-  {
-    readonly "inputs": readonly [
-      {
-        readonly "internalType": "uint8";
-        readonly "name": "bits";
-        readonly "type": "uint8";
-      },
-      {
-        readonly "internalType": "int256";
-        readonly "name": "value";
-        readonly "type": "int256";
-      }
-    ];
-    readonly "name": "SafeCastOverflowedIntDowncast";
-    readonly "type": "error";
-  },
-  {
-    readonly "inputs": readonly [
-      {
-        readonly "internalType": "uint256";
-        readonly "name": "value";
-        readonly "type": "uint256";
-      }
-    ];
-    readonly "name": "SafeCastOverflowedUintToInt";
     readonly "type": "error";
   },
   {
@@ -9612,9 +9627,28 @@ export declare const guardianReceiverAbi: readonly [
     readonly "inputs": readonly [
       {
         readonly "indexed": false;
+        readonly "internalType": "uint256";
+        readonly "name": "badDebt";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "BadDebtAcknowledged";
+    readonly "type": "event";
+  },
+  {
+    readonly "anonymous": false;
+    readonly "inputs": readonly [
+      {
+        readonly "indexed": false;
         readonly "internalType": "enum GuardianReceiver.Override";
         readonly "name": "mode";
         readonly "type": "uint8";
+      },
+      {
+        readonly "indexed": false;
+        readonly "internalType": "uint64";
+        readonly "name": "until";
+        readonly "type": "uint64";
       }
     ];
     readonly "name": "CreditGuardOverridden";
@@ -9841,28 +9875,42 @@ export declare const guardianReceiverAbi: readonly [
     readonly "anonymous": false;
     readonly "inputs": readonly [
       {
+        readonly "components": readonly [
+          {
+            readonly "internalType": "int256";
+            readonly "name": "minPrice";
+            readonly "type": "int256";
+          },
+          {
+            readonly "internalType": "int256";
+            readonly "name": "maxPrice";
+            readonly "type": "int256";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "minFreeCash";
+            readonly "type": "uint256";
+          },
+          {
+            readonly "internalType": "uint16";
+            readonly "name": "maxBadDebtBps";
+            readonly "type": "uint16";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "minOriginated";
+            readonly "type": "uint256";
+          },
+          {
+            readonly "internalType": "uint32";
+            readonly "name": "maxPriceAge";
+            readonly "type": "uint32";
+          }
+        ];
         readonly "indexed": false;
-        readonly "internalType": "int256";
-        readonly "name": "minPrice";
-        readonly "type": "int256";
-      },
-      {
-        readonly "indexed": false;
-        readonly "internalType": "uint256";
-        readonly "name": "minFreeCash";
-        readonly "type": "uint256";
-      },
-      {
-        readonly "indexed": false;
-        readonly "internalType": "uint16";
-        readonly "name": "maxBadDebtBps";
-        readonly "type": "uint16";
-      },
-      {
-        readonly "indexed": false;
-        readonly "internalType": "uint32";
-        readonly "name": "maxPriceAge";
-        readonly "type": "uint32";
+        readonly "internalType": "struct GuardianReceiver.Thresholds";
+        readonly "name": "thresholds";
+        readonly "type": "tuple";
       }
     ];
     readonly "name": "ThresholdsSet";
@@ -9896,7 +9944,59 @@ export declare const guardianReceiverAbi: readonly [
   },
   {
     readonly "inputs": readonly [];
+    readonly "name": "MAX_FORCE_RESUME";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint32";
+        readonly "name": "";
+        readonly "type": "uint32";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "POOL_REASONS";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint8";
+        readonly "name": "";
+        readonly "type": "uint8";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "PRICE_CEILING";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "int256";
+        readonly "name": "";
+        readonly "type": "int256";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
     readonly "name": "PRICE_DECIMALS";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint8";
+        readonly "name": "";
+        readonly "type": "uint8";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "PRICE_REASONS";
     readonly "outputs": readonly [
       {
         readonly "internalType": "uint8";
@@ -9987,6 +10087,39 @@ export declare const guardianReceiverAbi: readonly [
   },
   {
     readonly "inputs": readonly [];
+    readonly "name": "acknowledgeBadDebt";
+    readonly "outputs": readonly [];
+    readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "activeOverride";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "enum GuardianReceiver.Override";
+        readonly "name": "";
+        readonly "type": "uint8";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
+    readonly "name": "badDebtAcknowledged";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
     readonly "name": "cashScale";
     readonly "outputs": readonly [
       {
@@ -10048,6 +10181,26 @@ export declare const guardianReceiverAbi: readonly [
             readonly "internalType": "uint80";
             readonly "name": "round";
             readonly "type": "uint80";
+          },
+          {
+            readonly "internalType": "uint64";
+            readonly "name": "overrideUntil";
+            readonly "type": "uint64";
+          },
+          {
+            readonly "internalType": "uint8";
+            readonly "name": "poolReasons";
+            readonly "type": "uint8";
+          },
+          {
+            readonly "internalType": "uint8";
+            readonly "name": "priceReasons";
+            readonly "type": "uint8";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "badDebtAcknowledged";
+            readonly "type": "uint256";
           }
         ];
         readonly "internalType": "struct GuardianReceiver.CreditStatus";
@@ -10097,6 +10250,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "type": "int256";
           },
           {
+            readonly "internalType": "int256";
+            readonly "name": "maxPrice";
+            readonly "type": "int256";
+          },
+          {
             readonly "internalType": "uint256";
             readonly "name": "minFreeCash";
             readonly "type": "uint256";
@@ -10107,6 +10265,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "type": "uint16";
           },
           {
+            readonly "internalType": "uint256";
+            readonly "name": "minOriginated";
+            readonly "type": "uint256";
+          },
+          {
             readonly "internalType": "uint32";
             readonly "name": "maxPriceAge";
             readonly "type": "uint32";
@@ -10115,6 +10278,11 @@ export declare const guardianReceiverAbi: readonly [
         readonly "internalType": "struct GuardianReceiver.Thresholds";
         readonly "name": "limits";
         readonly "type": "tuple";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "acknowledgedBadDebt";
+        readonly "type": "uint256";
       }
     ];
     readonly "stateMutability": "view";
@@ -10496,6 +10664,19 @@ export declare const guardianReceiverAbi: readonly [
   },
   {
     readonly "inputs": readonly [];
+    readonly "name": "overrideUntil";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint64";
+        readonly "name": "";
+        readonly "type": "uint64";
+      }
+    ];
+    readonly "stateMutability": "view";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [];
     readonly "name": "owner";
     readonly "outputs": readonly [
       {
@@ -10598,6 +10779,11 @@ export declare const guardianReceiverAbi: readonly [
         readonly "internalType": "enum GuardianReceiver.Override";
         readonly "name": "mode";
         readonly "type": "uint8";
+      },
+      {
+        readonly "internalType": "uint64";
+        readonly "name": "until";
+        readonly "type": "uint64";
       }
     ];
     readonly "name": "setOverride";
@@ -10628,6 +10814,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "type": "int256";
           },
           {
+            readonly "internalType": "int256";
+            readonly "name": "maxPrice";
+            readonly "type": "int256";
+          },
+          {
             readonly "internalType": "uint256";
             readonly "name": "minFreeCash";
             readonly "type": "uint256";
@@ -10636,6 +10827,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "internalType": "uint16";
             readonly "name": "maxBadDebtBps";
             readonly "type": "uint16";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "minOriginated";
+            readonly "type": "uint256";
           },
           {
             readonly "internalType": "uint32";
@@ -10697,6 +10893,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "type": "int256";
           },
           {
+            readonly "internalType": "int256";
+            readonly "name": "maxPrice";
+            readonly "type": "int256";
+          },
+          {
             readonly "internalType": "uint256";
             readonly "name": "minFreeCash";
             readonly "type": "uint256";
@@ -10705,6 +10906,11 @@ export declare const guardianReceiverAbi: readonly [
             readonly "internalType": "uint16";
             readonly "name": "maxBadDebtBps";
             readonly "type": "uint16";
+          },
+          {
+            readonly "internalType": "uint256";
+            readonly "name": "minOriginated";
+            readonly "type": "uint256";
           },
           {
             readonly "internalType": "uint32";

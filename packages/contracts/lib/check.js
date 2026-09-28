@@ -15,6 +15,8 @@
 
 const { ZeroAddress, getAddress } = require("ethers");
 
+const { GUARDIAN_THRESHOLD_FIELDS } = require("./cre");
+
 const same = (a, b) => typeof a === "string" && typeof b === "string" && getAddress(a) === getAddress(b);
 
 /**
@@ -89,9 +91,11 @@ async function checkDeployment(ethers, record) {
     const t = await g.thresholds();
     const want = record.config?.guardian;
     if (want) {
-      const got = { minPrice: t.minPrice.toString(), minFreeCash: t.minFreeCash.toString(), maxBadDebtBps: Number(t.maxBadDebtBps), maxPriceAge: Number(t.maxPriceAge) };
-      const wantT = { minPrice: String(want.minPrice), minFreeCash: String(want.minFreeCash), maxBadDebtBps: Number(want.maxBadDebtBps), maxPriceAge: Number(want.maxPriceAge) };
-      row("GuardianReceiver: thresholds match the record", JSON.stringify(got) === JSON.stringify(wantT), JSON.stringify(got));
+      // Every field the record names, in GuardianReceiver.Thresholds' order, as decimal strings.
+      const fields = GUARDIAN_THRESHOLD_FIELDS.filter((f) => want[f] !== undefined);
+      const got = Object.fromEntries(fields.map((f) => [f, String(t[f])]));
+      const wantT = Object.fromEntries(fields.map((f) => [f, String(want[f])]));
+      row("GuardianReceiver: thresholds match the record", fields.length > 0 && JSON.stringify(got) === JSON.stringify(wantT), JSON.stringify(got));
       const age = Number(await g.maxAttestationAge());
       row("GuardianReceiver: attestation goes stale after the recorded age", age === Number(want.maxAttestationAge), `${age} s`);
     }
@@ -100,7 +104,13 @@ async function checkDeployment(ethers, record) {
     row("pool state (info)", true, `free cash ${ethers.formatUnits(state.freeCash, 6)}, owed ${ethers.formatUnits(state.totalOwed, 6)}, bad debt ${ethers.formatUnits(state.badDebt, 6)}, originated ${ethers.formatUnits(state.totalOriginated, 6)}`);
     const round = Number(await g.latestRound());
     const [paused, reasons] = await co.creditPaused();
-    row("guardian status (info)", true, `${round === 0 ? "no attestation yet" : `round ${round}`}; Pay in 4 ${paused ? `paused (reasons ${reasons})` : "open"}`);
+    const status = await g.creditStatus();
+    row(
+      "guardian status (info)",
+      true,
+      `${round === 0 ? "no attestation yet" : `round ${round}`}; Pay in 4 ${paused ? `paused (reasons ${reasons})` : "open"}; ` +
+        `pool reasons now ${status.poolReasons}, price reasons ${status.stale ? "stale (fail open)" : status.priceReasons}`
+    );
   }
 
   // ── the CRE receivers ──────────────────────────────────────────────────

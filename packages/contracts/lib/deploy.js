@@ -27,6 +27,7 @@ const {
   GUARDIAN_OVERRIDE,
   GUARDIAN_DEFAULTS,
   GUARDIAN_PRICE_DECIMALS,
+  guardianThresholds: toGuardianThresholds,
   AUSD_USD_FEED_MONAD_MAINNET,
   workflowNameBytes10,
 } = require("./cre");
@@ -54,8 +55,8 @@ const USD = (n) => BigInt(Math.round(Number(n) * 1e6));
  * @property {"local"|"simulation"|"production"} forwarderKind
  * @property {string} [forwarderAddress] required unless forwarderKind is "local"
  * @property {string} simulationTransmitter  the three receivers' origin guard (zero to disable)
- * @property {{minPrice: bigint, minFreeCash: bigint, maxBadDebtBps: number, maxPriceAge: number}} [guardianThresholds]
- *                                      GuardianReceiver thresholds (default: GUARDIAN_DEFAULTS, decision 9)
+ * @property {{minPrice?: bigint, maxPrice?: bigint, minFreeCash?: bigint, maxBadDebtBps?: number, minOriginated?: bigint, maxPriceAge?: number}} [guardianThresholds]
+ *                                      GuardianReceiver thresholds (default: lib/cre.js GUARDIAN_DEFAULTS)
  * @property {number} [maxAttestationAge] seconds before the guardian's attestation is stale and credit fails open (3600)
  * @property {string} [workflowOwner]   production only: expected CRE workflow owner
  * @property {string} [relayer]         Privy server wallet that relays; gets operator roles
@@ -182,13 +183,7 @@ async function deployPolaris(hre, cfg, log = () => {}) {
     addresses.ScoreManager,
     transmitter,
   ]);
-  const thresholds = { ...GUARDIAN_DEFAULTS, ...(cfg.guardianThresholds ?? {}) };
-  const guardianThresholds = {
-    minPrice: BigInt(thresholds.minPrice),
-    minFreeCash: BigInt(thresholds.minFreeCash),
-    maxBadDebtBps: Number(thresholds.maxBadDebtBps),
-    maxPriceAge: Number(thresholds.maxPriceAge),
-  };
+  const guardianThresholds = toGuardianThresholds(cfg.guardianThresholds ?? {});
   const maxAttestationAge = Number(cfg.maxAttestationAge ?? GUARDIAN_DEFAULTS.maxAttestationAge);
   const guardian = await deployContract("GuardianReceiver", [
     forwarder,
@@ -232,9 +227,9 @@ async function deployPolaris(hre, cfg, log = () => {}) {
   log("  LoanEngine: originator = PolarisCheckout (only), vault, registry");
   log("  PolarisPayments: checkout = PolarisCheckout");
   log(
-    `  PolarisCheckout: credit guardian = GuardianReceiver (depeg < $${Number(guardianThresholds.minPrice) / 1e8}, ` +
-      `cash < $${Number(guardianThresholds.minFreeCash) / 1e6}, bad debt > ${guardianThresholds.maxBadDebtBps / 100}%, ` +
-      `price older than ${guardianThresholds.maxPriceAge}s; stale after ${maxAttestationAge}s)`
+    `  PolarisCheckout: credit guardian = GuardianReceiver (depeg < ${Number(guardianThresholds.minPrice) / 1e8} or > ${Number(guardianThresholds.maxPrice) / 1e8}, ` +
+      `cash < ${Number(guardianThresholds.minFreeCash) / 1e6}, bad debt > ${guardianThresholds.maxBadDebtBps / 100}% once ${Number(guardianThresholds.minOriginated) / 1e6} is lent, ` +
+      `price older than ${guardianThresholds.maxPriceAge}s; price stale after ${maxAttestationAge}s)`
   );
 
   if (cfg.relayer) {
@@ -324,13 +319,7 @@ async function deployPolaris(hre, cfg, log = () => {}) {
     feeBps: Number(await payments.feeBps()),
     interestRateBps: Number(await engine.INTEREST_RATE_BPS()),
     requireUnderwriting: await scores.requireUnderwriting(),
-    guardian: {
-      minPrice: guardianThresholds.minPrice.toString(),
-      minFreeCash: guardianThresholds.minFreeCash.toString(),
-      maxBadDebtBps: guardianThresholds.maxBadDebtBps,
-      maxPriceAge: guardianThresholds.maxPriceAge,
-      maxAttestationAge,
-    },
+    guardian: guardianRecordConfig(guardianThresholds, maxAttestationAge),
   };
   record.roles = {
     owner: deployer.address,
@@ -379,7 +368,7 @@ async function deployPolaris(hre, cfg, log = () => {}) {
         priceDecimals: GUARDIAN_PRICE_DECIMALS,
         priceFeed,
         pool: addresses.PolarisLoanEngine,
-        view: "currentInputs() returns ((uint256 freeCash,uint256 totalOwed,uint256 badDebt,uint256 totalOriginated) state, (int256 minPrice,uint256 minFreeCash,uint16 maxBadDebtBps,uint32 maxPriceAge) limits)",
+        view: GUARDIAN_VIEW,
         feed: { description: "Polaris pool health, computed by CRE", decimals: GUARDIAN_PRICE_DECIMALS, address: addresses.GuardianReceiver },
       },
     },
@@ -405,6 +394,25 @@ async function _domains(ethers, addresses, token) {
   return out;
 }
 
+/** GuardianReceiver.currentInputs(), as the deployment record describes it to the workflow. */
+const GUARDIAN_VIEW =
+  "currentInputs() returns ((uint256 freeCash,uint256 totalOwed,uint256 badDebt,uint256 totalOriginated) state, " +
+  "(int256 minPrice,int256 maxPrice,uint256 minFreeCash,uint16 maxBadDebtBps,uint256 minOriginated,uint32 maxPriceAge) limits, " +
+  "uint256 acknowledgedBadDebt)";
+
+/** The record's `config.guardian`: the thresholds as decimal strings and numbers, and the staleness. */
+function guardianRecordConfig(t, maxAttestationAge) {
+  return {
+    minPrice: t.minPrice.toString(),
+    maxPrice: t.maxPrice.toString(),
+    minFreeCash: t.minFreeCash.toString(),
+    maxBadDebtBps: Number(t.maxBadDebtBps),
+    minOriginated: t.minOriginated.toString(),
+    maxPriceAge: Number(t.maxPriceAge),
+    maxAttestationAge: Number(maxAttestationAge),
+  };
+}
+
 /** Bigints as decimal strings, recursively, so a record serialises. */
 function jsonSafe(v) {
   if (typeof v === "bigint") return v.toString();
@@ -418,4 +426,4 @@ function randomWallet() {
   return Wallet.createRandom();
 }
 
-module.exports = { deployPolaris, MONAD_TESTNET, USD, randomWallet, ZeroAddress };
+module.exports = { deployPolaris, MONAD_TESTNET, USD, randomWallet, ZeroAddress, GUARDIAN_VIEW, guardianRecordConfig, jsonSafe };

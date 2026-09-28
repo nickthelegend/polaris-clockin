@@ -24,6 +24,11 @@
             "type": "int256"
           },
           {
+            "internalType": "int256",
+            "name": "maxPrice",
+            "type": "int256"
+          },
+          {
             "internalType": "uint256",
             "name": "minFreeCash",
             "type": "uint256"
@@ -32,6 +37,11 @@
             "internalType": "uint16",
             "name": "maxBadDebtBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minOriginated",
+            "type": "uint256"
           },
           {
             "internalType": "uint32",
@@ -119,6 +129,22 @@
       }
     ],
     "name": "InvalidMaxAttestationAge",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "enum GuardianReceiver.Override",
+        "name": "mode",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "until",
+        "type": "uint64"
+      }
+    ],
+    "name": "InvalidOverride",
     "type": "error"
   },
   {
@@ -226,39 +252,28 @@
   {
     "inputs": [
       {
+        "internalType": "uint8",
+        "name": "reportedPoolReasons",
+        "type": "uint8"
+      },
+      {
+        "internalType": "uint8",
+        "name": "livePoolReasons",
+        "type": "uint8"
+      }
+    ],
+    "name": "PoolMismatch",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "uint80",
         "name": "roundId",
         "type": "uint80"
       }
     ],
     "name": "RoundNotFound",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "bits",
-        "type": "uint8"
-      },
-      {
-        "internalType": "int256",
-        "name": "value",
-        "type": "int256"
-      }
-    ],
-    "name": "SafeCastOverflowedIntDowncast",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
-        "name": "value",
-        "type": "uint256"
-      }
-    ],
-    "name": "SafeCastOverflowedUintToInt",
     "type": "error"
   },
   {
@@ -327,9 +342,28 @@
     "inputs": [
       {
         "indexed": false,
+        "internalType": "uint256",
+        "name": "badDebt",
+        "type": "uint256"
+      }
+    ],
+    "name": "BadDebtAcknowledged",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
         "internalType": "enum GuardianReceiver.Override",
         "name": "mode",
         "type": "uint8"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint64",
+        "name": "until",
+        "type": "uint64"
       }
     ],
     "name": "CreditGuardOverridden",
@@ -556,28 +590,42 @@
     "anonymous": false,
     "inputs": [
       {
+        "components": [
+          {
+            "internalType": "int256",
+            "name": "minPrice",
+            "type": "int256"
+          },
+          {
+            "internalType": "int256",
+            "name": "maxPrice",
+            "type": "int256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minFreeCash",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint16",
+            "name": "maxBadDebtBps",
+            "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minOriginated",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint32",
+            "name": "maxPriceAge",
+            "type": "uint32"
+          }
+        ],
         "indexed": false,
-        "internalType": "int256",
-        "name": "minPrice",
-        "type": "int256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint256",
-        "name": "minFreeCash",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint16",
-        "name": "maxBadDebtBps",
-        "type": "uint16"
-      },
-      {
-        "indexed": false,
-        "internalType": "uint32",
-        "name": "maxPriceAge",
-        "type": "uint32"
+        "internalType": "struct GuardianReceiver.Thresholds",
+        "name": "thresholds",
+        "type": "tuple"
       }
     ],
     "name": "ThresholdsSet",
@@ -611,7 +659,59 @@
   },
   {
     "inputs": [],
+    "name": "MAX_FORCE_RESUME",
+    "outputs": [
+      {
+        "internalType": "uint32",
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "POOL_REASONS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PRICE_CEILING",
+    "outputs": [
+      {
+        "internalType": "int256",
+        "name": "",
+        "type": "int256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "PRICE_DECIMALS",
+    "outputs": [
+      {
+        "internalType": "uint8",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "PRICE_REASONS",
     "outputs": [
       {
         "internalType": "uint8",
@@ -702,6 +802,39 @@
   },
   {
     "inputs": [],
+    "name": "acknowledgeBadDebt",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "activeOverride",
+    "outputs": [
+      {
+        "internalType": "enum GuardianReceiver.Override",
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "badDebtAcknowledged",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "cashScale",
     "outputs": [
       {
@@ -763,6 +896,26 @@
             "internalType": "uint80",
             "name": "round",
             "type": "uint80"
+          },
+          {
+            "internalType": "uint64",
+            "name": "overrideUntil",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint8",
+            "name": "poolReasons",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint8",
+            "name": "priceReasons",
+            "type": "uint8"
+          },
+          {
+            "internalType": "uint256",
+            "name": "badDebtAcknowledged",
+            "type": "uint256"
           }
         ],
         "internalType": "struct GuardianReceiver.CreditStatus",
@@ -812,6 +965,11 @@
             "type": "int256"
           },
           {
+            "internalType": "int256",
+            "name": "maxPrice",
+            "type": "int256"
+          },
+          {
             "internalType": "uint256",
             "name": "minFreeCash",
             "type": "uint256"
@@ -822,6 +980,11 @@
             "type": "uint16"
           },
           {
+            "internalType": "uint256",
+            "name": "minOriginated",
+            "type": "uint256"
+          },
+          {
             "internalType": "uint32",
             "name": "maxPriceAge",
             "type": "uint32"
@@ -830,6 +993,11 @@
         "internalType": "struct GuardianReceiver.Thresholds",
         "name": "limits",
         "type": "tuple"
+      },
+      {
+        "internalType": "uint256",
+        "name": "acknowledgedBadDebt",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -1211,6 +1379,19 @@
   },
   {
     "inputs": [],
+    "name": "overrideUntil",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "owner",
     "outputs": [
       {
@@ -1313,6 +1494,11 @@
         "internalType": "enum GuardianReceiver.Override",
         "name": "mode",
         "type": "uint8"
+      },
+      {
+        "internalType": "uint64",
+        "name": "until",
+        "type": "uint64"
       }
     ],
     "name": "setOverride",
@@ -1343,6 +1529,11 @@
             "type": "int256"
           },
           {
+            "internalType": "int256",
+            "name": "maxPrice",
+            "type": "int256"
+          },
+          {
             "internalType": "uint256",
             "name": "minFreeCash",
             "type": "uint256"
@@ -1351,6 +1542,11 @@
             "internalType": "uint16",
             "name": "maxBadDebtBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minOriginated",
+            "type": "uint256"
           },
           {
             "internalType": "uint32",
@@ -1412,6 +1608,11 @@
             "type": "int256"
           },
           {
+            "internalType": "int256",
+            "name": "maxPrice",
+            "type": "int256"
+          },
+          {
             "internalType": "uint256",
             "name": "minFreeCash",
             "type": "uint256"
@@ -1420,6 +1621,11 @@
             "internalType": "uint16",
             "name": "maxBadDebtBps",
             "type": "uint16"
+          },
+          {
+            "internalType": "uint256",
+            "name": "minOriginated",
+            "type": "uint256"
           },
           {
             "internalType": "uint32",

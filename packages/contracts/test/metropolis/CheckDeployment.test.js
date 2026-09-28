@@ -9,6 +9,7 @@ const { ethers } = hre;
 
 const { deployPolaris, USD } = require("../../lib/deploy");
 const { checkDeployment } = require("../../lib/check");
+const cre = require("../../lib/cre");
 
 describe("check-deployment (lib/check.js)", () => {
   let record, deployer, relayer, transmitter;
@@ -35,7 +36,12 @@ describe("check-deployment (lib/check.js)", () => {
     const rows = await checkDeployment(ethers, record);
     expect(failed(rows)).to.deep.equal([]);
     expect(rows.length).to.be.greaterThan(40);
-    expect(rows.find((r) => r.what === "guardian status (info)").detail).to.equal("no attestation yet; Pay in 4 open");
+    expect(rows.find((r) => r.what === "guardian status (info)").detail).to.equal(
+      "no attestation yet; Pay in 4 open; pool reasons now 0, price reasons stale (fail open)"
+    );
+    expect(rows.find((r) => r.what === "GuardianReceiver: thresholds match the record").detail).to.equal(
+      JSON.stringify({ minPrice: "99500000", maxPrice: "100500000", minFreeCash: "1000000000", maxBadDebtBps: "500", minOriginated: "10000000000", maxPriceAge: "7200" })
+    );
     expect(rows.find((r) => r.what === "credit pool (info)").detail).to.equal("10000.0 held by the loan engine");
     expect(rows.find((r) => r.what === "Stablecoin: the mock says it is one (ERC-20 name \"Mock AUSD\")").ok).to.equal(true);
   });
@@ -63,7 +69,7 @@ describe("check-deployment (lib/check.js)", () => {
 
   it("fails an address with no code, a wrong chain and changed thresholds", async () => {
     const guardian = await at("GuardianReceiver");
-    await guardian.setThresholds({ minPrice: 100_000_000n, minFreeCash: USD(1_000), maxBadDebtBps: 500, maxPriceAge: 7_200 });
+    await guardian.setThresholds({ ...cre.guardianThresholds(), minPrice: 100_000_000n });
     const broken = {
       ...record,
       chainId: 10143,
@@ -79,5 +85,13 @@ describe("check-deployment (lib/check.js)", () => {
   it("fails when the relayer is given the power to originate", async () => {
     await (await at("PolarisLoanEngine")).setOriginator(relayer.address, true);
     expect(failed(await checkDeployment(ethers, record))).to.deep.equal(["relayer: does not originate loans"]);
+  });
+
+  it("fails a changed field the old record never had (the ceiling, the originations floor)", async () => {
+    const guardian = await at("GuardianReceiver");
+    await guardian.setThresholds({ ...cre.guardianThresholds(), minOriginated: 0n });
+    expect(failed(await checkDeployment(ethers, record))).to.deep.equal(["GuardianReceiver: thresholds match the record"]);
+    await guardian.setThresholds({ ...cre.guardianThresholds(), maxPrice: 101_000_000n });
+    expect(failed(await checkDeployment(ethers, record))).to.deep.equal(["GuardianReceiver: thresholds match the record"]);
   });
 });

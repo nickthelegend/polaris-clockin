@@ -4,7 +4,9 @@
  *   pnpm --filter @polarispay/contracts guardian:monad                                     # status
  *   GUARD_ACTION=thresholds GUARD_MIN_PRICE=1.001 pnpm … guardian:monad                   # the demo's raised peg (decision 28)
  *   GUARD_ACTION=thresholds pnpm … guardian:monad                                         # back to decision 9's thresholds
- *   GUARD_ACTION=override GUARD_OVERRIDE=pause|resume|none pnpm … guardian:monad
+ *   GUARD_ACTION=override GUARD_OVERRIDE=pause|none pnpm … guardian:monad
+ *   GUARD_ACTION=override GUARD_OVERRIDE=resume GUARD_RESUME_SECONDS=3600 pnpm … guardian:monad   # ends by itself (at most a day)
+ *   GUARD_ACTION=acknowledge pnpm … guardian:monad                                        # only bad debt beyond today's counts
  *   GUARD_ACTION=max-age GUARD_MAX_ATTESTATION_AGE_SECONDS=1800 pnpm … guardian:monad
  *
  * Reads deployments/<network>.json. Changes are sent by the receiver's owner
@@ -31,7 +33,11 @@ async function main() {
   const [owner] = await hre.ethers.getSigners();
   const guardian = await hre.ethers.getContractAt("GuardianReceiver", address, owner);
 
-  const { sent } = await runGuardianAction(guardian, action, { config: guardianConfig(process.env), override: process.env.GUARD_OVERRIDE });
+  const { sent } = await runGuardianAction(guardian, action, {
+    config: guardianConfig(process.env),
+    override: process.env.GUARD_OVERRIDE,
+    resumeSeconds: process.env.GUARD_RESUME_SECONDS || undefined,
+  });
   if (sent) console.log(`${action}: ${sent}${record.explorer ? `  ${record.explorer}/tx/${sent}` : ""}`);
   console.log(JSON.stringify(await guardianStatus(guardian), null, 2));
 }
