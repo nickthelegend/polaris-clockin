@@ -112,16 +112,121 @@ export function dotEnv(file = join(ROOT, ".env")) {
   }
 }
 
+// ------------------------------------------------------------------ secrets
+
+/** The workflow folders of this CRE project, and the targets of project.yaml. */
+export const WORKFLOW_DIRS = ["collections", "underwriting", "guardian"];
+export const CRE_TARGETS = ["local-settings", "staging-settings", "production-settings"];
+
+const unquote = (s) => s.trim().replace(/^(["'])(.*)\1$/, "$2");
+const withoutComment = (line) => line.replace(/\s+#.*$/, "").replace(/^#.*$/, "");
+
 /**
- * The environment the CLI runs with: `env` (Bun first on PATH), plus the Zerion
- * Basic credential derived from ZERION_API_KEY when it is not set already.
- * Nothing is printed; the derived value exists only in the child's environment.
+ * The `secrets-path` a workflow.yaml gives one target, as written (relative
+ * to the workflow's folder), or null when it is empty: the CLI then reads no
+ * secrets at all for that target. A line-based reader for the flat layout
+ * this project's workflow.yaml files use; it throws on a missing target
+ * rather than guess.
  */
-export function creEnv(env = envWithBun(), file = join(ROOT, ".env")) {
+export function secretsPathOf(workflowYaml, target) {
+  let inTarget = false;
+  let found = false;
+  for (const raw of workflowYaml.split(/\r?\n/)) {
+    const line = withoutComment(raw);
+    if (line.trim() === "") continue;
+    const top = /^([A-Za-z0-9_.-]+):\s*$/.exec(line);
+    if (top) {
+      inTarget = top[1] === target;
+      found ||= inTarget;
+      continue;
+    }
+    const m = inTarget && /^\s+secrets-path:\s*(.*)$/.exec(line);
+    if (m) {
+      const path = unquote(m[1]);
+      return path === "" ? null : path;
+    }
+  }
+  if (!found) throw new Error(`no ${target} block in this workflow.yaml`);
+  return null;
+}
+
+/**
+ * A CRE secrets file's `secretsNames`: `{ secretId: [envVar, ...] }`. In
+ * simulation the CLI reads each secret from those environment variables, and
+ * aborts the whole run ("environment variable X for secret value not found")
+ * when one is not set at all.
+ */
+export function parseSecretsNames(text) {
+  const out = {};
+  let inNames = false;
+  let current = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = withoutComment(raw);
+    if (line.trim() === "") continue;
+    if (/^\S/.test(line)) {
+      inNames = /^secretsNames:\s*$/.test(line);
+      current = null;
+      continue;
+    }
+    if (!inNames) continue;
+    const id = /^\s{1,4}([A-Za-z_][A-Za-z0-9_]*):\s*$/.exec(line);
+    if (id) {
+      current = id[1];
+      out[current] = [];
+      continue;
+    }
+    const item = /^\s+-\s*(\S+)\s*$/.exec(line);
+    if (item && current) out[current].push(unquote(item[1]));
+  }
+  return out;
+}
+
+/**
+ * Every environment variable `cre workflow simulate` resolves for these
+ * workflows and target, from each workflow.yaml's secrets-path and the
+ * secrets file it names: `[{ workflow, file, secretId, envVar }]`.
+ */
+export function secretEnvFor({ root = ROOT, target, workflows = WORKFLOW_DIRS }) {
+  const out = [];
+  for (const workflow of workflows) {
+    const dir = join(root, workflow);
+    const rel = secretsPathOf(readFileSync(join(dir, "workflow.yaml"), "utf8"), target);
+    if (!rel) continue;
+    const file = join(dir, rel);
+    for (const [secretId, vars] of Object.entries(parseSecretsNames(readFileSync(file, "utf8")))) {
+      for (const envVar of vars) out.push({ workflow, file, secretId, envVar });
+    }
+  }
+  return out;
+}
+
+/** The names of every variable any workflow resolves for any target. */
+export function allSecretEnvNames(root = ROOT) {
+  return [...new Set(CRE_TARGETS.flatMap((target) => secretEnvFor({ root, target }).map((s) => s.envVar)))].sort();
+}
+
+/**
+ * The environment the CLI runs with: `env` (Bun first on PATH), plus
+ *   - the Zerion Basic credential derived from ZERION_API_KEY when it is not
+ *     set already (nothing is printed; the value exists only in the child's
+ *     environment);
+ *   - every secret variable a workflow resolves (secretEnvFor) that neither
+ *     `env` nor `file` defines, set to "": the CLI aborts a simulate on an
+ *     unset one, even for a workflow that never reads it, and "" is a secret
+ *     that is not configured, which every workflow reads as missing
+ *     (`optionalSecret`). A value in `file` is left for the CLI to load.
+ */
+export function creEnv(env = envWithBun(), file = join(ROOT, ".env"), root = ROOT) {
   const fromFile = dotEnv(file);
+  const out = { ...env };
   const key = env.ZERION_API_KEY || fromFile.ZERION_API_KEY;
-  if (!key || env.ZERION_BASIC_AUTH || fromFile.ZERION_BASIC_AUTH) return env;
-  return { ...env, ZERION_BASIC_AUTH: Buffer.from(`${key}:`, "utf8").toString("base64") };
+  if (key && !env.ZERION_BASIC_AUTH && !fromFile.ZERION_BASIC_AUTH) {
+    out.ZERION_BASIC_AUTH = Buffer.from(`${key}:`, "utf8").toString("base64");
+  }
+  for (const name of allSecretEnvNames(root)) {
+    if (out[name] === undefined && fromFile[name] === undefined) out[name] = "";
+  }
+  return out;
 }
 
 const BUNDLING = new Set(["build", "simulate", "deploy", "hash"]);

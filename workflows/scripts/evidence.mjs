@@ -8,6 +8,7 @@
  *   pnpm --filter @polaris/cre-workflows evidence --only collections,guardian
  *   pnpm --filter @polaris/cre-workflows evidence --deployment <file> --target staging-settings
  *   pnpm --filter @polaris/cre-workflows evidence --only collections --retry-tx <reauthorize tx hash>
+ *   pnpm --filter @polaris/cre-workflows evidence --callback http://127.0.0.1:3000/api/cre/callback
  *
  * In order:
  *   1. `cre whoami`: refuses unless logged in (`cre login`, or CRE_API_KEY).
@@ -17,7 +18,11 @@
  *   3. The transmitter: CRE_ETH_PRIVATE_KEY (workflows/.env or the shell) must
  *      be set, hold testnet MON, and be every receiver's simulationTransmitter
  *      (collections, underwriting, guardian), or its reports would revert.
- *      Only its address is ever printed.
+ *      Only its address is ever printed. Every variable the workflows'
+ *      secrets files name must be defined too, or the CLI aborts the run
+ *      before it starts; sim.mjs `simulationEnv` defines each one missing as
+ *      "" (a key that is not configured), and the check here says which one
+ *      if another environment is passed.
  *   4. `configure staging` from that record, so the configs hold its addresses
  *      (commit them: they are public): all three workflows, the retry's
  *      PolarisCheckout, the guardian's Chainlink AUSD/USD on Monad mainnet.
@@ -32,14 +37,20 @@
  *      Monad testnet), collections' EVM log trigger too: `--trigger-index 1
  *      --evm-tx-hash <hash> --evm-event-index <i>`, where i is the position of
  *      its `Reauthorized` log in that receipt, read from the chain.
+ *      A run whose config differs from the committed one gets it through
+ *      `--config` (runConfig): underwriting without the providers that have
+ *      no key (else Confidential HTTP would send each an empty key), and with
+ *      `--callback <url>` collections and underwriting post their signed run
+ *      callback there. Each log's header and runs.json say what changed.
  *   7. Every transaction hash in the result and the logs is read back from
  *      Monad testnet: landed or reverted, its block, and what the forwarder's
  *      ReportProcessed said about the receiver.
  *
- * Output: workflows/evidence/<UTC date>/<time>-<workflow>.log (the CLI's
+ * Output: workflows/evidence/<UTC date>/<workflow>-<time>.log (the CLI's
  * output, secrets redacted), runs.json (every run of that date) and README.md
  * (the table, also printed). A run that wrote nothing (nothing due, a thin
- * file) is recorded as it is: no transaction is ever invented.
+ * file) is recorded as it is: no transaction is ever invented. Last, it warns
+ * if git would ignore any of those files.
  */
 
 import { spawnSync } from "node:child_process";
@@ -50,9 +61,11 @@ import { privateKeyToAccount } from "viem/accounts";
 import { configure } from "./configure.mjs";
 import {
   markdownTable,
+  missingSecretEnv,
   MONAD_TESTNET,
   NOT_LOGGED_IN,
   outcomeOf,
+  parseSecretsNames,
   parseSimulation,
   readDeployment,
   readWhoami,
@@ -62,6 +75,7 @@ import {
   runCreCaptured,
   simulationEnv,
   verifyTx,
+  withoutMissingKeys,
 } from "./sim.mjs";
 
 export const DEFAULT_DEPLOYMENT = join(ROOT, "..", "packages", "contracts", "deployments", "monad-testnet.json");
@@ -94,13 +108,18 @@ export function reauthorizedLogIndex(receipt, checkout) {
   );
 }
 
-/** The CLI arguments for one evidence run. `retry` = { txHash, eventIndex } runs collections' log trigger. */
-export function simulateArgs(w, target, retry = null) {
+/**
+ * The CLI arguments for one evidence run. `retry` = { txHash, eventIndex }
+ * runs collections' log trigger; `configFile` (runConfigFor) replaces the
+ * workflow's config for this run only.
+ */
+export function simulateArgs(w, target, retry = null, configFile = null) {
   const spec = WORKFLOWS[w];
+  const config = configFile ? ["--config", configFile] : [];
   if (retry) {
-    return ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "1", "--evm-tx-hash", retry.txHash, "--evm-event-index", String(retry.eventIndex), "--broadcast"];
+    return ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "1", "--evm-tx-hash", retry.txHash, "--evm-event-index", String(retry.eventIndex), ...config, "--broadcast"];
   }
-  const args = ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "0", "--broadcast"];
+  const args = ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "0", ...config, "--broadcast"];
   if (spec.trigger === "http") args.push("--http-payload", "./underwriting/payload.json");
   return args;
 }
@@ -131,10 +150,17 @@ function arg(name) {
  * Everything that must hold before a single transaction is sent. Returns the
  * reasons to refuse (empty when ready). Pure but for the file reads it is given.
  */
-export function preflight({ whoami, deployment, deploymentFile, target, workflows, env, retryTx = null }) {
+export function preflight({ whoami, deployment, deploymentFile, target, workflows, env, retryTx = null, callback = null, root = ROOT }) {
   const problems = [];
   if (retryTx !== null && !/^0x[0-9a-fA-F]{64}$/.test(retryTx)) problems.push("--retry-tx must be a transaction hash (0x and 64 hex characters).");
   if (retryTx !== null && !workflows.includes("collections")) problems.push("--retry-tx runs collections' log trigger: include collections.");
+  if (callback !== null) {
+    if (!/^https?:\/\/\S+$/.test(callback)) problems.push("--callback must be an http(s) URL: the Polaris API's /api/cre/callback.");
+    // Without the key the run logs "callback skipped", and no HTTP request is made.
+    else if (!env.POLARIS_CALLBACK_SECRET?.trim()) {
+      problems.push("--callback needs POLARIS_CALLBACK_SECRET (workflows/.env): the Polaris API's POLARIS_CRE_CALLBACK_SECRET, the key each callback is signed with.");
+    }
+  }
   if (!whoami.loggedIn) problems.push(NOT_LOGGED_IN);
   if (!TARGETS[target]) problems.push(`target "${target}" is not one this script broadcasts to: use staging-settings (Monad testnet) or local-settings`);
   if (!deployment) {
@@ -157,7 +183,72 @@ export function preflight({ whoami, deployment, deploymentFile, target, workflow
   } else if (!/^(0x)?[0-9a-fA-F]{64}$/.test(key)) {
     problems.push("CRE_ETH_PRIVATE_KEY is not 32 bytes of hex.");
   }
+  // The CLI resolves every name in a workflow's secrets file before the run,
+  // and aborts on one that is not set at all, even one the workflow never reads.
+  if (TARGETS[target]) {
+    const unset = new Map();
+    for (const s of missingSecretEnv(env, { target, workflows, root })) {
+      const seen = unset.get(s.envVar) ?? { secretId: s.secretId, workflows: [] };
+      if (!seen.workflows.includes(s.workflow)) seen.workflows.push(s.workflow);
+      unset.set(s.envVar, seen);
+    }
+    for (const [envVar, s] of unset) {
+      problems.push(
+        `${envVar} (secret ${s.secretId}, ${s.workflows.join(", ")}) is not set: \`cre workflow simulate\` aborts on it ("environment variable ${envVar} for secret value not found"). Set it in workflows/.env, empty if you have no key.`,
+      );
+    }
+  }
   return problems;
+}
+
+/**
+ * What one run's config changes from the workflow's committed one, or null
+ * when nothing does. Pure, for the tests (runConfigFor writes it).
+ *   - underwriting: every provider whose key is empty left out
+ *     (sim.mjs withoutMissingKeys), so Confidential HTTP never templates an
+ *     empty key into a paid request;
+ *   - collections and underwriting, with `callback` (--callback <url>): the
+ *     signed run callback sent there, for this run only, so the committed
+ *     staging config never names a local API.
+ */
+export function runConfig(w, config, { env, secretsNames, callback = null }) {
+  let out = config;
+  let leftOut = [];
+  if (w === "underwriting") ({ config: out, leftOut } = withoutMissingKeys(out, secretsNames, env));
+  const takesCallback = w === "collections" || w === "underwriting";
+  if (callback && takesCallback) out = { ...out, callback: { url: callback, secretId: "POLARIS_CALLBACK_SECRET" } };
+  if (out === config || (leftOut.length === 0 && !(callback && takesCallback))) return null;
+  return { config: out, leftOut, callback: callback && takesCallback ? callback : null };
+}
+
+/**
+ * runConfig for one run, written to workflows/.local/evidence/ (git-ignored)
+ * for `--config`: returns { file, leftOut, callback }, or null.
+ */
+export function runConfigFor(w, target, env, { root = ROOT, callback = null } = {}) {
+  const config = JSON.parse(readFileSync(join(root, WORKFLOWS[w].dir, `config.${TARGETS[target]}.json`), "utf8"));
+  const secretsNames = parseSecretsNames(readFileSync(join(root, "secrets.yaml"), "utf8"));
+  const change = runConfig(w, config, { env, secretsNames, callback });
+  if (!change) return null;
+  const dir = join(root, ".local", "evidence");
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${w}.${TARGETS[target]}.json`);
+  writeFileSync(file, `${JSON.stringify(change.config, null, 2)}\n`);
+  return { file, leftOut: change.leftOut, callback: change.callback };
+}
+
+/**
+ * The files among `files` that git ignores (`git check-ignore`), which a
+ * normal `git add` would leave out of the evidence. [] when git is missing.
+ */
+export function ignoredByGit(files, { cwd = ROOT } = {}) {
+  if (files.length === 0) return [];
+  const r = spawnSync("git", ["check-ignore", "--no-index", "--", ...files], { cwd, encoding: "utf8" });
+  if (r.error || (r.status !== 0 && r.status !== 1)) return [];
+  return r.stdout
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 }
 
 /** The transmitter's address from CRE_ETH_PRIVATE_KEY, never the key. */
@@ -190,13 +281,14 @@ async function main() {
   const target = arg("target") ?? "staging-settings";
   const deploymentFile = arg("deployment") ?? DEFAULT_DEPLOYMENT;
   const retryTx = arg("retry-tx") ?? null;
+  const callback = arg("callback") ?? null;
   const env = simulationEnv();
   const workflows = workflowsToRun();
 
   console.log("CRE evidence: checking the login, the deployment and the transmitter before sending anything.\n");
   const whoami = readWhoami(await runCreCaptured(["whoami"], { env, echo: false, timeoutMs: 60_000 }));
   const deployment = readDeployment(deploymentFile);
-  const problems = preflight({ whoami, deployment, deploymentFile, target, workflows, env, retryTx });
+  const problems = preflight({ whoami, deployment, deploymentFile, target, workflows, env, retryTx, callback });
   if (problems.length > 0) {
     console.error("Refusing to run: nothing was sent.\n");
     for (const p of problems) console.error(`  - ${p}`);
@@ -268,18 +360,39 @@ async function main() {
     const spec = WORKFLOWS[w];
     console.log(`\n── ${label} (${r ? "EVM log trigger: Reauthorized" : `${spec.trigger} trigger`}) ─────────────────────────────────────`);
     if (spec.trigger === "http" && !r) writePayload(env);
-    const args = simulateArgs(w, target, r);
+    const override = runConfigFor(w, target, env, { callback });
+    if (override?.leftOut.length) console.log(`No key for ${override.leftOut.join(", ")}: left out of this run's config (${override.file})`);
+    if (override?.callback) console.log(`Run callback: ${override.callback} (this run only)`);
+    const args = simulateArgs(w, target, r, override?.file ?? null);
     const at = new Date();
     const run = await runCreCaptured(args, { env });
     const parsed = parseSimulation(run.output);
     const log = `${label}-${stamp(at)}.log`;
-    writeFileSync(join(dir, log), `$ cre ${args.join(" ")}\n# exit ${run.code}, ${at.toISOString()}\n\n${redact(run.output, env)}`);
+    const changes = override
+      ? [
+          `# config: ${spec.dir}/config.${TARGETS[target]}.json` +
+            (override.leftOut.length ? `, providers without a key left out: ${override.leftOut.join(", ")}` : "") +
+            (override.callback ? `, callback to ${override.callback}` : ""),
+        ]
+      : [];
+    const header = [`$ cre ${args.join(" ")}`, `# exit ${run.code}, ${at.toISOString()}`, ...changes];
+    writeFileSync(join(dir, log), `${header.join("\n")}\n\n${redact(run.output, env)}`);
     const txs = [];
     for (const hash of parsed.txHashes) {
       const tx = await verifyTx(hash, { url: rpcUrl });
       if (tx) txs.push(tx);
     }
-    const row = { at: at.toISOString(), workflow: label, target, exitCode: run.code, outcome: outcomeOf(parsed, run.code), result: parsed.result, log, txs };
+    const row = {
+      at: at.toISOString(),
+      workflow: label,
+      target,
+      exitCode: run.code,
+      outcome: outcomeOf(parsed, run.code),
+      result: parsed.result,
+      log,
+      txs,
+      ...(override ? { configChanges: { providersLeftOut: override.leftOut, callback: override.callback } } : {}),
+    };
     fresh.push(row);
     runs.push(row);
   }
@@ -292,6 +405,13 @@ async function main() {
     `# CRE runs on ${dir.slice(-10)}\n\nEach row is one \`cre workflow simulate --broadcast\` run (CRE CLI v1.35.0), with its log in this folder and its transaction read back from Monad testnet. "Delivered" is the forwarder's ReportProcessed result for the receiver.\n\n${table}\n`,
   );
   console.log(`\n${markdownTable(rows(fresh))}\n\nLogs and runs.json: ${dir}`);
+  const ignored = ignoredByGit([join(dir, "README.md"), runsFile, join(dir, "supported-chains.txt"), ...fresh.map((r) => join(dir, r.log))]);
+  if (ignored.length > 0) {
+    console.error(
+      `\nWARNING: git ignores ${ignored.length} evidence file(s), so a commit would leave them out:\n${ignored.map((f) => `  ${f}`).join("\n")}\n` +
+        "The root .gitignore must keep workflows/evidence/**/*.log.",
+    );
+  }
   if (fresh.some((r) => r.exitCode !== 0)) process.exitCode = 1;
 }
 

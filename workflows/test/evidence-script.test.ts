@@ -13,7 +13,9 @@ import { creEnv } from "../scripts/cre.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
 import { loopPreflight, loopRecord } from "../scripts/collections-loop.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
-import { plannedRuns, preflight, REAUTHORIZED_TOPIC, reauthorizedLogIndex, simulateArgs, WORKFLOWS } from "../scripts/evidence.mjs";
+import { EVIDENCE_DIR, ignoredByGit, plannedRuns, preflight, REAUTHORIZED_TOPIC, reauthorizedLogIndex, simulateArgs, WORKFLOWS } from "../scripts/evidence.mjs";
+// @ts-expect-error: plain ESM scripts, no type declarations
+import { LOOP_DIR } from "../scripts/collections-loop.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
 import { listenPreflight, takeRuns } from "../scripts/retry-listen.mjs";
 import { REAUTHORIZED_TOPIC as WORKFLOW_REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
@@ -140,7 +142,8 @@ describe("secrets never reach a log", () => {
     fs.writeFileSync(file, "ZERION_API_KEY=zk_test_123\n");
     expect(creEnv({ PATH: "x" }, file).ZERION_BASIC_AUTH).toBe(Buffer.from("zk_test_123:").toString("base64"));
     expect(creEnv({ PATH: "x", ZERION_BASIC_AUTH: "already" }, file).ZERION_BASIC_AUTH).toBe("already");
-    expect(creEnv({ PATH: "x" }, join(dir, "missing.env")).ZERION_BASIC_AUTH).toBeUndefined();
+    // No key anywhere: defined but empty, so the CLI's secret lookup finds it (test/secrets-env.test.ts).
+    expect(creEnv({ PATH: "x" }, join(dir, "missing.env")).ZERION_BASIC_AUTH).toBe("");
     // The simulation environment layers the shell over workflows/.env.
     expect(simulationEnv({ ZERION_API_KEY: "from-shell" }, file).ZERION_BASIC_AUTH).toBe(Buffer.from("from-shell:").toString("base64"));
     expect(redact(`auth ${Buffer.from("zk_test_123:").toString("base64")}`, simulationEnv({}, file))).toBe("auth [redacted]");
@@ -177,7 +180,8 @@ describe("refusing before anything is sent", () => {
     deploymentFile: "deployments/monad-testnet.json",
     target: "staging-settings",
     workflows: ["collections", "underwriting"],
-    env: { CRE_ETH_PRIVATE_KEY: `0x${"22".repeat(32)}` },
+    // What main() passes: the transmitter key, and every secret variable defined (sim.mjs simulationEnv).
+    env: simulationEnv({ CRE_ETH_PRIVATE_KEY: `0x${"22".repeat(32)}` }, join(os.tmpdir(), "polaris-no-such-dir", ".env")),
     configOf: () => null,
   };
 
@@ -354,5 +358,24 @@ describe("every hash is read back from the chain", () => {
     expect(table).toContain(`(https://testnet.monadscan.com/tx/${TX})`);
     expect(table).toContain("| 42 | result=true |");
     expect(markdownTable([{ at: "2026-09-28T12:01:00.000Z", workflow: "underwriting", target: "staging-settings", outcome: "thin", tx: null }])).toContain("| thin | none |");
+  });
+});
+
+describe("the evidence is committed with a normal git add", () => {
+  test("git keeps every file the evidence and loop scripts write, simulate logs included (the root *.log rule excepts them)", () => {
+    const day = join(EVIDENCE_DIR, "2026-09-28");
+    const written = [
+      join(day, "collections-retry-120000.log"),
+      join(day, "guardian-120100.log"),
+      join(day, "runs.json"),
+      join(day, "README.md"),
+      join(day, "supported-chains.txt"),
+      join(LOOP_DIR, "2026-09-28.log"),
+      join(LOOP_DIR, "2026-09-28-guardian.log"),
+      join(LOOP_DIR, "2026-09-28.jsonl"),
+    ];
+    expect(ignoredByGit(written)).toEqual([]);
+    // The check itself sees an ignored file: a log anywhere else still is.
+    expect(ignoredByGit([join(EVIDENCE_DIR, "..", "debug.log")]).length).toBe(1);
   });
 });

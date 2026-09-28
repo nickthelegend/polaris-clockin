@@ -1,7 +1,10 @@
 # CRE workflow settings for `guardian`, one block per target in ../project.yaml.
 # workflow-name is what the production forwarder carries (as the bytes10 of its
 # sha256, 0x64383734313635346335) and what GuardianReceiver.setExpectedWorkflowName
-# checks. The guardian reads no secrets; secrets-path is kept for a uniform CLI.
+# checks. The guardian reads no secrets, so secrets-path is empty for every
+# target: the CLI then resolves none. A secrets file here would make
+# `cre workflow simulate` abort on any of its variables left unset
+# ("environment variable X for secret value not found").
 
 local-settings:
   user-workflow:
@@ -9,7 +12,7 @@ local-settings:
   workflow-artifacts:
     workflow-path: "./main.ts"
     config-path: "./config.local.json"
-    secrets-path: "../secrets.yaml"
+    secrets-path: ""
 
 staging-settings:
   user-workflow:
@@ -17,7 +20,7 @@ staging-settings:
   workflow-artifacts:
     workflow-path: "./main.ts"
     config-path: "./config.staging.json"
-    secrets-path: "../secrets.yaml"
+    secrets-path: ""
 
 production-settings:
   user-workflow:
@@ -26,4 +29,4 @@ production-settings:
   workflow-artifacts:
     workflow-path: "./main.ts"
     config-path: "./config.production.json"
-    secrets-path: "../secrets.yaml"
+    secrets-path: ""
