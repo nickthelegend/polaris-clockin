@@ -1,0 +1,41 @@
+
+> @polarispay/contracts@0.1.0 deploy:monad F:\Projects\polaris\.claude\worktrees\cl-integration\packages\contracts
+> hardhat run scripts/deploy-monad.js --network monadTestnet
+
+Network   monadTestnet (chain 10143)
+Deployer  0x6Df4a0b84BD608123D1f3412709AcaC69523c115
+Balance   5.0 MON
+Needs     about 3.2142470928 MON at 102.0 gwei (rough)
+Token     MockAUSD (new)
+CRE       simulation forwarder 0xB9F79d863261869B234c481D1f9A7af84AeAd192
+CRE sim   transmitter 0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6
+
+Stablecoin
+  Stablecoin             0x3F9554F15f58Bb5900822224f37A05be81eF9723  (block 66288112, gas 1501005)
+Core
+  ScoreManager           0xB3D34eF62Cb64b985C230079D2815787619E6061  (block 66288120, gas 1772606)
+  PolarisLoanEngine      0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a  (block 66288126, gas 3689049)
+  PolarisPayments        0x7C774CF3E664B10057Cb2dDa66bA298e831292F1  (block 66288133, gas 3572445)
+  MerchantRegistry       0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4  (block 66288138, gas 1824144)
+  CollateralVault        0xD0e777f8DfA2E62F500054E85F815fC54fae3E72  (block 66288140, gas 994637)
+  BatchSettlement        0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53  (block 66288144, gas 1003418)
+  PolarisSend            0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55  (block 66288148, gas 1777975)
+  PolarisCheckout        0x3874ef1bcE222755525a96f8284631780b9bC70B  (block 66288152, gas 3641539)
+Chainlink CRE
+  CollectionsReceiver    0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC  (block 66288157, gas 2002357)
+  UnderwritingReceiver   0x523e9791d0e324525F66F91b21B478C18e284a19  (block 66288161, gas 1765316)
+  GuardianReceiver       0xF8259426519d7908e7AF63f20aea3FfCF52426D8  (block 66288166, gas 2826621)
+Roles
+  ScoreManager: writer = LoanEngine, underwriter = UnderwritingReceiver, requireUnderwriting
+  LoanEngine: originator = PolarisCheckout (only), vault, registry
+  PolarisPayments: checkout = PolarisCheckout
+  PolarisCheckout: credit guardian = GuardianReceiver (depeg < $0.995, cash < $1000, bad debt > 5%, price older than 7200s; stale after 3600s)
+  relayer 0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69: PolarisPayments operator, MerchantRegistry operator, BatchSettlement settler
+Demo merchant
+  0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185 registered by its own signature, active, cap $1,000
+  subscription plans #1 ($9.99 / 30 days) and #2 ($1 / 60s)
+Credit pool
+  funded 10000.0 AUSD
+
+Spent     2.943832317025787453 MON
+Wrote     F:\Projects\polaris\.claude\worktrees\cl-integration\packages\contracts\deployments\monad-testnet.json
