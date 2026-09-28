@@ -176,25 +176,32 @@ export function spentBetween(activity: ActivityItem[], fromDaysAgo: number, toDa
 
 /* ── Credit score history ────────────────────────────────────────────────── */
 
+/** ScoreManager.ON_TIME_BONUS: what an instalment paid on time adds. */
+const ON_TIME_BONUS = 12;
+
 /**
- * The score day by day, rebuilt from the facts behind it: the account's age
- * and every instalment paid on time move it the same way the underwriter
- * does (see the data layer's `reasons`). Ends on today's score.
+ * The score over the last `days`, from when it was first scored (`since`:
+ * the CRE decision that opened the line) and never before: it starts at the
+ * score the line opened with, moves only when an instalment is paid on time
+ * (ScoreManager's on-time bonus), and its last point is today's score, the
+ * figure every headline shows. No score yet: no history.
  */
-export function scoreHistory(credit: CreditLine, plans: Plan[], memberSince: number, days: number, now = Date.now()): number[] {
-  const paid = plans.flatMap((p) => p.instalments.map((i) => i.paidAt).filter((t): t is number => t !== null));
-  const perInstalment = credit.reasons[0]?.points && paid.length ? credit.reasons[0].points / paid.length : 12;
-  const today = startOfDay(now);
-  const series: number[] = [];
-  for (let d = days - 1; d >= 0; d--) {
-    const at = today - d * MS_DAY + MS_DAY - 1;
-    const paidBy = paid.filter((t) => t <= at).length;
-    const ageShare = Math.min(1, Math.max(0, (at - memberSince) / (now - memberSince || 1)));
-    // Everything the score counts today, minus what hadn't happened yet on that day.
-    const missing = (paid.length - paidBy) * perInstalment + (1 - ageShare) * 6;
-    series.push(Math.round(credit.score - missing));
-  }
-  return series;
+export function scoreHistory(credit: CreditLine, plans: Plan[], since: number, days: number, now = Date.now()): { t: number; value: number }[] {
+  if (credit.score <= 0) return [];
+  const begin = Math.min(now - 60_000, Math.max(since, now - days * MS_DAY));
+  const paid = plans
+    .flatMap((p) => p.instalments.map((i) => i.paidAt))
+    .filter((t): t is number => t !== null && t >= since && t <= now)
+    .sort((a, b) => a - b);
+  const opening = credit.openingScore ?? credit.score - paid.length * ON_TIME_BONUS;
+  // Each on-time payment's share of the way from the opening score to today's.
+  const per = paid.length ? (credit.score - opening) / paid.length : 0;
+  const at = (t: number) => Math.round(opening + per * paid.filter((p) => p <= t).length);
+  const points: { t: number; value: number }[] = [];
+  const step = Math.max(60_000, Math.min(MS_DAY, (now - begin) / 2));
+  for (let t = begin; t < now; t += step) points.push({ t, value: at(t) });
+  points.push({ t: now, value: credit.score });
+  return points;
 }
 
 /** Week-by-week candles from a daily series (open, high, low, close). */

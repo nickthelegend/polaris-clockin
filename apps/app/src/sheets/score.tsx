@@ -63,23 +63,26 @@ export function ScoreSheet() {
 
   const days = RANGE_DAYS[range];
   const now = useNow();
-  const daily = useMemo(
+  // From when the line was scored (its CRE decision), never before: the last point is today's score.
+  const history = useMemo(
     () =>
       credit.value && plans.value && profile.value && now
-        ? scoreHistory(credit.value, plans.value.plans, profile.value.memberSince, days, now)
+        ? scoreHistory(credit.value, plans.value.plans, credit.value.openedAt ?? profile.value.memberSince, days, now)
         : null,
     [credit.value, plans.value, profile.value, days, now],
   );
+  // No score yet: a flat zero until the first review.
+  const daily = useMemo(() => (history ? (history.length ? history.map((p) => p.value) : [0, 0]) : null), [history]);
   const candles = useMemo(() => {
-    if (!daily || !now) return [];
+    if (!history || !daily || !now) return [];
     if (days <= 30) {
-      return daily.map((c, i) => {
-        const o = daily[i - 1] ?? c;
-        return { t: now - (daily.length - 1 - i) * 86_400_000, o, h: Math.max(o, c), l: Math.min(o, c), c };
+      return history.map((p, i) => {
+        const o = daily[i - 1] ?? p.value;
+        return { t: p.t, o, h: Math.max(o, p.value), l: Math.min(o, p.value), c: p.value };
       });
     }
     return weeklyCandles(daily, now);
-  }, [daily, days, now]);
+  }, [history, daily, days, now]);
 
   const score = credit.value?.score;
   const start = daily?.[0];

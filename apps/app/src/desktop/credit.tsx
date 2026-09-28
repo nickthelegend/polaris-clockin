@@ -242,20 +242,24 @@ export function ScoreDesktop() {
   const now = useNow();
   const days = RANGES.find((r) => r.value === range)!.days;
 
-  const daily = useMemo(
-    () => (credit.value && plans.value && profile.value && now ? scoreHistory(credit.value, plans.value.plans, profile.value.memberSince, days, now) : null),
-    [credit.value, plans.value, profile.value, days, now],
-  );
-  const points = daily && now ? daily.map((v, i) => ({ t: now - (daily.length - 1 - i) * 86_400_000, value: v })) : null;
+  // From when the line was scored (its CRE decision), never before: the last point is today's score.
+  const points = useMemo(() => {
+    if (!credit.value || !plans.value || !profile.value || !now) return null;
+    const history = scoreHistory(credit.value, plans.value.plans, credit.value.openedAt ?? profile.value.memberSince, days, now);
+    // No score yet: a flat zero, which the chart shows as its empty state.
+    return history.length ? history : [{ t: now - 86_400_000, value: 0 }, { t: now, value: 0 }];
+  }, [credit.value, plans.value, profile.value, days, now]);
+  const daily = points?.map((p) => p.value) ?? null;
   const candles = useMemo(() => {
-    if (!daily || !now) return [];
+    if (!points || !now) return [];
+    const values = points.map((p) => p.value);
     if (days <= 30)
-      return daily.map((c, i) => {
-        const o = daily[i - 1] ?? c;
-        return { t: now - (daily.length - 1 - i) * 86_400_000, o, h: Math.max(o, c), l: Math.min(o, c), c };
+      return points.map((p, i) => {
+        const o = values[i - 1] ?? p.value;
+        return { t: p.t, o, h: Math.max(o, p.value), l: Math.min(o, p.value), c: p.value };
       });
-    return weeklyCandles(daily, now);
-  }, [daily, days, now]);
+    return weeklyCandles(values, now);
+  }, [points, days, now]);
 
   const c = credit.value;
   const start = daily?.[0];
@@ -306,6 +310,7 @@ export function ScoreDesktop() {
                   formatBubbleNote={null}
                   defaultIndex={points.length - 1}
                   lastLabel="Today"
+                  empty={<p className="text-[15px] text-ui-muted">No score yet. Raise your limit and your first one lands here.</p>}
                 />
               ) : (
                 <CandlestickChart
