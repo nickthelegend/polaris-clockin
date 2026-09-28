@@ -31,6 +31,22 @@ export declare const polarisCheckoutAbi: readonly [
   {
     readonly "inputs": readonly [
       {
+        readonly "internalType": "uint256";
+        readonly "name": "allowance";
+        readonly "type": "uint256";
+      },
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "owed";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "name": "AlreadyAuthorized";
+    readonly "type": "error";
+  },
+  {
+    readonly "inputs": readonly [
+      {
         readonly "internalType": "uint8";
         readonly "name": "reasonMask";
         readonly "type": "uint8";
@@ -1182,6 +1198,25 @@ export declare const polarisCheckoutAbi: readonly [
     readonly "name": "reauthorize";
     readonly "outputs": readonly [];
     readonly "stateMutability": "nonpayable";
+    readonly "type": "function";
+  },
+  {
+    readonly "inputs": readonly [
+      {
+        readonly "internalType": "address";
+        readonly "name": "";
+        readonly "type": "address";
+      }
+    ];
+    readonly "name": "reauthorizedThrough";
+    readonly "outputs": readonly [
+      {
+        readonly "internalType": "uint256";
+        readonly "name": "";
+        readonly "type": "uint256";
+      }
+    ];
+    readonly "stateMutability": "view";
     readonly "type": "function";
   },
   {

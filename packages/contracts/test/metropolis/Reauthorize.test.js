@@ -167,13 +167,71 @@ describe("PolarisCheckout.reauthorize (the instant collection retry)", () => {
     await expect(s.checkout.connect(s.stranger).reauthorize(buyer.address, permitArg(p))).to.be.revertedWithCustomError(s.checkout, "InvalidSignature");
   });
 
-  it("a permit a stranger lands on the token first makes reauthorize revert, and the allowance is restored all the same", async () => {
+  // Security review: landing the buyer's permit on the token first made
+  // reauthorize revert, so a stranger could cancel the instant retry for free.
+  it("a permit a stranger lands on the token first still fires the retry, once: the allowance it set is in force", async () => {
     const { buyer } = await buyerWhoLostTheAllowance();
     const owed = await s.engine.activeDebtOf(buyer.address);
     const p = await signPermit(s.ausd, buyer, await engineAddress(), owed, (await now()) + 600n);
     await s.ausd.connect(s.stranger).permit(buyer.address, await engineAddress(), owed, p.deadline, p.v, p.r, p.s);
-    await expect(s.checkout.connect(s.relayer).reauthorize(buyer.address, permitArg(p))).to.be.revertedWithCustomError(s.checkout, "InvalidSignature");
     expect(await s.ausd.allowance(buyer.address, await engineAddress())).to.equal(owed);
+    const nonce = await s.ausd.nonces(buyer.address);
+    await expect(s.checkout.connect(s.relayer).reauthorize(buyer.address, permitArg(p)))
+      .to.emit(s.checkout, "Reauthorized")
+      .withArgs(buyer.address, owed, p.deadline);
+    expect(await s.checkout.reauthorizedThrough(buyer.address)).to.equal(nonce);
+    // Announced once: the same permit again is refused.
+    await expect(s.checkout.connect(s.stranger).reauthorize(buyer.address, permitArg(p))).to.be.revertedWithCustomError(s.checkout, "InvalidSignature");
+  });
+
+  it("an older permit that landed is not the one in force once the allowance moved on", async () => {
+    const { buyer } = await buyerWhoLostTheAllowance();
+    const owed = await s.engine.activeDebtOf(buyer.address);
+    const p = await signPermit(s.ausd, buyer, await engineAddress(), owed + 5n, (await now()) + 600n);
+    await s.ausd.connect(s.stranger).permit(buyer.address, await engineAddress(), owed + 5n, p.deadline, p.v, p.r, p.s);
+    // The buyer's own wallet approves another amount afterwards (no permit, so the nonce stays).
+    await impersonateAccount(buyer.address);
+    await setBalance(buyer.address, ethers.parseEther("1"));
+    await s.ausd.connect(await ethers.getSigner(buyer.address)).approve(await engineAddress(), owed);
+    await setBalance(buyer.address, 0n);
+    await expect(s.checkout.connect(s.relayer).reauthorize(buyer.address, permitArg(p))).to.be.revertedWithCustomError(s.checkout, "InvalidSignature");
+  });
+
+  // Security review F2: openPlan's permit and reauthorize's have the same
+  // spender, so a mempool watcher could submit a buyer's openPlan permit to
+  // reauthorize first: a Reauthorized nobody asked for, a log-triggered run,
+  // and allowance_lost plans marked re-signed.
+  it("refuses a buyer whose allowance still covers what they owe, so openPlan's permit can't fire a retry; openPlan still opens", async () => {
+    const buyer = ethers.Wallet.createRandom().connect(ethers.provider);
+    await s.ausd.mint(buyer.address, AUSD(1_000));
+    const open = async (i) => {
+      const intent = {
+        buyer: buyer.address,
+        merchant: s.merchant.address,
+        principal: AUSD(60),
+        installments: 4,
+        interval: BigInt(WEEK),
+        orderId: `copy-${i}`,
+        nonce: await s.checkout.nonces(buyer.address),
+        deadline: (await now()) + 600n,
+      };
+      const q = await s.checkout.quotePlan(buyer.address, intent.principal, 4, WEEK);
+      const p = await signPermit(s.ausd, buyer, await engineAddress(), q.permitValue);
+      const sig = (await signTyped(buyer, s.checkout, { PlanIntent: TYPES.PolarisCheckout.PlanIntent }, intent)).signature;
+      return { intent, sig, permit: permitArg(p) };
+    };
+    const first = await open(1);
+    await s.checkout.connect(s.relayer).openPlan(first.intent, first.sig, first.permit);
+    const owed = await s.engine.activeDebtOf(buyer.address);
+    const allowance = await s.ausd.allowance(buyer.address, await engineAddress());
+    expect(allowance >= owed).to.equal(true);
+
+    // The second plan's permit (activeDebt + the new plan), copied from the mempool.
+    const second = await open(2);
+    await expect(s.checkout.connect(s.stranger).reauthorize(buyer.address, second.permit))
+      .to.be.revertedWithCustomError(s.checkout, "AlreadyAuthorized")
+      .withArgs(allowance, owed);
+    await expect(s.checkout.connect(s.relayer).openPlan(second.intent, second.sig, second.permit)).to.emit(s.checkout, "PlanOpened");
   });
 
   it("refuses a permit that would not cover everything the buyer owes, and a buyer who owes nothing", async () => {

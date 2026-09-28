@@ -13,9 +13,14 @@
  * ladder (6 h, then 24 h, 72 h, 168 h).
  *
  * The filter is PolarisCheckout's address and the event's topic0 alone, so
- * only that contract's event can fire it, and every buyer is covered. Only
- * the buyer can cause the event (it needs their permit signature over the
- * token's current nonce), and a run writes nothing unless an instalment is due.
+ * only that contract's event can fire it, and every buyer is covered. The
+ * event needs the buyer's permit signature for the loan engine, and
+ * PolarisCheckout emits it only while their allowance no longer covers what
+ * they owe (`AlreadyAuthorized` otherwise), so a copy of another permit to
+ * the engine (openPlan's, from the mempool) can't fire a run; each permit is
+ * announced once (`reauthorizedThrough`). Anyone may submit the permit, not
+ * only the relayer, which is fine: it moves no money but the buyer's own
+ * repayment. A run writes nothing unless an instalment is due.
  */
 
 import { type EVMLog, bytesToHex, logTriggerConfig, protoBigIntToBigint } from "@chainlink/cre-sdk";

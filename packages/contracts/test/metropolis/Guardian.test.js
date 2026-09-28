@@ -790,6 +790,9 @@ describe("The CRE credit guard (GuardianReceiver)", () => {
         workflowName: cre.WORKFLOW_NAMES.COLLECTIONS,
       });
       await expect(tx).to.emit(s.collections, "TaskExecuted");
+      // The buyer's approval goes (their own wallet), so there is something to re-sign.
+      await s.owner.sendTransaction({ to: buyer.address, value: ethers.parseEther("1") });
+      await s.ausd.connect(buyer).approve(s.engine, 0);
       const owed = await s.engine.activeDebtOf(buyer.address);
       const p = await signPermit(s.ausd, buyer, await s.engine.getAddress(), owed, (await now()) + 600n);
       await expect(s.checkout.connect(s.relayer).reauthorize(buyer.address, { value: owed, deadline: p.deadline, v: p.v, r: p.r, s: p.s }))

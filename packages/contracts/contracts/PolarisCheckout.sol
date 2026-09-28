@@ -200,6 +200,10 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     /// The CRE credit guard `openPlan` asks first; zero for none.
     ICreditGuard public creditGuardian;
 
+    /// Per buyer, the token's permit nonce after the last permit `reauthorize`
+    /// emitted `Reauthorized` for: a permit is announced once.
+    mapping(address => uint256) public reauthorizedThrough;
+
     /// Pay now settled an order. PolarisPayments emits PaymentMade in the same
     /// transaction; this adds the checkout's view of it.
     event CheckoutPaid(
@@ -263,6 +267,9 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     /// A re-signed permit must cover everything the buyer owes the engine,
     /// because a permit replaces the allowance rather than adding to it.
     error PermitBelowDebt(uint256 value, uint256 owed);
+    /// `reauthorize` for a buyer whose allowance to the engine still covers
+    /// what they owe: nothing was lost, so there is nothing to re-sign.
+    error AlreadyAuthorized(uint256 allowance, uint256 owed);
 
     constructor(
         address initialOwner,
@@ -488,12 +495,21 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
      *      it, so the errors are the same on real AUSD and MockAUSD:
      *      `SignatureExpired`, `InvalidSignature` (a wrong signer, another
      *      spender or value, or a permit already used: its nonce has moved on),
-     *      `NothingOwed`, `PermitBelowDebt`. Unlike `openPlan` the permit is
-     *      not relayed inside try/catch: `Reauthorized` must mean this call
-     *      applied it, since the collections workflow collects on that event.
-     *      So a copy of the permit submitted to the token first makes this
-     *      revert; the allowance is restored all the same, and the next
-     *      scheduled collection takes the instalment.
+     *      `NothingOwed`, `PermitBelowDebt`, and `AlreadyAuthorized` when the
+     *      allowance still covers what the buyer owes. That last one is the
+     *      "lost allowance" condition the relayer checks, enforced here: it is
+     *      what refuses a copy of another permit to the engine (openPlan's, seen
+     *      in the mempool) submitted here first to fire a retry nobody asked for.
+     *
+     *      Unlike `openPlan` the permit is not relayed inside try/catch:
+     *      `Reauthorized` must mean the permit is in force, since the
+     *      collections workflow collects on that event. One case is let
+     *      through without the token call: someone landed this very permit on
+     *      the token first (its signature checks against the previous nonce,
+     *      and the allowance is exactly its value). The allowance it set
+     *      stands, so the retry goes ahead instead of waiting for the next
+     *      rung of the dunning ladder. Each permit is announced once
+     *      (`reauthorizedThrough`).
      *
      *      Not stopped by `pause()` or the credit guard: it only lets the
      *      buyer pay what they already owe. An EOA signature only (as AUSD's
@@ -507,15 +523,33 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
         if (permit.value < owed) revert PermitBelowDebt(permit.value, owed);
 
         IERC20Permit token = IERC20Permit(address(stablecoin));
-        bytes32 structHash = keccak256(
-            abi.encode(PERMIT_TYPEHASH, buyer, address(loanEngine), permit.value, token.nonces(buyer), permit.deadline)
-        );
+        uint256 nonce = token.nonces(buyer);
+        uint256 allowance = stablecoin.allowance(buyer, address(loanEngine));
+        if (_signedPermit(token, buyer, permit, nonce)) {
+            if (allowance >= owed) revert AlreadyAuthorized(allowance, owed);
+            token.permit(buyer, address(loanEngine), permit.value, permit.deadline, permit.v, permit.r, permit.s);
+            reauthorizedThrough[buyer] = nonce + 1;
+        } else if (
+            nonce != 0 &&
+            reauthorizedThrough[buyer] < nonce &&
+            allowance == permit.value &&
+            _signedPermit(token, buyer, permit, nonce - 1)
+        ) {
+            // This permit already landed on the token: the allowance it set is in force.
+            reauthorizedThrough[buyer] = nonce;
+        } else {
+            revert InvalidSignature();
+        }
+        emit Reauthorized(buyer, permit.value, permit.deadline);
+    }
+
+    /// Whether `buyer` signed AUSD's Permit for the loan engine, `permit.value`
+    /// and `permit.deadline`, at token nonce `nonce`.
+    function _signedPermit(IERC20Permit token, address buyer, PermitSignature calldata permit, uint256 nonce) private view returns (bool) {
+        bytes32 structHash = keccak256(abi.encode(PERMIT_TYPEHASH, buyer, address(loanEngine), permit.value, nonce, permit.deadline));
         bytes32 digest = MessageHashUtils.toTypedDataHash(token.DOMAIN_SEPARATOR(), structHash);
         (address signer, ECDSA.RecoverError err, ) = ECDSA.tryRecover(digest, permit.v, permit.r, permit.s);
-        if (err != ECDSA.RecoverError.NoError || signer != buyer) revert InvalidSignature();
-
-        token.permit(buyer, address(loanEngine), permit.value, permit.deadline, permit.v, permit.r, permit.s);
-        emit Reauthorized(buyer, permit.value, permit.deadline);
+        return err == ECDSA.RecoverError.NoError && signer == buyer;
     }
 
     // -----------------------------------------------------------------
