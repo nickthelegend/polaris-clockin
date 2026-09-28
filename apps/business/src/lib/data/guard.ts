@@ -32,10 +32,10 @@ export function reasonsFromMask(mask: number): GuardReason[] {
 
 /** Why credit is paused, in the merchant's words. */
 export const GUARD_REASON_TEXT: Readonly<Record<GuardReason, string>> = {
-  depeg: "AUSD traded below its floor on Chainlink's AUSD/USD feed",
+  depeg: "AUSD/USD fell below its floor",
   low_cash: "The credit pool's free cash fell below its floor",
   bad_debt: "Bad debt passed its share of everything lent",
-  stale_price: "Chainlink's AUSD/USD price was too old to trust",
+  stale_price: "The AUSD/USD price was too old to trust",
   owner_pause: "Polaris paused Pay in 4 by hand",
 };
 

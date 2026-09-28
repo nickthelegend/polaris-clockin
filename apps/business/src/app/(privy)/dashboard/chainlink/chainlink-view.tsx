@@ -19,6 +19,7 @@ import type { ReactNode } from "react";
 import { LoadError, Panel, StaleNotice, useNow } from "@/components/dashboard/common";
 import { PageCoin, PageHead } from "@/components/dashboard/page-head";
 import { deliveryLabel, describeRun, type ChainlinkOverview, type ChainlinkRun, type ChainlinkWorkflow, type WorkflowKey, type WorkflowTrigger } from "@/lib/data/chainlink";
+import { nextCronFire } from "@/lib/data/cron";
 import { formatAgo } from "@/lib/data/format";
 import { checkedAgo, GUARD_REASON_TEXT, guardAgeSeconds, type CreditGuard } from "@/lib/data/guard";
 import { useQuery, type QueryState } from "@/lib/session";
@@ -332,7 +333,7 @@ function WorkflowPanel({ workflow: w, sample }: { workflow: ChainlinkWorkflow; s
                 <span className="min-w-0 text-[14px] leading-snug">
                   <span className="font-medium">{t.label} trigger</span>
                   <span className="block text-ui-muted">{t.detail}</span>
-                  {t.kind === "cron" && t.nextAt ? <span className="ui-figure block text-[12.5px] text-ui-muted">Next on schedule {inTime(t.nextAt, now)}</span> : null}
+                  {t.kind === "cron" && t.schedule ? <NextTick schedule={t.schedule} now={now} /> : null}
                 </span>
               </li>
             ))}
@@ -363,6 +364,13 @@ function WorkflowPanel({ workflow: w, sample }: { workflow: ChainlinkWorkflow; s
       </div>
     </Panel>
   );
+}
+
+/** When the cron fires next, on this browser's clock (the server's nextAt is only as fresh as the last read). */
+function NextTick({ schedule, now }: { schedule: string; now: number }) {
+  const next = nextCronFire(schedule, now);
+  if (!next) return null;
+  return <span className="ui-figure block text-[12.5px] text-ui-muted">Next on schedule {inTime(new Date(next).toISOString(), now)}</span>;
 }
 
 function Figure({ label, value }: { label: string; value: string }) {

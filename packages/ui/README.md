@@ -121,7 +121,7 @@ wins) and forwards refs where it renders one element.
 | `CopyButton` | `<CopyButton value={address} label="payout address" />` · a fixed-size IconButton (or `variant="button"`) with a check and a toast |
 | `Menu` | `<Menu label="Account" trigger={<Avatar … />}><Menu.Header>…</Menu.Header><Menu.Item icon={<LogOut />} tone="danger" onSelect={signOut}>Sign out</Menu.Item></Menu>` · arrow keys, Home/End, Escape and Tab close, focus returns |
 | `TxLink`, `shortHash` | `<TxLink hash={run.txHash} href={run.explorerUrl} />` · the shortened hash in figures with an arrow, opening the explorer in a new tab (`kind` names it: transaction, report, contract); unlinked text when `href` is null (a local chain); `children` replaces the hash ("View report") |
-| `ProvenanceBadge` | `<ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" href={reportUrl} />` · a lime-tinted pill with a shield: who attested a figure, when, and "View report" (`linkLabel`) to the proof; only for facts a third party wrote on chain · `size="sm"` |
+| `ProvenanceBadge` | `<ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" href={reportUrl} />` · a lime-tinted pill with a shield: who attested a figure, when, and "View report" (`linkLabel`) to the proof; only for facts a third party wrote on chain · `hash` shows the proof's transaction, unlinked, where there is no explorer · `size="sm"` |
 | `Meter` | `<Meter value={12 / 60} label="Time since the last check" valueText="12 min of 60" tone="lime" />` · a thin gauge of an allowance used (`role="meter"`); tones `lime`, `amber`, `red`, `neutral` |
 
 ### Composites

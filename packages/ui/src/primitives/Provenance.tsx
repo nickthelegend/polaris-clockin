@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "../lib/cn";
 import { IconSlot } from "../lib/icon";
+import { shortHash } from "./TxLink";
 
 export type ProvenanceBadgeProps = {
   /** Who vouches for the figure beside it: "Verified by Chainlink CRE". */
@@ -13,6 +14,8 @@ export type ProvenanceBadgeProps = {
   href?: string | null;
   /** The link's words ("View report"). */
   linkLabel?: string;
+  /** The proof's transaction hash: shown, shortened, when there is no explorer to link to (a local chain). */
+  hash?: string | null;
   icon?: ReactNode;
   size?: "sm" | "md";
   className?: string;
@@ -26,9 +29,10 @@ export type ProvenanceBadgeProps = {
  *
  * ```tsx
  * <ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" href={explorerUrl} linkLabel="View report" />
+ * <ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" hash={txHash} />   // no explorer: the hash, unlinked
  * ```
  */
-export function ProvenanceBadge({ label, meta, href, linkLabel = "View report", icon, size = "md", className }: ProvenanceBadgeProps) {
+export function ProvenanceBadge({ label, meta, href, linkLabel = "View report", hash, icon, size = "md", className }: ProvenanceBadgeProps) {
   const body = (
     <>
       <IconSlot size={size === "sm" ? 14 : 16} className="inline-grid shrink-0 place-items-center text-ui-lime">
@@ -40,6 +44,10 @@ export function ProvenanceBadge({ label, meta, href, linkLabel = "View report", 
         <span className="inline-flex items-center gap-0.5 text-ui-text underline decoration-ui-hairline-strong underline-offset-4 group-hover:decoration-current">
           {linkLabel}
           <ArrowUpRight aria-hidden size={size === "sm" ? 13 : 14} strokeWidth={1.75} />
+        </span>
+      ) : hash ? (
+        <span className="ui-figure text-ui-muted" title={hash}>
+          · {shortHash(hash)}
         </span>
       ) : null}
     </>
