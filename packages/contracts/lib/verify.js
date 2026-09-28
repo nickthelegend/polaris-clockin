@@ -18,6 +18,12 @@
  *      zeroed, metadata left out, as Etherscan compares);
  *   4. and only then hands exactly that input to Etherscan.
  *
+ * Around that, for scripts/verify-monad.js: which contracts a record asks to
+ * verify (verificationTargets: the ones it lists, and the ones a redeploy
+ * replaced), the input cut down to the files a contract is built from
+ * (closureInput, verificationInput), and the constructor arguments read back
+ * from the creation transaction (argsFromCreation).
+ *
  * Used by scripts/verify-monad.js and test/metropolis/Verify.test.js.
  */
 
@@ -144,7 +150,7 @@ async function compileFor(hre, input, solcVersion, fqn) {
       settings: {
         ...full.settings,
         outputSelection: {
-          [sourceName]: { [contractName]: ["abi", "evm.bytecode.object", "evm.deployedBytecode.object", "evm.deployedBytecode.immutableReferences"] },
+          [sourceName]: { [contractName]: ["abi", "metadata", "evm.bytecode.object", "evm.deployedBytecode.object", "evm.deployedBytecode.immutableReferences"] },
         },
       },
     };
@@ -167,6 +173,7 @@ async function compileFor(hre, input, solcVersion, fqn) {
       deployedBytecode: `0x${out.evm.deployedBytecode.object}`,
       immutableReferences: out.evm.deployedBytecode.immutableReferences ?? {},
       abi: out.abi,
+      metadata: out.metadata,
       input: full,
     };
   }
@@ -192,7 +199,133 @@ async function sourcesFor(hre, { fqn, address, commit, root = repoRoot() }) {
   if (!sameExecutable(onChain, compiled.deployedBytecode, compiled.immutableReferences)) {
     throw new Error(`${fqn} at ${address}: the code on chain is neither today's nor ${commit.slice(0, 10)}'s`);
   }
-  return { from: commit, input: compiled.input, solcLongVersion, abi: compiled.abi };
+  return { from: commit, input: compiled.input, solcVersion, solcLongVersion, abi: compiled.abi, compiled };
+}
+
+/**
+ * What to verify in a deployment record: every contract it lists (a real
+ * stablecoin is not ours to verify, the mock is), and every contract a
+ * redeploy replaced, which is still on chain under its old address. Each
+ * with the artifact that built it and the commit its sources are at.
+ */
+function verificationTargets(record) {
+  const targets = [];
+  for (const [name, c] of Object.entries(record.contracts ?? {})) {
+    if (name === "Stablecoin" && c.kind !== "MockAUSD") continue;
+    targets.push({
+      name,
+      artifact: name === "Stablecoin" ? "MockAUSD" : name,
+      address: c.address,
+      txHash: c.txHash ?? null,
+      args: Array.isArray(c.args) ? c.args : null,
+      commit: c.sourceCommit ?? record.sourceCommit ?? null,
+      current: true,
+    });
+  }
+  for (const r of record.redeploys ?? []) {
+    if (!r.replaced?.address) continue;
+    targets.push({
+      name: `${r.contract} (replaced)`,
+      artifact: r.contract,
+      address: r.replaced.address,
+      txHash: r.replaced.txHash ?? null,
+      args: null,
+      commit: r.replaced.sourceCommit ?? record.sourceCommit ?? null,
+      current: false,
+      replacedBy: r.address,
+    });
+  }
+  return targets;
+}
+
+/**
+ * The ABI-encoded constructor arguments a creation transaction carried: its
+ * input past the contract's creation code. The code must be the same as
+ * `creationBytecode` (its metadata aside), else this is not the transaction
+ * that deployed it.
+ */
+function argsFromCreation(txData, creationBytecode) {
+  const data = strip0x(txData);
+  const code = strip0x(creationBytecode);
+  if (data.length < code.length) throw new Error("the creation transaction is shorter than the contract's creation code");
+  const head = data.slice(0, code.length);
+  if (head !== code && withoutMetadata(head) !== withoutMetadata(code)) {
+    throw new Error("the creation transaction does not carry this contract's creation code");
+  }
+  return `0x${data.slice(code.length)}`;
+}
+
+/**
+ * `input` cut down to the sources `fqn`'s metadata names: the files it is
+ * built from, which is what the explorer shows (the rest of the project is
+ * not part of it).
+ */
+function closureInput(input, metadata) {
+  const used = Object.keys(JSON.parse(metadata).sources);
+  const sources = {};
+  for (const name of used) {
+    if (!input.sources[name]) throw new Error(`${name} is in the metadata but not in the input`);
+    sources[name] = input.sources[name];
+  }
+  return { language: input.language ?? "Solidity", sources, settings: input.settings };
+}
+
+/** Whether code on chain is the compiled code byte for byte, metadata included (immutables zeroed). */
+function sameBytes(onChain, compiled, immutableReferences) {
+  if (!onChain || onChain === "0x") return false;
+  return zeroImmutables(onChain, immutableReferences) === zeroImmutables(compiled, immutableReferences);
+}
+
+/**
+ * Everything to submit for `fqn` at `address`: the sources that reproduce
+ * its code (sourcesFor), cut down to the files it is built from when those
+ * alone still reproduce it, the compiler, the ABI and the creation code (to
+ * read its constructor arguments back from the creation transaction).
+ * `exact` is whether the metadata matches too (Etherscan's "exact match").
+ */
+async function verificationInput(hre, { fqn, address, commit, root = repoRoot() }) {
+  const onChain = await hre.ethers.provider.getCode(address);
+  const found = await sourcesFor(hre, { fqn, address, commit, root });
+  let full;
+  if (found.from === "today") {
+    const buildInfo = await hre.artifacts.getBuildInfo(fqn);
+    const { sourceName, contractName } = splitFqn(fqn);
+    const out = buildInfo.output.contracts[sourceName][contractName];
+    full = {
+      input: buildInfo.input,
+      solcVersion: buildInfo.solcVersion,
+      solcLongVersion: buildInfo.solcLongVersion,
+      compiled: {
+        bytecode: `0x${out.evm.bytecode.object}`,
+        deployedBytecode: `0x${out.evm.deployedBytecode.object}`,
+        immutableReferences: out.evm.deployedBytecode.immutableReferences ?? {},
+        abi: out.abi,
+        metadata: out.metadata,
+        input: buildInfo.input,
+      },
+    };
+  } else {
+    full = { input: found.input, solcVersion: found.solcVersion, solcLongVersion: found.solcLongVersion, compiled: found.compiled };
+  }
+
+  let chosen = full.compiled;
+  let reduced = false;
+  if (full.compiled.metadata) {
+    const small = await compileFor(hre, closureInput(full.compiled.input, full.compiled.metadata), full.solcVersion, fqn);
+    if (sameExecutable(onChain, small.deployedBytecode, small.immutableReferences)) {
+      chosen = small;
+      reduced = true;
+    }
+  }
+  return {
+    from: found.from,
+    input: chosen.input,
+    reduced,
+    solcLongVersion: full.solcLongVersion,
+    abi: chosen.abi,
+    bytecode: chosen.bytecode,
+    exact: sameBytes(onChain, chosen.deployedBytecode, chosen.immutableReferences),
+  };
 }
 
 module.exports = {
@@ -204,7 +337,12 @@ module.exports = {
   withoutMetadata,
   zeroImmutables,
   sameExecutable,
+  sameBytes,
   standardInputAt,
   compileFor,
   sourcesFor,
+  verificationTargets,
+  argsFromCreation,
+  closureInput,
+  verificationInput,
 };
