@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { duePayment, owedOnOpenPlans, plansNeedingSignature, signAgainState } from "../src/lib/collection.ts";
 import { GUARD_PAUSED_MESSAGE, laterPausedMessage, staleGuardLine, toGuardView } from "../src/lib/credit-guard.ts";
 import type { CreditGuardView, PaymentLink, Plan } from "../src/lib/data/types.ts";
+import { provenanceOf } from "../src/lib/provenance.ts";
 
 /**
  * The Chainlink states the app shows: the risk guard (paused, or late and
@@ -97,5 +98,18 @@ describe("the risk guard", () => {
     // Unavailable for another reason (the amount), or the guard open: no guard message.
     assert.equal(laterPausedMessage(link({}, { payLaterUnavailable: "Pay in 4 starts at $20.00.", creditGuard: view({}) })), null);
     assert.equal(laterPausedMessage(link({}, { payLaterUnavailable: null, creditGuard: null })), null);
+  });
+});
+
+describe("a credit line's report", () => {
+  // Judge finding: "Verified by Chainlink CRE" appeared for any report, a
+  // local run through a mock forwarder and a simulator-signed one included.
+  it("reads as verified only when the DON signed it; a simulated or local run says what it is", () => {
+    assert.deepEqual(provenanceOf({ delivery: "don" }), { label: "Verified by Chainlink CRE", verified: true });
+    assert.deepEqual(provenanceOf({ delivery: "simulation" }), { label: "Chainlink CRE (simulated)", verified: false });
+    assert.deepEqual(provenanceOf({ delivery: "local" }), { label: "CRE workflow, local run", verified: false });
+    assert.deepEqual(provenanceOf({ delivery: "unknown" }), { label: "CRE workflow report", verified: false });
+    // An API that doesn't say who delivered it is never read as verified.
+    assert.deepEqual(provenanceOf({}), { label: "CRE workflow report", verified: false });
   });
 });

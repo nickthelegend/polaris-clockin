@@ -1,4 +1,4 @@
-import { ArrowUpRight, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, FlaskConical, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "../lib/cn";
@@ -17,6 +17,14 @@ export type ProvenanceBadgeProps = {
   /** The proof's transaction hash: shown, shortened, when there is no explorer to link to (a local chain). */
   hash?: string | null;
   icon?: ReactNode;
+  /**
+   * `verified` (the default): a lime pill with a shield, for a fact a third
+   * party attested (a DON-signed report). `neutral`: a plain pill with a
+   * flask, for a report that is real but vouched for by no one (a simulated
+   * or local CRE run): it says where the figure came from without claiming
+   * a verification.
+   */
+  tone?: "verified" | "neutral";
   size?: "sm" | "md";
   className?: string;
 };
@@ -30,13 +38,15 @@ export type ProvenanceBadgeProps = {
  * ```tsx
  * <ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" href={explorerUrl} linkLabel="View report" />
  * <ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2" hash={txHash} />   // no explorer: the hash, unlinked
+ * <ProvenanceBadge tone="neutral" label="Chainlink CRE (simulated)" meta="Oct 2" href={explorerUrl} />
  * ```
  */
-export function ProvenanceBadge({ label, meta, href, linkLabel = "View report", hash, icon, size = "md", className }: ProvenanceBadgeProps) {
+export function ProvenanceBadge({ label, meta, href, linkLabel = "View report", hash, icon, tone = "verified", size = "md", className }: ProvenanceBadgeProps) {
+  const verified = tone === "verified";
   const body = (
     <>
-      <IconSlot size={size === "sm" ? 14 : 16} className="inline-grid shrink-0 place-items-center text-ui-lime">
-        {icon ?? <ShieldCheck />}
+      <IconSlot size={size === "sm" ? 14 : 16} className={cn("inline-grid shrink-0 place-items-center", verified ? "text-ui-lime" : "text-ui-muted")}>
+        {icon ?? (verified ? <ShieldCheck /> : <FlaskConical />)}
       </IconSlot>
       <span className="font-medium text-ui-text">{label}</span>
       {meta ? <span className="text-ui-muted">· {meta}</span> : null}
@@ -53,13 +63,19 @@ export function ProvenanceBadge({ label, meta, href, linkLabel = "View report", 
     </>
   );
   const classes = cn(
-    "group inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-full bg-ui-lime/10 font-satoshi ring-1 ring-ui-lime/22 ring-inset",
+    "group inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-full font-satoshi ring-1 ring-inset",
+    verified ? "bg-ui-lime/10 ring-ui-lime/22" : "bg-ui-surface-2 ring-ui-hairline-strong",
     size === "sm" ? "min-h-7 px-2.5 py-1 text-[12.5px]" : "min-h-8 px-3 py-1.5 text-[13.5px]",
     className,
   );
   if (!href) return <span className={classes}>{body}</span>;
   return (
-    <a href={href} target="_blank" rel="noreferrer noopener" className={cn(classes, "transition-colors hover:bg-ui-lime/15 focus-visible:ring-2 focus-visible:ring-ui-focus focus-visible:outline-none")}>
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer noopener"
+      className={cn(classes, "transition-colors focus-visible:ring-2 focus-visible:ring-ui-focus focus-visible:outline-none", verified ? "hover:bg-ui-lime/15" : "hover:bg-ui-surface-3")}
+    >
       {body}
       <span className="sr-only"> (opens the explorer in a new tab)</span>
     </a>

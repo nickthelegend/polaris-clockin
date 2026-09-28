@@ -61,8 +61,15 @@ type CreditStatus = {
     reason: string | null;
     linkedWallet: Address | null;
     explanation: { reasons: Array<{ text: string; points: number | null; provider: string | null }> } | null;
-    /** The underwriting report's transaction (Chainlink CRE), and when it landed. */
-    verified?: { by: "Chainlink CRE"; workflow: string; txHash: Hex; at: string; explorerUrl: string | null } | null;
+    /** The underwriting report's transaction (Chainlink CRE), when it landed, and which forwarder delivered it. */
+    verified?: {
+      by: "Chainlink CRE";
+      workflow: string;
+      txHash: Hex;
+      at: string;
+      explorerUrl: string | null;
+      delivery?: "don" | "simulation" | "local" | "unknown";
+    } | null;
   } | null;
 };
 

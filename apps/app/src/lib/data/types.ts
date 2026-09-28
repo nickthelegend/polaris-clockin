@@ -68,7 +68,11 @@ export type CreditLine = {
   verified: CreditProvenance | null;
 };
 
-/** "Verified by Chainlink CRE": the underwriting report's transaction. */
+/**
+ * The underwriting report behind a credit line: its transaction, and which
+ * forwarder delivered it (lib/provenance.ts turns that into words: "Verified
+ * by Chainlink CRE" only for a DON-signed report).
+ */
 export type CreditProvenance = {
   by: "Chainlink CRE";
   /** The CRE workflow that wrote it: polaris-underwrite. */
@@ -78,6 +82,13 @@ export type CreditProvenance = {
   explorerUrl: string | null;
   /** When the report landed (its block time), ms. */
   at: number;
+  /**
+   * Who delivered it: `don` (Chainlink's KeystoneForwarder, DON-signed),
+   * `simulation` (the CRE CLI's simulator through Chainlink's
+   * MockKeystoneForwarder), `local` (a local chain), `unknown`. Missing from
+   * an older API, which then never reads as verified.
+   */
+  delivery?: "don" | "simulation" | "local" | "unknown";
 };
 
 /**

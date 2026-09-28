@@ -9,6 +9,7 @@ import { afterResponse } from "../background";
 import { polarisLoanEngineAbi, scoreManagerAbi } from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { formatUnits } from "../chain/money";
+import { deliveryOf, PROVENANCE_LABEL, reportForwarder } from "../cre/provenance";
 import { getDb } from "../db";
 import { explorerTxUrl, getConfig } from "../env";
 import { HttpError } from "../http";
@@ -260,10 +261,18 @@ export async function explainDecision(accountLower: string): Promise<void> {
   await db.creditDecisions.update(accountLower, (d) => (d.callbackId === decision.callbackId ? { ...d, explanation } : d));
 }
 
-/** The report behind a decision, as the app links it: "Verified by Chainlink CRE". */
-function verifiedBy(decision: { txHash: Hex | null; at: string; report?: { txHash: Hex; at: string; blockNumber: number } | null }) {
+/**
+ * The report behind a decision, as the app links it, and who stands behind
+ * it (cre/provenance.ts): "Verified by Chainlink CRE" only for a report the
+ * DON signed (Chainlink's KeystoneForwarder); a simulated run (the CLI through
+ * Chainlink's MockKeystoneForwarder) or a local one says so instead.
+ */
+async function verifiedBy(decision: { txHash: Hex | null; at: string; report?: { txHash: Hex; at: string; blockNumber: number } | null }) {
   const txHash = decision.report?.txHash ?? decision.txHash;
   if (!txHash) return null;
+  const chain = getConfig().chain;
+  const forwarder = chain ? await reportForwarder(txHash, chain.contracts.underwriting) : null;
+  const delivery = chain ? deliveryOf(forwarder, chain) : "unknown";
   return {
     by: "Chainlink CRE" as const,
     workflow: "polaris-underwrite" as const,
@@ -272,6 +281,10 @@ function verifiedBy(decision: { txHash: Hex | null; at: string; report?: { txHas
     at: decision.report?.at ?? decision.at,
     blockNumber: decision.report?.blockNumber ?? null,
     explorerUrl: explorerTxUrl(txHash),
+    /** Which forwarder delivered it, and what the app may call it: only `don` is "Verified by Chainlink CRE". */
+    delivery,
+    forwarder,
+    label: PROVENANCE_LABEL[delivery],
   };
 }
 
@@ -314,7 +327,7 @@ export async function creditStatus(account: Address) {
            * workflow wrote (from the chain sync when it has seen it land, else
            * the callback's), when it landed, and where to see it.
            */
-          verified: verifiedBy(decision),
+          verified: await verifiedBy(decision),
         }
       : null,
   };

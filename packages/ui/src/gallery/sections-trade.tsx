@@ -374,6 +374,8 @@ export function SectionTrade() {
           <Specimen label="ProvenanceBadge · TxLink: where a figure came from">
             <ProvenanceBadge label="Verified by Chainlink CRE" meta="Oct 2, 2026" href="#ref-e" />
             <ProvenanceBadge size="sm" label="Verified by Chainlink CRE" meta="Oct 2" />
+            <ProvenanceBadge tone="neutral" label="Chainlink CRE (simulated)" meta="Oct 2, 2026" href="#ref-e" />
+            <ProvenanceBadge tone="neutral" size="sm" label="CRE workflow, local run" meta="Oct 2" hash="0x10d38ddb663b14507d34a5af1e5896202c879155c0998b0329e10587f5f12f11" />
             <TxLink hash={TX} href="#ref-e" />
             <TxLink hash={TX} href="#ref-e" kind="report">View report</TxLink>
           </Specimen>
