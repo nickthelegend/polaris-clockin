@@ -14,3 +14,13 @@ packages:
 # place; the CRE workflows compile to WASM with it (workflows/README.md).
 onlyBuiltDependencies:
   - bun
+
+# @chainlink/cre-sdk's compile step (cre-compile, which `cre workflow build`
+# and `simulate` run) imports `typescript` without declaring it, so it got
+# whichever copy pnpm hoisted: packages/contracts' TypeScript 7, whose
+# package has no compiler API ("ts.ScriptTarget" is undefined). Give it the
+# TypeScript 5 every other package uses.
+packageExtensions:
+  "@chainlink/cre-sdk":
+    dependencies:
+      typescript: "^5.9.3"
