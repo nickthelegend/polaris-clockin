@@ -8,10 +8,12 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
+import {ICreditGuard} from "./interfaces/ICreditGuard.sol";
 import {PolarisLoanEngine} from "./PolarisLoanEngine.sol";
 import {PolarisPayments} from "./PolarisPayments.sol";
 import {ScoreManager} from "./ScoreManager.sol";
@@ -77,6 +79,27 @@ import {ScoreManager} from "./ScoreManager.sol";
  *                        string orderId,uint256 nonce,uint256 deadline)
  *      Signatures are checked with SignatureChecker, so an ERC-1271 smart
  *      account can buy as well as a Mera EOA.
+ *
+ *      The credit guard. When `creditGuardian` is set (GuardianReceiver, the
+ *      Chainlink CRE `polaris-guardian` workflow's receiver), `openPlan` asks
+ *      it first and refuses a new Pay in 4 plan with
+ *      `CreditPausedByGuardian(reasons)` while it says credit is paused: the
+ *      AUSD peg, the pool's free cash, its bad debt or a stale price failed a
+ *      threshold, or the owner forced a pause. Pay now, Subscribe, and
+ *      everything already open (collections, repayments, `reauthorize`) never
+ *      ask it: a buyer paying with their own money is never stopped by the
+ *      state of the credit pool. The guard fails open: a stale attestation
+ *      (the guardian's `maxAttestationAge`), no guardian, or a guardian call
+ *      that reverts all leave Pay in 4 working.
+ *
+ *      Re-signing. A buyer whose standing allowance to the loan engine was
+ *      lost (revoked, or replaced by a permit for something else) can't be
+ *      collected from, and the collections workflow skips them with
+ *      `InsufficientAllowance`. `reauthorize` relays the buyer's fresh
+ *      ERC-2612 permit to the engine and emits `Reauthorized`, which the
+ *      collections workflow's EVM log trigger listens for, so the missed
+ *      instalment is collected seconds later instead of at the next dunning
+ *      retry.
  */
 contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     /// What a buyer signs to open a Pay in 4 plan.
@@ -87,6 +110,10 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     bytes32 public constant SUBSCRIBE_INTENT_TYPEHASH = keccak256(
         "SubscribeIntent(address buyer,address merchant,uint256 planId,uint256 pricePerPeriod,uint64 periodSeconds,string orderId,uint256 nonce,uint256 deadline)"
     );
+
+    /// ERC-2612's Permit, checked by `reauthorize` before the token sees it.
+    bytes32 public constant PERMIT_TYPEHASH =
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)");
 
     /// Longest an intent may still have to run when it lands. Apps sign a few
     /// minutes; the hour is headroom for slow relaying and clock drift.
@@ -170,6 +197,9 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     /// Settled orders by order key.
     mapping(bytes32 => Order) public orders;
 
+    /// The CRE credit guard `openPlan` asks first; zero for none.
+    ICreditGuard public creditGuardian;
+
     /// Pay now settled an order. PolarisPayments emits PaymentMade in the same
     /// transaction; this adds the checkout's view of it.
     event CheckoutPaid(
@@ -208,6 +238,10 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     );
     /// A buyer retired their next intent without using it.
     event NonceInvalidated(address indexed buyer, uint256 nonce);
+    /// A buyer's fresh permit to the loan engine was applied. The collections
+    /// workflow's log trigger collects what fell due for `buyer`.
+    event Reauthorized(address indexed buyer, uint256 value, uint256 deadline);
+    event CreditGuardianSet(address indexed guardian);
 
     error ZeroAddress();
     error EmptyOrderId();
@@ -219,6 +253,16 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     error PlanMismatch(uint256 planId);
     error WrongStablecoin();
     error WrongScoreManager();
+    /// The credit guard refused a new Pay in 4 plan. `reasonMask` is
+    /// GuardianReceiver's: 1 depeg, 2 low pool cash, 4 bad debt, 8 stale
+    /// price, 0x80 paused by the owner.
+    error CreditPausedByGuardian(uint8 reasonMask);
+    error GuardianNotAContract(address guardian);
+    /// `reauthorize` for a buyer who owes the engine nothing.
+    error NothingOwed(address buyer);
+    /// A re-signed permit must cover everything the buyer owes the engine,
+    /// because a permit replaces the allowance rather than adding to it.
+    error PermitBelowDebt(uint256 value, uint256 owed);
 
     constructor(
         address initialOwner,
@@ -254,6 +298,13 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    /// @notice Set, or with zero remove, the credit guard `openPlan` asks.
+    function setCreditGuardian(ICreditGuard guardian) external onlyOwner {
+        if (address(guardian) != address(0) && address(guardian).code.length == 0) revert GuardianNotAContract(address(guardian));
+        creditGuardian = guardian;
+        emit CreditGuardianSet(address(guardian));
     }
 
     // -----------------------------------------------------------------
@@ -304,9 +355,9 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     /**
      * @notice Open a Pay in 4 plan the buyer signed for, and pay the merchant
      *         the whole principal from the credit pool. Anyone may submit it.
-     * @dev Checks, in order: the intent's deadline and window, the buyer's
-     *      signature, the buyer's nonce, and that the order is unsettled and
-     *      priced as quoted. Then it relays the permit and calls
+     * @dev Checks, in order: the credit guard (`CreditPausedByGuardian`), the
+     *      intent's deadline and window, the buyer's signature, the buyer's
+     *      nonce, and that the order is unsettled and priced as quoted. Then it relays the permit and calls
      *      `PolarisLoanEngine.createLoan`, which enforces the rest: the credit
      *      line from ScoreManager (`ExceedsCreditLimit`), the allowance
      *      covering everything the buyer owes (`InsufficientAllowance`), the
@@ -325,6 +376,8 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
         whenNotPaused
         returns (uint256 loanId)
     {
+        (bool creditIsPaused, uint8 reasons) = creditPaused();
+        if (creditIsPaused) revert CreditPausedByGuardian(reasons);
         _checkParties(intent.buyer, intent.merchant);
         _checkDeadline(intent.deadline);
         _requireSigned(intent.buyer, _planStructHash(intent), signature);
@@ -420,6 +473,52 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     }
 
     // -----------------------------------------------------------------
+    // Re-signing a lost allowance
+    // -----------------------------------------------------------------
+
+    /**
+     * @notice Apply a buyer's fresh ERC-2612 permit to the loan engine, so the
+     *         instalments they owe can be collected again. Anyone may submit
+     *         it; the relayer does, so the buyer needs no gas.
+     * @dev The buyer signs AUSD's `Permit` with spender = the loan engine,
+     *      value >= `loanEngine.activeDebtOf(buyer)` (everything they owe it:
+     *      a permit replaces the allowance, so less would strand a plan), the
+     *      token's current `nonces(buyer)` and a deadline. The signature is
+     *      checked here, against the token's own domain, before the token sees
+     *      it, so the errors are the same on real AUSD and MockAUSD:
+     *      `SignatureExpired`, `InvalidSignature` (a wrong signer, another
+     *      spender or value, or a permit already used: its nonce has moved on),
+     *      `NothingOwed`, `PermitBelowDebt`. Unlike `openPlan` the permit is
+     *      not relayed inside try/catch: `Reauthorized` must mean this call
+     *      applied it, since the collections workflow collects on that event.
+     *      So a copy of the permit submitted to the token first makes this
+     *      revert; the allowance is restored all the same, and the next
+     *      scheduled collection takes the instalment.
+     *
+     *      Not stopped by `pause()` or the credit guard: it only lets the
+     *      buyer pay what they already owe. An EOA signature only (as AUSD's
+     *      permit): a smart account approves the engine by its own call.
+     */
+    function reauthorize(address buyer, PermitSignature calldata permit) external nonReentrant {
+        if (buyer == address(0)) revert ZeroAddress();
+        if (block.timestamp > permit.deadline) revert SignatureExpired();
+        uint256 owed = loanEngine.activeDebtOf(buyer);
+        if (owed == 0) revert NothingOwed(buyer);
+        if (permit.value < owed) revert PermitBelowDebt(permit.value, owed);
+
+        IERC20Permit token = IERC20Permit(address(stablecoin));
+        bytes32 structHash = keccak256(
+            abi.encode(PERMIT_TYPEHASH, buyer, address(loanEngine), permit.value, token.nonces(buyer), permit.deadline)
+        );
+        bytes32 digest = MessageHashUtils.toTypedDataHash(token.DOMAIN_SEPARATOR(), structHash);
+        (address signer, ECDSA.RecoverError err, ) = ECDSA.tryRecover(digest, permit.v, permit.r, permit.s);
+        if (err != ECDSA.RecoverError.NoError || signer != buyer) revert InvalidSignature();
+
+        token.permit(buyer, address(loanEngine), permit.value, permit.deadline, permit.v, permit.r, permit.s);
+        emit Reauthorized(buyer, permit.value, permit.deadline);
+    }
+
+    // -----------------------------------------------------------------
     // Views for clients
     // -----------------------------------------------------------------
 
@@ -441,6 +540,27 @@ contract PolarisCheckout is Ownable, Pausable, ReentrancyGuard, EIP712, Nonces {
     /// @notice The EIP-712 digest a buyer signs for `intent`.
     function subscribeIntentDigest(SubscribeIntent calldata intent) external view returns (bytes32) {
         return _hashTypedDataV4(_subscribeStructHash(intent));
+    }
+
+    /**
+     * @notice Whether `openPlan` would refuse a new plan right now for the
+     *         credit guard, and why (GuardianReceiver's reason bits).
+     * @dev Fails open: no guardian, or a guardian call that reverts, reads as
+     *      open. Staleness is the guardian's own (`isCreditPaused` is false
+     *      once its latest attestation is older than `maxAttestationAge`).
+     */
+    function creditPaused() public view returns (bool paused, uint8 reasons) {
+        address guardian = address(creditGuardian);
+        if (guardian == address(0)) return (false, 0);
+        // A low-level call, so that nothing the guardian does (revert, return
+        // nothing, return garbage) can make openPlan revert: try/catch would
+        // not catch a return value that fails to decode. It cannot be starved
+        // to fail open on purpose either: it gets 63/64 of the gas left, and
+        // a call given too little to finish leaves openPlan too little to.
+        (bool ok, bytes memory ret) = guardian.staticcall(abi.encodeCall(ICreditGuard.isCreditPaused, ()));
+        if (!ok || ret.length < 64) return (false, 0);
+        (uint256 p, uint256 r) = abi.decode(ret, (uint256, uint256));
+        return (p != 0, uint8(r));
     }
 
     /**

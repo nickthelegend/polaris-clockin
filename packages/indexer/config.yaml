@@ -91,10 +91,12 @@ contracts:
   - name: PolarisCheckout
     events:
       - event: "CheckoutPaid(bytes32 indexed orderKey, address indexed merchant, address indexed buyer, string orderId, uint256 amount, uint256 fee)"
+      - event: "CreditGuardianSet(address indexed guardian)"
       - event: "NonceInvalidated(address indexed buyer, uint256 nonce)"
       - event: "OwnershipTransferred(address indexed previousOwner, address indexed newOwner)"
       - event: "Paused(address account)"
       - event: "PlanOpened(bytes32 indexed orderKey, address indexed merchant, address indexed buyer, uint256 loanId, string orderId, uint256 principal, uint256 totalOwed, uint32 installments, uint64 interval, uint64 firstDueAt)"
+      - event: "Reauthorized(address indexed buyer, uint256 value, uint256 deadline)"
       - event: "SubscriptionStarted(bytes32 indexed orderKey, address indexed merchant, address indexed buyer, uint256 subId, uint256 planId, string orderId, uint256 pricePerPeriod, uint64 periodSeconds, uint64 nextChargeAt)"
       - event: "Unpaused(address account)"
   - name: CollectionsReceiver
@@ -106,6 +108,7 @@ contracts:
       - event: "ForwarderAddressUpdated(address indexed previousForwarder, address indexed newForwarder)"
       - event: "OwnershipTransferred(address indexed previousOwner, address indexed newOwner)"
       - event: "SecurityWarning(string message)"
+      - event: "SimulationTransmitterSet(address indexed transmitter)"
       - event: "TaskExecuted(uint8 indexed action, uint256 indexed id, uint256 amount)"
       - event: "TaskSkipped(uint8 indexed action, uint256 indexed id, bytes reason)"
   - name: UnderwritingReceiver
