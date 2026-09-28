@@ -181,8 +181,17 @@ export type QueryState<T> = {
 };
 
 /**
+ * How often the money pages (Overview, Payments, Pay in 4, Payouts) read
+ * again while the tab is visible: a payment should be on screen within
+ * seconds of the chain (plan §8, "+$200.00, paid in full, 0.8 s later").
+ * Every 3 s in `next dev` (pnpm demo:local), every 10 s in production.
+ */
+export const LIVE_REFRESH_MS = process.env.NODE_ENV === "development" ? 3_000 : 10_000;
+
+/**
  * Load something from the page's data source, with loading, error, reload
- * and an optional refresh interval (only while the tab is visible). A failed
+ * and an optional refresh interval (only while the tab is visible, and at
+ * once when the tab comes back into view). A failed
  * refresh keeps the older data and reports `stale`, so the page can say so
  * instead of silently showing old numbers.
  */
@@ -230,13 +239,20 @@ export function useQuery<T>(load: (data: DashboardData) => Promise<T>, options: 
 
   useEffect(() => {
     if (!options.refreshMs) return;
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        setInFlight(true);
-        setNonce((n) => n + 1);
-      }
-    }, options.refreshMs);
-    return () => clearInterval(id);
+    const again = () => {
+      if (document.visibilityState !== "visible") return;
+      setInFlight(true);
+      setNonce((n) => n + 1);
+    };
+    const id = setInterval(again, options.refreshMs);
+    // Back on the tab (or the window): read now rather than on the next tick.
+    document.addEventListener("visibilitychange", again);
+    window.addEventListener("focus", again);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", again);
+      window.removeEventListener("focus", again);
+    };
   }, [options.refreshMs]);
 
   const reload = useCallback(() => {

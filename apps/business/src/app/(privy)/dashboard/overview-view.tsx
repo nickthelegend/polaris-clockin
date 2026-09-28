@@ -37,7 +37,7 @@ import { formatAgo, MODE_LABEL, money, shortAddress } from "@/lib/data/format";
 import { getCollectionsRun, getIndexedEvents, getUnderwritingReasons, placeholderNextEvent, type IndexedEvent } from "@/lib/data/insights";
 import type { Insights, Overview, PayMode, Payment, Plan } from "@/lib/data/types";
 import { useMerchant } from "@/lib/merchant-context";
-import { useQuery, useSample, type QueryState } from "@/lib/session";
+import { LIVE_REFRESH_MS, useQuery, useSample, type QueryState } from "@/lib/session";
 
 /**
  * The Overview is ref E's main screen, mapped to Polaris: the sales chart
@@ -47,9 +47,10 @@ import { useQuery, useSample, type QueryState } from "@/lib/session";
 export function OverviewView() {
   const { merchant } = useMerchant();
   const sample = useSample();
-  const overview = useQuery((d) => d.getOverview(), { refreshMs: 30_000 });
-  const payments = useQuery((d) => d.listPayments(), { refreshMs: 30_000 });
-  const plans = useQuery((d) => d.listPlans(), { refreshMs: 60_000 });
+  // A new payment is on screen within seconds (3 s under demo:local, 10 s in production).
+  const overview = useQuery((d) => d.getOverview(), { refreshMs: LIVE_REFRESH_MS });
+  const payments = useQuery((d) => d.listPayments(), { refreshMs: LIVE_REFRESH_MS });
+  const plans = useQuery((d) => d.listPlans(), { refreshMs: LIVE_REFRESH_MS });
 
   const list = payments.data;
   const empty = overview.data !== undefined && list !== undefined && list.length === 0 && overview.data.balanceCents === 0;

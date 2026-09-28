@@ -33,7 +33,7 @@ import { formatDateTime, money, shortAddress } from "@/lib/data/format";
 import type { AutoPayouts, Payout } from "@/lib/data/types";
 import { useMerchant } from "@/lib/merchant-context";
 import { useAutoPayouts } from "@/lib/payouts";
-import { useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
+import { LIVE_REFRESH_MS, useDashboardData, useQuery, useReadiness, useSample, type QueryState } from "@/lib/session";
 
 /** Payouts shown at a time in the history. */
 const HISTORY_PAGE = 10;
@@ -72,8 +72,8 @@ const COLUMNS: TableColumn<Payout>[] = [
 export function PayoutsView() {
   const { merchant } = useMerchant();
   const sample = useSample();
-  const payouts = useQuery((d) => d.getPayouts(), { refreshMs: 30_000 });
-  const payments = useQuery((d) => d.listPayments(), { refreshMs: 60_000 });
+  const payouts = useQuery((d) => d.getPayouts(), { refreshMs: LIVE_REFRESH_MS });
+  const payments = useQuery((d) => d.listPayments(), { refreshMs: LIVE_REFRESH_MS });
   const [open, setOpen] = useState<Payout | null>(null);
   const [historyLimit, setHistoryLimit] = useState(HISTORY_PAGE);
   const state = payouts.data;
