@@ -50,10 +50,11 @@ Then, as needed:
 |---|---|
 | `fund-pool:monad` | The credit pool is empty because the deployer held no AUSD (the Agora faucet is dry; `docs/research/ausd.md` 5.2). Send AUSD to the deployer, then run it. Or redeploy with `AUSD_MODE=mock`. |
 | `RELAYER_ADDRESS=0x… grant-relayer:monad` | The Privy relayer wallet exists: gives it PolarisPayments and MerchantRegistry operator and BatchSettlement settler. |
-| `ETHERSCAN_API_KEY=… verify:monad` | Verify every contract on Monadscan (Etherscan V2 API). |
+| `ETHERSCAN_API_KEY=… verify:monad` | Verify every contract on Monadscan (Etherscan V2 API), each from the sources that built it: today's when they reproduce its code, else those of the commit the record names (`sourceCommit`), rebuilt from git and checked against the chain first (`lib/verify.js`). `VERIFY_DRY_RUN=1` checks all of them with no key and no submission; `VERIFY_ONLY=A,B` picks some. |
+| `redeploy-guardian:monad` | Replace GuardianReceiver alone with today's code and point PolarisCheckout's credit guard at it (`lib/redeploy.js`); refuses unless the deployer owns PolarisCheckout, the receiver is not already today's code, `contracts/` is committed and the MON is there. Writes the record (with a `redeploys` entry) and appends to `monad-testnet.transactions.json`. |
 | `check:monad` | Read-only live check of AUSD, the forwarders, Multicall3 and gas. |
-| `guardian:monad` | The credit guard's status (paused, why, stale, override, thresholds, the latest attestation). `GUARD_ACTION=thresholds` sets the `GUARD_*` thresholds (decision 9 for any unset; `GUARD_MIN_PRICE=1.001` is the demo's raised peg, decision 28), `GUARD_ACTION=override GUARD_OVERRIDE=pause\|resume\|none`, `GUARD_ACTION=max-age GUARD_MAX_ATTESTATION_AGE_SECONDS=…`. |
-| `CRE_WORKFLOW_OWNER=0x… CRE_WORKFLOW_ID_COLLECTIONS=0x… CRE_WORKFLOW_ID_UNDERWRITE=0x… CRE_WORKFLOW_ID_GUARDIAN=0x… lock-receivers:monad` | After `cre workflow deploy`: each receiver accepts only its workflow's owner, name **and** id, moves to the production KeystoneForwarder, and drops the simulation transmitter (in that order; idempotent). `CRE_FORWARDER=simulation` adds the identity checks and keeps the simulation forwarder and transmitter. Writes `cre.locked` into the deployment record. |
+| `guardian:monad` | The credit guard's status (paused, why and from where, stale, override and until when, thresholds, the acknowledged bad debt, the latest attestation). `GUARD_ACTION=thresholds` sets the `GUARD_*` thresholds (the defaults for any unset; `GUARD_MIN_PRICE=1.001` is the demo's raised peg, decision 28, and applies at once), `GUARD_ACTION=override GUARD_OVERRIDE=pause\|resume\|none` (a resume lasts `GUARD_RESUME_SECONDS`, 3600 by default, at most a day), `GUARD_ACTION=acknowledge` (only bad debt beyond today's counts), `GUARD_ACTION=max-age GUARD_MAX_ATTESTATION_AGE_SECONDS=…`. |
+| `CRE_WORKFLOW_OWNER=0x… CRE_WORKFLOW_ID_COLLECTIONS=0x… CRE_WORKFLOW_ID_UNDERWRITE=0x… CRE_WORKFLOW_ID_GUARDIAN=0x… lock-receivers:monad` | After `cre workflow deploy`: each receiver accepts only its workflow's owner, name **and** id, moves to the production KeystoneForwarder, and drops the simulation transmitter (in that order; idempotent). The production forwarder must answer `typeAndVersion()` as Chainlink's KeystoneForwarder; Chainlink's MockKeystoneForwarder (which anyone can call) is refused before anything is sent, on Monad testnet only Chainlink's own address is taken, and the forwarder is read back and checked again before the transmitter is cleared. `CRE_FORWARDER_ADDRESS` is for a local chain only. `CRE_FORWARDER=simulation` adds the identity checks and keeps the simulation forwarder and transmitter. Writes `cre.locked` into the deployment record. |
 
 `deploy:monad` uses **real AUSD** (`0xa9012a05…22dC`) and checks its EIP-712
 domain on deploy; it refuses Monad mainnet, and refuses to start without the
@@ -67,17 +68,19 @@ for `cre workflow simulate --broadcast` alone; set on all three receivers;
 required on the simulation forwarder, read from `CRE_ETH_PRIVATE_KEY` when
 unset, and never the deployer, which the script refuses), `CRE_WORKFLOW_OWNER`,
 `RELAYER_ADDRESS`, `POOL_SEED_AUSD`, and the guardian's `GUARD_MIN_PRICE`
-(0.995), `GUARD_MIN_FREE_CASH_AUSD` (1000), `GUARD_MAX_BAD_DEBT_BPS` (500),
+(0.995), `GUARD_MAX_PRICE` (1.005), `GUARD_MIN_FREE_CASH_AUSD` (1000),
+`GUARD_MAX_BAD_DEBT_BPS` (500), `GUARD_MIN_ORIGINATED_AUSD` (10000),
 `GUARD_MAX_PRICE_AGE_SECONDS` (7200), `GUARD_MAX_ATTESTATION_AGE_SECONDS`
-(3600).
+(3600). The record names the commit the bytecode was built from
+(`sourceCommit`), which `verify:monad` rebuilds from when the sources move on.
 
 **Gas.** Monad bills the gas *limit*. Every script sends through `lib/tx.js`:
 `eth_estimateGas` plus 15%, never a blanket limit. Measured locally (gas used,
 `e2e:local`): Pay now 271k, open a plan 521k (the first plan on a fresh
 deployment, which writes the pool totals and the borrower's loan list for the
 first time; 436k for a later one), a collections report 162k, subscribe 335k,
-send 167k, claim 63k, an underwriting report 142k, a guardian attestation 121k
-(247k for the first), `reauthorize` 77k.
+send 167k, claim 63k, an underwriting report 142k, a guardian attestation 140k
+(254k for the first; it reads the pool to check the report against it), `reauthorize` 77k.
 
 ## Contracts
 
@@ -135,7 +138,7 @@ PolarisPayments' appointed `checkout` for Pay in 4 as well as Subscribe.
 | `openPlan(PlanIntent, bytes signature, PermitSignature) → loanId` | `PlanIntent` + AUSD `Permit`, spender = **PolarisLoanEngine**, value = `quotePlan(...).permitValue` | Merchant paid `principal` at once. |
 | `subscribe(SubscribeIntent, bytes signature, PermitSignature) → subId` | `SubscribeIntent` + AUSD `Permit`, spender = **PolarisPayments** (e.g. 12 periods) | Plan terms must equal the intent (`PlanMismatch`). |
 | `quotePlan(buyer, principal, installments, interval) → PlanQuote` | | `totalOwed, interest, installmentAmount, permitValue, creditLimit, activeDebt, available, withinLimit`. |
-| `reauthorize(buyer, PermitSignature) ` | AUSD `Permit`, spender = **PolarisLoanEngine**, value >= `loanEngine.activeDebtOf(buyer)` | Restores a lost allowance; emits `Reauthorized`, which the collections workflow's log trigger collects on. Not stopped by `pause()` or the credit guard. |
+| `reauthorize(buyer, PermitSignature) ` | AUSD `Permit`, spender = **PolarisLoanEngine**, value >= `loanEngine.activeDebtOf(buyer)` | Restores a lost allowance; emits `Reauthorized`, which the collections workflow's log trigger collects on. Only while the allowance no longer covers what the buyer owes (`AlreadyAuthorized` otherwise, so a copy of openPlan's permit can't fire a retry). A permit someone landed on the token first still emits `Reauthorized` (its allowance is in force), once (`reauthorizedThrough`). Not stopped by `pause()` or the credit guard. **Not on Monad testnet yet**: the deployed PolarisCheckout predates these two checks (`verify:monad` verifies it from the deploy commit). |
 | `creditPaused() → (bool paused, uint8 reasons)` | | What `openPlan` would decide now (fails open). |
 | `orderOf(merchant, orderId)`, `orderKeyOf`, `planIntentDigest`, `subscribeIntentDigest`, `invalidateNonce()`, `pause()`/`unpause()`, `setCreditGuardian(guardian)` (owner) | | |
 
@@ -162,8 +165,8 @@ ceiling ladder, `thresholdFor(k) - thresholdFor(k - 1)` with `thresholdFor(k) = 
 `InvalidAccountNonce(account, current)`, `SignatureExpired`, `SignatureWindowTooLong`,
 `OrderAlreadySettled(orderKey)`, `WrongAmount(quoted, offered)`, `PlanMismatch(planId)`, `EmptyOrderId`,
 `ZeroAddress`, `EnforcedPause`, `CreditPausedByGuardian(reasonMask)` (Pay in 4 only), and for `reauthorize`
-`NothingOwed(buyer)`, `PermitBelowDebt(value, owed)`, `SignatureExpired`, `InvalidSignature` (wrong signer,
-spender or value, or a replayed permit); the engine's `ExceedsCreditLimit`, `InsufficientAllowance(have, need)`,
+`NothingOwed(buyer)`, `PermitBelowDebt(value, owed)`, `AlreadyAuthorized(allowance, owed)`, `SignatureExpired`,
+`InvalidSignature` (wrong signer, spender or value, or a replayed permit); the engine's `ExceedsCreditLimit`, `InsufficientAllowance(have, need)`,
 `MerchantNotEligible`, `InvalidInterval` bubble up unchanged.
 
 ### Chainlink CRE receivers
@@ -221,38 +224,49 @@ deliver, so it must be a dedicated CRE key, never the deployer.
 
 **GuardianReceiver** (`polaris-guardian`, cron). Each run reads Chainlink's AUSD/USD on Monad
 **mainnet** (`0xE20751C7B5867bCBef815ffc1b284c3f412a9e13`, 8 decimals) and, on testnet,
-`currentInputs() → (PoolState state, Thresholds limits)` (one read: the engine's
-`poolState() = (freeCash, totalOwed, badDebt, totalOriginated)` and the thresholds). Report body:
+`currentInputs() → (PoolState state, Thresholds limits, uint256 acknowledgedBadDebt)` (one read: the
+engine's `poolState() = (freeCash, totalOwed, badDebt, totalOriginated)`, the thresholds, and the bad
+debt the owner acknowledged). Report body:
 
 ```
 abi.encode(uint8 kind = 3, Attestation a)
 Attestation = (uint80 priceRoundId, int256 price, uint64 priceUpdatedAt,
                uint256 freeCash, uint256 totalOwed, uint256 badDebt, uint256 totalOriginated,
                uint64 observedAt, bool creditPaused, uint8 reasons)
-reasons: 1 depeg (price < minPrice)   2 low cash (freeCash < minFreeCash)
-         4 bad debt (badDebt > maxBadDebtBps of totalOriginated)
+reasons: 1 depeg (price < minPrice or price > maxPrice)   2 low cash (freeCash < minFreeCash)
+         4 bad debt (totalOriginated >= minOriginated and badDebt - acknowledged > maxBadDebtBps of totalOriginated)
          8 stale price (priceUpdatedAt == 0 or observedAt - priceUpdatedAt > maxPriceAge)
 creditPaused must equal reasons != 0
 ```
 
 `evaluate(Attestation) → uint8` is the verdict formula (`cre.guardianReasons` in JS); a report whose
-verdict differs is refused (`AttestationRefused(observedAt, VerdictMismatch(...))`), as is one out of
-order (`AttestationOutOfOrder`), dated more than 5 minutes ahead (`ObservationInFuture`) or already
-older than `maxAttestationAge` (`AttestationTooOld`). Accepted: `CreditGuardUpdated(uint80 indexed round,
-bool indexed creditPaused, uint8 reasons, Attestation attestation)`. Thresholds (decision 9 defaults:
-$0.995, $1,000, 500 bps, 7200 s) and `maxAttestationAge` (3600 s) are owner-set
-(`setThresholds`, `setMaxAttestationAge`; events `ThresholdsSet`, `MaxAttestationAgeSet`).
+verdict differs is refused (`AttestationRefused(observedAt, VerdictMismatch(...))`), as is one whose
+low-cash and bad-debt bits are not the live pool's (`PoolMismatch`: a report claiming an empty pool
+against a funded one cannot pause anything), one out of order (`AttestationOutOfOrder`), dated more
+than 5 minutes ahead (`ObservationInFuture`) or already older than `maxAttestationAge`
+(`AttestationTooOld`). Accepted: `CreditGuardUpdated(uint80 indexed round, bool indexed creditPaused,
+uint8 reasons, Attestation attestation)`. Thresholds (defaults: $0.995 to $1.005, $1,000, 500 bps from
+$10,000 lent, 7200 s) and `maxAttestationAge` (3600 s) are owner-set (`setThresholds`,
+`setMaxAttestationAge`; events `ThresholdsSet(Thresholds)`, `MaxAttestationAgeSet`).
 `isCreditPaused() → (bool, uint8)` is what the checkout asks: the owner override first
-(`setOverride(0 None | 1 ForceResume | 2 ForcePause)`, event `CreditGuardOverridden`; a forced pause
-reads as reason `0x80`), then **fail open** when there is no attestation or it is older than
-`maxAttestationAge`, else the attestation's verdict. `creditStatus()` returns all of it for a badge.
+(`setOverride(mode, until)`: 2 ForcePause with `until` 0 reads as reason `0x80`; 1 ForceResume must
+end (`until`) within `MAX_FORCE_RESUME`, a day, and reads as None after it; 0 None; event
+`CreditGuardOverridden(mode, until)`). Then low cash and bad debt **from `pool.poolState()` in the same
+call**, never stale; then depeg and stale price from the latest attestation judged by today's
+thresholds, which **fail open** when there is no attestation or it is older than `maxAttestationAge`.
+So the DON is trusted for the mainnet price only. `creditStatus()` returns all of it for a badge,
+with `poolReasons` and `priceReasons` apart, the override's end and the acknowledged bad debt.
 Bad debt is measured against lifetime originations, not today's outstanding book: bad debt never
 falls while the book shrinks with every repayment, so against the book a quiet week would trip the
-guard with no new loss, and a paused book could never lift it. A bad-debt pause needs the owner.
+guard with no new loss, and a paused book could never lift it. The ratio applies only once
+`minOriginated` has been lent (one default on a young pool is not a portfolio), and
+`acknowledgeBadDebt()` (owner; event `BadDebtAcknowledged`) counts only bad debt beyond what the
+owner has looked into, leaving the price checks alone.
 It is also an `AggregatorV3Interface`: description `"Polaris pool health, computed by CRE"`,
-8 decimals, one round per accepted attestation, answer = free cash in USD at the attested price
-(0 when the attestation paused credit), `startedAt = updatedAt = observedAt`. It is a Polaris
-attestation computed by a CRE workflow, not a Chainlink Data Feed or Proof of Reserve.
+8 decimals, one round per accepted attestation, answer = the pool's free cash when the report
+landed (read from the pool) in USD at the attested price, saturating at int192's maximum (0 when
+the verdict paused credit), `startedAt = updatedAt = observedAt`. It is a Polaris attestation
+computed by a CRE workflow, not a Chainlink Data Feed or Proof of Reserve.
 
 **Forwarders on Monad testnet**: simulation `0xB9F79d863261869B234c481D1f9A7af84AeAd192` (default),
 production `0xF8344CFd5c43616a4366C34E3EEE75af79a74482`. To move to production after deploy access:
@@ -268,13 +282,18 @@ redirect a payment, replay an intent or a permit, or reenter), `CreReceivers.tes
 reports, the forwarder, owner and name checks, stale or repeated underwriting, a reused history
 wallet, a stranger on the simulation forwarder, out-of-gas reports, and the three report formats
 round-tripped), `Guardian.test.js` (the credit guard: each reason, verdicts that are not the chain's,
-replayed or stale attestations, fail open, the owner's override and thresholds, the feed-shaped view,
-the formula fuzzed against `lib/cre.js`, and Pay now, Subscribe, Send and open plans all working
-while credit is paused), `Reauthorize.test.js` (re-signing: valid, expired, wrong signer, spender or
-value, replay, front-run, too small, then the retry collects), `LoanEngineTotals.test.js` (the pool
-totals equal the sum over loans after every step, table-driven and random), `LockReceivers.test.js`,
+a report whose pool is not the chain's, the pool never failing open, replayed or stale attestations,
+fail open on the price, the owner's override and its end, a default on a young pool and the
+acknowledgement with a depeg after it, thresholds applying at once, the ceiling and a round write
+that saturates, the feed-shaped view, the formula fuzzed against `lib/cre.js`, and Pay now,
+Subscribe, Send and open plans all working while credit is paused), `Reauthorize.test.js`
+(re-signing: valid, expired, wrong signer, spender or value, replay, openPlan's permit copied in
+first, a permit landed on the token first, too small, then the retry collects),
+`LoanEngineTotals.test.js` (the pool totals equal the sum over loans after every step, table-driven
+and random), `LockReceivers.test.js` (and the mock forwarder refused as the production one),
 `Deploy.test.js` (every role the deployment grants), `Interfaces.test.js` (ABIs and EIP-712 types
-stay true).
+stay true), `Verify.test.js` (the deploy commit's PolarisCheckout rebuilt from git and told from
+today's), `Redeploy.test.js` (the guardian replaced and read back).
 
 ## Attribution
 
