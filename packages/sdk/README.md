@@ -122,6 +122,19 @@ While `paused`, show Pay in 4 as unavailable with `message` (and pass it to
 `<PolarisMessaging paused>`); the hosted checkout does the same. `state` is
 `stale` or `never` when the guard is late: it then blocks nothing.
 
+### `splits.retrieve(id)`
+
+A split-the-bill link's status, by its id (the `0x…` in `/split/0x…`): each
+share's amount and whether (and when) it was paid, and whether the split is
+`open`, `settled`, `closed` or `expired`. It comes from PolarisSplit on
+chain. The split's words (what it's for, the names) are the organiser's and
+travel only in the link, so they are not here; `memoHash` is their hash.
+
+```ts
+const split = await polaris.splits.retrieve("0x5f1e…1100");
+// { status: "open", totalUnits: "90000000", paidCount: 1, shareCount: 3, shares: [{ index: 0, amountUnits: "30000000", paid: true, paidAt, txHash }, …], … }
+```
+
 ### Errors
 
 Everything throws `PolarisError` with `type`, `code`, `status`, `param` and
@@ -315,6 +328,26 @@ drawn ($200 reads 50.38, 50.39, 50.38, 50.38 = 201.53). Every Polaris plan is
 interest and the APR and never call a plan interest-free; `aprBps` other than
 1000 exists for tests.
 
+### Split-the-bill links: `splits.link(params)`, `splits.open(params)`
+
+A split is the organiser's own request for money from friends: they open it
+with Face ID in the Polaris app, share one link, and each friend pays their
+share there, straight to the organiser. An app can't create one for them, but
+it can hand them the Polaris app's "Split a bill" screen filled in (a
+restaurant's "Split this bill", a ride's "Split the fare"). They review it and
+confirm; nothing is created until they do.
+
+```ts
+polaris.splits.open({ total: "120.00", description: "Dinner at Lucia", people: 4, names: ["Sam", "Priya", "Jon"] });
+polaris.splits.link({ total: "120.00", shares: [{ name: "Sam", amount: "45" }, { name: "Priya", amount: "30.50" }] });
+// "https://pay.polarispay.app/split/new?amount=120.00&share=Sam%3A45.00&share=Priya%3A30.50"
+```
+
+`people` (2 to 20) counts the organiser unless `includeOrganiser: false`;
+`shares` (up to 19 named amounts) wins over `people`, and what's left of the
+bill is the organiser's part. `splitLink(appOrigin, params)` is the same as a
+plain function.
+
 ### 0.2 methods
 
 `subscribe`, `cancelSubscription`, `payLater`, `lockCollateral`,
@@ -505,6 +538,11 @@ when `modes` includes `"subscribe"`.
 ### `GET {baseUrl}/api/public/credit-guard`
 
 Public, no key needed. **200** `{ "data": CreditGuardStatus }` (`credit.guard()` above).
+
+### `GET {baseUrl}/api/public/splits/{id}`
+
+Public, no key needed. **200** `{ "data": SplitStatus }` (`splits.retrieve()` above);
+**404** `split_not_found`; **400** for an id that isn't 32 bytes of hex.
 
 ### Relay: `POST {relayUrl}` (direct pay)
 

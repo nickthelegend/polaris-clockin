@@ -148,6 +148,55 @@ export function planSplit(input: { bill: Micros; mode: SplitMode; people: number
   return { ok: true, amounts, labels: rows.map((r) => cleanText(r.name, 24)), collect, yourPart: bill - collect, each: null };
 }
 
+/** What a link to /split/new can fill in: polarispay-sdk's `splits.link()` builds it. */
+export type SplitPrefill = {
+  /** The bill, as typed: "120" or "86.40". */
+  amount?: string;
+  description?: string;
+  mode?: SplitMode;
+  /** Everyone sharing the bill, including you unless `includeMe` is false. */
+  people?: number;
+  includeMe?: boolean;
+  names?: string[];
+  rows?: SplitRow[];
+};
+
+/**
+ * The create form's starting values from its URL:
+ *
+ *   /split/new?amount=120&description=Dinner&people=4&name=Sam&name=Priya
+ *   /split/new?amount=120&share=Sam:45&share=Priya:30.50
+ *
+ * Anything malformed is left out, never guessed; the organiser still reviews
+ * every value and confirms with Face ID.
+ */
+export function splitPrefill(params: URLSearchParams): SplitPrefill {
+  const out: SplitPrefill = {};
+  const amount = (params.get("amount") ?? "").trim();
+  if (parseAmount(amount) !== null && amount !== "") out.amount = amount;
+  const description = cleanText(params.get("description") ?? "", LIMITS.description);
+  if (description) out.description = description;
+  const shares = params
+    .getAll("share")
+    .map((s) => {
+      const i = s.lastIndexOf(":");
+      return i > 0 ? { name: cleanText(s.slice(0, i), LIMITS.label), amount: s.slice(i + 1).trim() } : null;
+    })
+    .filter((r): r is SplitRow => r !== null && r.name !== "" && parseAmount(r.amount) !== null)
+    .slice(0, MAX_PEOPLE - 1);
+  if (shares.length) {
+    out.mode = "custom";
+    out.rows = shares;
+    return out;
+  }
+  const people = Number(params.get("people"));
+  if (Number.isInteger(people) && people >= 2 && people <= MAX_PEOPLE) out.people = people;
+  if (params.get("include_me") === "0") out.includeMe = false;
+  const names = params.getAll("name").map((n) => cleanText(n, LIMITS.label)).slice(0, MAX_PEOPLE);
+  if (names.some((n) => n)) out.names = names;
+  return out;
+}
+
 /* ── What this device knows ─────────────────────────────────────────────── */
 
 export type KnownSplit = {

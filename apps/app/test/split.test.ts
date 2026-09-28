@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { encodeAbiParameters, keccak256 } from "viem";
 
-import { equalShares, memoHash, memoMatches, parseSplitFragment, planSplit, shareLabel, type SplitMemo, splitUrl } from "../src/lib/split.ts";
+import { equalShares, memoHash, memoMatches, parseSplitFragment, planSplit, shareLabel, type SplitMemo, splitPrefill, splitUrl } from "../src/lib/split.ts";
 
 /**
  * Split-the-bill links in the app: the shares a form makes, the link's
@@ -102,5 +102,23 @@ describe("the link's words", () => {
     assert.equal(parsed.description.length, 60);
     assert.ok(!parsed.description.includes("\u0007"));
     assert.deepEqual(parsed.labels, ["AB"]);
+  });
+});
+
+describe("a create form filled in from its URL (polarispay-sdk splits.link)", () => {
+  it("fills the bill, the words and an equal split with names", () => {
+    const p = splitPrefill(new URLSearchParams("amount=120&description=Dinner%20at%20Lucia&people=4&name=Sam&name=Priya&name=Jon"));
+    assert.deepEqual(p, { amount: "120", description: "Dinner at Lucia", people: 4, names: ["Sam", "Priya", "Jon"] });
+    assert.deepEqual(splitPrefill(new URLSearchParams("amount=60&people=3&include_me=0")), { amount: "60", people: 3, includeMe: false });
+  });
+
+  it("fills named amounts, and they win over an equal split", () => {
+    const p = splitPrefill(new URLSearchParams("amount=120&share=Sam:45&share=Priya:30.50&people=4"));
+    assert.deepEqual(p, { amount: "120", mode: "custom", rows: [{ name: "Sam", amount: "45" }, { name: "Priya", amount: "30.50" }] });
+  });
+
+  it("leaves out anything malformed rather than guess", () => {
+    const p = splitPrefill(new URLSearchParams("amount=12.345&people=99&share=:5&share=Sam:abc&name="));
+    assert.deepEqual(p, {});
   });
 });

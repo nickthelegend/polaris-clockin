@@ -19,8 +19,8 @@ import {
   useIsDesktop,
 } from "@polaris/ui";
 import { Copy, Minus, Plus, Share2, UserPlus, X } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { LocalEquivalent } from "@/components/local-equivalent";
 import { QrCode } from "@/components/qr";
@@ -34,7 +34,7 @@ import { longDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { parseAmount, usd } from "@/lib/money";
 import { setPrefs, usePrefs } from "@/lib/prefs";
-import { cleanText, MAX_PEOPLE, planSplit, type SplitMemo, type SplitMode, type SplitRow } from "@/lib/split";
+import { cleanText, MAX_PEOPLE, planSplit, type SplitMemo, type SplitMode, type SplitRow, splitPrefill } from "@/lib/split";
 
 /**
  * Split a bill: the organiser enters what was paid, says what it was for,
@@ -63,16 +63,21 @@ function cleanAmount(raw: string): string {
 
 /** The form's state, shared by the phone's two steps and the desktop's one form. */
 function useSplitForm() {
-  const [value, setValue] = useState("");
-  const [description, setDescription] = useState("");
-  const [mode, setMode] = useState<Mode>("equal");
-  const [people, setPeople] = useState(3);
-  const [includeMe, setIncludeMe] = useState(true);
-  const [names, setNames] = useState<string[]>([]);
-  const [rows, setRows] = useState<Row[]>([
-    { name: "", amount: "" },
-    { name: "", amount: "" },
-  ]);
+  // An app can open this form filled in (polarispay-sdk `splits.link()`); the organiser still reviews it all.
+  const params = useSearchParams();
+  const [prefill] = useState(() => splitPrefill(new URLSearchParams(params?.toString() ?? "")));
+  const [value, setValue] = useState(prefill.amount ?? "");
+  const [description, setDescription] = useState(prefill.description ?? "");
+  const [mode, setMode] = useState<Mode>(prefill.mode ?? "equal");
+  const [people, setPeople] = useState(prefill.people ?? 3);
+  const [includeMe, setIncludeMe] = useState(prefill.includeMe ?? true);
+  const [names, setNames] = useState<string[]>(prefill.names ?? []);
+  const [rows, setRows] = useState<Row[]>(
+    prefill.rows ?? [
+      { name: "", amount: "" },
+      { name: "", amount: "" },
+    ],
+  );
   const bill = parseAmount(value || "0") ?? 0n;
   const plan = useMemo(() => planSplit({ bill, mode, people, includeMe, names, rows }), [bill, mode, people, includeMe, names, rows]);
   return { value, setValue, description, setDescription, mode, setMode, people, setPeople, includeMe, setIncludeMe, names, setNames, rows, setRows, bill, plan };
@@ -84,7 +89,8 @@ type Form = ReturnType<typeof useSplitForm>;
 export function SplitNewSheet() {
   const close = useCloseSheet();
   const form = useSplitForm();
-  const [step, setStep] = useState<"amount" | "details">("amount");
+  // A filled-in bill (a link from another app) starts on the details.
+  const [step, setStep] = useState<"amount" | "details">(form.bill > 0n ? "details" : "amount");
   useEffect(() => prefetchDomains("split"), []);
 
   if (step === "amount") {
@@ -432,10 +438,16 @@ export function SplitNewRoute({ cold }: { cold?: boolean }) {
         size: "md",
         title: "Split a bill",
         description: "One link: each friend pays their share, and it lands with you.",
-        content: <SplitNewDialogContent />,
+        content: (
+          <Suspense>
+            <SplitNewDialogContent />
+          </Suspense>
+        ),
       }}
     >
-      <SplitNewSheet />
+      <Suspense>
+        <SplitNewSheet />
+      </Suspense>
     </RouteSheet>
   );
 }

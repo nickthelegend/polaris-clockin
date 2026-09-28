@@ -3,6 +3,7 @@ import type { CreditGuardStatus } from "../credit.js";
 import { configurationError, invalidRequest } from "../errors.js";
 import type { WebhookEvent } from "../events.js";
 import { requireSecretKey } from "../keys.js";
+import { assertSplitId, type SplitStatus } from "../splits.js";
 import { assertSessionId, buildCreateBody } from "./checkout-params.js";
 import { createHttpClient, type HttpClientOptions } from "./http.js";
 import {
@@ -62,6 +63,15 @@ export interface PolarisServer {
      * `message` and keep Pay now; the hosted checkout does the same.
      */
     guard(options?: Omit<RequestOptions, "idempotencyKey">): Promise<CreditGuardStatus>;
+  };
+  splits: {
+    /**
+     * GET /api/public/splits/{id}: a split-the-bill link's status (each
+     * share's amount, whether and when it was paid, open, settled, closed or
+     * expired), from PolarisSplit on chain. Its words (what it's for, the
+     * names) are the organiser's and travel only in the link.
+     */
+    retrieve(id: string, options?: Omit<RequestOptions, "idempotencyKey">): Promise<SplitStatus>;
   };
   webhooks: {
     /**
@@ -169,6 +179,16 @@ export function createPolarisServer(options: PolarisServerOptions): PolarisServe
         return http.request<CreditGuardStatus>({
           method: "GET",
           path: "/api/public/credit-guard",
+          timeoutMs: requestOptions.timeoutMs,
+          signal: requestOptions.signal,
+        });
+      },
+    },
+    splits: {
+      async retrieve(id, requestOptions = {}) {
+        return http.request<SplitStatus>({
+          method: "GET",
+          path: `/api/public/splits/${assertSplitId(id)}`,
           timeoutMs: requestOptions.timeoutMs,
           signal: requestOptions.signal,
         });
