@@ -1,6 +1,6 @@
 import { encodeFunctionData, getAddress, zeroHash, type Address, type Hex, type LocalAccount } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { iausdAbi, polarisSendAbi } from "@polarispay/contracts/abi";
 import { POST as relayRoute } from "@/app/api/relay/route";
@@ -86,13 +86,19 @@ describe("POST /api/relay type=transfer is not free gas for strangers", () => {
   });
 
   it("one global budget bounds every open transfer, however many fresh keys and IPs send them", async () => {
-    const statuses: number[] = [];
-    for (let i = 0; i < 125 && !statuses.includes(429); i++) statuses.push((await relay(await signedTransfer(fresh(), fresh().address, 100_000n))).status);
-    // The burst (120), plus the few tokens refilled (one a second) while the loop ran.
-    const carried = statuses.filter((s) => s === 200).length;
-    expect(carried).toBeGreaterThanOrEqual(120);
-    expect(carried).toBeLessThan(125);
-    expect(statuses.at(-1)).toBe(429);
+    // The bucket refills one token a second from Date.now(): hold the clock still, so a slow machine
+    // can't refill it mid-loop and the test says exactly what the budget allows.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date());
+    try {
+      const statuses: number[] = [];
+      for (let i = 0; i < 125 && !statuses.includes(429); i++) statuses.push((await relay(await signedTransfer(fresh(), fresh().address, 100_000n))).status);
+      // The burst (120), and not one transfer more.
+      expect(statuses.filter((s) => s === 200).length).toBe(120);
+      expect(statuses.at(-1)).toBe(429);
+    } finally {
+      vi.useRealTimers();
+    }
   }, 60_000);
 });
 
