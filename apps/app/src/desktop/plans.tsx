@@ -163,7 +163,16 @@ export function PlansDesktop() {
                     {
                       key: "state",
                       header: "State",
-                      render: (p) => (p.status === "active" ? <StatusPill tone="purple">On track</StatusPill> : <StatusPill tone="lime" icon={<Check />}>Paid off</StatusPill>),
+                      render: (p) =>
+                        p.status === "active" && signAgainState(p) === "needed" ? (
+                          <StatusPill tone="amber">Sign again</StatusPill>
+                        ) : p.status === "active" ? (
+                          <StatusPill tone="purple">On track</StatusPill>
+                        ) : (
+                          <StatusPill tone="lime" icon={<Check />}>
+                            Paid off
+                          </StatusPill>
+                        ),
                     },
                     {
                       key: "left",

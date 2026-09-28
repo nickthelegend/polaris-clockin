@@ -244,6 +244,37 @@ Settings. Nothing is ever priced or paid in it.
   from Ethereum, Polygon or Base. Some of those update once a day, which is
   why the age is always shown.
 
+## Chainlink in the app
+
+Three things a buyer sees come from Polaris's Chainlink CRE workflows (the
+API serves them; see apps/business "Chainlink"). Captures of each state are
+in [`docs/design/chainlink`](../../docs/design/chainlink).
+
+- **The risk guard.** While the guardian has paused credit, the checkout
+  (phone and from 1024px) keeps Pay in 4 on screen as unavailable, with
+  *Pay in 4 is paused by our risk guard; pay now works as usual.* and a
+  button to pay now; the credit line says the same. A guard that is late
+  blocks nothing (it fails open), and the checkout's Pay in 4 and the credit
+  line say *Risk guard last checked 72 min ago · Pay in 4 stays on*. From the
+  session (`payIn4.guard`) and `GET /api/public/credit-guard`
+  (`src/lib/credit-guard.ts`, `components/credit-guard-note.tsx`).
+- **Sign again.** When a payment couldn't be collected because the approval
+  to take it was reset, Home, the plan sheet and the plan drawer say *Sign
+  again to pay your instalment*. One Face ID signs an ERC-2612 permit to the
+  loan engine for everything owed (`reauthorizePayments` in
+  `src/lib/actions.ts`), the relayer carries it to
+  `PolarisCheckout.reauthorize`, and the plan polls the API every 2 s until
+  the collection that follows lands: *Collected*, with its receipt
+  (`components/sign-again.tsx`, `src/lib/collection.ts`). The amount carries
+  the Chainlink FX line.
+- **Verified by Chainlink CRE.** The credit line and score show the
+  underwriting report's date and transaction (`components/credit-provenance.tsx`),
+  only for a line a report opened; the reasons are the report's own. The
+  offline demo's sample line is never shown as verified.
+
+`pnpm --filter @polaris/app test` checks the guard and collection states
+(node --test, `test/`).
+
 ## Code map
 
 | Path | What it is |
@@ -258,6 +289,7 @@ Settings. Nothing is ever priced or paid in it.
 | `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data, marked Sample) without |
 | `src/app/api/fx/route.ts`, `src/lib/fx.ts` | The Chainlink rate behind the local-currency line: the server route (`@polaris/fx`) and the tab's shared, cached fetch |
 | `src/lib/underwriting.ts` | Pay in 4 credit: consent and link-proof signatures, the CRE underwriting request, waiting for the decision |
+| `src/lib/credit-guard.ts`, `src/lib/collection.ts` | The risk guard in the buyer's words; a plan's collection after a lost approval (sign again, collecting, collected) |
 | `src/desktop/` | The desktop layouts (from 1024px): Home and its money widget, the pages, the checkout card, onboarding; `lib/series.ts` draws their charts |
 | `src/screens/`, `src/sheets/` | The five tabs, and every sheet with its route wrapper (`SendRoute`, `CheckoutRoute`…), which the pages in `app/(tabs)` (cold) and `app/@sheet` (intercepted) render |
 | `src/components/` | App pieces composed from `@polaris/ui`: the shell (stage, sheet host, nav), Confirm with Face ID, the success receipt, the email sheet, QR |
