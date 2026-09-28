@@ -394,10 +394,16 @@ async function receiptInPopup(popup, name) {
   {
     await dash.goto(BUSINESS + "/dashboard/links?new=1", { waitUntil: "networkidle" });
     await settle(dash, 2500);
-    await dash.getByLabel("What it's for").fill("Logo work");
-    await dash.getByLabel("Amount").fill("40.00");
+    // The New link dialog (the page's own Request a payment panel has the same fields).
+    const form = dash.getByRole("dialog").last();
+    await form.getByLabel("What it's for").fill("Logo work");
+    await form.getByLabel("Amount").fill("40.00");
     await shot(dash, "45-dashboard-new-link");
-    await dash.getByRole("button", { name: "Create link" }).click();
+    await form.getByRole("button", { name: "Create link" }).click();
+    // Saved: share it from its row (the Share dialog shows the URL and its QR code).
+    await dash.getByRole("button", { name: /Share .Logo work/ }).first().click({ timeout: 30000 }).catch(() => {});
+    await sleep(1500);
+    await shot(dash, "45-dashboard-share-link");
     const url = await until("the new link's URL", async () => {
       const codes = await dash.locator("code").allInnerTexts();
       return codes.find((c) => /\/pay\/pl_/.test(c)) ?? null;
@@ -408,7 +414,8 @@ async function receiptInPopup(popup, name) {
       await buyerPage.goto(url, { waitUntil: "networkidle", timeout: POPUP_MS });
       await settle(buyerPage, 3000);
       await shot(buyerPage, "46-link-1-app-checkout");
-      const pay = (await buttons(buyerPage)).find((t) => /^Pay now/.test(t));
+      // "Pay now" on a phone, "Pay $40" on the desktop checkout.
+      const pay = (await buttons(buyerPage)).find((t) => /^Pay (now|\$\d)/.test(t));
       if (pay) {
         await buyerPage.getByRole("button", { name: pay }).first().click();
         await confirmInPopup(buyerPage, "46-link-2");
