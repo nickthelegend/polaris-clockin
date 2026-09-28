@@ -191,7 +191,7 @@ function GuardPanel({ guard, sample }: { guard: CreditGuard; sample: boolean }) 
         <div className="mt-6 grid gap-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2 text-[14px]">
             <span>Last checked {checkedAgo(age)}</span>
-            <span className="text-ui-muted">Stale after {Math.round(max / 60)} min, then it fails open</span>
+            <span className="text-ui-muted">Stale after {Math.round(max / 60)} min, then the price check fails open</span>
           </div>
           <Meter
             value={age / max}

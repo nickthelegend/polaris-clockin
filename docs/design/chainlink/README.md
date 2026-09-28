@@ -49,7 +49,7 @@ client created on the same local stack.
 | `app-sign-again-confirm-1440.png` | Confirm with Face ID |
 | `app-collecting-plan-1440.png`, `app-collecting-plan-402.png` | Signed, collecting (the app polls the API) |
 | `app-collected-plan-1440.png`, `app-collected-plan-402.png`, `app-collected-after-retry-402.png` | Collected, with the collection's transaction (1 s after signing with the watcher running) |
-| `app-credit-verified-1440.png`, `app-credit-verified-402.png`, `app-score-verified-1440.png`, `app-score-verified-402.png` | "Verified by Chainlink CRE" on the credit line and score (no explorer on a local chain, so the report's hash is shown unlinked) |
+| `app-credit-verified-1440.png`, `app-credit-verified-402.png`, `app-score-verified-1440.png`, `app-score-verified-402.png` | The report's provenance on the credit line and score (no explorer on a local chain, so the report's hash is shown unlinked). **Superseded:** captured before the provenance fix, they label a local run "Verified by Chainlink CRE". The app now says that only for a DON-signed report; a local run reads "CRE workflow, local run" in a plain pill, as in [`docs/demo/chainlink/07-credit-cre-local-run.png`](../../demo/chainlink/07-credit-cre-local-run.png) |
 | `app-checkout-paused-1440.png`, `app-checkout-paused-402.png` | Checkout while the risk guard has paused credit: Pay in 4 shown as paused, Pay now offered |
 | `app-credit-paused-1440.png`, `app-credit-paused-402.png` | The credit line while paused |
 | `app-checkout-stale-1440.png`, `app-checkout-stale-402.png`, `app-credit-stale-1440.png`, `app-credit-stale-402.png` | A late guard: "Risk guard last checked 3 min ago · Pay in 4 stays on" (the buyer was over their limit for this order, which the checkout also says) |

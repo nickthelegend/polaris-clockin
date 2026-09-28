@@ -23,7 +23,11 @@ export function CreditGuardBanner({ className }: { className?: string }) {
   const g = guard.data;
   if (!g?.paused) return null;
   const why = g.reasons.map((r) => GUARD_REASON_TEXT[r]).join("; ");
-  const lifts = g.reasons.includes("bad_debt") || g.reasons.includes("owner_pause") ? "Polaris lifts it by hand." : "It lifts on the next healthy check.";
+  const lifts = g.reasons.includes("owner_pause")
+    ? "Polaris lifts it by hand."
+    : g.reasons.includes("bad_debt")
+      ? "Bad debt never falls: Polaris acknowledges it by hand, and only new losses count after that."
+      : "It lifts as soon as the check passes.";
   const checked = lastCheckedLine(g, now);
   return (
     <Notice
