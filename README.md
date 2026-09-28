@@ -50,19 +50,27 @@ no public chain):
 | The Polaris app | http://localhost:3000 | the hosted checkout; the dev signer stands in for Face ID (badge on every screen) |
 | Halcyon, the demo shop | http://127.0.0.1:3600 | `polarispay-sdk` against the real API and checkout (not its dev mock) |
 | A faucet | http://127.0.0.1:3650/mint | test dollars; the app's **Add money** offers it on this chain |
+| The CRE collections cron | every minute | `workflows` `collections:local`: the real `polaris-collections` handler on the CRE SDK's test runtime; it collects due Pay in 4 instalments through `CollectionsReceiver`, reports each run to the API (the dashboard's Collections card, `installment.collected` webhooks) and logs to `.demo/logs/cre-collections.log` |
 
 Then: open the shop, add something to the bag, **check out with Polaris**. The
 checkout opens in a popup (the app's `/pay/[id]` sheet). Pay now, or choose
 Pay in 4: a new buyer has no line, so **Raise your limit** runs the CRE
 underwriting workflow first. The shop's order is marked paid by the Polaris
 webhook, and the merchant dashboard at http://localhost:3100/dashboard shows
-the payment and the plan. Ports move with `DEMO_NODE_PORT`,
+the payment and the plan. Before it prints its URLs, `demo:local` opens every
+page and API route once, so no first click waits for `next dev` to compile.
+`DEMO_FAST_PLANS=1` makes Pay in 4 instalments a minute apart instead of a
+week, so the collections run shows on camera (instalment 1 is collected about
+two minutes after checkout). Ports move with `DEMO_NODE_PORT`,
 `DEMO_BUSINESS_PORT`, `DEMO_APP_PORT`, `DEMO_SHOP_PORT`, `DEMO_TRIGGER_PORT`
-and `DEMO_FAUCET_PORT`. Logs and state are in `.demo/`.
+and `DEMO_FAUCET_PORT`. Logs and state are in `.demo/`; `.demo/demo.json`
+has every URL of the run.
 
 `pnpm demo:e2e` ([`scripts/demo-e2e.cjs`](scripts/demo-e2e.cjs), needs
-Playwright: `PLAYWRIGHT_MODULE=<path>`) drives that run headless and writes the
-screenshots in [`docs/demo`](docs/demo). The committed ones are from a run in
+Playwright: `PLAYWRIGHT_MODULE=<path>`, and `CHROMIUM=<chrome.exe>` if its
+browser build isn't installed) drives that run headless and writes the
+screenshots in [`docs/demo`](docs/demo). It finds the run's URLs in
+`.demo/demo.json` (or `APP`, `SHOP`, `BUSINESS`, `RPC` and `FAUCET`). The committed ones are from a run in
 which all 15 steps passed:
 
 | Step | Screenshot |
