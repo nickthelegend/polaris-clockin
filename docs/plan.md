@@ -272,8 +272,8 @@ meeting the requirements is 40% of the bounty score.
 3. **Server wallets with policies carry every payment in the network.** The
    relayer is a Privy server wallet. Its policy allows only our contracts, only
    the functions in §5.3 and zero MON value. A compromised server can't send
-   money anywhere a user didn't sign for. The protocol treasury and the
-   fallback keeper are server wallets too, each with its own narrow policy.
+   money anywhere a user didn't sign for. The protocol treasury is a server
+   wallet too, with its own narrow policy.
 4. **Automatic payouts, Stripe-style.** A merchant turns on daily payouts once.
    A Privy session signer (server-side signing for their wallet, check current
    Privy docs) sweeps the balance to their payout address, and a policy allows
@@ -291,42 +291,79 @@ docs.
 A BNPL product is only as good as its collections and its underwriting. Our EVM
 build ran collections on KeeperHub, which **doesn't list Monad**. CRE replaces
 it, and our design already has CRE's shape: check on chain, act on chain, never
-act on a stale off-chain view.
+act on a stale off-chain view. The code is in `workflows/` (TypeScript on
+`@chainlink/cre-sdk` 1.22.0, CRE CLI v1.35.0); each workflow writes to its own
+receiver in `packages/contracts/contracts/cre/`, all built on Chainlink's
+`ReceiverTemplate`. `workflows/README.md` is the reference.
 
-**Workflow 1: `collections`** (cron, every minute)
+**Workflow 1: `polaris-collections`** (cron: every minute in simulation, daily
+once deployed) → **`CollectionsReceiver`**
 
 ```
-Envio: plans and subscriptions that might be due        (the indexer proposes)
-EVM read: isInstallmentDue · isChargeDue · checkLiquidatable, batched via Multicall3
-DON consensus → signed report → PolarisCollector._onReport  (the chain disposes)
-  per item: try collectInstallment / chargeDue / liquidate; catch → skip reason
-skip reasons → our API → dunning ladder (6h → 24h → 72h → 168h → liquidation)
+Envio: plans and subscriptions whose next attempt has come   (the indexer proposes;
+       on the dunning ladder)                                  without it, the chain's
+                                                               own counts, on the same ladder)
+EVM read: CollectionsReceiver.checkTasks((action, id)[])      (the chain disposes: one read
+          at the last finalized block                          per 72 tasks, CRE's 5 KB cap)
+DON consensus → one signed report → forwarder → CollectionsReceiver._processReport
+  per task: try collectInstallment / chargeDue / liquidate; catch → TaskSkipped(reason)
+receipt read back → skip reasons (allowance_lost | insufficient_funds | other)
+            → signed callback to our API → dunning ladder (6h → 24h → 72h → 168h → liquidation)
             → webhook to the merchant, notification to the buyer
 ```
 
-**Workflow 2: `underwrite`** (HTTP trigger, fired when a buyer asks for Pay in 4)
+`checkTasks` is a purpose-built view rather than Multicall3: CRE caps a read at
+5 KB, which fits about 20 Multicall3 checks and about 150 ids here. Every action
+is permissionless on its target, so the receiver adds no power, and there is
+no fallback keeper: if CRE is down, anyone can call the same functions
+(`workflows/README.md`).
 
-The DON fetches facts about the buyer's account and any history wallets they
-linked (§5.5):
+**Workflow 2: `polaris-underwrite`** (HTTP trigger, fired when a buyer asks to
+raise their limit) → **`UnderwritingReceiver`** → `ScoreManager.underwrite`
+
+The workflow first checks the account's own signed consent and any history
+wallet's proof, then everything the chain would refuse (already underwritten, a
+history already lent to another account), all before a paid call. Then it
+fetches facts about the buyer's account and any history wallet they linked
+(§5.5):
 
 - **Nansen:** first funder, counterparties, related wallets (a sybil signal),
   PnL
 - **Zerion:** wallet age, transactions and holdings, including Monad testnet
-- **Existing signals:** DeFi tenure and prior liquidations
+- **Etherscan and public RPCs:** prior liquidations on allowlisted Aave pools,
+  send counts
 
-The nodes agree on the facts and sign a report. `ScoreManager.underwrite(user,
-facts)` then computes the score **on chain**.
+The paid calls go through CRE's **Confidential HTTP** (a config switch, on in
+simulation): each is made once, from an enclave that resolves the API key from
+the Vault DON, so no node holds a key. With it off, every node calls the
+providers and the DON agrees field by field (counts by median, verdicts by
+identical). The report carries facts; `ScoreManager.underwrite(user, facts)`
+computes the score **on chain**.
 
 **No single key can hand out credit.** The DON attests facts, never a score.
 The contract does the arithmetic, the opening line is capped at $1,000, and
 $2,500 and $5,000 are reached only by repaying.
 
+**Workflow 3: `polaris-guardian`** (cron) → **`GuardianReceiver`**. It reads
+Chainlink's AUSD/USD feed on **Monad mainnet** from inside the testnet
+workflow, plus the pool's own numbers, and pauses only new Pay in 4 plans
+(`PolarisCheckout.openPlan`) when AUSD trades below $0.995, free pool cash
+falls under $1,000, bad debt passes 5% of what buyers owe, or the price is
+more than 2 h old. It resumes on the next healthy report. Pay now, Send and
+Subscribe never stop. The CRE project has a read-only `monad-mainnet` RPC
+(`https://rpc.monad.xyz`) in every target for this; nothing writes to mainnet.
+Its status is in `workflows/README.md`.
+
 - **Simulation qualifies:** the bounty says build, simulate *or* deploy.
   `cre workflow simulate --broadcast` sends real transactions to Monad testnet
-  through the simulation forwarder.
-- **Still request Early Access on Day 0** (`cre account access`). A deployed
-  workflow is a stronger entry.
+  through the simulation forwarder, and `pnpm --filter @polaris/cre-workflows
+  evidence` records each run's log and hashes.
+- **Deploy access, requested on Day 0** (`cre account access`; `cre whoami`
+  shows it once granted): `cre workflow deploy` needs it, simulation doesn't. A
+  deployed workflow is a stronger entry.
 - **Monad is supported:** forwarders exist for testnet and mainnet (Appendix A).
+- **Three workflows fit** the private registry's limit of three per
+  organisation.
 
 ### 3.4 Stack-ons: small extra work, real money
 
@@ -450,7 +487,7 @@ flowchart LR
         SEND["PolarisSend<br/>send by link"]
         LE["PolarisLoanEngine<br/>Pay in 4"]
         SM["ScoreManager<br/>300–850"]
-        COL["PolarisCollector<br/>CRE receiver"]
+        COL["CollectionsReceiver · UnderwritingReceiver<br/>CRE receivers"]
     end
 
     RLY --> PAY
@@ -521,11 +558,14 @@ flowchart LR
 7. **Minimum interval per deployment,** like `gracePeriod`: 1 hour in
    production, 60 s for the demo deployment, so a whole plan plays out on
    camera. The same applies to the subscription period minimum.
-8. **`PolarisCollector`** (new): a CRE `ReceiverTemplate` consumer.
-   - It accepts reports only from the KeystoneForwarder and our workflows.
-   - It runs collections, charges and liquidations in a batch, each in its own
-     try/catch.
-   - It forwards underwriting reports to `ScoreManager`.
+8. **`CollectionsReceiver` and `UnderwritingReceiver`** (new): CRE
+   `ReceiverTemplate` consumers (§3.3).
+   - They accept reports only from the forwarder and, once locked, only from
+     our workflows (author, name, workflow id).
+   - `CollectionsReceiver` runs collections, charges and liquidations in a
+     batch, each in its own try/catch, and answers `checkTasks` for the
+     workflow's one batched read.
+   - `UnderwritingReceiver` forwards underwriting facts to `ScoreManager`.
 9. **`MerchantRegistry.registerFor`** (owner-only), so a merchant is onboarded
    without holding MON.
 10. **Tests named for the exploit,** as the suite already does:
@@ -582,7 +622,7 @@ flowchart LR
   ```
 
 - **Monad charges gas on the gas *limit*, not on gas used.** Every sender (the
-  relayer, CRE and the fallback keeper) sets its limit from `eth_estimateGas`
+  relayer and CRE) sets its limit from `eth_estimateGas`
   plus about 15%, never a blanket 1M.
 - **No dependency on EIP-7702 or ERC-4337.** Mera accounts are plain EOAs, and
   Monad adds reserve-balance rules for 7702-delegated accounts that we'd rather
@@ -590,15 +630,17 @@ flowchart LR
 
 ### 5.4 The credit engine on CRE
 
-- **Workflows:** `cre/collections/` and `cre/underwrite/`, in TypeScript on
-  `@chainlink/cre-sdk` (cron and HTTP triggers, the EVM client and the HTTP
-  client). The receiver is `PolarisCollector`.
-- **Dunning:** CRE skip reasons drive the imported dunning ladder. It
-  distinguishes "short on funds" from "allowance lost", and it never duns a
-  buyer for our mistake.
-- **Fallback:** a small direct-signer keeper (viem, following the
-  `keeper-solana` pattern) on a Privy server wallet. It runs only if CRE is down
-  during judging.
+- **Workflows:** `workflows/collections/` and `workflows/underwriting/`, in
+  TypeScript on `@chainlink/cre-sdk` (cron and HTTP triggers, the EVM client,
+  the HTTP client and Confidential HTTP). The receivers are
+  `CollectionsReceiver` and `UnderwritingReceiver` (§3.3).
+- **Dunning:** CRE skip reasons drive the dunning ladder. It distinguishes
+  "short on funds" from "allowance lost", and it never duns a buyer for our
+  mistake. The indexer, the workflow and the webhooks use the same words
+  (`insufficient_funds`, `allowance_lost`, `other`).
+- **No fallback keeper.** Every collection action is permissionless on chain,
+  so if CRE is down anyone can call `collectInstallment`, `chargeDue` or
+  `liquidate` directly (`workflows/README.md`).
 
 ### 5.5 Cold-start credit
 
@@ -762,8 +804,8 @@ With fewer people, D folds into A and C.
 |---|---|---|---|---|---|
 | **Sat 26 – Sun 27 Sep** | New repo + import commit. Monad networks. Deploy the six contracts with AUSD; suite green | Mera smoke test on every team phone: Face ID → address → sign typed data | Privy app, a server wallet, and a policy that rejects a disallowed call | Envio init on Monad testnet. Nansen and Zerion keys. Day-0 questions (§11) | `pay()` from a script lands on Monad testnet, verified on the explorer |
 | **Mon 28 Sep – Thu 1 Oct** | `payWithAuthorization`, `PolarisSend`, `PolarisCheckout`, `collectInstallment`, `registerFor`, minimum intervals, tests | Onboarding, balance, pay a link now, send and claim | Relayer service; Business login, links, payments list | Indexer schema for payments and sends; storyboard for the video | **Face ID → paid a merchant link, and a send link claimed on a second phone. Gasless, on testnet** |
-| **Fri 2 – Mon 5 Oct** | `PolarisCollector` + `collections`; `underwrite` + `ScoreManager.underwrite` | Pay in 4 with the limit and its *why*; Bring your history | Payouts (one tap); webhooks, keys, event log | Nansen and Zerion adapters for `underwrite`; Envio to the cloud (on or after 5 Oct) | **An instalment collected by CRE on Monad testnet; the webhook arrives** |
-| **Tue 6 – Thu 8 Oct** | CRE deploy if access has landed; fallback keeper; mainnet decision | Subscriptions, copy pass, install polish (manifest, icons); TWA if needed | Automatic payouts; SDK 0.3.0 + docs; `shopping/` wired | README draft, write-up draft, per-bounty evidence | **The full 3-minute demo runs, uncut, on a real phone** |
+| **Fri 2 – Mon 5 Oct** | `CollectionsReceiver` + `collections`; `underwrite` + `ScoreManager.underwrite` | Pay in 4 with the limit and its *why*; Bring your history | Payouts (one tap); webhooks, keys, event log | Nansen and Zerion adapters for `underwrite`; Envio to the cloud (on or after 5 Oct) | **An instalment collected by CRE on Monad testnet; the webhook arrives** |
+| **Tue 6 – Thu 8 Oct** | CRE deploy if access has landed; mainnet decision | Subscriptions, copy pass, install polish (manifest, icons); TWA if needed | Automatic payouts; SDK 0.3.0 + docs; `shopping/` wired | README draft, write-up draft, per-bounty evidence | **The full 3-minute demo runs, uncut, on a real phone** |
 | **Fri 9 Oct** | **Feature freeze at 18:00.** Bug bash on an iPhone and an Android phone | | | | Zero known bugs on the demo path |
 | **Sat 10 – Sun 11 Oct** | D leads: video, README (pre-existing table, AI disclosure, attribution, setup), write-up, profile. Everyone reviews | | | | Someone who didn't build it can follow the README |
 | **Mon 12 Oct** | **Submit** | | | | Confirmed on the portal |
@@ -819,7 +861,7 @@ the write-up.
 |---|---|
 | Agora | App URL (and the APK if we build one); AUSD addresses; a cross-border send and a claim on the explorer; timing of final settlement |
 | Privy | App ID; the server-wallet policy JSON; the relayer's transactions; payout-wallet and automatic-payout code paths |
-| Chainlink CRE | Workflow source paths; the DON deployment or `simulate --broadcast` logs; `PolarisCollector` transactions; the underwriting report transaction |
+| Chainlink CRE | Workflow source paths; the DON deployment or `simulate --broadcast` logs (`workflows/evidence/`); `CollectionsReceiver` and `UnderwritingReceiver` transactions |
 | Nansen | Which endpoints, which facts they become, and the score reasons shown to the buyer |
 | Mera UX | The onboarding code path; the statement that there's no seed phrase, extension or custody backend; supported devices |
 | Envio | The indexer config and schema; the GraphQL queries behind the dashboard and the CRE candidate list |
@@ -836,7 +878,7 @@ the write-up.
 | Privy on the merchant side disqualifies us from Mera UX | Ask on Day 0. It isn't counted in the ceiling |
 | The Mera rpId gets changed later | Fix it at `polarispay.app` on Day 0 and never move it; offer mnemonic export for recovery |
 | Nansen credits run out, or it can't see testnet | Cache per wallet, skip labels, Zerion for testnet, ask Nansen for credits |
-| CRE Early Access is slow | Simulation qualifies for the bounty; `--broadcast` writes to Monad testnet |
+| CRE deploy access is slow | Simulation qualifies for the bounty; `--broadcast` writes to Monad testnet |
 | AUSD's 3009 or 2612 behaves differently on testnet | Script-check on Day 0. Fallbacks: permit + `transferFrom`, or Permit2 |
 | Gas charged on the limit makes the relayer or CRE expensive | Estimate plus 15%; batch collections into one report |
 | Envio needs Docker (WSL on Windows); cloud dev deployments expire after 30 days | Use WSL or the cloud; deploy on or after 5 Oct |
@@ -860,7 +902,7 @@ the write-up.
 - [ ] Mera smoke test on every team phone. Fix the rpId at `polarispay.app`
 - [ ] Privy: create the app, email `monad@privy.io`, create a server wallet,
       and prove its policy rejects a disallowed call
-- [ ] Run `cre account access` and request Early Access. Install the CRE CLI and
+- [ ] Run `cre account access` to request deploy access. Install the CRE CLI and
       simulate a hello-world cron workflow
 - [ ] Get a Nansen API key (and ask about hackathon credits) and a Zerion key.
       Run Envio's `init` against Monad testnet

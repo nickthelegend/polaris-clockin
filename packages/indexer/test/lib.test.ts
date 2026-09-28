@@ -131,24 +131,24 @@ describe("revert decoding (CollectionsReceiver.TaskSkipped reasons)", () => {
 
   it("tells re-sign from top up, with what was had and needed", () => {
     const allowance = decodeRevert(encodeErrorResult({ abi, errorName: "InsufficientAllowance", args: [5n, 50_383_562n] }));
-    expect(allowance).toMatchObject({ name: "InsufficientAllowance", action: "RESIGN", have: 5n, need: 50_383_562n });
+    expect(allowance).toMatchObject({ name: "InsufficientAllowance", action: "allowance_lost", have: 5n, need: 50_383_562n });
     const balance = decodeRevert(encodeErrorResult({ abi, errorName: "InsufficientBalance", args: [7n, 9n] }));
-    expect(balance).toMatchObject({ name: "InsufficientBalance", action: "TOP_UP", have: 7n, need: 9n });
+    expect(balance).toMatchObject({ name: "InsufficientBalance", action: "insufficient_funds", have: 7n, need: 9n });
     const token = decodeRevert(
       encodeErrorResult({ abi, errorName: "ERC20InsufficientBalance", args: ["0x00000000000000000000000000000000000000aa", 1n, 2n] }),
     );
-    expect(token).toMatchObject({ name: "ERC20InsufficientBalance", action: "TOP_UP", have: 1n, need: 2n });
+    expect(token).toMatchObject({ name: "ERC20InsufficientBalance", action: "insufficient_funds", have: 1n, need: 2n });
   });
 
   it("calls a not-due candidate stale, and keeps an unknown selector raw", () => {
-    expect(decodeRevert(encodeErrorResult({ abi, errorName: "NotDue" }))).toMatchObject({ name: "NotDue", action: "STALE" });
-    expect(decodeRevert("0xdeadbeef")).toMatchObject({ name: "0xdeadbeef", action: "OTHER" });
-    expect(decodeRevert("0x")).toMatchObject({ name: "EMPTY", action: "OTHER" });
+    expect(decodeRevert(encodeErrorResult({ abi, errorName: "NotDue" }))).toMatchObject({ name: "NotDue", action: "stale" });
+    expect(decodeRevert("0xdeadbeef")).toMatchObject({ name: "0xdeadbeef", action: "other" });
+    expect(decodeRevert("0x")).toMatchObject({ name: "EMPTY", action: "other" });
   });
 
   it("reads Error(string) and guesses allowance or balance from the message", () => {
     const data = encodeErrorResult({ abi: parseAbi(["error Error(string)"]), errorName: "Error", args: ["ERC20: transfer amount exceeds allowance"] });
-    expect(decodeRevert(data)).toMatchObject({ name: "Error", action: "RESIGN", message: "ERC20: transfer amount exceeds allowance" });
+    expect(decodeRevert(data)).toMatchObject({ name: "Error", action: "allowance_lost", message: "ERC20: transfer amount exceeds allowance" });
   });
 
   it("returns the addresses of WalletAlreadyLinked", () => {
@@ -225,9 +225,9 @@ describe("the webhook helpers the client ships", () => {
   });
 
   it("names a failed collection in polarispay-sdk's words, the same in the indexer and the client", () => {
-    for (const action of ["TOP_UP", "RESIGN", "STALE", "OTHER"] as const) {
+    for (const action of ["insufficient_funds", "allowance_lost", "stale", "other"] as const) {
       expect(failureReasonOf(action)).toBe(clientFailureReason(action));
     }
-    expect([failureReasonOf("TOP_UP"), failureReasonOf("RESIGN"), failureReasonOf("OTHER")]).toEqual(["insufficient_funds", "allowance_lost", "other"]);
+    expect([failureReasonOf("insufficient_funds"), failureReasonOf("allowance_lost"), failureReasonOf("stale"), failureReasonOf("other")]).toEqual(["insufficient_funds", "allowance_lost", "other", "other"]);
   });
 });

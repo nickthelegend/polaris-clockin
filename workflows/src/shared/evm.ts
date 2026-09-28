@@ -1,6 +1,7 @@
 /**
- * EVM plumbing both workflows use: reads, the gas limit, the write, and the
- * receipt the write left behind.
+ * EVM plumbing every workflow here uses: reads (at the last finalized block,
+ * or at one block by number), the gas limit, the write, and the receipt the
+ * write left behind.
  *
  * Two CRE facts shape this file (docs/research/cre.md):
  *   - Monad bills the gas *limit*. So a report's limit is sized from an
@@ -13,12 +14,14 @@
  */
 
 import {
+  blockNumber,
   bytesToHex,
   cre,
   encodeCallMsg,
   hexToBase64,
   LAST_FINALIZED_BLOCK_NUMBER,
   prepareReportRequest,
+  protoBigIntToBigint,
   type Report,
   type Runtime,
   TxStatus,
@@ -50,34 +53,48 @@ export function evmClientFor(chainSelectorName: string): EVMClient {
   return new cre.capabilities.EVMClient(selector);
 }
 
+/** A block to read at: `LAST_FINALIZED_BLOCK_NUMBER` (the default), or a number from `atBlock(n)`. */
+export type BlockRef = { absVal: string; sign: string };
+
+/** A block by number, so that several reads all see the same state. */
+export function atBlock(n: bigint): BlockRef {
+  return blockNumber(n) as BlockRef;
+}
+
 /**
  * One `eth_call` through the EVM capability: raw calldata in, raw return
  * data out. Reads the last finalized block by default: every node of the DON
  * sees the same state there, and on Monad it is 800 ms behind the head.
  */
-export function callRaw(
-  runtime: Runtime<unknown>,
-  evm: EVMClient,
-  to: Address,
-  data: Hex,
-  block: typeof LAST_FINALIZED_BLOCK_NUMBER = LAST_FINALIZED_BLOCK_NUMBER,
-): Hex {
+export function callRaw(runtime: Runtime<unknown>, evm: EVMClient, to: Address, data: Hex, block: BlockRef = LAST_FINALIZED_BLOCK_NUMBER): Hex {
   const reply = evm.callContract(runtime, { call: encodeCallMsg({ from: zeroAddress, to, data }), blockNumber: block }).result();
   return bytesToHex(reply.data);
 }
 
 /**
+ * The last finalized block's number and timestamp (unix seconds), in one EVM
+ * read. Reading the rest of a run at this number, rather than at "finalized"
+ * again, keeps every read on the same block (the finalized head moves every
+ * 400 ms on Monad), and the timestamp says when that state was observed.
+ */
+export function finalizedHeader(runtime: Runtime<unknown>, evm: EVMClient): { number: bigint; timestamp: bigint } {
+  const h = evm.headerByNumber(runtime, { blockNumber: LAST_FINALIZED_BLOCK_NUMBER }).result().header;
+  if (!h?.blockNumber) throw new Error("the EVM capability returned no finalized block header");
+  return { number: protoBigIntToBigint(h.blockNumber), timestamp: BigInt(h.timestamp) };
+}
+
+/**
  * A typed view call: encode with viem, one EVM read, decode with viem.
  * `abi` should be a narrow `parseAbi([...])` fragment, so the bundle stays
- * small and the return type is exact.
+ * small and the return type is exact. `block` defaults to the last finalized.
  */
 export function readContract<const TAbi extends Abi>(
   runtime: Runtime<unknown>,
   evm: EVMClient,
-  call: { address: Address; abi: TAbi; functionName: string; args?: readonly unknown[] },
+  call: { address: Address; abi: TAbi; functionName: string; args?: readonly unknown[]; block?: BlockRef },
 ): unknown {
   const data = encodeFunctionData({ abi: call.abi as Abi, functionName: call.functionName, args: call.args ?? [] });
-  const raw = callRaw(runtime, evm, call.address, data);
+  const raw = callRaw(runtime, evm, call.address, data, call.block);
   return decodeFunctionResult({ abi: call.abi as Abi, functionName: call.functionName, data: raw });
 }
 
@@ -192,6 +209,45 @@ export function submitReport(
   }
   const txHash = bytesToHex(write.txHash ?? new Uint8Array(32));
   return { txHash, gasLimit: p.gasLimit, broadcast: !/^0x0+$/.test(txHash) };
+}
+
+const TRANSMITTER_ABI = parseAbi(["function simulationTransmitter() view returns (address)"]);
+
+/**
+ * The receiver's simulation-only origin check (PolarisReceiver), or zero when
+ * it has none. While it trusts Chainlink's public simulation forwarder, a
+ * Polaris receiver accepts deliveries only from its `simulationTransmitter`,
+ * so it refuses an estimate sent from the forwarder's address. A receiver
+ * without the function answers with a revert: no check.
+ */
+export function simulationTransmitterOf(runtime: Runtime<unknown>, evm: EVMClient, receiver: Address): Address {
+  try {
+    return readContract(runtime, evm, { address: receiver, abi: TRANSMITTER_ABI, functionName: "simulationTransmitter" }) as Address;
+  } catch {
+    return zeroAddress;
+  }
+}
+
+/** EVM reads `writeSized` spends before its write: the transmitter and the estimate. */
+export const WRITE_SIZED_READS = 2;
+
+/**
+ * Sign-then-size-then-write, the one path every Polaris report takes: read
+ * the receiver's simulation transmitter; estimate `onReport` as the forwarder
+ * calls it or, behind a transmitter, the whole delivery from it; size the
+ * limit (`gasLimitFor`); write. Two EVM reads (WRITE_SIZED_READS) and the write.
+ */
+export function writeSized(
+  runtime: Runtime<unknown>,
+  evm: EVMClient,
+  p: { forwarder: Address; receiver: Address; report: Report; gas: GasConfig },
+): WriteOutcome & { estimate: bigint; transmitter: Address } {
+  const transmitter = simulationTransmitterOf(runtime, evm, p.receiver);
+  const target = { forwarder: p.forwarder, receiver: p.receiver, report: p.report };
+  const estimate = transmitter === zeroAddress ? estimateOnReport(runtime, evm, target) : estimateDelivery(runtime, evm, { ...target, from: transmitter });
+  const gasLimit = gasLimitFor(estimate, p.gas, transmitter === zeroAddress ? "receiver" : "delivery");
+  const write = submitReport(runtime, evm, { receiver: p.receiver, report: p.report, gasLimit });
+  return { ...write, estimate, transmitter };
 }
 
 export interface ReceiptLog {

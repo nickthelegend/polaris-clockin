@@ -10,11 +10,13 @@
     "indexerQuery": null,
     "indexerLimit": 100,
     "recentWindow": 150,
-    "sweepWindow": 60
+    "sweepWindow": 60,
+    "chainBackoff": { "ladderSeconds": [21600, 86400, 259200, 604800], "windowSeconds": 120 }
   },
   "liquidate": true,
   "maxTasksPerReport": 25,
   "checkBatch": 72,
   "gas": { "overhead": "30000", "headroomBps": 1500, "min": "150000", "max": "8000000" },
-  "callback": null
+  "callback": null,
+  "retry": { "checkout": null, "confidence": "FINALIZED" }
 }

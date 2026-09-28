@@ -78,3 +78,68 @@ export function cloneFixtures(pairs: Array<{ from: string; to: string }>): strin
   }
   return dir;
 }
+
+/** The ConfidentialHTTPRequest message the Confidential HTTP mock receives, reduced to what we read. */
+export interface ConfidentialRequestLike {
+  vaultDonSecrets: Array<{ key: string }>;
+  request?: {
+    url: string;
+    method: string;
+    body?: { case?: string; value?: unknown };
+    multiHeaders: Record<string, { values: string[] }>;
+    encryptOutput?: boolean;
+  };
+}
+
+export interface ConfidentialSent {
+  /** The request as the workflow built it: placeholders, never a key. */
+  built: SentRequest;
+  /** The secret ids it asked the enclave for. */
+  secretKeys: string[];
+  /** The request as the enclave sends it, placeholders resolved. */
+  resolved: SentRequest;
+}
+
+/**
+ * Resolve `{{.KEY}}` placeholders the way the enclave does (in headers and a
+ * body; chainlink's simulator uses Go's text/template the same way), with the
+ * stricter rule a real enclave has: only the secrets the request lists.
+ */
+export function toSentConfidential(input: ConfidentialRequestLike, values: Record<string, string>): ConfidentialSent {
+  const r = input.request;
+  if (!r) throw new Error("confidential request without a request");
+  const headers: Record<string, string> = {};
+  for (const [k, v] of Object.entries(r.multiHeaders ?? {})) headers[k.toLowerCase()] = v.values[0] ?? "";
+  const body = r.body?.case === "bodyString" ? String(r.body.value) : undefined;
+  const built: SentRequest = { url: r.url, method: r.method, headers, body, cached: false };
+  const secretKeys = input.vaultDonSecrets.map((s) => s.key);
+  const resolve = (text: string) =>
+    text.replace(/\{\{\s*\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_, key: string) => {
+      if (!secretKeys.includes(key)) throw new Error(`placeholder {{.${key}}} names a secret the request did not list`);
+      const v = values[key];
+      if (v === undefined) throw new Error(`no value for secret ${key}`);
+      return v;
+    });
+  const resolved: SentRequest = {
+    url: r.url,
+    method: r.method,
+    headers: Object.fromEntries(Object.entries(headers).map(([k, v]) => [k, resolve(v)])),
+    body: body === undefined ? undefined : resolve(body),
+    cached: false,
+  };
+  return { built, secretKeys, resolved };
+}
+
+/**
+ * Answer one Confidential HTTP request from the fixtures. Etherscan's key
+ * arrives as a POST form body (its GET API takes it only in the query
+ * string); Etherscan reads request parameters from either, so the fixture
+ * transport answers it as the GET it stands for.
+ */
+export function answerConfidentialFromFixtures(sent: ConfidentialSent, dir: string = DEFAULT_FIXTURES_DIR) {
+  const r = sent.resolved;
+  if (r.url.startsWith("https://api.etherscan.io") && r.method === "POST" && /^apikey=[^&]*$/.test(r.body ?? "")) {
+    return answerFromFixtures({ ...r, method: "GET", body: undefined }, dir);
+  }
+  return answerFromFixtures(r, dir);
+}

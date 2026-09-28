@@ -127,8 +127,12 @@ export type Plan = {
 export type CollectorStatus = {
   state: "running" | "degraded" | "stopped";
   lastPassAt: IsoDate | null;
-  /** Where collections run: the CRE workflow, or the fallback keeper. */
-  runner: "cre" | "fallback";
+  /**
+   * Where collections run: the `polaris-collections` CRE workflow, the only
+   * runner. There is no fallback keeper: every collection action is
+   * permissionless on chain, so anyone can run one (workflows/README.md).
+   */
+  runner: "cre";
 };
 
 /* ── Overview ───────────────────────────────────────────────────────────── */

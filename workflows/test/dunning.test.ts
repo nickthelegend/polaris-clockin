@@ -6,7 +6,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import { polarisLoanEngineAbi, polarisPaymentsAbi } from "@polarispay/contracts/abi";
-import { encodeErrorResult, type Hex, parseAbi } from "viem";
+import { type Abi, encodeErrorResult, type Hex, parseAbi, parseAbiItem, zeroAddress } from "viem";
 import { packCandidates, parseIndexerCandidates, unpackCandidates } from "../src/collections/candidates.ts";
 import { classifySkip, eventsFor, INSTALLMENT_FAILURE_REASONS } from "../src/collections/outcomes.ts";
 import { ACTION } from "../src/collections/tasks.ts";
@@ -139,5 +139,46 @@ describe("signed callbacks", () => {
     expect(verifyCallback(secret, body, header, t + 301)).toEqual({ ok: false, reason: "timestamp outside tolerance" });
     expect(verifyCallback(secret, body, "v1=abc", t)).toEqual({ ok: false, reason: "malformed signature header" });
     expect(verifyCallback(secret, body, undefined, t)).toEqual({ ok: false, reason: "missing signature header" });
+  });
+});
+
+describe("the indexer says what the workflow says", () => {
+  // packages/indexer/src/lib/revert.ts is pure (no Envio import): its words are the workflow's.
+  const revertTs = join(import.meta.dir, "..", "..", "packages", "indexer", "src", "lib", "revert.ts");
+  type Decoded = { name: string; action: string };
+  const load = async () =>
+    (await import(revertTs)) as {
+      ERROR_SELECTORS: Record<string, { signature: string; name: string; action: string }>;
+      decodeRevert(data: string): Decoded;
+    };
+  /** A revert with this signature, every argument zero (a string argument: "x"). */
+  const sample = (signature: string): Hex => {
+    const item = parseAbiItem(`error ${signature}`) as unknown as { type: "error"; name: string; inputs: readonly { type: string }[] };
+    const args = item.inputs.map((i) => (i.type === "address" ? zeroAddress : i.type === "string" ? "x" : 0n));
+    return encodeErrorResult({ abi: [item] as unknown as Abi, errorName: item.name, args } as never);
+  };
+
+  test.skipIf(!fs.existsSync(revertTs))("for every revert the indexer knows, the same word as classifySkip", async () => {
+    const { ERROR_SELECTORS, decodeRevert } = await load();
+    for (const { signature } of Object.values(ERROR_SELECTORS)) {
+      const data = sample(signature);
+      expect(`${signature} → ${decodeRevert(data).action}`).toBe(`${signature} → ${classifySkip(data).class}`);
+    }
+  });
+
+  test.skipIf(!fs.existsSync(revertTs))("including a token that reverts with a message, an unknown error and an empty revert", async () => {
+    const { decodeRevert } = await load();
+    const message = (m: string) => encodeErrorResult({ abi: parseAbi(["error Error(string)"]), errorName: "Error", args: [m] });
+    for (const data of [
+      message("ERC20: transfer amount exceeds allowance"),
+      message("ERC20: transfer amount exceeds balance"),
+      message("Pausable: paused"),
+      "0xdeadbeef",
+      "0x",
+    ] as Hex[]) {
+      expect(decodeRevert(data).action).toBe(classifySkip(data).class);
+    }
+    expect(classifySkip(message("ERC20: transfer amount exceeds allowance")).class).toBe("allowance_lost");
+    expect(classifySkip(message("ERC20: transfer amount exceeds balance")).class).toBe("insufficient_funds");
   });
 });

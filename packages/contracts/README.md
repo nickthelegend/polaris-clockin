@@ -61,7 +61,7 @@ MON a rough estimate says it needs. Configuration (all optional) is documented
 at the top of `scripts/deploy-monad.js`: `AUSD_MODE`, `TREASURY`,
 `GRACE_SECONDS` (3600), `MIN_INTERVAL_SECONDS` and `MIN_PERIOD_SECONDS` (60,
 so a plan plays out on camera; weekly plans still work), `CRE_FORWARDER`
-(`simulation` by default, `production` once Early Access lands),
+(`simulation` by default, `production` once deploy access is granted),
 `CRE_SIMULATION_TRANSMITTER` (the address of `CRE_ETH_PRIVATE_KEY`, a key kept
 for `cre workflow simulate --broadcast` alone; set on all three receivers;
 required on the simulation forwarder, read from `CRE_ETH_PRIVATE_KEY` when

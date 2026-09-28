@@ -41,7 +41,7 @@ function open(sim: Sim, loanId: bigint, orderKey: string, orderId: string, inter
   return firstDueAt;
 }
 
-/** One CRE collections report, delivered through the forwarder. */
+/** The events one collections report leaves, simulated here (no CRE workflow or DON runs in this test). */
 function report(sim: Sim, body: (sim: Sim) => void, tasks: number, executed: number) {
   sim.tx({ from: TRANSMITTER, to: SETTINGS.creForwarders[0] });
   body(sim);
@@ -125,7 +125,7 @@ describe("Pay in 4", () => {
     const failedAt = sim.time;
 
     let plan = await sim.indexer.Plan.getOrThrow("1");
-    expect(plan).toMatchObject({ dunning: true, failedAttempts: 1, lastFailureReason: "InsufficientBalance", lastFailureAction: "TOP_UP", lastFailureAt: failedAt });
+    expect(plan).toMatchObject({ dunning: true, failedAttempts: 1, lastFailureReason: "InsufficientBalance", lastFailureAction: "insufficient_funds", lastFailureAt: failedAt });
     // The ladder's first step (6 h) is past the grace period here, so the next
     // try is when the plan turns liquidatable.
     expect(plan.nextAttemptAt).toBe(Math.min(failedAt + SETTINGS.dunningRetrySeconds[0]!, firstDueAt + SETTINGS.graceSeconds + 1));
@@ -134,7 +134,7 @@ describe("Pay in 4", () => {
     const failed = (await sim.indexer.Activity.getAll()).find((a) => a.kind === "installment.failed");
     expect(failed).toMatchObject({
       reason: "InsufficientBalance",
-      reasonAction: "TOP_UP",
+      reasonAction: "insufficient_funds",
       failureReason: "insufficient_funds",
       amount: first,
       installmentIndex: 0,

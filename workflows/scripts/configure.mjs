@@ -8,8 +8,10 @@
  *
  * Reads packages/contracts/deployments/monad-testnet.json (staging,
  * production) or workflows/.local/deployment.json (local), and writes the
- * contract addresses, the forwarder, the stablecoins and the workflow owner
- * into collections/ and underwriting/config.<target>.json, keeping every
+ * contract addresses, the forwarder, the stablecoins, PolarisCheckout for the
+ * collections retry's log trigger, and the guardian's price feed (Chainlink
+ * AUSD/USD on Monad mainnet, or the local chain's labelled mock) into
+ * collections/, underwriting/ and guardian/config.<target>.json, keeping every
  * other setting. It refuses a record whose forwarder does not match the
  * target, so a staging config never points at the production forwarder or
  * the other way round.
@@ -79,6 +81,17 @@ export function configsFor(target, record, templates, opts = {}) {
     loanEngine: addressOf(record, "PolarisLoanEngine"),
     payments: addressOf(record, "PolarisPayments"),
     forwarder: t.forwarder,
+    // The instant retry listens to PolarisCheckout's Reauthorized; a template with retry: null keeps it off.
+    retry:
+      templates.collections.retry === null
+        ? null
+        : { confidence: "FINALIZED", ...templates.collections.retry, checkout: addressOf(record, "PolarisCheckout") },
+  };
+  const guardian = {
+    ...templates.guardian,
+    receiver: addressOf(record, "GuardianReceiver"),
+    forwarder: t.forwarder,
+    priceFeed: priceFeedFor(target, record),
   };
   const underwriting = {
     ...templates.underwriting,
@@ -90,6 +103,11 @@ export function configsFor(target, record, templates, opts = {}) {
   if (target === "local") {
     // The local chain answers every minute; keep its runs quick and its windows small.
     collections.schedule = "*/30 * * * * *";
+    // One attempt per rung of the dunning ladder at that pace (src/collections/backoff.ts).
+    const ladder = collections.candidates?.chainBackoff;
+    if (ladder) collections.candidates = { ...collections.candidates, chainBackoff: { ...ladder, windowSeconds: 30 } };
+    guardian.schedule = "*/30 * * * * *";
+    guardian.write = { ...guardian.write, heartbeatSeconds: 300 };
   }
   if (opts.indexer !== undefined) {
     // A query left over from another indexer would fail against this one, and a
@@ -107,10 +125,34 @@ export function configsFor(target, record, templates, opts = {}) {
     collections.callback = cb;
     underwriting.callback = cb;
   }
-  return { collections, underwriting };
+  return { collections, underwriting, guardian };
+}
+
+/** Chainlink AUSD/USD on Monad mainnet (verified on chain 28 Sep 2026: "AUSD / USD", 8 decimals). */
+export const AUSD_USD_MONAD_MAINNET = "0xE20751C7B5867bCBef815ffc1b284c3f412a9e13";
+
+/**
+ * The guardian's price feed from the record (cre.workflows.guardian.priceFeed):
+ * Chainlink's AUSD/USD on Monad mainnet for staging and production; on the
+ * local stand-in, its MockPriceFeed, read on the local chain itself (which
+ * plays monad-testnet) and labelled "mock" in every run's result.
+ */
+function priceFeedFor(target, record) {
+  const f = record.cre?.workflows?.guardian?.priceFeed;
+  if (!f || !/^0x[0-9a-fA-F]{40}$/.test(f.address ?? "")) throw new Error("the deployment records no price feed for the guardian (cre.workflows.guardian.priceFeed)");
+  if (target === "local") {
+    return { chainSelectorName: "monad-testnet", address: f.address, decimals: Number(f.decimals), description: f.description, kind: f.kind === "chainlink" ? "chainlink" : "mock" };
+  }
+  if (f.kind !== "chainlink" || f.chainSelectorName !== "monad-mainnet" || f.address.toLowerCase() !== AUSD_USD_MONAD_MAINNET.toLowerCase()) {
+    throw new Error(`${target} reads Chainlink AUSD/USD on Monad mainnet (${AUSD_USD_MONAD_MAINNET}); the deployment records ${f.kind} ${f.address} on ${f.chainSelectorName}`);
+  }
+  return { chainSelectorName: "monad-mainnet", address: f.address, decimals: Number(f.decimals), description: f.description, kind: "chainlink" };
 }
 
 const readJson = (p) => JSON.parse(readFileSync(p, "utf8"));
+
+/** Every workflow folder this script fills. */
+export const WORKFLOW_DIRS = ["collections", "underwriting", "guardian"];
 
 export function configure(target, opts = {}) {
   const t = TARGETS[target];
@@ -127,10 +169,11 @@ export function configure(target, opts = {}) {
   const templates = {
     collections: readJson(join(ROOT, "collections", t.template)),
     underwriting: readJson(join(ROOT, "underwriting", t.template)),
+    guardian: readJson(join(ROOT, "guardian", t.template)),
   };
   const out = configsFor(target, record, templates, opts);
   const written = [];
-  for (const w of ["collections", "underwriting"]) {
+  for (const w of WORKFLOW_DIRS) {
     const file = join(ROOT, w, t.file);
     writeFileSync(file, `${JSON.stringify(out[w], null, 2)}\n`);
     written.push(file);

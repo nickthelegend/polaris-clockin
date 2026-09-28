@@ -204,8 +204,7 @@ export function webhookEventId(sourceKey: string): string {
 
 /** Map a skipped collection's action to polarispay-sdk's reason. */
 export function failureReasonOf(action: ReasonAction | null | undefined): InstallmentFailureReason {
-  if (action === "TOP_UP") return "insufficient_funds";
-  if (action === "RESIGN") return "allowance_lost";
+  if (action === "insufficient_funds" || action === "allowance_lost") return action;
   return "other";
 }
 

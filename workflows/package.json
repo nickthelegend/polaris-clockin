@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "Polaris's Chainlink CRE workflows: collections (cron) and underwriting (HTTP), the orchestration layer of the Pay in 4 credit engine on Monad.",
+  "description": "Polaris's Chainlink CRE workflows: collections (cron, plus an EVM log trigger for the instant retry), underwriting (HTTP) and the guardian (cron, reading Chainlink AUSD/USD on Monad mainnet), the orchestration layer of the Pay in 4 credit engine on Monad.",
   "engines": {
     "node": ">=22.6.0"
   },
@@ -12,14 +12,15 @@
     "./callback": "./src/shared/callback.ts",
     "./consent": "./src/underwriting/consent.ts",
     "./events": "./src/collections/outcomes.ts",
+    "./guardian": "./src/guardian/attestation.ts",
     "./trigger": "./src/trigger.ts",
     "./package.json": "./package.json"
   },
   "scripts": {
     "cre:install": "node scripts/install-cre.mjs",
     "cre": "node scripts/cre.mjs",
-    "build": "node scripts/cre.mjs workflow build ./collections && node scripts/cre.mjs workflow build ./underwriting",
-    "typecheck": "node scripts/cre.mjs --deps && tsc -p collections/tsconfig.json && tsc -p underwriting/tsconfig.json && tsc -p tsconfig.json",
+    "build": "node scripts/cre.mjs workflow build ./collections && node scripts/cre.mjs workflow build ./underwriting && node scripts/cre.mjs workflow build ./guardian",
+    "typecheck": "node scripts/cre.mjs --deps && tsc -p collections/tsconfig.json && tsc -p underwriting/tsconfig.json && tsc -p guardian/tsconfig.json && tsc -p tsconfig.json",
     "test": "node scripts/bun.mjs --conditions=source test ./test",
     "e2e:local": "node scripts/e2e-local.mjs",
     "chain:local": "node scripts/local-chain.mjs",
@@ -27,8 +28,14 @@
     "payload:underwriting": "node --experimental-strip-types --disable-warning=ExperimentalWarning --conditions=source scripts/underwriting-payload.mjs",
     "simulate:collections": "node scripts/cre.mjs workflow simulate ./collections --non-interactive --trigger-index 0 --broadcast -T",
     "simulate:underwriting": "node --experimental-strip-types --disable-warning=ExperimentalWarning --conditions=source scripts/underwriting-payload.mjs && node scripts/cre.mjs workflow simulate ./underwriting --non-interactive --trigger-index 0 --http-payload ./underwriting/payload.json --broadcast -T",
+    "simulate:guardian": "node scripts/cre.mjs workflow simulate ./guardian --non-interactive --trigger-index 0 --broadcast -T",
+    "simulate:retry": "node scripts/cre.mjs workflow simulate ./collections --non-interactive --trigger-index 1 --broadcast --evm-event-index 1 -T",
     "trigger:local": "node scripts/local-trigger.mjs",
-    "collections:local": "node scripts/local-collections.mjs"
+    "collections:local": "node scripts/local-collections.mjs",
+    "collections:loop": "node scripts/collections-loop.mjs",
+    "guardian:loop": "node scripts/collections-loop.mjs --workflow guardian",
+    "retry:listen": "node scripts/retry-listen.mjs",
+    "evidence": "node scripts/evidence.mjs"
   },
   "dependencies": {
     "@chainlink/cre-sdk": "1.22.0",

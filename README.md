@@ -234,8 +234,10 @@ What each sponsor asks for, where this repository meets it, and how to check.
    `pnpm --filter @polaris/cre-workflows configure staging`, and commit the
    deployment record and the regenerated files.
 2. **Chainlink CRE:** `pnpm --filter @polaris/cre-workflows cre login` (or
-   `CRE_API_KEY`), request Early Access, run `simulate:underwriting` and
-   `simulate:collections` (with `--broadcast` on staging after step 1), and
+   `CRE_API_KEY`), request deploy access (`cre account access`), and after
+   step 1 run `pnpm --filter @polaris/cre-workflows evidence` (each workflow
+   once with `simulate --broadcast` on Monad testnet; logs and hashes land in
+   `workflows/evidence/`) and `collections:loop --broadcast` for the demo;
    point `CRE_UNDERWRITING_TRIGGER_URL` at the CLI's trigger.
 3. **Nansen, Zerion, Etherscan:** create API keys (ask Nansen for credits) and
    run `pnpm --filter @polarispay/underwriting record --linked <a consenting wallet>`

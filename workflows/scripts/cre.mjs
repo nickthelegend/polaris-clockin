@@ -13,6 +13,11 @@
  * The CLI is found at $CRE_BIN, else workflows/.tools (scripts/install-cre.mjs
  * puts it there), else on PATH, else where Chainlink's installers put it.
  *
+ * Every run also gets ZERION_BASIC_AUTH = base64("<ZERION_API_KEY>:") when
+ * ZERION_API_KEY is set (in the shell or workflows/.env) and it is not: the
+ * credential Confidential HTTP templates into Zerion's Basic header, which the
+ * enclave cannot encode itself (secrets.yaml).
+ *
  * Before `workflow build|simulate|deploy|hash` it builds @polarispay/underwriting
  * when its dist is missing or stale: the underwriting workflow bundles that
  * package's pure core, and CRE's bundler (Bun.build, target browser) resolves
@@ -20,10 +25,11 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import { binaryName, officialInstallDir, TOOLS_DIR } from "./install-cre.mjs";
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -97,12 +103,33 @@ export function ensureUnderwritingBuilt() {
   if (r.status !== 0) throw new Error("@polarispay/underwriting failed to build");
 }
 
+/** workflows/.env as a plain object (never loaded into this process), or {} without one. */
+export function dotEnv(file = join(ROOT, ".env")) {
+  try {
+    return parseEnv(readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The environment the CLI runs with: `env` (Bun first on PATH), plus the Zerion
+ * Basic credential derived from ZERION_API_KEY when it is not set already.
+ * Nothing is printed; the derived value exists only in the child's environment.
+ */
+export function creEnv(env = envWithBun(), file = join(ROOT, ".env")) {
+  const fromFile = dotEnv(file);
+  const key = env.ZERION_API_KEY || fromFile.ZERION_API_KEY;
+  if (!key || env.ZERION_BASIC_AUTH || fromFile.ZERION_BASIC_AUTH) return env;
+  return { ...env, ZERION_BASIC_AUTH: Buffer.from(`${key}:`, "utf8").toString("base64") };
+}
+
 const BUNDLING = new Set(["build", "simulate", "deploy", "hash"]);
 
 export function runCre(args, opts = {}) {
   const cre = findCre();
   if (args[0] === "workflow" && BUNDLING.has(args[1])) ensureUnderwritingBuilt();
-  return spawnSync(cre, args, { cwd: ROOT, stdio: "inherit", env: envWithBun(), ...opts });
+  return spawnSync(cre, args, { cwd: ROOT, stdio: "inherit", env: creEnv(), ...opts });
 }
 
 if (process.argv[1] && /cre\.mjs$/.test(process.argv[1])) {

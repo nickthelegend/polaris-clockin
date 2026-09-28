@@ -84,7 +84,7 @@ indexer.onEvent({ contract: "CollectionsReceiver", event: "TaskSkipped" }, async
       txHash: st.m.txHash,
     });
     // A stale candidate is not the buyer's failure; a failed liquidation is not a dunning step.
-    if (why.action === "STALE" || action === ACTION.LIQUIDATE) return;
+    if (why.action === "stale" || action === ACTION.LIQUIDATE) return;
     const ladder = st.settings.dunningRetrySeconds;
 
     if (action === ACTION.COLLECT_INSTALLMENT) {

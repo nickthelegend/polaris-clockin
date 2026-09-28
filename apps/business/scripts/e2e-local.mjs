@@ -306,6 +306,9 @@ async function main() {
   pass("checkout.sessions.retrieve shows the session complete, with the transaction");
 
   // ── 7. Pay in 4 ──────────────────────────────────────────────────────────
+  // These reports are built by hand and pushed through the local MockKeystoneForwarder,
+  // which checks no signatures: no CRE workflow or DON runs here. The workflows' own
+  // round trip is workflows/ e2e:local; their real runs on Monad are workflows/evidence/.
   const { encodeRawReport, encodeUnderwritingReport, encodeCollectionsReport, WORKFLOW_NAMES, ACTION } = createRequire(join(CONTRACTS_DIR, "package.json"))("./lib/cre.js");
   const block = await client.getBlock();
   const underwriting = encodeUnderwritingReport([
@@ -320,7 +323,7 @@ async function main() {
     const hash = await owner.writeContract({ address: C.MockKeystoneForwarder, abi: mockKeystoneForwarderAbi, functionName: "report", args: [receiver, raw, "0x", []] });
     const r = await client.waitForTransactionReceipt({ hash });
     const [processed] = parseEventLogs({ abi: mockKeystoneForwarderAbi, logs: r.logs, eventName: "ReportProcessed" });
-    assert(processed?.args.result, "the receiver accepted the CRE report");
+    assert(processed?.args.result, "the receiver accepted the hand-built mock forwarder report");
     return r;
   };
   await report(C.UnderwritingReceiver, underwriting, WORKFLOW_NAMES.UNDERWRITING);
