@@ -48,7 +48,7 @@ import { scoreManagerAbi, underwritingReceiverAbi } from "@polarispay/contracts/
 import { LIQUIDATION_POOLS as LIQUIDATION_POOLS_BY_CHAIN, scoreFromFacts } from "@polarispay/underwriting/core";
 import { type Abi, type Address, decodeErrorResult, type Hex, parseAbi, zeroAddress } from "viem";
 import { z } from "zod";
-import { address, callbackSchema, chainSelectorName, gasSchema } from "../shared/config.ts";
+import { address, callbackSchema, chainSelectorName, gasSchema, httpUrl } from "../shared/config.ts";
 import {
   decodeLogsFrom,
   deliveredTo,
@@ -111,7 +111,7 @@ export const configSchema = z.object({
     accountZerionChain: z.string().min(1),
     accountChainId: z.number().int().positive(),
     /** JSON-RPC endpoints whose nonces count a history wallet's sends. */
-    historyRpcUrls: z.array(z.string().url()).max(4),
+    historyRpcUrls: z.array(httpUrl).max(4),
     /** Chain ids whose allowlisted Aave pools count liquidations (one call each). */
     liquidationChainIds: z.array(z.number().int().positive()).max(3),
     /** Spend 100 Nansen credits on labels for the risk screen. */

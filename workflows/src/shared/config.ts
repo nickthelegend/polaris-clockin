@@ -57,12 +57,20 @@ export const gasSchema = z.object({
 export type GasConfig = z.infer<typeof gasSchema>;
 
 /**
+ * An http(s) URL. zod's .url() calls the URL constructor, which the CRE
+ * workflow runtime (WASM) does not provide: every URL failed validation there
+ * ("Invalid url" for https://mainnet.base.org) while the Bun unit tests, which
+ * have URL, passed. A pattern check behaves the same in both.
+ */
+export const httpUrl = z.string().regex(/^https?:\/\/[^\s/?#:]+(?::\d{1,5})?(?:[/?#]\S*)?$/i, "Invalid url");
+
+/**
  * Where the workflow reports what it did to the Polaris API (dunning,
  * webhooks). Optional: the chain events are the record either way.
  */
 export const callbackSchema = z
   .object({
-    url: z.string().url(),
+    url: httpUrl,
     /** CRE secret id of the HMAC key both sides share. */
     secretId: z.string().min(1),
   })

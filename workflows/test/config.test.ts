@@ -196,3 +196,22 @@ describe("configure", () => {
     expect(out.underwriting.callback).toEqual({ url: "https://business.polarispay.app/api/cre/events", secretId: "POLARIS_CALLBACK_SECRET" });
   });
 });
+
+describe("httpUrl (config URLs)", () => {
+  test("validates without the URL constructor, which the CRE workflow runtime lacks", async () => {
+    const { httpUrl } = await import("../src/shared/config.ts");
+    const saved = globalThis.URL;
+    // @ts-expect-error the WASM runtime has no URL; neither does this test
+    delete globalThis.URL;
+    try {
+      for (const ok of ["https://mainnet.base.org", "https://ethereum-rpc.publicnode.com", "http://localhost:3100/api/cre/callback", "http://127.0.0.1:8620", "https://indexer.example.com/v1/graphql?x=1"]) {
+        expect(httpUrl.safeParse(ok).success).toBe(true);
+      }
+      for (const bad of ["", "mainnet.base.org", "ftp://example.com", "https://", "https://exa mple.com", "javascript:alert(1)"]) {
+        expect(httpUrl.safeParse(bad).success).toBe(false);
+      }
+    } finally {
+      globalThis.URL = saved;
+    }
+  });
+});

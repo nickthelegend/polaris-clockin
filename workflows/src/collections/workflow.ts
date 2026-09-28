@@ -36,7 +36,7 @@ import { collectionsReceiverAbi, polarisLoanEngineAbi, polarisPaymentsAbi } from
 import { type Address, parseAbi } from "viem";
 import { z } from "zod";
 import { base64Utf8 } from "../shared/callback.ts";
-import { address, callbackSchema, chainSelectorName, gasSchema } from "../shared/config.ts";
+import { address, callbackSchema, chainSelectorName, gasSchema, httpUrl } from "../shared/config.ts";
 import {
   deliveredTo,
   type EVMClient,
@@ -82,7 +82,7 @@ export const configSchema = z.object({
   forwarder: address("forwarder"),
   candidates: z.object({
     /** Envio HyperIndex GraphQL endpoint, or null to read candidates from the chain. */
-    indexerUrl: z.string().url().nullable(),
+    indexerUrl: httpUrl.nullable(),
     /** Overrides DUE_CANDIDATES_QUERY for an indexer with another schema. */
     indexerQuery: z.string().min(1).nullable(),
     /** Most candidates of each kind to take from the indexer. */
