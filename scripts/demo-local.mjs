@@ -21,15 +21,29 @@
  *  5. Halcyon, the demo shop (apps/shop), on :3600, paying through
  *     polarispay-sdk against the real API and checkout (no dev mock);
  *  6. a local faucet on :3650 for test dollars (MockAUSD), which the app's
- *     Add money sheet offers on this chain.
+ *     Add money sheet offers on this chain;
+ *  7. the CRE collections cron's local stand-in (workflows,
+ *     collections:local): the real `polaris-collections` handler every
+ *     minute, collecting the Pay in 4 instalments that are due through
+ *     CollectionsReceiver and reporting to the API (the dashboard's
+ *     Collections card, installment.collected webhooks).
+ *
+ * Before it prints the URLs it opens every page and API route once, so no
+ * first click waits for `next dev` to compile it.
+ *
+ * DEMO_FAST_PLANS=1 makes Pay in 4 instalments a minute apart instead of a
+ * week (PAY_IN_4_INTERVAL_SECONDS=60, the local deployment's minimum), so
+ * the collections run is on camera: instalment 2 is collected about a
+ * minute after checkout. Its log is .demo/logs/cre-collections.log.
  *
  * Then open http://127.0.0.1:3600, add something to the bag and check out
  * with Polaris. The dashboard is http://localhost:3100/dashboard.
  *
  * Ports: DEMO_NODE_PORT (8545), DEMO_BUSINESS_PORT (3100), DEMO_APP_PORT
  * (3000), DEMO_SHOP_PORT (3600), DEMO_TRIGGER_PORT (2000), DEMO_FAUCET_PORT
- * (3650). State lives in .demo/ (git-ignored) and is fresh on every run.
- * Stop with Ctrl+C; everything started here stops with it.
+ * (3650). State lives in .demo/ (git-ignored) and is fresh on every run;
+ * .demo/demo.json has every URL. Stop with Ctrl+C; everything started here
+ * stops with it.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -57,6 +71,7 @@ const PORTS = {
   trigger: port("DEMO_TRIGGER_PORT", 2000),
   faucet: port("DEMO_FAUCET_PORT", 3650),
 };
+const FAST_PLANS = process.env.DEMO_FAST_PLANS === "1";
 const RPC = `http://127.0.0.1:${PORTS.node}`;
 const BUSINESS_URL = `http://localhost:${PORTS.business}`;
 const APP_URL = `http://localhost:${PORTS.app}`;
@@ -123,6 +138,31 @@ async function until(what, check, timeoutMs) {
     if (Date.now() - started > timeoutMs) throw new Error(`Timed out waiting for ${what} (see .demo/logs)`);
     await new Promise((r) => setTimeout(r, 1000));
   }
+}
+
+/**
+ * Open every page and API route once so `next dev` compiles it now, not on
+ * the first click (a first POST to a route took 30 s; the landing 50 s).
+ * Any answer counts, a 404 or a 401 included: the route is compiled.
+ */
+async function warm(base, routes) {
+  const started = Date.now();
+  let failed = 0;
+  for (const route of routes) {
+    const [method, path, body] = typeof route === "string" ? ["GET", route, undefined] : route;
+    try {
+      const res = await fetch(`${base}${path}`, {
+        method,
+        headers: body === undefined ? {} : { "content-type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(240_000),
+      });
+      await res.arrayBuffer();
+    } catch {
+      failed++;
+    }
+  }
+  return { ms: Date.now() - started, failed };
 }
 
 async function rpc(method, params = []) {
@@ -285,7 +325,8 @@ async function main() {
     POLARIS_PUBLIC_URL: BUSINESS_URL,
     POLARIS_APP_ORIGINS: `http://127.0.0.1:${PORTS.app}`,
     POLARIS_WORKERS: "1",
-    PAY_IN_4_INTERVAL_SECONDS: "604800",
+    // A week between instalments; DEMO_FAST_PLANS=1 makes it a minute, so the collections run shows on camera.
+    PAY_IN_4_INTERVAL_SECONDS: FAST_PLANS ? String(Math.max(60, deployment.config?.minInterval ?? 60)) : "604800",
     CRON_SECRET: secrets.cron,
     CRE_UNDERWRITING_TRIGGER_URL: `http://127.0.0.1:${PORTS.trigger}/trigger`,
     CRE_TRIGGER_MIN_INTERVAL_MS: "2000",
@@ -310,6 +351,19 @@ async function main() {
       POLARIS_LOCAL_RPC: RPC,
       POLARIS_LOCAL_DEPLOYMENT: deploymentFile,
       POLARIS_LOCAL_TRIGGER_PORT: String(PORTS.trigger),
+      POLARIS_CALLBACK_URL: `${BUSINESS_URL}/api/cre/callback`,
+      POLARIS_CALLBACK_SECRET: secrets.callback,
+    },
+  });
+
+  // ── 3b. the CRE collections cron (local stand-in), every minute ───────
+  background("cre-collections", process.execPath, [join(WORKFLOWS, "scripts", "local-collections.mjs")], {
+    cwd: WORKFLOWS,
+    env: {
+      ...process.env,
+      POLARIS_LOCAL_RPC: RPC,
+      POLARIS_LOCAL_DEPLOYMENT: deploymentFile,
+      POLARIS_LOCAL_COLLECTIONS_EVERY_MS: "60000",
       POLARIS_CALLBACK_URL: `${BUSINESS_URL}/api/cre/callback`,
       POLARIS_CALLBACK_SECRET: secrets.callback,
     },
@@ -393,11 +447,76 @@ async function main() {
   await until("the Polaris app", async () => (await fetch(`${APP_URL}/`)).ok, 300_000);
   await until("the demo shop", async () => (await fetch(`${SHOP_URL}/`)).ok, 300_000);
 
+  // Compile every page and route now (the three apps in parallel), so nobody waits on a first click.
+  log("opening every page and API route once so the first click is fast (a few minutes)…");
+  const zero = "0x0000000000000000000000000000000000000000";
+  const warmed = await Promise.all([
+    warm(APP_URL, [
+      "/",
+      "/onboard",
+      "/pay",
+      "/pay/pl_warmupwarmup",
+      "/pay/cs_test_warmupwarmup",
+      "/send",
+      "/claim",
+      "/add",
+      "/receive",
+      "/activity",
+      "/credit",
+      "/credit/score",
+      "/plans",
+      "/cards",
+      "/insights",
+      "/profile",
+      "/notifications",
+      "/settings",
+      "/accounts",
+      "/pay/cs_test_warmupwarmup?display=popup",
+    ]),
+    warm(BUSINESS_URL, [
+      "/",
+      "/login",
+      "/dashboard",
+      "/dashboard/payments",
+      "/dashboard/links",
+      "/dashboard/plans",
+      "/dashboard/payouts",
+      "/dashboard/developers",
+      "/dashboard/settings",
+      ["POST", "/api/public/links/pl_warmupwarmup/checkout", {}],
+      "/api/public/sessions/cs_test_warmupwarmup",
+      `/api/public/credit/${zero}`,
+      `/api/public/credit/${zero}/messages`,
+      `/api/public/buyers/${zero}`,
+      "/api/public/network",
+      ["OPTIONS", "/api/relay"],
+      ["POST", "/api/relay", {}],
+      ["OPTIONS", "/api/credit/underwrite"],
+      ["POST", "/api/credit/underwrite", {}],
+      ["POST", "/api/cre/callback", {}],
+      ["POST", "/api/webhooks/we_warmup/test", {}],
+      "/api/webhooks",
+      "/api/overview",
+      "/api/payments",
+      "/api/plans",
+      "/api/links",
+      "/api/payouts",
+      "/api/keys",
+      "/api/me",
+      "/api/merchant/registration",
+      ["POST", "/api/v1/checkout/sessions", {}],
+      "/api/public/merchants/m_warmup",
+    ]),
+    warm(SHOP_URL, ["/shop", "/products/halcyon-one", "/cart", "/checkout", "/orders/HC-00000", ["POST", "/api/checkout", {}], "/api/orders/HC-00000", ["POST", "/api/webhooks/polaris", {}]]),
+  ]);
+  log(`warmed the app in ${Math.round(warmed[0].ms / 1000)} s, the dashboard and API in ${Math.round(warmed[1].ms / 1000)} s, the shop in ${Math.round(warmed[2].ms / 1000)} s`);
+
   writeFileSync(
     join(DEMO, "demo.json"),
     JSON.stringify(
       {
         ports: PORTS,
+        fastPlans: FAST_PLANS,
         urls: { business: BUSINESS_URL, dashboard: `${BUSINESS_URL}/dashboard`, app: APP_URL, shop: SHOP_URL, faucet: `${FAUCET_URL}/mint`, rpc: RPC },
         chainId: deployment.chainId,
         contracts: Object.fromEntries(Object.entries(deployment.contracts).map(([k, v]) => [k, v.address])),
@@ -419,6 +538,8 @@ Polaris is running locally (chain ${deployment.chainId}; nothing is live, no Pri
 
 Pay in 4 needs a credit line: in the checkout, Raise your limit runs the CRE
 underwriting workflow locally (sample history from fixtures, not Nansen).
+The CRE collections workflow runs every minute (.demo/logs/cre-collections.log);
+instalments are ${FAST_PLANS ? "a minute apart (DEMO_FAST_PLANS=1)" : "a week apart (DEMO_FAST_PLANS=1 makes them a minute)"}.
 Logs: .demo/logs. Ctrl+C stops everything.
 `);
   await new Promise(() => {});

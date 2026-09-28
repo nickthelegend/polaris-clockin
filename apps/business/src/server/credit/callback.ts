@@ -20,6 +20,10 @@ import { recordDecision } from "./underwriting";
  *   rather than on its next tick, so instalment webhooks and dunning follow
  *   at once. The chain events stay the source of truth: the callback only
  *   says where to look.
+ * - `collections.heartbeat`: a collections run happened, idle or not (the
+ *   local runner, workflows/scripts/local-collections.mjs, sends one per
+ *   run). An idle run writes nothing on chain, so this is how the
+ *   dashboard's Collections card knows the runner is alive.
  *
  * Every node of the DON may deliver the same callback, so each `id` is
  * handled once; an unknown type is acknowledged (so the DON doesn't retry)
@@ -71,6 +75,18 @@ export async function handleCreCallback(raw: string): Promise<{ id: string; type
       });
     } else if (type === "collections.run") {
       afterResponse("cre: chain sync", () => syncChain());
+    } else if (type === "collections.heartbeat") {
+      const at = new Date().toISOString();
+      const current = await db.collectorRuns.get("cre");
+      await db.collectorRuns.upsert({
+        id: "cre",
+        lastRunAt: at,
+        lastRunBlock: current?.lastRunBlock ?? null,
+        lastTxHash: current?.lastTxHash ?? null,
+        tasks: current?.tasks ?? 0,
+        executed: current?.executed ?? 0,
+        skipped: current?.skipped ?? 0,
+      });
     }
   } catch (error) {
     // Let the DON's retry (or the next node's delivery) try again.

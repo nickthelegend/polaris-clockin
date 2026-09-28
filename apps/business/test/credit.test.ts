@@ -230,6 +230,14 @@ describe("POST /api/cre/callback", () => {
     expect((await post({ id: "future-1", type: "something.new" })).status).toBe(200);
   });
 
+  it("hears a collections runner's heartbeat, idle runs too, for the dashboard's Collections card", async () => {
+    expect(await getDb().collectorRuns.get("cre")).toBeNull();
+    expect((await post({ id: "heartbeat-1", type: "collections.heartbeat", status: "idle", checked: 0, tasks: 0, executed: 0, skipped: 0, txHash: null })).status).toBe(200);
+    const run = await getDb().collectorRuns.get("cre");
+    expect(run?.lastRunAt).toEqual(expect.any(String));
+    expect(Date.now() - Date.parse(run!.lastRunAt!)).toBeLessThan(5_000);
+  });
+
   it("verifies exactly the workflows' signing scheme (t=<unix>,v1=<hex HMAC-SHA256(secret, t.body)>)", () => {
     const header = signCreCallback("s3cret", '{"id":"1"}', 1_790_000_000);
     // HMAC-SHA256("s3cret", '1790000000.{"id":"1"}'), computed independently.
