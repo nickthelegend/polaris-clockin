@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { type FormEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { MerchantAvatar } from "@/components/avatars";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
-import { getPaymentLink, type PaymentLink, SAMPLE_LINK_IDS } from "@/lib/data";
+import { getPaymentLink, type PaymentLink, SAMPLE_DATA, SAMPLE_LINK_IDS } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { toAppPath } from "@/lib/links";
 import { usd } from "@/lib/money";
@@ -156,7 +156,8 @@ export function PaySheet({ cold = false }: { cold?: boolean }) {
 
         {desktop ? null : pasteForm}
 
-        <SampleLinks cold={cold} />
+        {/* Sample links exist only in the offline demo; with Polaris for Business every link is a real one. */}
+        {SAMPLE_DATA ? <SampleLinks cold={cold} /> : null}
       </Sheet.Body>
     </div>
   );
@@ -258,7 +259,7 @@ export function PayRoute({ cold }: { cold?: boolean }) {
       label="Pay or claim a link"
       snapPoints={["full"]}
       cold={cold}
-      desktop={{ as: "dialog", size: "md", title: "Pay or claim", description: "Paste a Polaris link, or try a sample. On your phone, point the camera at the code." }}
+      desktop={{ as: "dialog", size: "md", title: "Pay or claim", description: SAMPLE_DATA ? "Paste a Polaris link, or try a sample. On your phone, point the camera at the code." : "Paste a Polaris link. On your phone, point the camera at the code." }}
     >
       <PaySheet cold={cold} />
     </RouteSheet>
