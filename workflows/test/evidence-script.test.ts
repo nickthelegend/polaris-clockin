@@ -13,7 +13,10 @@ import { creEnv } from "../scripts/cre.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
 import { loopPreflight, loopRecord } from "../scripts/collections-loop.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
-import { preflight, WORKFLOWS } from "../scripts/evidence.mjs";
+import { preflight, REAUTHORIZED_TOPIC, reauthorizedLogIndex, simulateArgs, WORKFLOWS } from "../scripts/evidence.mjs";
+// @ts-expect-error: plain ESM scripts, no type declarations
+import { listenPreflight, takeRuns } from "../scripts/retry-listen.mjs";
+import { REAUTHORIZED_TOPIC as WORKFLOW_REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
 import {
   markdownTable,
   NOT_LOGGED_IN,
@@ -65,6 +68,49 @@ describe("parseSimulation", () => {
     expect(outcomeOf(idle, 0)).toBe("idle; 1 held back by the ladder; candidates: chain");
     const thin = parseSimulation(cliOutput({ status: "thin", reason: "thin file: 3 days, 2 transactions", txHash: null }, []));
     expect(outcomeOf(thin, 0)).toBe("thin; thin file: 3 days, 2 transactions");
+  });
+
+  test("the guardian's result reads as its verdict, and a log-triggered run names what fired it (not as its own write)", () => {
+    const guardian = parseSimulation(
+      cliOutput(
+        {
+          status: "written",
+          why: "verdict",
+          transition: "paused",
+          verdict: { creditPaused: true, reasons: 1, reasonNames: ["depeg"] },
+          price: { kind: "chainlink", answer: "0.99982564" },
+          round: "3",
+          refusal: null,
+          txHash: TX,
+        },
+        [`wrote the attestation, gas limit 150000 (estimate 121000), tx ${TX}`],
+      ),
+    );
+    expect(outcomeOf(guardian, 0)).toBe("written (paused); paused: depeg; round 3; AUSD/USD 0.99982564 (chainlink)");
+    const quiet = parseSimulation(
+      cliOutput({ status: "unchanged", why: "unchanged", transition: "unchanged", verdict: { creditPaused: false, reasons: 0, reasonNames: [] }, price: { kind: "chainlink", answer: "0.9998" }, round: null, txHash: null }, []),
+    );
+    expect(outcomeOf(quiet, 0)).toBe("unchanged; healthy; nothing new to attest; AUSD/USD 0.9998 (chainlink)");
+    expect(quiet.txHashes).toEqual([]);
+
+    const reauth = `0x${"cd".repeat(32)}`;
+    const retry = parseSimulation(
+      cliOutput(
+        {
+          status: "written",
+          trigger: { kind: "log", event: "Reauthorized", buyer: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", txHash: reauth, logIndex: 1 },
+          source: "event",
+          tasks: [{ action: "collect", id: "3" }],
+          executed: 1,
+          skipped: 0,
+          heldBack: [],
+          txHash: TX,
+        },
+        [`Reauthorized: 0x90F79bf6EB2c4f870365E785982E1f101E93b906 re-signed for 150000000 (tx ${reauth}, block 42)`, `wrote 1 tasks, gas limit 168109 (estimate 120000), tx ${TX}`],
+      ),
+    );
+    expect(retry.txHashes).toEqual([TX]);
+    expect(outcomeOf(retry, 0)).toBe("written; log trigger: Reauthorized by 0x90F79bf6EB2c4f870365E785982E1f101E93b906; 1 task(s): collect #3; 1 executed, 0 skipped");
   });
 
   test("a failed run has no result, and says why", () => {
@@ -119,7 +165,10 @@ describe("refusing before anything is sent", () => {
   const deployment = {
     chainId: 10143,
     contracts: Object.fromEntries(
-      ["CollectionsReceiver", "PolarisLoanEngine", "PolarisPayments", "UnderwritingReceiver", "ScoreManager", "Stablecoin"].map((c, i) => [c, { address: address(i + 1) }]),
+      ["CollectionsReceiver", "PolarisLoanEngine", "PolarisPayments", "UnderwritingReceiver", "ScoreManager", "Stablecoin", "PolarisCheckout"].map((c, i) => [
+        c,
+        { address: address(i + 1) },
+      ]),
     ),
   };
   const ok = {
@@ -146,13 +195,24 @@ describe("refusing before anything is sent", () => {
     expect(preflight({ ...ok, target: "production-settings" })[0]).toContain("is not one this script broadcasts to");
   });
 
-  test("a third workflow must come with its addresses in its own config", () => {
-    expect(WORKFLOWS.guardian.trigger).toBe("cron");
-    const problems = preflight({ ...ok, workflows: ["guardian"], configOf: () => ({ receiver: null, schedule: "0 */5 * * * *", callback: null }) });
-    expect(problems).toEqual(["guardian: its config for staging-settings has no receiver (fill it after the deployment)."]);
+  test("the guardian needs GuardianReceiver, and collections (for its log trigger) PolarisCheckout, from the deployment", () => {
+    expect(WORKFLOWS.guardian).toMatchObject({ dir: "./guardian", trigger: "cron", receiver: "GuardianReceiver" });
+    expect(preflight({ ...ok, workflows: ["guardian"] })).toEqual(["The deployment has no GuardianReceiver address, which guardian needs."]);
+    const full = { ...deployment, contracts: { ...deployment.contracts, GuardianReceiver: { address: address(9) }, PolarisCheckout: { address: address(10) } } };
+    expect(preflight({ ...ok, deployment: full, workflows: ["collections", "underwriting", "guardian"] })).toEqual([]);
+    expect(preflight({ ...ok, deployment: { ...full, contracts: { ...full.contracts, PolarisCheckout: undefined } } })).toEqual([
+      "The deployment has no PolarisCheckout address, which collections needs.",
+    ]);
   });
 
-  test("the loop: logged in, collections configured, and a key when it broadcasts", () => {
+  test("--retry-tx: a transaction hash, and only with collections", () => {
+    const full = { ...deployment, contracts: { ...deployment.contracts, PolarisCheckout: { address: address(10) } } };
+    expect(preflight({ ...ok, deployment: full, retryTx: TX })).toEqual([]);
+    expect(preflight({ ...ok, deployment: full, retryTx: "0x1234" })).toEqual(["--retry-tx must be a transaction hash (0x and 64 hex characters)."]);
+    expect(preflight({ ...ok, deployment: full, workflows: ["underwriting"], retryTx: TX })).toEqual(["--retry-tx runs collections' log trigger: include collections."]);
+  });
+
+  test("the loop: logged in, the workflow configured, and a key when it broadcasts", () => {
     const config = { receiver: address(1), loanEngine: address(2), payments: address(3), schedule: "0 * * * * *" };
     const base = { whoami: { loggedIn: true }, target: "staging-settings", config, broadcast: true, env: { CRE_ETH_PRIVATE_KEY: "0x" + "22".repeat(32) } };
     expect(loopPreflight(base)).toEqual([]);
@@ -160,6 +220,22 @@ describe("refusing before anything is sent", () => {
     expect(loopPreflight({ ...base, config: { ...config, receiver: null } })[0]).toContain("has no receiver");
     expect(loopPreflight({ ...base, env: {} })[0]).toContain("--broadcast needs CRE_ETH_PRIVATE_KEY");
     expect(loopPreflight({ ...base, broadcast: false, env: {} })).toEqual([]);
+    // guardian:loop needs only its receiver; an unknown workflow is refused.
+    expect(loopPreflight({ ...base, workflow: "guardian", config: { receiver: address(9), schedule: "0 * * * * *" } })).toEqual([]);
+    expect(loopPreflight({ ...base, workflow: "guardian", config: { receiver: null } })[0]).toBe(
+      "guardian/config.staging.json has no receiver: deploy, then `configure staging`",
+    );
+    expect(loopPreflight({ ...base, workflow: "underwriting" })[0]).toContain('workflow "underwriting" is not one this loop runs');
+  });
+
+  test("the retry listener: the loop's checks, and a log trigger to listen with", () => {
+    const config = { receiver: address(1), loanEngine: address(2), payments: address(3), retry: { checkout: address(10), confidence: "FINALIZED" } };
+    const base = { whoami: { loggedIn: true }, target: "staging-settings", config, broadcast: false, env: {} };
+    expect(listenPreflight(base)).toEqual([]);
+    expect(listenPreflight({ ...base, config: { ...config, retry: null } })).toEqual([
+      "collections/config.staging.json has retry: null, so there is no log trigger to listen with",
+    ]);
+    expect(listenPreflight({ ...base, config: { ...config, retry: { checkout: null, confidence: "FINALIZED" } } })[0]).toContain("has no retry.checkout");
   });
 
   test("a loop run's record: the outcome, what the ladder held back, the transaction", () => {
@@ -181,6 +257,59 @@ describe("refusing before anything is sent", () => {
       txHash: TX,
       error: null,
     });
+  });
+});
+
+describe("the log trigger's evidence run", () => {
+  const checkout = "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6";
+
+  test("finds Reauthorized in the reauthorize receipt, after the token's Approval, and passes its index to the CLI", () => {
+    expect(REAUTHORIZED_TOPIC).toBe(WORKFLOW_REAUTHORIZED_TOPIC);
+    const receipt = {
+      logs: [
+        { address: "0x5FbDB2315678afecb367f032d93F642f64180aa3", topics: [keccak256(toHex("Approval(address,address,uint256)"))] },
+        { address: checkout.toLowerCase(), topics: [REAUTHORIZED_TOPIC, pad("0x90F79bf6EB2c4f870365E785982E1f101E93b906")] },
+      ],
+    };
+    expect(reauthorizedLogIndex(receipt, checkout)).toBe(1);
+    expect(reauthorizedLogIndex({ logs: receipt.logs.slice(0, 1) }, checkout)).toBe(-1);
+    expect(reauthorizedLogIndex(receipt, "0x0000000000000000000000000000000000000bad")).toBe(-1);
+    expect(reauthorizedLogIndex(null, checkout)).toBe(-1);
+    expect(simulateArgs("collections", "staging-settings", { txHash: TX, eventIndex: 1 })).toEqual([
+      "workflow",
+      "simulate",
+      "./collections",
+      "-T",
+      "staging-settings",
+      "--non-interactive",
+      "--trigger-index",
+      "1",
+      "--evm-tx-hash",
+      TX,
+      "--evm-event-index",
+      "1",
+      "--broadcast",
+    ]);
+    expect(simulateArgs("guardian", "staging-settings")).toEqual(["workflow", "simulate", "./guardian", "-T", "staging-settings", "--non-interactive", "--trigger-index", "0", "--broadcast"]);
+    expect(simulateArgs("underwriting", "staging-settings").slice(-2)).toEqual(["--http-payload", "./underwriting/payload.json"]);
+  });
+
+  test("the listener cuts each finished run out of --listen's stream, and keeps the rest for later", () => {
+    const run = (tx: string) =>
+      cliOutput({ status: "written", trigger: { kind: "log", event: "Reauthorized", buyer: "0x90F79bf6EB2c4f870365E785982E1f101E93b906", txHash: `0x${"cd".repeat(32)}` }, tasks: [], executed: 1, skipped: 0, txHash: tx }, [
+        `wrote 1 tasks, gas limit 168109 (estimate 120000), tx ${tx}`,
+      ]);
+    const tx2 = `0x${"ef".repeat(32)}`;
+    const stream = `${run(TX)}${run(tx2)}${ESC}[34m2026-09-28T12:03:00Z${ESC}[0m Matching EVM log event found at block 43 (tx 0x…, index 1)\r\n`;
+    const { runs, rest } = takeRuns(stream);
+    expect(runs).toHaveLength(2);
+    expect(runs.map((r: string) => parseSimulation(r).result?.txHash)).toEqual([TX, tx2]);
+    expect(rest).toContain("Matching EVM log event found at block 43");
+    // Half a run stays pending until its result arrives; a failed run ends at its error line.
+    expect(takeRuns(run(TX).slice(0, -60)).runs).toHaveLength(0);
+    const failed = takeRuns(`${ESC}[31m✗${ESC}[0m workflow execution returned an error: CollectionsReceiver reverted the report\nnext`);
+    expect(failed.runs).toHaveLength(1);
+    expect(failed.rest).toBe("next");
   });
 });
 

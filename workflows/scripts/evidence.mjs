@@ -5,8 +5,9 @@
  * transaction hashes kept, and every hash checked on chain.
  *
  *   pnpm --filter @polaris/cre-workflows evidence
- *   pnpm --filter @polaris/cre-workflows evidence --only collections
+ *   pnpm --filter @polaris/cre-workflows evidence --only collections,guardian
  *   pnpm --filter @polaris/cre-workflows evidence --deployment <file> --target staging-settings
+ *   pnpm --filter @polaris/cre-workflows evidence --only collections --retry-tx <reauthorize tx hash>
  *
  * In order:
  *   1. `cre whoami`: refuses unless logged in (`cre login`, or CRE_API_KEY).
@@ -14,17 +15,22 @@
  *      refuses without one, or without the addresses a workflow needs, or
  *      on any chain but Monad testnet (10143). Nothing here writes to mainnet.
  *   3. The transmitter: CRE_ETH_PRIVATE_KEY (workflows/.env or the shell) must
- *      be set, hold testnet MON, and be UnderwritingReceiver's
- *      simulationTransmitter, or its reports would revert. Only its address
- *      is ever printed.
+ *      be set, hold testnet MON, and be every receiver's simulationTransmitter
+ *      (collections, underwriting, guardian), or its reports would revert.
+ *      Only its address is ever printed.
  *   4. `configure staging` from that record, so the configs hold its addresses
- *      (commit them: they are public).
+ *      (commit them: they are public): all three workflows, the retry's
+ *      PolarisCheckout, the guardian's Chainlink AUSD/USD on Monad mainnet.
  *   5. `cre workflow supported-chains`, kept as the organisation's view of
  *      Monad testnet and mainnet.
  *   6. Each workflow: `cre workflow simulate <dir> -T <target> --non-interactive
  *      --trigger-index 0 --broadcast` (underwriting with a freshly signed
  *      payload, scripts/underwriting-payload.mjs). A cron workflow fires at its
- *      next scheduled tick, so a run can wait up to a minute.
+ *      next scheduled tick, so a run can wait up to a minute. With
+ *      `--retry-tx <hash>` (a PolarisCheckout.reauthorize transaction on
+ *      Monad testnet), collections' EVM log trigger too: `--trigger-index 1
+ *      --evm-tx-hash <hash> --evm-event-index <i>`, where i is the position of
+ *      its `Reauthorized` log in that receipt, read from the chain.
  *   7. Every transaction hash in the result and the logs is read back from
  *      Monad testnet: landed or reverted, its block, and what the forwarder's
  *      ReportProcessed said about the receiver.
@@ -62,11 +68,41 @@ export const EVIDENCE_DIR = join(ROOT, "evidence");
 
 /** What each workflow needs from the deployment, and how its trigger is fired. */
 export const WORKFLOWS = {
-  collections: { dir: "./collections", trigger: "cron", receiver: "CollectionsReceiver", contracts: ["CollectionsReceiver", "PolarisLoanEngine", "PolarisPayments"] },
+  collections: {
+    dir: "./collections",
+    trigger: "cron",
+    receiver: "CollectionsReceiver",
+    // PolarisCheckout: the instant retry's log trigger listens to its Reauthorized.
+    contracts: ["CollectionsReceiver", "PolarisLoanEngine", "PolarisPayments", "PolarisCheckout"],
+  },
   underwriting: { dir: "./underwriting", trigger: "http", receiver: "UnderwritingReceiver", contracts: ["UnderwritingReceiver", "ScoreManager", "Stablecoin"] },
-  // Workflow 3, once its folder is here: its config must already hold its addresses.
-  guardian: { dir: "./guardian", trigger: "cron", receiver: "GuardianReceiver", contracts: [] },
+  guardian: { dir: "./guardian", trigger: "cron", receiver: "GuardianReceiver", contracts: ["GuardianReceiver"] },
 };
+
+/** keccak256("Reauthorized(address,uint256,uint256)"): PolarisCheckout's re-sign event, collections' trigger 1. */
+export const REAUTHORIZED_TOPIC = "0xd76c9fffb0eee17b94b2c5c485c1dcadfb48e50f9089e879e50c163b8ce02d73";
+
+/**
+ * The `--evm-event-index` for a reauthorize transaction: the position of
+ * PolarisCheckout's `Reauthorized` among the receipt's logs (the token's
+ * `Approval` from the permit comes first), or -1 when it has none.
+ */
+export function reauthorizedLogIndex(receipt, checkout) {
+  return (receipt?.logs ?? []).findIndex(
+    (l) => (l.address ?? "").toLowerCase() === checkout.toLowerCase() && (l.topics?.[0] ?? "").toLowerCase() === REAUTHORIZED_TOPIC,
+  );
+}
+
+/** The CLI arguments for one evidence run. `retry` = { txHash, eventIndex } runs collections' log trigger. */
+export function simulateArgs(w, target, retry = null) {
+  const spec = WORKFLOWS[w];
+  if (retry) {
+    return ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "1", "--evm-tx-hash", retry.txHash, "--evm-event-index", String(retry.eventIndex), "--broadcast"];
+  }
+  const args = ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "0", "--broadcast"];
+  if (spec.trigger === "http") args.push("--http-payload", "./underwriting/payload.json");
+  return args;
+}
 
 const TARGETS = { "staging-settings": "staging", "local-settings": "local" };
 
@@ -84,8 +120,10 @@ function arg(name) {
  * Everything that must hold before a single transaction is sent. Returns the
  * reasons to refuse (empty when ready). Pure but for the file reads it is given.
  */
-export function preflight({ whoami, deployment, deploymentFile, target, workflows, env, configOf }) {
+export function preflight({ whoami, deployment, deploymentFile, target, workflows, env, retryTx = null }) {
   const problems = [];
+  if (retryTx !== null && !/^0x[0-9a-fA-F]{64}$/.test(retryTx)) problems.push("--retry-tx must be a transaction hash (0x and 64 hex characters).");
+  if (retryTx !== null && !workflows.includes("collections")) problems.push("--retry-tx runs collections' log trigger: include collections.");
   if (!whoami.loggedIn) problems.push(NOT_LOGGED_IN);
   if (!TARGETS[target]) problems.push(`target "${target}" is not one this script broadcasts to: use staging-settings (Monad testnet) or local-settings`);
   if (!deployment) {
@@ -100,16 +138,6 @@ export function preflight({ whoami, deployment, deploymentFile, target, workflow
       for (const c of WORKFLOWS[w].contracts) {
         if (!/^0x[0-9a-fA-F]{40}$/.test(deployment.contracts?.[c]?.address ?? "")) problems.push(`The deployment has no ${c} address, which ${w} needs.`);
       }
-    }
-  }
-  for (const w of workflows) {
-    if (WORKFLOWS[w].contracts.length > 0) continue;
-    const cfg = configOf(w);
-    if (!cfg) problems.push(`${w}: no config for ${target}.`);
-    else {
-      const unset = Object.entries(cfg).filter(([, v]) => v === null).map(([k]) => k);
-      const addresses = unset.filter((k) => !["callback", "indexerUrl", "indexerQuery"].includes(k));
-      if (addresses.length > 0) problems.push(`${w}: its config for ${target} has no ${addresses.join(", ")} (fill it after the deployment).`);
     }
   }
   const key = env.CRE_ETH_PRIVATE_KEY?.trim();
@@ -150,17 +178,14 @@ const stamp = (d) => d.toISOString().slice(11, 19).replace(/:/g, "");
 async function main() {
   const target = arg("target") ?? "staging-settings";
   const deploymentFile = arg("deployment") ?? DEFAULT_DEPLOYMENT;
+  const retryTx = arg("retry-tx") ?? null;
   const env = simulationEnv();
   const workflows = workflowsToRun();
 
   console.log("CRE evidence: checking the login, the deployment and the transmitter before sending anything.\n");
   const whoami = readWhoami(await runCreCaptured(["whoami"], { env, echo: false, timeoutMs: 60_000 }));
   const deployment = readDeployment(deploymentFile);
-  const configOf = (w) => {
-    const file = join(ROOT, WORKFLOWS[w].dir, `config.${TARGETS[target] ?? "staging"}.json`);
-    return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
-  };
-  const problems = preflight({ whoami, deployment, deploymentFile, target, workflows, env, configOf });
+  const problems = preflight({ whoami, deployment, deploymentFile, target, workflows, env, retryTx });
   if (problems.length > 0) {
     console.error("Refusing to run: nothing was sent.\n");
     for (const p of problems) console.error(`  - ${p}`);
@@ -192,6 +217,19 @@ async function main() {
       refuse.push(`${name} only accepts reports sent by ${expected}, not ${transmitter}: set CRE_ETH_PRIVATE_KEY to that key (or have the owner call setSimulationTransmitter).`);
     }
   }
+  // The log trigger's payload is a real Reauthorized log: find it in that transaction's receipt.
+  let retry = null;
+  if (retryTx) {
+    const receipt = await rpc(rpcUrl, "eth_getTransactionReceipt", [retryTx]);
+    const checkout = deployment.contracts.PolarisCheckout.address;
+    const eventIndex = reauthorizedLogIndex(receipt, checkout);
+    if (!receipt) refuse.push(`--retry-tx ${retryTx} is not a transaction on ${target}.`);
+    else if (eventIndex < 0) refuse.push(`${retryTx} has no Reauthorized log from PolarisCheckout ${checkout}: send PolarisCheckout.reauthorize first.`);
+    else {
+      retry = { txHash: retryTx, eventIndex };
+      console.log(`Reauthorized is log ${eventIndex} of ${retryTx}: collections' trigger 1 will fire on it`);
+    }
+  }
   if (refuse.length > 0) {
     console.error("\nRefusing to run: nothing was sent.\n");
     for (const p of refuse) console.error(`  - ${p}`);
@@ -214,25 +252,23 @@ async function main() {
   const runsFile = join(dir, "runs.json");
   const runs = existsSync(runsFile) ? JSON.parse(readFileSync(runsFile, "utf8")) : [];
   const fresh = [];
-  for (const w of workflows) {
+  const planned = [...workflows.map((w) => ({ w, label: w, retry: null })), ...(retry ? [{ w: "collections", label: "collections-retry", retry }] : [])];
+  for (const { w, label, retry: r } of planned) {
     const spec = WORKFLOWS[w];
-    console.log(`\n── ${w} (${spec.trigger} trigger) ─────────────────────────────────────`);
-    const args = ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "0", "--broadcast"];
-    if (spec.trigger === "http") {
-      writePayload(env);
-      args.push("--http-payload", "./underwriting/payload.json");
-    }
+    console.log(`\n── ${label} (${r ? "EVM log trigger: Reauthorized" : `${spec.trigger} trigger`}) ─────────────────────────────────────`);
+    if (spec.trigger === "http" && !r) writePayload(env);
+    const args = simulateArgs(w, target, r);
     const at = new Date();
     const run = await runCreCaptured(args, { env });
     const parsed = parseSimulation(run.output);
-    const log = `${w}-${stamp(at)}.log`;
+    const log = `${label}-${stamp(at)}.log`;
     writeFileSync(join(dir, log), `$ cre ${args.join(" ")}\n# exit ${run.code}, ${at.toISOString()}\n\n${redact(run.output, env)}`);
     const txs = [];
     for (const hash of parsed.txHashes) {
       const tx = await verifyTx(hash, { url: rpcUrl });
       if (tx) txs.push(tx);
     }
-    const row = { at: at.toISOString(), workflow: w, target, exitCode: run.code, outcome: outcomeOf(parsed, run.code), result: parsed.result, log, txs };
+    const row = { at: at.toISOString(), workflow: label, target, exitCode: run.code, outcome: outcomeOf(parsed, run.code), result: parsed.result, log, txs };
     fresh.push(row);
     runs.push(row);
   }

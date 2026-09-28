@@ -96,7 +96,9 @@ export function parseSimulation(output) {
   const errorLine = lines.find((l) => /workflow execution (returned an error|failed)|^\s*(✗|Error:)/i.test(l));
   const hashes = new Set();
   if (result && typeof result.txHash === "string" && !ZERO_HASH.test(result.txHash)) hashes.add(result.txHash.toLowerCase());
-  for (const l of logs) for (const m of l.match(TX) ?? []) if (!ZERO_HASH.test(m)) hashes.add(m.toLowerCase());
+  // A log-triggered run names the transaction that fired it; that one is not the run's own write.
+  const trigger = typeof result?.trigger?.txHash === "string" ? result.trigger.txHash.toLowerCase() : null;
+  for (const l of logs) for (const m of l.match(TX) ?? []) if (!ZERO_HASH.test(m) && m.toLowerCase() !== trigger) hashes.add(m.toLowerCase());
   return { result, error: errorLine ? errorLine.trim() : null, logs, txHashes: [...hashes] };
 }
 
@@ -200,16 +202,35 @@ export function markdownTable(rows, explorer = MONAD_TESTNET.explorer) {
   return [head, ...body].join("\n");
 }
 
-/** One line for a run's outcome: `written: 2 tasks`, `thin (…)`, `failed: …`. */
+/**
+ * One line for a run's outcome: `written; 2 task(s): …`, `thin; …`,
+ * `written (paused); paused: depeg; round 3; AUSD/USD 0.99 (chainlink)`,
+ * `failed: …`.
+ */
 export function outcomeOf(parsed, code) {
   const r = parsed.result;
   if (!r) return code === 0 ? "no result printed" : `failed: ${(parsed.error ?? "see the log").slice(0, 160)}`;
+  if (r.verdict && typeof r.verdict === "object") return guardianOutcome(r);
   const parts = [String(r.status ?? "unknown")];
+  const byLog = r.trigger?.kind === "log";
+  if (byLog) parts.push(`log trigger: ${r.trigger.event} by ${r.trigger.buyer}`);
   if (Array.isArray(r.tasks) && r.tasks.length > 0) parts.push(`${r.tasks.length} task(s): ${r.tasks.map((t) => `${t.action} #${t.id}`).join(", ")}`);
   if (typeof r.executed === "number" && typeof r.skipped === "number" && r.status === "written") parts.push(`${r.executed} executed, ${r.skipped} skipped`);
   if (Array.isArray(r.heldBack) && r.heldBack.length > 0) parts.push(`${r.heldBack.length} held back by the ladder`);
   if (typeof r.onChainScore === "number") parts.push(`score ${r.onChainScore}`);
   if (r.reason) parts.push(String(r.reason).slice(0, 120));
-  if (r.source) parts.push(`candidates: ${r.source}`);
+  if (r.source && !byLog) parts.push(`candidates: ${r.source}`);
+  return parts.join("; ");
+}
+
+/** polaris-guardian's result as one line. */
+function guardianOutcome(r) {
+  const moved = r.transition && r.transition !== "unchanged" ? ` (${r.transition})` : "";
+  const parts = [`${r.status}${r.status === "written" ? moved : ""}`];
+  parts.push(r.verdict.creditPaused ? `paused: ${(r.verdict.reasonNames ?? []).join(", ")}` : "healthy");
+  if (r.round) parts.push(`round ${r.round}`);
+  if (r.refusal) parts.push(`refused: ${r.refusal}`);
+  if (r.status === "unchanged" && r.why) parts.push(r.why === "not-newer" ? "no newer block" : "nothing new to attest");
+  if (r.price) parts.push(`AUSD/USD ${r.price.answer} (${r.price.kind})`);
   return parts.join("; ");
 }
