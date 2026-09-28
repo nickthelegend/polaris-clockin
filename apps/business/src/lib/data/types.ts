@@ -88,6 +88,8 @@ export type Payment = {
   amountCents: Cents;
   feeCents: Cents;
   netCents: Cents;
+  /** What reached the merchant, in AUSD micro-units, so totals add up before they are truncated to cents. */
+  netUnits?: string;
   linkId: string | null;
   /** Set once the indexer has seen the settling transaction. Null for sample rows. */
   txHash: `0x${string}` | null;
@@ -203,6 +205,8 @@ export type AutoPayouts = {
 
 export type PayoutsState = {
   balanceCents: Cents;
+  /** The balance's change over the last 24 hours as the chain has it (truncated like the balance); null when nothing moved. Absent: work it out from the lists. */
+  changeTodayCents?: Cents | null;
   walletAddress: Address | null;
   auto: AutoPayouts;
   history: Payout[];

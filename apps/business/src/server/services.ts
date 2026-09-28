@@ -84,9 +84,16 @@ function sampleOf(merchant: MerchantRecord): SampleBook | null {
 
 /* ── Mapping records to what the dashboard shows ────────────────────────── */
 
+/**
+ * One rule for every amount: micro-units on chain, truncated to cents the way
+ * AUSD.balanceOf is shown. The net is what reached the merchant's wallet
+ * (347.255 of a \$349 payment is \$347.25, as the balance says), and the fee
+ * is what makes up the rest, so gross = net + fee to the cent.
+ */
 function toPayment(p: PaymentRecord): Payment {
   const amountCents = unitsToCents(p.amountUnits);
-  const feeCents = unitsToCents(p.feeUnits);
+  const netUnits = BigInt(p.amountUnits) - BigInt(p.feeUnits);
+  const netCents = unitsToCents(netUnits);
   return {
     id: p.id,
     orderId: p.orderId,
@@ -95,8 +102,9 @@ function toPayment(p: PaymentRecord): Payment {
     mode: p.kind === "subscription" ? "subscribe" : p.kind,
     status: "succeeded",
     amountCents,
-    feeCents,
-    netCents: amountCents - feeCents,
+    feeCents: amountCents - netCents,
+    netCents,
+    netUnits: netUnits.toString(),
     linkId: p.linkId,
     txHash: p.txHash,
     createdAt: p.createdAt,
@@ -335,13 +343,41 @@ export async function listLinks(auth: AuthedMerchant): Promise<PaymentLink[]> {
 
 /* ── Payouts ────────────────────────────────────────────────────────────── */
 
+/**
+ * The balance's change over the last 24 hours, in cents, from the chain's
+ * own amounts: the micro-units that came in (payments' nets) and went out
+ * (payouts), applied to the balance the chain reports, then both ends
+ * truncated to cents as the balance card shows them. So the chip always
+ * agrees with the card ('\$896.25' never sits beside '+\$896.26 today'). Null
+ * when nothing moved, or for a sample book.
+ */
+async function balanceChangeToday(merchant: MerchantRecord, payouts: PayoutRecord[]): Promise<number | null> {
+  if (merchant.sample || !merchant.walletAddress || !getConfig().chain) return null;
+  const since = new Date(Date.now() - 86_400_000).toISOString();
+  const payments = await getDb().payments.find({ merchantId: merchant.id, createdAt: { gte: since } }, { limit: 1000 });
+  let moved = 0n;
+  for (const p of payments) if (!p.sample && !p.mismatch) moved += BigInt(p.amountUnits) - BigInt(p.feeUnits);
+  for (const p of payouts) if (!p.sample && p.state !== "failed" && p.createdAt >= since) moved -= BigInt(p.amountUnits);
+  if (moved === 0n) return null;
+  try {
+    const now = await walletBalanceUnits(merchant.walletAddress);
+    const before = now - moved;
+    const change = unitsToCents(now) - (before >= 0n ? unitsToCents(before) : -unitsToCents(-before));
+    return change === 0 ? null : change;
+  } catch {
+    return null;
+  }
+}
+
 export async function getPayouts(auth: AuthedMerchant): Promise<PayoutsState> {
   const merchant = await ensureMerchant(auth);
   const rows = await getDb().payouts.find({ merchantId: merchant.id }, { orderBy: "createdAt", direction: "desc", limit: 200 });
   // Withdrawals against a sample balance are sample rows too.
   const real = rows.map((p) => (p.sample ? { ...toPayout(p), sample: true } : toPayout(p))).filter((p) => merchant.sample || !p.sample);
+  const [balance, changeTodayCents] = await Promise.all([balanceCents(merchant), balanceChangeToday(merchant, rows)]);
   return {
-    balanceCents: await balanceCents(merchant),
+    balanceCents: balance,
+    ...(merchant.sample ? {} : { changeTodayCents }),
     walletAddress: merchant.walletAddress,
     auto: toAutoPayouts(merchant),
     history: [...real, ...(sampleOf(merchant)?.payouts ?? [])].sort(newestFirst),

@@ -110,6 +110,8 @@ export function periodSummary(payments: Payment[], { days = 30, now = Date.now()
   let count = 0;
   let failed = 0;
   let prev = 0;
+  // The net in micro-units when every payment has them: summed first, truncated once, like the balance.
+  let netUnits: bigint | null = 0n;
   for (const p of payments) {
     const t = at(p);
     if (t >= start && t <= now) {
@@ -117,9 +119,14 @@ export function periodSummary(payments: Payment[], { days = 30, now = Date.now()
         gross += p.amountCents;
         fees += p.feeCents;
         net += p.netCents;
+        netUnits = netUnits !== null && p.netUnits !== undefined ? netUnits + BigInt(p.netUnits) : null;
         count += 1;
       } else failed += 1;
     } else if (p.status === "succeeded" && t >= prevStart && t < start) prev += p.amountCents;
+  }
+  if (netUnits !== null && count > 0) {
+    net = Number(netUnits / 10_000n);
+    fees = gross - net;
   }
   return { gross, fees, net, count, failed, delta: pctChange(gross, prev), modes: salesByMode(payments, { days, now }) };
 }

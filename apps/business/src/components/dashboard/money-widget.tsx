@@ -204,7 +204,11 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
 
   const cents = parseAmount(amount);
   const over = cents !== null && cents > balance;
-  const change = useMemo(() => (state ? balanceChange(payments, state.history) : null), [state, payments]);
+  // The chain's own change when the server has it (it agrees with the balance to the cent); else the lists'.
+  const change = useMemo(
+    () => (state ? (state.changeTodayCents !== undefined ? state.changeTodayCents : balanceChange(payments, state.history)) : null),
+    [state, payments],
+  );
   const ready = !blocker && Boolean(wallet) && state !== undefined;
   // A control that can't work yet is disabled, with its reason under it.
   const empty = state !== undefined && balance === 0;
