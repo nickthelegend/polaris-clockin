@@ -309,7 +309,7 @@ const COLUMNS: TableColumn<Payment>[] = [
     header: "Amount",
     align: "right",
     render: (p) => (
-      <span className="flex flex-col items-end">
+      <span className="flex flex-col items-end whitespace-nowrap">
         <span className={cn("ui-figure", p.status === "failed" ? "text-ui-muted line-through" : "font-medium")}>{money(p.amountCents)}</span>
         <span className="ui-figure text-[13px] text-ui-muted">{p.status === "failed" ? "Failed" : p.feeCents ? `Net ${money(p.netCents)}` : "No fee"}</span>
       </span>
