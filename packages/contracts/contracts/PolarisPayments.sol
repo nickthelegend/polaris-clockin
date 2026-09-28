@@ -133,6 +133,24 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      */
     mapping(address => mapping(bytes32 => uint256)) public quotedAmount;
 
+    /**
+     * @notice Orders the checkout settled as Pay in 4 or Subscribe, by
+     *         payment id. Such an order can never be paid here as well.
+     * @dev An order settles once, in one mode. The checkout refuses to open
+     *      a plan or a subscription on an order already paid here, and this
+     *      is the other half: without it, a Pay now authorization the buyer
+     *      signed for the same order (a relay that timed out, say, before the
+     *      buyer chose Pay in 4 instead) stays redeemable by anyone through
+     *      `payWithAuthorization`, and charges the buyer in full on top of
+     *      the plan.
+     *
+     *      Kept here rather than read from the checkout's own book, so it
+     *      binds whichever checkout is appointed later, and still binds with
+     *      none: replacing or switching off the checkout cannot reopen an
+     *      order it settled.
+     */
+    mapping(bytes32 => bool) public settledByCheckout;
+
     event PaymentMade(
         bytes32 indexed paymentId,
         address indexed payer,
@@ -215,6 +233,7 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     error WrongAmount(uint256 quoted, uint256 offered);
     error CheckoutNotAContract(address checkout);
     error InvalidMerchant(address merchant);
+    error OrderAlreadySettled(bytes32 paymentId);
 
     constructor(address initialOwner, IERC20 _stablecoin, address _treasury, uint64 _minPeriod)
         Ownable(initialOwner)
@@ -240,7 +259,9 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
 
     /**
      * @notice Appoint the checkout. The zero address switches relayed
-     *         subscriptions off.
+     *         subscriptions, and Pay in 4 through the checkout, off: the
+     *         checkout records every plan's order here (see
+     *         `markSettledByCheckout`) and can't while it isn't appointed.
      * @dev Refuses an address with no code. A buyer's subscription permit is
      *      one pooled allowance to this contract, sized for a year of the
      *      plan they chose, and nothing here ties it to that plan: whoever is
@@ -308,7 +329,11 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      *      The id is shared with `pay`, so an order can't be paid once each
      *      way: whichever lands first records it and the other reverts with
      *      `DuplicatePayment`. A replayed authorization fails the same way,
-     *      and would fail again at the token as a spent nonce.
+     *      and would fail again at the token as a spent nonce. An order the
+     *      checkout already settled as Pay in 4 or Subscribe refuses both
+     *      with `OrderAlreadySettled`, so a buyer who signed Pay now and then
+     *      chose a plan instead can't be charged twice by the unused
+     *      authorization.
      *
      *      First come, first served cuts both ways. This call exposes the
      *      merchant and order id while it is pending, so anyone -- the relayer
@@ -361,8 +386,8 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      *      claimed before its quote lands; the quote then reverts with
      *      `DuplicatePayment` and the session has to pick a new id.
      *
-     *      A quote can be replaced until the order is paid, and never after,
-     *      so the price an order was paid at can't be rewritten.
+     *      A quote can be replaced until the order is settled, and never
+     *      after, so the price an order was paid at can't be rewritten.
      */
     function quoteOrder(address merchant, bytes32 paymentId, uint256 amount) external {
         if (msg.sender != merchant && msg.sender != owner() && !isOperator[msg.sender]) {
@@ -371,9 +396,29 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
         if (merchant == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
         if (payments[paymentId].paidAt != 0) revert DuplicatePayment();
+        if (settledByCheckout[paymentId]) revert OrderAlreadySettled(paymentId);
 
         quotedAmount[merchant][paymentId] = amount;
         emit OrderQuoted(paymentId, merchant, amount);
+    }
+
+    /**
+     * @notice Record that the checkout settled this order as Pay in 4 or
+     *         Subscribe, so that no payment here can settle it again.
+     *         Checkout only.
+     * @dev PolarisCheckout calls this for every plan and subscription it
+     *      opens, before any money moves, and refuses the order itself if it
+     *      was already paid here. Refused here too for an order already paid
+     *      or marked, so the two records can never both hold for one order.
+     *      Only the appointed checkout can call it: anyone else could mark an
+     *      order nobody has paid and make it unpayable.
+     */
+    function markSettledByCheckout(bytes32 paymentId) external {
+        if (msg.sender != checkout) revert NotCheckout();
+        if (payments[paymentId].paidAt != 0 || settledByCheckout[paymentId]) {
+            revert OrderAlreadySettled(paymentId);
+        }
+        settledByCheckout[paymentId] = true;
     }
 
     /**
@@ -385,6 +430,10 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      *      and the indexer behind `payment.succeeded` must match `amount`,
      *      and `payer` where it matters, against the order -- or quote the
      *      order with `quoteOrder`, so that nothing but its price can pay it.
+     *
+     *      An order settled as Pay in 4 or Subscribe has no payment record;
+     *      `settledByCheckout` says so, and the checkout's `orderOf` has the
+     *      details.
      */
     function paymentFor(address merchant, string calldata orderId)
         external
@@ -493,9 +542,13 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
     }
 
     /// @notice True when this subscription is collectable right now.
+    /// @dev An id never subscribed reads as an Active slot due at time zero,
+    ///      so the zero subscriber is checked first. Without it this said
+    ///      "due" for every unused id, and a keeper or CRE workflow trusting it
+    ///      sent charges that could only fail.
     function isChargeDue(uint256 subId) public view returns (bool) {
         Subscription storage s = subscriptions[subId];
-        if (s.status != SubStatus.Active) return false;
+        if (s.subscriber == address(0) || s.status != SubStatus.Active) return false;
         return block.timestamp >= s.nextChargeAt;
     }
 
@@ -505,7 +558,9 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
      */
     function chargeDue(uint256 subId) external nonReentrant {
         Subscription storage s = subscriptions[subId];
-        if (s.status != SubStatus.Active) revert SubscriptionNotActive();
+        // An unwritten slot reads as Active; refused here rather than panicking
+        // on its plan's zero period below.
+        if (s.subscriber == address(0) || s.status != SubStatus.Active) revert SubscriptionNotActive();
         if (block.timestamp < s.nextChargeAt) revert NotDue();
 
         Plan storage p = plans[s.planId];
@@ -609,8 +664,9 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
 
     /// Claim an order's id and record who paid it, before any token moves.
     /// Both payment paths go through here, which is what makes an order
-    /// payable exactly once whichever path lands first, and a quoted order
-    /// payable only at its price whichever path is used.
+    /// payable exactly once whichever path lands first, never payable once
+    /// the checkout settled it as a plan or a subscription, and a quoted
+    /// order payable only at its price whichever path is used.
     function _recordPayment(address payer, address merchant, uint256 amount, string calldata orderId)
         private
         returns (bytes32 paymentId)
@@ -619,6 +675,7 @@ contract PolarisPayments is Ownable, ReentrancyGuard, EIP712 {
 
         paymentId = keccak256(abi.encodePacked(merchant, orderId));
         if (payments[paymentId].paidAt != 0) revert DuplicatePayment();
+        if (settledByCheckout[paymentId]) revert OrderAlreadySettled(paymentId);
 
         uint256 quoted = quotedAmount[merchant][paymentId];
         if (quoted != 0 && amount != quoted) revert WrongAmount(quoted, amount);

@@ -1,13 +1,16 @@
 "use client";
 
+import { MARK_INNER, MARK_OUTER, MARK_VIEWBOX } from "@polaris/brand";
+import { cn } from "@polaris/ui";
 import QRCode from "qrcode";
 import { useMemo } from "react";
-import { cx } from "./ui";
+
+const [, , VB_W, VB_H] = MARK_VIEWBOX.split(" ").map(Number) as [number, number, number, number];
 
 /**
- * A QR code drawn as one SVG path, dark on white in both themes (scanners
- * want the contrast), with the Polaris star in a quiet zone at the centre.
- * Error correction "Q" leaves room for the mark.
+ * A QR code drawn as one SVG path, ink on white (scanners want the
+ * contrast), with the Polaris mark in a cleared zone at the centre. Error
+ * correction "Q" leaves room for it.
  */
 export function QrCode({
   value,
@@ -43,29 +46,28 @@ export function QrCode({
 
   if (!drawn) return null;
   const { d, n, clear } = drawn;
-  const pad = 2;
+  const pad = 1;
   const view = n + pad * 2;
   const c = n / 2;
-  const r = clear + 0.6;
+  const box = (clear + 0.5) * 2;
+  const markH = box * 0.9;
+  const markW = (markH * (VB_W || 520)) / (VB_H || 580);
   return (
-    <div className={cx("inline-block rounded-[20px] bg-white p-3", className)}>
-      <svg
-        viewBox={`${-pad} ${-pad} ${view} ${view}`}
-        width={size}
-        height={size}
-        role="img"
-        aria-label={label}
-        shapeRendering="crispEdges"
-      >
-        <path d={d} fill="#0b0b0b" />
-        <g shapeRendering="geometricPrecision">
-          <circle cx={c} cy={c} r={r} fill="#b3de00" />
-          <path
-            transform={`translate(${c - r * 0.62} ${c - r * 0.62}) scale(${(r * 1.24) / 24})`}
-            d="M12 1.8C12.9 8.1 15.9 11.1 22.2 12 15.9 12.9 12.9 15.9 12 22.2 11.1 15.9 8.1 12.9 1.8 12 8.1 11.1 11.1 8.1 12 1.8Z"
-            fill="#0b0b0b"
-          />
-        </g>
+    <div className={cn("inline-block rounded-[24px] bg-white p-3.5", className)}>
+      <svg viewBox={`${-pad} ${-pad} ${view} ${view}`} width={size} height={size} role="img" aria-label={label} shapeRendering="crispEdges">
+        <path d={d} fill="#0f1011" />
+        <svg
+          x={c - markW / 2}
+          y={c - markH / 2}
+          width={markW}
+          height={markH}
+          viewBox={MARK_VIEWBOX}
+          shapeRendering="geometricPrecision"
+          aria-hidden
+        >
+          <path fill="#2E8C0A" d={MARK_OUTER} />
+          <path fill="#BFFA62" d={MARK_INNER} />
+        </svg>
       </svg>
     </div>
   );

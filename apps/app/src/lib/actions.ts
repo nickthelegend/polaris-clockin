@@ -1,21 +1,23 @@
 import { type Address, type Hex, type LocalAccount, parseAbi, zeroAddress } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { api, apiConfigured } from "./api";
 import { publicClient } from "./chain";
 import type { PaymentLink, Person, Plan } from "./data/types";
-import { contractAddress, getDomain, isConfigured } from "./domains";
+import { getDomain, isConfigured, resolveContract } from "./domains";
 import { amountParam, type Micros } from "./money";
 import { type RelayReceipt, relayer, type Signed } from "./relayer";
 import {
   buildCancel,
   buildCancelSubscription,
   buildClaim,
+  buildOpen,
   buildPermit,
   buildPlanIntent,
   buildReceiveWithAuthorization,
+  buildRepayIntent,
   buildSubscribeIntent,
   buildTransferWithAuthorization,
   type Eip712Domain,
-  orderIdToBytes32,
   paymentNonce,
   sendNonce,
 } from "./sign";
@@ -23,7 +25,9 @@ import {
 /**
  * Each money action as the app performs it: build the typed data, sign it
  * with the account (no prompt: Face ID already happened in `authorize`), and
- * hand the signatures to the relayer.
+ * hand the signatures to the relayer. Every struct is the contract's own
+ * (src/lib/sign/types.ts, checked against packages/contracts by
+ * `pnpm check:signatures`).
  */
 
 const MINUTE = 60n;
@@ -38,15 +42,65 @@ function randomNonce(): Hex {
   return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
-async function permitNonce(owner: Address): Promise<bigint> {
+const noncesAbi = parseAbi(["function nonces(address owner) view returns (uint256)"]);
+
+/** `nonces(owner)` on a contract, or 0 when it isn't reachable (the stub relayer doesn't check). */
+async function readNonce(name: "ausd" | "checkout" | "loanEngine", owner: Address): Promise<bigint> {
+  if (!isConfigured(name)) return 0n;
+  try {
+    const address = await resolveContract(name);
+    if (address === zeroAddress) return 0n;
+    return await publicClient().readContract({ address, abi: noncesAbi, functionName: "nonces", args: [owner] });
+  } catch {
+    return 0n;
+  }
+}
+
+type BuyerState = {
+  checkoutNonce: bigint;
+  tokenNonce: bigint;
+  /** PolarisCheckout.quotePlan(...).permitValue: what the buyer owes in total once this plan opens. */
+  permitValue: bigint | null;
+  /**
+   * The Subscribe permit's value, from Polaris for Business: the buyer's
+   * current allowance to PolarisPayments (every other subscription renews
+   * from it) plus this plan's authorised periods. A permit replaces the
+   * allowance, so signing only this plan's periods would starve the others.
+   */
+  subscriptionPermitValue: bigint | null;
+};
+
+/**
+ * What the buyer's checkout signatures depend on right now. From Polaris for
+ * Business for a real session (it reads the chain), else from our own reads.
+ */
+async function buyerState(link: PaymentLink, buyer: Address): Promise<BuyerState> {
+  if (link.session && apiConfigured()) {
+    const s = await api<{
+      buyer: { checkoutNonce: string; tokenNonce: string; quote: { permitValue: string } | null; subscription?: { permitValue: string } | null } | null;
+    }>(`/api/public/sessions/${encodeURIComponent(link.id)}?buyer=${buyer}`);
+    if (s.buyer) {
+      return {
+        checkoutNonce: BigInt(s.buyer.checkoutNonce),
+        tokenNonce: BigInt(s.buyer.tokenNonce),
+        permitValue: s.buyer.quote ? BigInt(s.buyer.quote.permitValue) : null,
+        subscriptionPermitValue: s.buyer.subscription ? BigInt(s.buyer.subscription.permitValue) : null,
+      };
+    }
+  }
+  const [checkoutNonce, tokenNonce] = await Promise.all([readNonce("checkout", buyer), readNonce("ausd", buyer)]);
+  return { checkoutNonce, tokenNonce, permitValue: null, subscriptionPermitValue: null };
+}
+
+const allowanceAbi = parseAbi(["function allowance(address owner, address spender) view returns (uint256)"]);
+
+/** AUSD `allowance(owner, spender)`, or 0 when it isn't reachable. */
+async function readAllowance(owner: Address, spender: Address): Promise<bigint> {
   if (!isConfigured("ausd")) return 0n;
   try {
-    return await publicClient().readContract({
-      address: contractAddress("ausd"),
-      abi: parseAbi(["function nonces(address owner) view returns (uint256)"]),
-      functionName: "nonces",
-      args: [owner],
-    });
+    const address = await resolveContract("ausd");
+    if (address === zeroAddress) return 0n;
+    return await publicClient().readContract({ address, abi: allowanceAbi, functionName: "allowance", args: [owner, spender] });
   } catch {
     return 0n;
   }
@@ -69,52 +123,51 @@ export async function payLink(
 ): Promise<RelayReceipt> {
   const t = now();
   if (mode === "now") {
-    const domain = await getDomain("ausd");
+    const [domain, payments] = await Promise.all([getDomain("ausd"), resolveContract("payments")]);
     const signed = await sign(
       account,
       buildReceiveWithAuthorization(domain, {
         from: account.address,
-        to: contractAddress("payments"),
+        to: payments,
         value: link.amount,
         validAfter: 0n,
         validBefore: t + 10n * MINUTE,
-        // Commits the signature to this merchant and this order.
+        // Commits the signature to this merchant and this order: the relayer can't redirect it.
         nonce: paymentNonce(link.merchant.address, link.orderId),
       }),
     );
     return relayer.payNow({ link, payer: account.address, authorization: signed });
   }
 
+  const [checkoutDomain, tokenDomain, state] = await Promise.all([getDomain("checkout"), getDomain("ausd"), buyerState(link, account.address)]);
+  const deadline = t + 15n * MINUTE;
+
   if (mode === "later") {
     const offer = link.modes.later;
     if (!offer) throw new Error("This link doesn't offer Pay in 4");
-    const [checkoutDomain, tokenDomain, nonce] = await Promise.all([
-      getDomain("checkout"),
-      getDomain("ausd"),
-      permitNonce(account.address),
-    ]);
-    const deadline = t + 15n * MINUTE;
+    const loanEngine = await resolveContract("loanEngine");
     const intent = await sign(
       account,
       buildPlanIntent(checkoutDomain, {
-        borrower: account.address,
+        buyer: account.address,
         merchant: link.merchant.address,
         principal: link.amount,
         installments: offer.installments,
         interval: BigInt(offer.interval),
-        orderId: orderIdToBytes32(link.orderId),
+        orderId: link.orderId,
+        nonce: state.checkoutNonce,
         deadline,
       }),
     );
-    // One allowance backs the whole book (§5.2): what's owed already plus this plan.
+    // One allowance backs the whole book (§5.2): everything owed already plus this plan.
     const permit = await sign(
       account,
       buildPermit(tokenDomain, {
         owner: account.address,
-        spender: contractAddress("loanEngine"),
-        value: (opts.outstanding ?? 0n) + offer.total,
-        nonce,
-        deadline,
+        spender: loanEngine,
+        value: state.permitValue ?? (opts.outstanding ?? 0n) + offer.total,
+        nonce: state.tokenNonce,
+        deadline: t + 30n * MINUTE,
       }),
     );
     return relayer.openPlan({ link, intent, permit });
@@ -122,24 +175,31 @@ export async function payLink(
 
   const offer = link.modes.subscription;
   if (!offer) throw new Error("This link doesn't offer a subscription");
-  const [checkoutDomain, tokenDomain, nonce] = await Promise.all([
-    getDomain("checkout"),
-    getDomain("ausd"),
-    permitNonce(account.address),
-  ]);
-  const deadline = t + 15n * MINUTE;
+  const payments = await resolveContract("payments");
   const intent = await sign(
     account,
-    buildSubscribeIntent(checkoutDomain, { subscriber: account.address, planId: offer.planId, deadline }),
+    buildSubscribeIntent(checkoutDomain, {
+      buyer: account.address,
+      merchant: link.merchant.address,
+      planId: offer.planId,
+      pricePerPeriod: offer.price,
+      periodSeconds: BigInt(offer.periodSeconds),
+      orderId: link.orderId,
+      nonce: state.checkoutNonce,
+      deadline,
+    }),
   );
+  // One allowance to PolarisPayments backs every subscription the buyer has: keep what the others need, add this one.
+  const permitValue =
+    state.subscriptionPermitValue ?? (await readAllowance(account.address, payments)) + offer.price * BigInt(offer.periodsAuthorised);
   const permit = await sign(
     account,
     buildPermit(tokenDomain, {
       owner: account.address,
-      spender: contractAddress("payments"),
-      value: offer.price * BigInt(offer.periodsAuthorised),
-      nonce,
-      deadline,
+      spender: payments,
+      value: permitValue,
+      nonce: state.tokenNonce,
+      deadline: t + 30n * MINUTE,
     }),
   );
   return relayer.subscribe({ link, intent, permit });
@@ -156,7 +216,8 @@ export type CreatedSendLink = {
 /**
  * Send by link. A throwaway key is born here and travels only inside the
  * link's fragment, which browsers never send to a server. The sender's
- * signature escrows the dollars against that key's address.
+ * signature escrows the dollars against that key's address, and the key
+ * itself signs `Open`, so only whoever holds the link could have opened it.
  */
 export async function createSendLink(
   account: LocalAccount,
@@ -165,15 +226,16 @@ export async function createSendLink(
   origin: string,
 ): Promise<CreatedSendLink> {
   const linkPrivateKey = generatePrivateKey();
-  const linkKey = privateKeyToAccount(linkPrivateKey).address;
+  const linkAccount = privateKeyToAccount(linkPrivateKey);
+  const linkKey = linkAccount.address;
   const t = now();
   const expiresAt = t + BigInt(SEND_LINK_LIFETIME_DAYS) * 86_400n;
-  const domain = await getDomain("ausd");
+  const [tokenDomain, sendDomain, send] = await Promise.all([getDomain("ausd"), getDomain("send"), resolveContract("send")]);
   const authorization = await sign(
     account,
-    buildReceiveWithAuthorization(domain, {
+    buildReceiveWithAuthorization(tokenDomain, {
       from: account.address,
-      to: contractAddress("send"),
+      to: send,
       value: amount,
       validAfter: 0n,
       validBefore: t + 10n * MINUTE,
@@ -181,7 +243,8 @@ export async function createSendLink(
       nonce: sendNonce(linkKey, expiresAt),
     }),
   );
-  const receipt = await relayer.send({ sender: account.address, senderName, linkKey, amount, expiresAt, authorization });
+  const open = await sign(linkAccount, buildOpen(sendDomain, { sender: account.address, amount, expiresAt }));
+  const receipt = await relayer.send({ sender: account.address, senderName, linkKey, amount, expiresAt, authorization, open });
   const fragment = new URLSearchParams({ k: linkPrivateKey, a: amountParam(amount), n: senderName });
   return {
     url: `${origin}/claim#${fragment.toString()}`,
@@ -192,7 +255,11 @@ export async function createSendLink(
   };
 }
 
-/** Claim: the link's key signs the recipient's address. No account signature needed. */
+/**
+ * Claim: the link's key signs the recipient's address and a deadline. No
+ * account signature needed. Until the deadline passes the claim can't be
+ * redirected (PolarisSend), so it is kept short.
+ */
 export async function claimLink(
   recipient: Address,
   linkPrivateKey: Hex,
@@ -201,8 +268,9 @@ export async function claimLink(
 ): Promise<RelayReceipt> {
   const linkAccount = privateKeyToAccount(linkPrivateKey);
   const domain = await getDomain("send");
-  const claim = await sign(linkAccount, buildClaim(domain, { to: recipient }));
-  return relayer.claim({ linkKey: linkAccount.address, claim, amount, senderName });
+  const deadline = now() + 15n * MINUTE;
+  const claim = await sign(linkAccount, buildClaim(domain, { to: recipient, deadline }));
+  return relayer.claim({ linkKey: linkAccount.address, claim, deadline, amount, senderName });
 }
 
 export async function cancelSendLink(account: LocalAccount, linkKey: Address): Promise<RelayReceipt> {
@@ -236,6 +304,35 @@ export async function transferTo(account: LocalAccount, to: Person, amount: Micr
   return relayer.transfer({ to, authorization });
 }
 
+const loanAbi = parseAbi([
+  "function outstandingOf(uint256 loanId) view returns (uint256)",
+  "function getLoan(uint256 loanId) view returns ((address borrower, address merchant, uint128 principal, uint128 totalOwed, uint128 totalRepaid, uint32 installmentCount, uint32 installmentsPaid, uint64 startedAt, uint64 intervalSeconds, uint8 status))",
+]);
+
+/**
+ * Pay the rest of a plan early. The intent pins the plan's current state
+ * (`expectedRepaid`), so it can't be replayed after a collection moved it.
+ */
 export async function payEarly(account: LocalAccount, plan: Plan): Promise<RelayReceipt> {
-  return relayer.payEarly({ planId: plan.id, loanId: plan.loanId, borrower: account.address });
+  let outstanding = plan.instalments.filter((i) => i.paidAt === null).reduce((sum, i) => sum + i.amount, 0n);
+  let repaid = plan.instalments.filter((i) => i.paidAt !== null).reduce((sum, i) => sum + i.amount, 0n);
+  if (isConfigured("loanEngine")) {
+    try {
+      const address = await resolveContract("loanEngine");
+      const [owed, loan] = await Promise.all([
+        publicClient().readContract({ address, abi: loanAbi, functionName: "outstandingOf", args: [plan.loanId] }),
+        publicClient().readContract({ address, abi: loanAbi, functionName: "getLoan", args: [plan.loanId] }),
+      ]);
+      outstanding = owed;
+      repaid = loan.totalRepaid;
+    } catch {
+      // keep the plan's own figures; the relayer refuses a stale intent anyway
+    }
+  }
+  const [domain, nonce] = await Promise.all([getDomain("loanEngine"), readNonce("loanEngine", account.address)]);
+  const repay = await sign(
+    account,
+    buildRepayIntent(domain, { loanId: plan.loanId, amount: outstanding, expectedRepaid: repaid, nonce, deadline: now() + 15n * MINUTE }),
+  );
+  return relayer.payEarly({ planId: plan.id, loanId: plan.loanId, borrower: account.address, repay });
 }

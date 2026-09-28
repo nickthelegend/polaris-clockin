@@ -1,0 +1,20 @@
+{
+  "schedule": "0 0 14 * * *",
+  "chainSelectorName": "monad-testnet",
+  "receiver": null,
+  "loanEngine": null,
+  "payments": null,
+  "forwarder": "0xF8344CFd5c43616a4366C34E3EEE75af79a74482",
+  "candidates": {
+    "indexerUrl": null,
+    "indexerQuery": null,
+    "indexerLimit": 200,
+    "recentWindow": 150,
+    "sweepWindow": 60
+  },
+  "liquidate": true,
+  "maxTasksPerReport": 40,
+  "checkBatch": 72,
+  "gas": { "overhead": "300000", "headroomBps": 1500, "min": "400000", "max": "9500000" },
+  "callback": null
+}

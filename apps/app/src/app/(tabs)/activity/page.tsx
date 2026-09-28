@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Activity } from "./activity";
+import { Activity } from "@/screens/activity";
 
 export const metadata: Metadata = { title: "Activity" };
 

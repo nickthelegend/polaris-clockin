@@ -140,6 +140,18 @@ export function formatAgo(iso: string, now = Date.now()): string {
   return d === 1 ? "yesterday" : `${d} days ago`;
 }
 
+/** How long until a time: "in 9 min", "in 3 h", "now". */
+export function formatIn(iso: string, now = Date.now()): string {
+  const diff = new Date(iso).getTime() - now;
+  const min = Math.ceil(diff / 60_000);
+  if (min <= 0) return "now";
+  if (min < 60) return `in ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `in ${h} h`;
+  const d = Math.round(h / 24);
+  return d === 1 ? "tomorrow" : `in ${d} days`;
+}
+
 export function isToday(iso: string, now = Date.now()): boolean {
   const a = new Date(iso);
   const b = new Date(now);

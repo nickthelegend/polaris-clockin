@@ -1,7 +1,16 @@
+const path = require("node:path");
+
 require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config({ path: "../../.env" });
+// The repo-root .env (git-ignored). Resolved from this file, not from the
+// shell's working directory, so `pnpm --filter` and a plain `npx hardhat` in
+// this folder read the same file.
+require("dotenv").config({ path: path.join(__dirname, "..", "..", ".env") });
 
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
+const accounts = DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [];
+
+/** The local node the end-to-end run uses: `pnpm node:local` (port 8600). */
+const LOCAL_NODE_PORT = Number(process.env.POLARIS_LOCAL_NODE_PORT || 8600);
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -9,7 +18,7 @@ module.exports = {
     version: "0.8.24",
     settings: {
       optimizer: { enabled: true, runs: 200 },
-      // Sepolia has cancun opcodes available.
+      // Monad and Sepolia both have the cancun opcodes.
       evmVersion: "cancun",
     },
   },
@@ -17,27 +26,38 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
+    // A `hardhat node` started by scripts/e2e-local.js (or `pnpm node:local`).
+    // Its accounts are the node's own unlocked test accounts.
+    monadLocal: {
+      url: `http://127.0.0.1:${LOCAL_NODE_PORT}`,
+      chainId: 31337,
+    },
     // Monad is EVM-equivalent, so the same compiler settings apply. Monad
     // charges gas on the gas limit rather than gas used, so every sender we
-    // write estimates first instead of passing a blanket limit.
+    // write estimates first instead of passing a blanket limit (lib/tx.js).
     monadTestnet: {
       url: process.env.MONAD_TESTNET_RPC_URL || "https://testnet-rpc.monad.xyz",
       chainId: 10143,
-      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+      accounts,
     },
     monad: {
       url: process.env.MONAD_RPC_URL || "https://rpc.monad.xyz",
       chainId: 143,
-      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+      accounts,
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com",
       chainId: 11155111,
-      accounts: DEPLOYER_PRIVATE_KEY ? [DEPLOYER_PRIVATE_KEY] : [],
+      accounts,
     },
   },
   etherscan: {
-    apiKey: { sepolia: process.env.ETHERSCAN_API_KEY || "" },
+    // One Etherscan V2 key covers Sepolia and Monadscan (Monad testnet is on
+    // the free tier: https://docs.etherscan.io/supported-chains).
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
+      monadTestnet: process.env.ETHERSCAN_API_KEY || "",
+    },
     customChains: [
       {
         network: "sepolia",
@@ -47,6 +67,15 @@ module.exports = {
           browserURL: "https://sepolia.etherscan.io",
         },
       },
+      {
+        network: "monadTestnet",
+        chainId: 10143,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=10143",
+          browserURL: "https://testnet.monadscan.com",
+        },
+      },
     ],
   },
+  sourcify: { enabled: false },
 };

@@ -1,0 +1,20 @@
+// What `cre workflow build` typechecks: main.ts and everything it imports, with
+// no Node, DOM or Bun types, so an API the WASM runtime lacks fails the build.
+{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "customConditions": ["source"],
+    "lib": ["ESNext"],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["main.ts"]
+}

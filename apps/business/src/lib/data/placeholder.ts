@@ -1,4 +1,5 @@
 import { payInFourQuote, PLAN_INSTALLMENTS, PLAN_INTERVAL_DAYS } from "./format";
+import { linkUrl } from "./links";
 import type {
   Address,
   Cents,
@@ -12,16 +13,21 @@ import type {
 } from "./types";
 
 /**
- * Sample data for a merchant, until the indexer is connected.
+ * A merchant's sample book.
+ *
+ * The server serves it only to a merchant created while no chain is
+ * connected (`MerchantRecord.sample`); with a chain, everything shown comes
+ * from the chain and a new merchant starts empty. The browser uses it for the
+ * per-viewer "Preview with sample data" and the development mock session.
  *
  * It is deterministic per merchant (seeded from their ID), so a reload shows
- * the same book, and it is internally consistent: every Pay in 4 payment has a
- * plan, the balance is what was paid in since the last payout, and each payout
- * is what came in between it and the one before. The UI labels it as sample
- * data everywhere it appears.
+ * the same book, and internally consistent: every Pay in 4 payment has a plan,
+ * the balance is what was paid in since the last payout, and each payout is
+ * what came in between it and the one before. The UI puts a "Sample" chip on
+ * every card and row that shows it.
  */
 
-export const PAY_LINK_BASE = "https://pay.polarispay.app";
+export { linkUrl };
 /** Merchant fee on direct payments and subscription charges. Pay in 4 pays the merchant 100%. */
 export const MERCHANT_FEE_BPS = 50;
 
@@ -92,10 +98,6 @@ function feeFor(mode: PayMode, amount: Cents): Cents {
 
 export function newLinkId(r: { id: (n: number) => string }): string {
   return r.id(10);
-}
-
-export function linkUrl(id: string): string {
-  return `${PAY_LINK_BASE}/${id}`;
 }
 
 export function seedMerchantBook(merchantId: string, now = Date.now()): SampleBook {
@@ -234,11 +236,14 @@ export function seedMerchantBook(merchantId: string, now = Date.now()): SampleBo
 
   const balanceCents = sumNet(payments, from, now + 1);
 
+  // Every record is marked, so a server that merges them with the
+  // merchant's own links can label each row.
+  const mark = <T extends object>(rows: T[]) => rows.map((row) => ({ ...row, sample: true }));
   return {
-    links: links.reverse(),
-    payments,
-    plans,
-    payouts,
+    links: mark(links.reverse()),
+    payments: mark(payments),
+    plans: mark(plans),
+    payouts: mark(payouts),
     balanceCents,
     collector: { state: "running", lastPassAt: new Date(now - r.int(20, 90) * 1000).toISOString(), runner: "cre" },
   };

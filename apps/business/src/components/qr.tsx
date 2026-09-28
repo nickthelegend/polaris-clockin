@@ -1,10 +1,10 @@
 "use client";
 
+import { Button } from "@polaris/ui";
 import { Download } from "lucide-react";
 import QRCode from "qrcode";
 import { useMemo } from "react";
 
-import { Button } from "./ui";
 
 const QUIET = 4;
 
@@ -61,7 +61,7 @@ export function DownloadQrButton({ value, filename }: { value: string; filename:
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return (
-    <Button variant="secondary" size="sm" onClick={download} icon={<Download className="size-3.5" aria-hidden />}>
+    <Button variant="outline" size="sm" onClick={download} icon={<Download />}>
       QR as SVG
     </Button>
   );

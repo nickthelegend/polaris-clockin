@@ -4,16 +4,28 @@
  *   pnpm --filter @polaris/app check:signatures
  *
  * For every struct it verifies that:
- *   1. the field list encodes to exactly the typehash preimage the contract
- *      declares (e.g. "Claim(address to)");
+ *   1. the typehash preimage in the contract's Solidity source (read from the
+ *      file, e.g. `keccak256("Claim(address to,uint256 deadline)")`) equals
+ *      the app's string, and the app's field list encodes to exactly it;
  *   2. the digest viem signs equals the one the contract computes by hand,
  *      keccak256(0x1901 ‖ domainSeparator ‖ keccak256(abi.encode(TYPEHASH, ...fields)));
  *   3. a signature from the builder recovers to its signer.
  * It also pins the two nonce derivations and the ERC-5267 field filtering.
  *
+ * The sources come from packages/contracts/contracts. A contract that isn't in
+ * this checkout yet (PolarisCheckout lives on its own branch until it merges)
+ * is read from git: the refs in POLARIS_CONTRACTS_REFS (comma separated),
+ * metropolis/checkout and then metropolis/api by default. A contract found
+ * nowhere fails the check.
+ *
  * Runs on Node 22.18+ (built-in TypeScript type stripping).
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import {
   type Address,
   concat,
@@ -33,14 +45,15 @@ import {
   buildCancel,
   buildCancelSubscription,
   buildClaim,
+  buildOpen,
   buildPermit,
   buildPlanIntent,
   buildReceiveWithAuthorization,
+  buildRepayIntent,
   buildSubscribeIntent,
   buildTransferWithAuthorization,
   domainFromErc5267,
   type Eip712Domain,
-  orderIdToBytes32,
   paymentNonce,
   sendNonce,
   TYPE_REGISTRY,
@@ -81,29 +94,102 @@ const ozDomainSeparator = keccak256(
   ),
 );
 
-// 1. encodeType strings
+/* ── The contracts' own typehash strings ─────────────────────────────────── */
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repo = resolve(here, "../../..");
+const contractsDir = resolve(repo, "packages/contracts/contracts");
+const REFS = (process.env.POLARIS_CONTRACTS_REFS ?? "metropolis/checkout,metropolis/api")
+  .split(",")
+  .map((r) => r.trim())
+  .filter(Boolean);
+
+type Source = { text: string; from: string };
+const sources = new Map<string, Source>();
+
+/** A Solidity file's text: this checkout first, then the git refs above. */
+function solidity(file: string): Source {
+  const cached = sources.get(file);
+  if (cached) return cached;
+  let found: Source | null = null;
+  if (file.startsWith("@openzeppelin/")) {
+    const path = resolve(repo, "packages/contracts/node_modules", file);
+    if (existsSync(path)) found = { text: readFileSync(path, "utf8"), from: "packages/contracts/node_modules" };
+  } else {
+    const path = resolve(contractsDir, file);
+    if (existsSync(path)) found = { text: readFileSync(path, "utf8"), from: "this checkout" };
+    for (const ref of found ? [] : REFS) {
+      try {
+        const text = execFileSync("git", ["show", `${ref}:packages/contracts/contracts/${file}`], {
+          cwd: repo,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        found = { text, from: `git ${ref}` };
+        break;
+      } catch {
+        /* not on this ref */
+      }
+    }
+  }
+  assert.ok(found, `${file} wasn't found in packages/contracts or on ${REFS.join(", ")}`);
+  sources.set(file, found);
+  return found;
+}
+
+/** The string inside `bytes32 ... NAME = keccak256("...")`, across line breaks. */
+function typehashPreimage(file: string, constant: string): { preimage: string; from: string } {
+  const { text, from } = solidity(file);
+  const pattern = new RegExp(
+    String.raw`bytes32\s+(?:(?:public|private|internal)\s+)?constant\s+` + constant + String.raw`\s*=\s*keccak256\(\s*"([^"]+)"\s*\)`,
+  );
+  const match = pattern.exec(text);
+  assert.ok(match, `${constant} isn't declared as keccak256("...") in ${file}`);
+  return { preimage: match[1]!, from };
+}
+
+// 1. encodeType strings, against the Solidity source
 for (const entry of TYPE_REGISTRY) {
-  await check(`${entry.primaryType} encodes to the contract's typehash preimage`, () => {
+  await check(`${entry.primaryType} matches ${entry.contract.split("/").pop()} ${entry.constant}`, () => {
+    const { preimage, from } = typehashPreimage(entry.contract, entry.constant);
+    assert.equal(entry.solidity, preimage, `the app's ${entry.primaryType} differs from the contract (read from ${from})`);
     const fields = (entry.types as Record<string, readonly { name: string; type: string }[]>)[entry.primaryType];
     assert.ok(fields, "field list present");
     const encoded = `${entry.primaryType}(${fields.map((f) => `${f.type} ${f.name}`).join(",")})`;
-    assert.equal(encoded, entry.solidity);
+    assert.equal(encoded, preimage);
   });
+}
+
+/** EIP-712 encodeData for one field: dynamic `string` and `bytes` are hashed. */
+function encodeField(type: string, value: unknown): { type: string; value: unknown } {
+  if (type === "string") return { type: "bytes32", value: keccak256(stringToBytes(value as string)) };
+  if (type === "bytes") return { type: "bytes32", value: keccak256(value as Hex) };
+  return { type, value };
 }
 
 // 2 + 3. digests and recovery for every builder
 const now = 1_790_000_000n;
 const cases = [
   buildPlanIntent(domain, {
-    borrower: buyer.address,
+    buyer: buyer.address,
     merchant,
     principal: 200_000_000n,
     installments: 4,
     interval: 604_800n,
-    orderId: orderIdToBytes32("SOL-2026-0142"),
+    orderId: "SOL-2026-0142",
+    nonce: 0n,
     deadline: now + 900n,
   }),
-  buildSubscribeIntent(domain, { subscriber: buyer.address, planId: 7n, deadline: now + 900n }),
+  buildSubscribeIntent(domain, {
+    buyer: buyer.address,
+    merchant,
+    planId: 7n,
+    pricePerPeriod: 29_000_000n,
+    periodSeconds: 2_592_000n,
+    orderId: "KIN-M-5512",
+    nonce: 1n,
+    deadline: now + 900n,
+  }),
   buildReceiveWithAuthorization(domain, {
     from: buyer.address,
     to: merchant,
@@ -121,9 +207,11 @@ const cases = [
     nonce: keccak256(toHex("transfer")),
   }),
   buildPermit(domain, { owner: buyer.address, spender: merchant, value: 201_534_246n, nonce: 3n, deadline: now }),
-  buildClaim(domain, { to: buyer.address }),
+  buildOpen(domain, { sender: buyer.address, amount: 50_000_000n, expiresAt: now + 604_800n }),
+  buildClaim(domain, { to: buyer.address, deadline: now + 600n }),
   buildCancel(domain, { linkKey: merchant, deadline: now }),
   buildCancelSubscription(domain, { subId: 12n, deadline: now }),
+  buildRepayIntent(domain, { loanId: 3n, amount: 151_150_684n, expectedRepaid: 50_383_562n, nonce: 0n, deadline: now + 600n }),
 ] as const;
 
 for (const typed of cases) {
@@ -132,10 +220,11 @@ for (const typed of cases) {
     assert.ok(entry);
     const fields = (entry.types as Record<string, readonly { name: string; type: string }[]>)[entry.primaryType]!;
     const message = typed.message as Record<string, unknown>;
+    const encoded = fields.map((f) => encodeField(f.type, message[f.name]));
     const structHash = keccak256(
       encodeAbiParameters(
-        [{ type: "bytes32" }, ...fields.map((f) => ({ type: f.type }))],
-        [keccak256(stringToBytes(entry.solidity)), ...fields.map((f) => message[f.name])],
+        [{ type: "bytes32" }, ...encoded.map((e) => ({ type: e.type }))],
+        [keccak256(stringToBytes(entry.solidity)), ...encoded.map((e) => e.value)],
       ),
     );
     const expected = keccak256(concat(["0x1901", ozDomainSeparator, structHash]));
@@ -163,12 +252,6 @@ await check("send nonce is keccak256(abi.encode(linkKey, uint64 expiresAt))", ()
   assert.equal(sendNonce(merchant, expiresAt), keccak256(encoded));
 });
 
-await check("orderIdToBytes32 hashes text and passes bytes32 through", () => {
-  const raw = keccak256(toHex("x"));
-  assert.equal(orderIdToBytes32(raw), raw);
-  assert.equal(orderIdToBytes32("SOL-1"), keccak256(toHex("SOL-1")));
-});
-
 await check("ERC-5267 fields 0x0f drop the unused salt", () => {
   const d = domainFromErc5267(
     { name: "AUSD", version: "1", chainId: 10143, verifyingContract: merchant, salt: pad("0x0") },
@@ -176,5 +259,19 @@ await check("ERC-5267 fields 0x0f drop the unused salt", () => {
   );
   assert.deepEqual(Object.keys(d).sort(), ["chainId", "name", "verifyingContract", "version"]);
 });
+
+// The contracts' own struct list, which their suite checks against every typehash on chain.
+const contracts = createRequire(import.meta.url)("../../../packages/contracts/lib/eip712.js") as {
+  TYPES: Record<string, Record<string, { name: string; type: string }[]>>;
+  typeString: (primary: string, fields: { name: string; type: string }[]) => string;
+};
+const onChain: Record<string, { name: string; type: string }[]> = Object.assign({}, ...Object.values(contracts.TYPES));
+for (const entry of TYPE_REGISTRY) {
+  await check(`${entry.primaryType} is the struct packages/contracts signs`, () => {
+    const fields = onChain[entry.primaryType];
+    assert.ok(fields, `packages/contracts/lib/eip712.js defines ${entry.primaryType}`);
+    assert.equal(entry.solidity, contracts.typeString(entry.primaryType, fields));
+  });
+}
 
 console.log(`\n${passed} checks passed`);

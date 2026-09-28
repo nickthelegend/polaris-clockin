@@ -1,4 +1,5 @@
-// A line-for-line JavaScript mirror of ScoreManager.scoreFromFacts.
+// A line-for-line JavaScript mirror of ScoreManager.scoreFromFacts and
+// ScoreManager.isThinFile.
 //
 // The underwriting workflow on CRE, the app's "why is my limit this" screen,
 // and anyone re-deriving a decision all need the opening score without a chain
@@ -23,6 +24,11 @@ const MAX_ACTIVITY_POINTS = 50n;
 const MAX_BALANCE_POINTS = 50n;
 const MAX_DEFI_POINTS = 30n;
 const EXCHANGE_FUNDED_POINTS = 10n;
+
+// The least history a report must show before it opens anything
+// (ScoreManager.isThinFile).
+const MIN_HISTORY_DAYS = 90n;
+const MIN_HISTORY_TXS = 10n;
 
 const USD = 1_000_000n; // AUSD has 6 decimals
 
@@ -62,7 +68,20 @@ function scoreFromFacts(f) {
   };
 }
 
+/**
+ * ScoreManager.isThinFile: too little history to open an unsecured line.
+ * `underwrite` refuses such a report (`ThinFile`) unless the facts decline
+ * the wallet outright, so the decision is "no line yet; bring a history
+ * wallet or lock collateral", never the floor score.
+ */
+function isThinFile(f) {
+  return BigInt(f.walletAgeDays) < MIN_HISTORY_DAYS || BigInt(f.txCount) < MIN_HISTORY_TXS;
+}
+
 module.exports = {
+  MIN_HISTORY_DAYS,
+  MIN_HISTORY_TXS,
+  isThinFile,
   UNDERWRITE_FLOOR,
   MIN_SCORE,
   MAX_UNDERWRITTEN_SCORE,

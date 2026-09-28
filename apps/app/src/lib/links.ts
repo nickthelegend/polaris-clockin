@@ -1,4 +1,17 @@
 /**
+ * Your receive link (`/send?to=<account>&n=<name>`, what your code holds) and
+ * how it reads on screen: the site and your name, never the account's 0x
+ * address. The real URL is only ever copied, shared or put in the code.
+ */
+export function receiveLink(origin: string, address: string, name: string): { url: string; shown: string } {
+  const url = `${origin}/send?${new URLSearchParams({ to: address, ...(name ? { n: name } : {}) }).toString()}`;
+  return { url, shown: `${origin.replace(/^https?:\/\//, "")}/send · ${name || "your link"}` };
+}
+
+/** A link slug, a payment link id (`pl_…`) or a checkout session id (`cs_test_…`). */
+const ID = /^[a-z0-9][a-z0-9_-]{1,135}$/i;
+
+/**
  * Turns whatever the buyer scanned or pasted into a path inside this app, or
  * null. Only Polaris destinations are accepted: a code can never send the
  * buyer to another site.
@@ -8,11 +21,12 @@
  *   https://<this origin>/claim#k=…            → /claim#k=…
  *   https://<this origin>/send?to=…            → /send?to=…
  *   sol-brand                                  → /pay/sol-brand
+ *   https://pay.polarispay.app/pay/cs_test_…   → /pay/cs_test_…  (a checkout session)
  */
 export function toAppPath(input: string, origin: string): string | null {
   const text = input.trim();
   if (!text) return null;
-  if (/^[a-z0-9][a-z0-9-]{1,63}$/i.test(text)) return `/pay/${text}`;
+  if (ID.test(text)) return `/pay/${text}`;
 
   let url: URL;
   try {
@@ -25,10 +39,11 @@ export function toAppPath(input: string, origin: string): string | null {
   if (!trusted || (url.protocol !== "https:" && url.origin !== origin)) return null;
 
   if (url.hostname === "pay.polarispay.app") {
-    const id = url.pathname.replace(/^\/+|\/+$/g, "");
-    return /^[a-z0-9][a-z0-9-]{1,63}$/i.test(id) ? `/pay/${id}` : null;
+    // Both pay.polarispay.app/<id> and the SDK's pay.polarispay.app/pay/<id>.
+    const id = url.pathname.replace(/^\/+|\/+$/g, "").replace(/^pay\//, "");
+    return ID.test(id) ? `/pay/${id}` : null;
   }
-  const pay = url.pathname.match(/^\/pay\/([a-z0-9][a-z0-9-]{1,63})\/?$/i);
+  const pay = url.pathname.match(/^\/pay\/([a-z0-9][a-z0-9_-]{1,135})\/?$/i);
   if (pay) return `/pay/${pay[1]}`;
   if (url.pathname === "/claim" && url.hash.length > 1) return `/claim${url.hash}`;
   if (url.pathname === "/send" && url.search) return `/send${url.search}`;

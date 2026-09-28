@@ -38,6 +38,8 @@ export type CreditReason = {
   label: string;
   /** Score points this fact adds (or removes). */
   points: number;
+  /** Where the fact came from, when a provider supplied it: "Nansen", "Zerion". */
+  source?: string | null;
 };
 
 export type CreditLine = {
@@ -54,6 +56,10 @@ export type CreditLine = {
   historyLinked: boolean;
   /** The opening line never goes past this; higher tiers come from repaying. */
   openingCap: Micros;
+  /** When the line opened (the CRE decision); null when not known. The sample book leaves it out. */
+  openedAt?: number | null;
+  /** The score the line opened with; its history starts there. */
+  openingScore?: number | null;
 };
 
 export type Instalment = {
@@ -110,11 +116,18 @@ export type ActivityItem = {
   direction: "in" | "out";
   amount: Micros;
   at: number;
-  counterparty: { kind: "merchant" | "person" | "polaris"; name: string; country?: CountryCode };
+  /** `category` is the merchant's ("Groceries", "Café"), for spending by category. */
+  counterparty: { kind: "merchant" | "person" | "polaris"; name: string; country?: CountryCode; category?: string };
   /** Opens the explorer from "View receipt". */
   txHash: Hex;
   /** Only indexed chain events are "settled" (plan §5.6). */
   status: "settled" | "pending";
+  /** The Pay in 4 plan it belongs to (plan-opened and instalment rows). */
+  planId?: string;
+  /** A send link's key, so its sender can take an unclaimed link back. */
+  linkKey?: Address;
+  /** A sent link: when it was claimed (or taken back). */
+  settledAt?: number;
 };
 
 export type PlanOffer = {
@@ -122,7 +135,7 @@ export type PlanOffer = {
   /** Seconds between instalments. */
   interval: number;
   aprBps: number;
-  /** One amount per instalment; the last absorbs the rounding. */
+  /** One amount per instalment, on the loan engine's ceil ladder. */
   amounts: Micros[];
   total: Micros;
   interest: Micros;
@@ -152,6 +165,30 @@ export type PaymentLink = {
   /** Where "Done" returns to, if the merchant sent the buyer here. */
   successUrl: string | null;
   status: "open" | "paid" | "expired";
+  /**
+   * Set when this is a real checkout session from Polaris for Business
+   * (`/api/public/sessions/{id}`); absent for sample links.
+   */
+  session?: CheckoutSessionInfo;
+};
+
+export type CheckoutSessionInfo = {
+  /** The merchant page that opened the checkout, for `postMessage` (never "*"). */
+  returnOrigin: string;
+  cancelUrl: string | null;
+  expiresAt: number;
+  /** Why Pay in 4 isn't offered, in the buyer's words, when it isn't. */
+  payLaterUnavailable: string | null;
+  /** The way to pay the merchant's page chose (the session's first mode): the checkout opens on it. */
+  preferredMode: "now" | "later" | "subscription" | null;
+  /** How it was paid, once the chain says so. */
+  payment: {
+    mode: "now" | "later" | "subscribe";
+    txHash: Hex;
+    paymentId: Hex | null;
+    planId: string | null;
+    subscriptionId: string | null;
+  } | null;
 };
 
 export type SendLinkStatus = {

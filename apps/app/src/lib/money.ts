@@ -82,9 +82,12 @@ export function amountParam(micros: Micros): string {
 /* ── Local currency (display only) ─────────────────────────────────────────── */
 
 /**
- * Placeholder rates, dollars to local currency. Display only: nothing is ever
- * priced or settled in these. A later step reads a live feed.
+ * Sample rates, dollars to local currency, fixed on `SAMPLE_FX_AS_OF`.
+ * Display only: nothing is ever priced or settled in these, and every place
+ * they show says "sample rate" (LocalEquivalent). A live feed (Chainlink
+ * Data Feeds where they exist) replaces them later.
  */
+export const SAMPLE_FX_AS_OF = "2026-09-20";
 export const MOCK_FX: Readonly<Record<string, number>> = {
   USD: 1,
   ARS: 1182,
