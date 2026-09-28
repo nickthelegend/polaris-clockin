@@ -93,7 +93,7 @@ async function shopCheckout(context, { product, mode, prefix }) {
   await page.reload({ waitUntil: "networkidle" });
   await settle(page, 800);
   await shot(page, `${prefix}-1-shop-product`);
-  await page.getByRole("button", { name: /Add to bag/ }).click();
+  await page.getByRole("button", { name: /Add to bag/ }).filter({ visible: true }).first().click();
   await sleep(1200);
   await shot(page, `${prefix}-2-shop-bag`);
   await page.goto(`${SHOP}/checkout`, { waitUntil: "networkidle", timeout: 120000 });
@@ -336,7 +336,7 @@ async function receiptInPopup(popup, name) {
     await page.evaluate(() => localStorage.removeItem("halcyon.bag.v1"));
     await page.reload({ waitUntil: "networkidle" });
     await settle(page, 800);
-    await page.getByRole("button", { name: /Add to bag/ }).click();
+    await page.getByRole("button", { name: /Add to bag/ }).filter({ visible: true }).first().click();
     await sleep(1200);
     await page.goto(`${SHOP}/checkout`, { waitUntil: "networkidle", timeout: 120000 });
     await settle(page, 1000);

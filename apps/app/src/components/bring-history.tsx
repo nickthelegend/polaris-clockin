@@ -74,6 +74,7 @@ export function BringHistorySheet({
             <p className="-mt-2 text-[15px] text-ui-muted">is your Pay later limit now.</p>
             <DetailsList
               size="sm"
+              wrapLabels
               items={limitReasons(credit.reasons).map((r) => ({ label: <ReasonLabel reason={r} />, value: <span className="text-ui-up">+{r.points}</span> }))}
             />
           </>

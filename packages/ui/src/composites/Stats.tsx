@@ -116,6 +116,8 @@ export type DetailsListProps = Omit<HTMLAttributes<HTMLDListElement>, "children"
   /** `raised` or `sunken` (ref C's grey panel on white); `plain`: rows only, for inside another card. */
   variant?: "raised" | "surface" | "sunken" | "plain";
   size?: "sm" | "md";
+  /** Long labels (sentences) wrap and the values never truncate: for reasons with points. */
+  wrapLabels?: boolean;
 };
 
 /**
@@ -125,7 +127,7 @@ export type DetailsListProps = Omit<HTMLAttributes<HTMLDListElement>, "children"
  * <DetailsList items={[{ label: "Merchant", value: "Blue Bottle" }, { label: "Order", value: "#4821" }]} />
  * ```
  */
-export function DetailsList({ items, variant = "raised", size = "md", className, ...props }: DetailsListProps) {
+export function DetailsList({ items, variant = "raised", size = "md", wrapLabels = false, className, ...props }: DetailsListProps) {
   return (
     <dl
       className={cn(
@@ -145,8 +147,8 @@ export function DetailsList({ items, variant = "raised", size = "md", className,
             size === "sm" ? "min-h-11 text-[14px]" : "min-h-[52px] text-[16px]",
           )}
         >
-          <dt className="shrink-0 text-ui-muted">{it.label}</dt>
-          <dd className="ui-figure min-w-0 truncate text-right text-ui-text">{it.value}</dd>
+          <dt className={cn("text-ui-muted", wrapLabels ? "min-w-0 py-2.5 leading-snug" : "shrink-0")}>{it.label}</dt>
+          <dd className={cn("ui-figure text-right text-ui-text", wrapLabels ? "shrink-0" : "min-w-0 truncate")}>{it.value}</dd>
         </div>
       ))}
     </dl>
