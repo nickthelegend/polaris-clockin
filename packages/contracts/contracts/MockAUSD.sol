@@ -12,7 +12,11 @@ import {IERC3009} from "./interfaces/IERC3009.sol";
  * @notice Local and test stand-in for Agora's AUSD. It has 6 decimals,
  *         ERC-2612 permit and ERC-3009 transfer/receive with authorization:
  *         the three things Polaris needs so that no user ever holds gas.
- * @dev Never deployed to a public network. Monad testnet and mainnet use real
+ * @dev A mock dollar, never real money. It runs on a local node and, while
+ *      the deployer holds no real testnet AUSD to seed the credit pool with,
+ *      on Monad testnet as the demo's clearly labelled stand-in
+ *      (`AUSD_MODE=mock`, decision 24): `mint` is open to anyone, so its
+ *      balances prove nothing about value. Monad mainnet only ever uses real
  *      AUSD, whose EIP-712 domain must be read from the token at runtime
  *      rather than assumed from this mock. Typehashes match Circle's
  *      FiatToken, which is what AUSD follows.
