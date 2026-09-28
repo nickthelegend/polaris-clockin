@@ -71,7 +71,8 @@ Playwright: `PLAYWRIGHT_MODULE=<path>`, and `CHROMIUM=<chrome.exe>` if its
 browser build isn't installed) drives that run headless and writes the
 screenshots in [`docs/demo`](docs/demo). It finds the run's URLs in
 `.demo/demo.json` (or `APP`, `SHOP`, `BUSINESS`, `RPC` and `FAUCET`). The committed ones are from a run in
-which all 15 steps passed:
+which all 24 steps passed (the `x-*` screens were captured right after, on the
+same run):
 
 | Step | Screenshot |
 |---|---|
@@ -80,13 +81,18 @@ which all 15 steps passed:
 | The Polaris checkout in the shop's popup, Face ID confirm | [`10-paynow-4-app-checkout-popup`](docs/demo/10-paynow-4-app-checkout-popup.png), [`10-paynow-5-app-confirm`](docs/demo/10-paynow-5-app-confirm.png) |
 | The popup posts `completed` and closes; the webhook marks the order paid | [`10-paynow-7-shop-order-paid`](docs/demo/10-paynow-7-shop-order-paid.png) |
 | Pay in 4: the checkout opens on Pay in 4; Raise your limit | [`20-payin4-4-app-checkout-popup`](docs/demo/20-payin4-4-app-checkout-popup.png), [`20-payin4-5-raise-your-limit`](docs/demo/20-payin4-5-raise-your-limit.png) |
-| The CRE underwriting workflow opens a $1,000 line on chain, with its reasons | [`20-payin4-6-limit-raised`](docs/demo/20-payin4-6-limit-raised.png) |
+| The CRE underwriting workflow opens a $1,000 line on chain, with its reasons (the linked account's history, the one from Nansen) | [`20-payin4-6-limit-raised`](docs/demo/20-payin4-6-limit-raised.png) |
+| The popup's receipt stays up until the checkout closes itself | [`10-paynow-6-app-receipt`](docs/demo/10-paynow-6-app-receipt.png), [`20-payin4-8b-app-receipt`](docs/demo/20-payin4-8b-app-receipt.png) |
+| A new buyer on a fresh phone: Pay in 4 → Raise your limit offers **Continue with Face ID**, and one tap creates the account and opens the line | [`25-newbuyer-5-raise-your-limit`](docs/demo/25-newbuyer-5-raise-your-limit.png), [`25-newbuyer-6-limit-raised`](docs/demo/25-newbuyer-6-limit-raised.png) |
+| `DEMO_FAST_PLANS=1`: the CRE collections workflow collects the first instalment a minute after checkout | `.demo/logs/cre-collections.log`; the dashboard's Collections card in [`x-1280-dashboard-overview`](docs/demo/x-1280-dashboard-overview.png) |
 | 4 × $87.92, nothing due today; confirm | [`20-payin4-7-app-checkout-with-line`](docs/demo/20-payin4-7-app-checkout-with-line.png), [`20-payin4-8-app-confirm`](docs/demo/20-payin4-8-app-confirm.png) |
 | The shop's order, paid through a Polaris plan (`plan.opened` webhook) | [`20-payin4-9-shop-order-plan`](docs/demo/20-payin4-9-shop-order-plan.png) |
 | Subscribe: the Coffee Club, monthly, in the Polaris popup; the first month charged on chain | [`50-subscribe-2-app-checkout-popup`](docs/demo/50-subscribe-2-app-checkout-popup.png), [`50-subscribe-4-shop-order`](docs/demo/50-subscribe-4-shop-order.png) |
 | Pay directly with a wallet: `polarispay-sdk` `pay()`, one signature, relayed gas-free | [`60-wallet-1-shop-checkout`](docs/demo/60-wallet-1-shop-checkout.png), [`60-wallet-2-shop-order-paid`](docs/demo/60-wallet-2-shop-order-paid.png) |
 | The buyer's app afterwards: balance, credit line, the plan | [`30-app-home-after`](docs/demo/30-app-home-after.png), [`31-app-credit-line`](docs/demo/31-app-credit-line.png), [`32-app-pay-in-4-plans`](docs/demo/32-app-pay-in-4-plans.png) |
 | The dashboard: payments, Envio feed and credit reasons, the plan, registration | [`40-dashboard-overview`](docs/demo/40-dashboard-overview.png), [`41-dashboard-panels`](docs/demo/41-dashboard-panels.png), [`42-dashboard-payments`](docs/demo/42-dashboard-payments.png), [`43-dashboard-pay-in-4`](docs/demo/43-dashboard-pay-in-4.png), [`44-dashboard-settings-registered`](docs/demo/44-dashboard-settings-registered.png) |
+| A dashboard payment link: paid, the receipt says **Done** and goes Home; the next visitor gets a fresh checkout | [`45-dashboard-share-link`](docs/demo/45-dashboard-share-link.png), [`46-link-3-app-receipt`](docs/demo/46-link-3-app-receipt.png), [`46-link-4-next-visitor`](docs/demo/46-link-4-next-visitor.png) |
+| After the run: a send link from "Maya" (name asked once), claimed on a new phone, "Your link was claimed"; Home, Activity, Credit, the dashboard at 1280 and 390 | [`x-1440-send-confirm`](docs/demo/x-1440-send-confirm.png), [`x-1440-send-link-ready`](docs/demo/x-1440-send-link-ready.png), [`x-390-claim-open`](docs/demo/x-390-claim-open.png), [`x-1440-notifications`](docs/demo/x-1440-notifications.png), [`x-1440-home`](docs/demo/x-1440-home.png), [`x-1440-activity`](docs/demo/x-1440-activity.png), [`x-1440-credit-score`](docs/demo/x-1440-credit-score.png), [`x-1280-dashboard-overview`](docs/demo/x-1280-dashboard-overview.png), [`x-1280-dashboard-payments`](docs/demo/x-1280-dashboard-payments.png), [`x-390-dashboard-payments`](docs/demo/x-390-dashboard-payments.png), [`x-1280-landing`](docs/demo/x-1280-landing.png) |
 
 ### Each app on its own
 
@@ -121,7 +127,7 @@ the API. Each app's README lists its environment.
 | The Polaris app | `pnpm --filter @polaris/app typecheck`, `lint`, `check:signatures`, `build` | 43 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 85 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
-| End to end | `pnpm demo:local` + `pnpm demo:e2e` | 15 of 15 steps (Pay now, Pay in 4 with CRE underwriting, Subscribe, direct wallet pay, the dashboard); [`docs/demo`](docs/demo) |
+| End to end | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e` | 24 of 24 steps (Pay now, Pay in 4 with CRE underwriting, a new buyer's one-tap line, a CRE collection, Subscribe, direct wallet pay, the dashboard, a dashboard payment link paid and reopened); [`docs/demo`](docs/demo) |
 | | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
 | | `pnpm --filter @polarispay/contracts e2e:local` | all nine flows; the buyer, sender and freelancer never hold MON |
 | | `pnpm --filter @polaris/cre-workflows e2e:local` | 7 passing (both workflows against real contracts on a local node) |
