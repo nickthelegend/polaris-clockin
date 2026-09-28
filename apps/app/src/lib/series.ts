@@ -91,7 +91,10 @@ function build(end: number, allSteps: Step[], frame: Frame, now: number, origin:
   // frame (one payment isn't smeared into a day-long slope) nor under 15
   // minutes.
   const moving = steps.filter((s) => s.at > from && s.at <= now).length;
-  const ramp = Math.max(15 * MIN, Math.min(span / 8, span / (moving + 1)));
+  const full = Math.max(15 * MIN, Math.min(frameSpan / 8, frameSpan / (moving + 1)));
+  // A line younger than its frame (an account opened minutes ago) is drawn over its own short span:
+  // there each step takes at most an eighth of it, so $0 → $500 → $1,000 reads as steps, not a slope.
+  const ramp = span < frameSpan ? Math.min(span / 8, full) : full;
 
   const exact = (t: number) => end - steps.filter((s) => s.at > t).reduce((sum, s) => sum + s.delta, 0);
   const smooth = (t: number) => end - steps.reduce((sum, s) => sum + s.delta * (1 - ease(t, s.at - ramp, s.at)), 0);

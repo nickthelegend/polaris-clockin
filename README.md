@@ -50,19 +50,27 @@ no public chain):
 | The Polaris app | http://localhost:3000 | the hosted checkout; the dev signer stands in for Face ID (badge on every screen) |
 | Halcyon, the demo shop | http://127.0.0.1:3600 | `polarispay-sdk` against the real API and checkout (not its dev mock) |
 | A faucet | http://127.0.0.1:3650/mint | test dollars; the app's **Add money** offers it on this chain |
+| The CRE collections cron | every minute | `workflows` `collections:local`: the real `polaris-collections` handler on the CRE SDK's test runtime; it collects due Pay in 4 instalments through `CollectionsReceiver`, reports each run to the API (the dashboard's Collections card, `installment.collected` webhooks) and logs to `.demo/logs/cre-collections.log` |
 
 Then: open the shop, add something to the bag, **check out with Polaris**. The
 checkout opens in a popup (the app's `/pay/[id]` sheet). Pay now, or choose
 Pay in 4: a new buyer has no line, so **Raise your limit** runs the CRE
 underwriting workflow first. The shop's order is marked paid by the Polaris
 webhook, and the merchant dashboard at http://localhost:3100/dashboard shows
-the payment and the plan. Ports move with `DEMO_NODE_PORT`,
+the payment and the plan. Before it prints its URLs, `demo:local` opens every
+page and API route once, so no first click waits for `next dev` to compile.
+`DEMO_FAST_PLANS=1` makes Pay in 4 instalments a minute apart instead of a
+week, so the collections run shows on camera (instalment 1 is collected about
+two minutes after checkout; Pay in 4's 10% APR is pro-rated over those minutes, so the plan shows $0.00 interest). Ports move with `DEMO_NODE_PORT`,
 `DEMO_BUSINESS_PORT`, `DEMO_APP_PORT`, `DEMO_SHOP_PORT`, `DEMO_TRIGGER_PORT`
-and `DEMO_FAUCET_PORT`. Logs and state are in `.demo/`.
+and `DEMO_FAUCET_PORT`. Logs and state are in `.demo/`; `.demo/demo.json`
+has every URL of the run.
 
 `pnpm demo:e2e` ([`scripts/demo-e2e.cjs`](scripts/demo-e2e.cjs), needs
-Playwright: `PLAYWRIGHT_MODULE=<path>`) drives that run headless and writes the
-screenshots in [`docs/demo`](docs/demo). The committed ones are from a run in
+Playwright: `PLAYWRIGHT_MODULE=<path>`, and `CHROMIUM=<chrome.exe>` if its
+browser build isn't installed) drives that run headless and writes the
+screenshots in [`docs/demo`](docs/demo). It finds the run's URLs in
+`.demo/demo.json` (or `APP`, `SHOP`, `BUSINESS`, `RPC` and `FAUCET`). The committed ones are from a run in
 which all 15 steps passed:
 
 | Step | Screenshot |
@@ -103,15 +111,15 @@ the API. Each app's README lists its environment.
 |---|---|---|
 | Contracts | `pnpm --filter @polarispay/contracts test` | 467 passing |
 | `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 146 passing; ESM and CJS builds |
-| Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 261 passing |
+| Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 263 passing |
 | Gateway | `pnpm --filter @polarispay/gateway test` | 7 passing |
 | `@polaris/db` | `pnpm --filter @polaris/db test` | 29 passing |
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check` | config and schema in sync (codegen and its tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
 | CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 101 passing; both workflows compile to WASM |
-| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 206 passing; the API auth check covers every route |
+| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 211 passing; the API auth check covers every route |
 | The Polaris app | `pnpm --filter @polaris/app typecheck`, `lint`, `check:signatures`, `build` | 43 signature checks against the Solidity typehashes |
-| Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 84 passing; the build proves no dev mock ships |
+| Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 85 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
 | End to end | `pnpm demo:local` + `pnpm demo:e2e` | 15 of 15 steps (Pay now, Pay in 4 with CRE underwriting, Subscribe, direct wallet pay, the dashboard); [`docs/demo`](docs/demo) |
 | | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
@@ -292,8 +300,8 @@ What each sponsor asks for, where this repository meets it, and how to check.
 
 ![The customer app](docs/screenshots/customer-app-screens.jpg)
 
-The desktop layout of the same app is in [`docs/demo`](docs/demo) (the
-`00`-`01` and `30`-`32` captures).
+More desktop captures of the app, from the end-to-end run, are in
+[`docs/demo`](docs/demo) (`01`, `30`-`32` and the `x-1440-*` screens).
 
 ### Halcyon, the demo shop
 
