@@ -436,6 +436,32 @@ export type WebhookDeliveryRecord = {
 /* ── Chain sync bookkeeping ─────────────────────────────────────────────── */
 
 export type ChainCursorRecord = { id: string; block: number; updatedAt: IsoDate };
+
+/**
+ * Dollars moving in or out of one address outside a merchant's own records:
+ * money added (minted or bridged in), transfers to and from people, send
+ * links made, claimed or taken back, and the transfers inside a payment or
+ * an instalment (kept so a balance history adds up). One record per address
+ * per AUSD Transfer log: `<txHash>:<logIndex>:<address>`.
+ */
+export type WalletMoveRecord = {
+  id: string;
+  /** The address whose book this is, lowercased. */
+  address: string;
+  kind: "added" | "received" | "sent" | "sent-link" | "claimed" | "link-returned" | "payment" | "refund" | "instalment";
+  direction: "in" | "out";
+  amountUnits: string;
+  counterparty: Address;
+  txHash: Hex;
+  logIndex: number;
+  blockNumber: number;
+  /** A send link's key (sent-link, claimed, link-returned). */
+  linkKey: Address | null;
+  /** For a sent link: when it was claimed, or taken back. */
+  settledAt: IsoDate | null;
+  settledAs: "claimed" | "returned" | null;
+  at: IsoDate;
+};
 /** A chain log we have handled: `<txHash>:<logIndex>`. Claimed before handling, released if handling fails. */
 export type ProcessedLogRecord = { id: string; txHash: Hex; blockNumber: number; at: IsoDate };
 /**
@@ -652,6 +678,15 @@ export const COLLECTIONS = {
     id: (d: ChainCursorRecord) => d.id,
     indexes: {},
   } satisfies CollectionSpec<ChainCursorRecord>,
+  walletMoves: {
+    name: "wallet_moves",
+    id: (d: WalletMoveRecord) => d.id,
+    indexes: {
+      address: (d: WalletMoveRecord) => d.address,
+      linkKey: (d: WalletMoveRecord) => lower(d.linkKey),
+      at: (d: WalletMoveRecord) => d.at,
+    },
+  } satisfies CollectionSpec<WalletMoveRecord>,
   processedLogs: {
     name: "processed_logs",
     id: (d: ProcessedLogRecord) => d.id,
@@ -707,6 +742,7 @@ export function collections(store: Store) {
     webhookEvents: store.collection(COLLECTIONS.webhookEvents),
     webhookDeliveries: store.collection(COLLECTIONS.webhookDeliveries),
     cursors: store.collection(COLLECTIONS.cursors),
+    walletMoves: store.collection(COLLECTIONS.walletMoves),
     processedLogs: store.collection(COLLECTIONS.processedLogs),
     collectorRuns: store.collection(COLLECTIONS.collectorRuns),
     failedLogs: store.collection(COLLECTIONS.failedLogs),

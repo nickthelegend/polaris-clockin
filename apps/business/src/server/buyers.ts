@@ -4,11 +4,15 @@ import type { MerchantRecord } from "@polaris/db";
 import type { Address } from "viem";
 
 import { getDb } from "./db";
+import { walletMoves } from "./wallet-moves";
 
 /**
  * A buyer's book as the Polaris app shows it: their Pay in 4 plans, their
  * subscriptions and their payments to Polaris merchants, from the records
- * the chain sync keeps (every one of them came from a chain event).
+ * the chain sync keeps (every one of them came from a chain event), and
+ * every other dollar in or out of the address (`moves`: money added,
+ * transfers, send links made, claimed or taken back, instalments), read
+ * from the chain's AUSD and PolarisSend logs (wallet-moves.ts).
  *
  * Public by address, so only what the chain already shows: amounts,
  * schedules, the merchant's name and address, transaction hashes. Never a
@@ -25,10 +29,11 @@ function merchantView(m: MerchantRecord | undefined, fallback: string) {
 export async function buyerBook(address: Address) {
   const db = getDb();
   const who = address.toLowerCase();
-  const [plans, subscriptions, payments] = await Promise.all([
+  const [plans, subscriptions, payments, moves] = await Promise.all([
     db.plans.find({ borrower: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
     db.subscriptions.find({ subscriber: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
     db.payments.find({ payer: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
+    walletMoves(address),
   ]);
   const ids = [...new Set([...plans, ...subscriptions, ...payments].map((r) => r.merchantId))];
   const merchants = new Map((await Promise.all(ids.map((id) => db.merchants.get(id)))).filter((m): m is MerchantRecord => m !== null).map((m) => [m.id, m]));
@@ -74,5 +79,18 @@ export async function buyerBook(address: Address) {
         txHash: p.txHash,
         createdAt: p.createdAt,
       })),
+    /** Every AUSD transfer to or from the address, classified; `payment` rows are the transfers inside a payment above. */
+    moves: moves.map((m) => ({
+      id: m.id,
+      kind: m.kind,
+      direction: m.direction,
+      amountUnits: m.amountUnits,
+      counterparty: m.counterparty,
+      txHash: m.txHash,
+      linkKey: m.linkKey,
+      settledAs: m.settledAs,
+      settledAt: m.settledAt,
+      at: m.at,
+    })),
   };
 }

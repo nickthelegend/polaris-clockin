@@ -16,7 +16,7 @@ import { getAddress, isAddress, isHex, type Address, type Hex } from "viem";
 export type Deployment = {
   network: string;
   chainId: number;
-  contracts: Record<string, { address: Address; abi?: string; kind?: string } | undefined>;
+  contracts: Record<string, { address: Address; abi?: string; kind?: string; blockNumber?: number } | undefined>;
   config?: { minInterval?: number; minPeriod?: number; feeBps?: number; interestRateBps?: number; graceSeconds?: number };
   eip712?: Record<string, { domain: { name?: string; version?: string; chainId?: number; verifyingContract?: Address } } | undefined>;
   demo?: { merchant?: Address; merchantName?: string; merchantPrivateKey?: Hex };
@@ -53,6 +53,8 @@ export type ChainConfig = {
   minPeriodSeconds: number;
   feeBps: number;
   local: boolean;
+  /** The first block with a Polaris contract in it (the deployment's), where per-address history starts. */
+  fromBlock?: number | null;
 };
 
 export type RelayerConfig =
@@ -256,6 +258,14 @@ function contractsFrom(d: Deployment): ContractAddresses {
   };
 }
 
+/** The earliest block a contract in the record was deployed in, or null when the record doesn't say. */
+function deployedFrom(d: Deployment): number | null {
+  const blocks = Object.values(d.contracts)
+    .map((c) => c?.blockNumber)
+    .filter((b): b is number => typeof b === "number" && Number.isInteger(b) && b >= 0);
+  return blocks.length ? Math.min(...blocks) : null;
+}
+
 function chainFrom(d: Deployment): ChainConfig {
   const id = d.chainId;
   const stable = d.eip712?.Stablecoin?.domain;
@@ -271,6 +281,7 @@ function chainFrom(d: Deployment): ChainConfig {
     minPeriodSeconds: d.config?.minPeriod ?? 3600,
     feeBps: d.config?.feeBps ?? 50,
     local: id === 31337 || id === 1337,
+    fromBlock: deployedFrom(d),
   };
 }
 

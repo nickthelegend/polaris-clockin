@@ -10,7 +10,8 @@ type Ctx = { params: Promise<{ address: string }> };
 
 /**
  * What the Polaris app shows a buyer: their plans, subscriptions and payments
- * to Polaris merchants, from chain events. Only what the chain already shows
+ * to Polaris merchants, and every other dollar in or out (money added,
+ * transfers, send links), all from chain events. Only what the chain already shows
  * (src/server/buyers.ts): no descriptions, order ids or metadata.
  */
 export const GET = withPublic<Ctx>(async (_req, _auth, { params }) => {

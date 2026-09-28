@@ -184,6 +184,21 @@ export class FakeChain {
       getLogs: async ({ fromBlock, toBlock }: { fromBlock: bigint; toBlock: bigint }) => {
         return this.logs.filter((l) => (l.blockNumber as bigint) >= fromBlock && (l.blockNumber as bigint) <= toBlock);
       },
+      /** eth_getLogs with an address and topic filter (a topic may be null, one value, or a list of alternatives). */
+      request: async ({ method, params }: { method: string; params: unknown[] }) => {
+        if (method !== "eth_getLogs") throw new Error(`FakeChain: no ${method}`);
+        const [q] = params as [{ address?: Address; topics?: Array<Hex | Hex[] | null>; fromBlock: Hex; toBlock: Hex }];
+        const same = (a?: string | null, b?: string | null) => (a ?? "").toLowerCase() === (b ?? "").toLowerCase();
+        const matches = (want: Hex | Hex[] | null | undefined, got: Hex | undefined) =>
+          want === null || want === undefined || (Array.isArray(want) ? want.some((w) => same(w, got)) : same(want, got));
+        return this.logs.filter(
+          (l) =>
+            (l.blockNumber as bigint) >= BigInt(q.fromBlock) &&
+            (l.blockNumber as bigint) <= BigInt(q.toBlock) &&
+            (!q.address || same(l.address, q.address)) &&
+            (q.topics ?? []).every((want, i) => matches(want, l.topics[i])),
+        );
+      },
     };
   }
 }
