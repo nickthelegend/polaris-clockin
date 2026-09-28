@@ -35,10 +35,10 @@ problems stand between a normal buyer and a Monad checkout:
 
 1. **Onboarding.** A seed phrase, an extension and gas before the first
    dollar moves.
-2. **Credit.** Card checkouts offer "pay in 4". On-chain checkouts offer
-   nothing, because nobody underwrites a wallet.
-3. **Cross-border money.** Sending dollars to someone abroad still needs both
-   sides to have an account first.
+2. **Paying in full.** A card checkout offers "pay in 4"; a Monad checkout
+   asks for the whole amount now, because there is no credit line to draw on.
+3. **Cross-border money.** Sending dollars on chain needs the recipient's
+   address, so the person abroad needs a wallet before they can be paid.
 
 ## 2. The product
 
@@ -89,8 +89,8 @@ capture from the end-to-end run (`pnpm demo:e2e`, 24 of 24 steps,
 | 6 | The receipt; the pop-up closes and the shop's order is paid through a plan (a `plan.opened` webhook) | [`20-payin4-8b`](../demo/20-payin4-8b-app-receipt.png), [`20-payin4-9`](../demo/20-payin4-9-shop-order-plan.png) |
 | 7 | The merchant sees the sale, paid in full, and the plan's four tick marks | [`43-dashboard-pay-in-4`](../demo/43-dashboard-pay-in-4.png) |
 
-The buyer never installed anything, never saw a seed phrase and never held
-MON. Every step they took was a signature that the Polaris relayer carried
+The buyer never installed anything, never saw a seed phrase and never
+needed MON. Every step they took was a signature that the Polaris relayer carried
 ([§4, "Gasless by construction"](#gasless-by-construction)).
 
 **Honest notes on these captures.** They ran on a local chain
@@ -339,7 +339,10 @@ Pay in 4 $200, plan #1 [`0x4af42348…d2522d`](https://testnet.monadscan.com/tx/
 a lost approval signed again [`0xf02c45bd…173002`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002).
 All three were sent by the relayer
 [`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69)
-for the buyer, who only signed.
+for the buyer, who only signed them. That buyer's Pay in 4 line is secured:
+it locked $202 in `CollateralVault` with its own two transactions, because
+an unsecured line needs a CRE underwriting report, and none has run on
+testnet yet ([Chainlink CRE](#chainlink-cre)).
 
 **Not done yet, and why:**
 

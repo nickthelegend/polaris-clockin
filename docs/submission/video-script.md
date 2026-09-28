@@ -21,7 +21,8 @@ shows.
    hosted on HTTPS by then ([README, step 6](../../README.md#what-only-you-can-do)),
    record scene 3 on an iPhone with real Face ID instead and drop the caption.
 2. **Say which chain each shot is on.** Scenes 2 to 7 are the local Hardhat
-   chain; scene 8 is Monad testnet. Local receipts link nowhere; never show a
+   chain (the guardian's price is read live from Monad mainnet); scene 8 is
+   Monad testnet. Local receipts link nowhere; never show a
    local hash as if it were on an explorer.
 3. **The guardian's pause is a moved threshold, never a faked price.** Every
    paused shot carries *Threshold raised for demo*.
@@ -143,7 +144,7 @@ The captures show $87.25 × 4 and $0.00 interest because they came from a
 | Shots | The app on desktop (profile 1, pesos): Home → Send → type 12.50 → the line under the amount: "≈ ARS … · Chainlink rate, … · indicative" → Send (the name is asked once: "Maya") → "Link ready." "Whoever opens it gets $12.50." → Copy → the incognito phone window opens the link: "You've got dollars" "$12.50" "from Maya" → "Claim $12.50" → "Arrived." "Fee" "None" → back in profile 1: "Your link was claimed" |
 | On screen | *Maya, in Buenos Aires, sends $12.50 by link. The pesos are at Chainlink's USD/ARS rate, for reference only.* *Whoever opens the link gets the dollars: no account needed first, no fee.* |
 | Voiceover | "Maya sends twelve dollars fifty to a friend abroad. She sees it in pesos, and shares a link. Her friend opens it, taps once, and it has arrived. No bank, no fee." |
-| Command | Take A; profile 1's buyer has dollars from the checkout scenes (or **Add money**, which uses the local faucet) |
+| Command | Take A. Off camera first, fund profile 1's account: **Add money** offers the local faucet's test dollars on this chain (Pay in 4 took nothing at checkout) |
 | Reference | [`01-fx-send-ars.png`](../demo/chainlink/01-fx-send-ars.png), [`x-1440-send-link-ready.png`](../demo/x-1440-send-link-ready.png), [`x-390-claim-open.png`](../demo/x-390-claim-open.png), [`x-390-claim-arrived.png`](../demo/x-390-claim-arrived.png), [`x-1440-notifications.png`](../demo/x-1440-notifications.png) |
 
 ### 6. The Chainlink guardian pauses and resumes Pay in 4 (1:40–2:10)
