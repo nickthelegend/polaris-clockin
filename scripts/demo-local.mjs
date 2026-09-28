@@ -187,7 +187,17 @@ process.on("SIGINT", () => {
   stop();
   process.exit(0);
 });
-process.on("exit", stop);
+process.on("exit", (code) => {
+  if (code !== 0) log(`exiting (${code}); stopping everything it started`);
+  stop();
+});
+process.on("uncaughtException", (error) => {
+  console.error(`[demo] ${error?.stack ?? error}`);
+  process.exit(1);
+});
+process.on("unhandledRejection", (error) => {
+  console.error(`[demo] unhandled: ${error?.stack ?? error}`);
+});
 
 /* ── The faucet: test dollars on the local chain only ──────────────────── */
 
@@ -447,42 +457,12 @@ async function main() {
   await until("the Polaris app", async () => (await fetch(`${APP_URL}/`)).ok, 300_000);
   await until("the demo shop", async () => (await fetch(`${SHOP_URL}/`)).ok, 300_000);
 
-  // Compile every page and route now (the three apps in parallel), so nobody waits on a first click.
+  // Compile every page and route now, so nobody waits on a first click: the API first (the app's
+  // pages call it while they render), with the shop's pages beside it; then the app.
   log("opening every page and API route once so the first click is fast (a few minutes)…");
   const zero = "0x0000000000000000000000000000000000000000";
-  const warmed = await Promise.all([
-    warm(APP_URL, [
-      "/",
-      "/onboard",
-      "/pay",
-      "/pay/pl_warmupwarmup",
-      "/pay/cs_test_warmupwarmup",
-      "/send",
-      "/claim",
-      "/add",
-      "/receive",
-      "/activity",
-      "/credit",
-      "/credit/score",
-      "/plans",
-      "/cards",
-      "/insights",
-      "/profile",
-      "/notifications",
-      "/settings",
-      "/accounts",
-      "/pay/cs_test_warmupwarmup?display=popup",
-    ]),
+  const [business, shop] = await Promise.all([
     warm(BUSINESS_URL, [
-      "/",
-      "/login",
-      "/dashboard",
-      "/dashboard/payments",
-      "/dashboard/links",
-      "/dashboard/plans",
-      "/dashboard/payouts",
-      "/dashboard/developers",
-      "/dashboard/settings",
       ["POST", "/api/public/links/pl_warmupwarmup/checkout", {}],
       "/api/public/sessions/cs_test_warmupwarmup",
       `/api/public/credit/${zero}`,
@@ -506,10 +486,41 @@ async function main() {
       "/api/merchant/registration",
       ["POST", "/api/v1/checkout/sessions", {}],
       "/api/public/merchants/m_warmup",
+      "/",
+      "/login",
+      "/dashboard",
+      "/dashboard/payments",
+      "/dashboard/links",
+      "/dashboard/plans",
+      "/dashboard/payouts",
+      "/dashboard/developers",
+      "/dashboard/settings",
     ]),
     warm(SHOP_URL, ["/shop", "/products/halcyon-one", "/cart", "/checkout", "/orders/HC-00000", ["POST", "/api/checkout", {}], "/api/orders/HC-00000", ["POST", "/api/webhooks/polaris", {}]]),
   ]);
-  log(`warmed the app in ${Math.round(warmed[0].ms / 1000)} s, the dashboard and API in ${Math.round(warmed[1].ms / 1000)} s, the shop in ${Math.round(warmed[2].ms / 1000)} s`);
+  const app = await warm(APP_URL, [
+    "/",
+    "/onboard",
+    "/pay",
+    "/pay/pl_warmupwarmup",
+    "/pay/cs_test_warmupwarmup",
+    "/send",
+    "/claim",
+    "/add",
+    "/receive",
+    "/activity",
+    "/credit",
+    "/credit/score",
+    "/plans",
+    "/cards",
+    "/insights",
+    "/profile",
+    "/notifications",
+    "/settings",
+    "/accounts",
+    "/pay/cs_test_warmupwarmup?display=popup",
+  ]);
+  log(`warmed the dashboard and API in ${Math.round(business.ms / 1000)} s, the shop in ${Math.round(shop.ms / 1000)} s, the app in ${Math.round(app.ms / 1000)} s`);
 
   writeFileSync(
     join(DEMO, "demo.json"),
