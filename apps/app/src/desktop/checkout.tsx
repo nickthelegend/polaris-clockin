@@ -30,7 +30,7 @@ import { longDate, shortDate } from "@/lib/dates";
 import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
 import { useNow } from "@/lib/use-now";
-import { n } from "@/lib/view";
+import { n, subscribeSummary } from "@/lib/view";
 import { initialMode, MODE_LABEL, merchantLine, modesOf, type Paid, Receipt } from "@/sheets/checkout";
 
 /**
@@ -121,8 +121,8 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
             className="mt-8"
             items={[
               { label: "For", value: link.description },
-              { label: "Order", value: link.orderId },
-              { label: "Merchant", value: `${link.merchant.name}, ${link.merchant.city}` },
+              ...(link.session ? [] : [{ label: "Order", value: link.orderId }]),
+              { label: "Merchant", value: [link.merchant.name, link.merchant.city].filter(Boolean).join(", ") },
               {
                 label: `${link.merchant.name} gets`,
                 value: mode === "subscription" && sub ? `${usd(sub.price)} today` : `${usd(link.amount)} today, in full`,
@@ -291,7 +291,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
           mode === "later" && later
             ? `${later.installments} × ${each} to ${link.merchant.name}, the first on ${payDate(0)}. Nothing to pay today. ${usd(later.interest)} interest in total.`
             : mode === "subscription" && sub
-              ? `${sub.name} at ${link.merchant.name}, ${describeInterval(sub.periodSeconds)}. Cancel any time in Pay in 4.`
+              ? subscribeSummary(link, sub)
               : `To ${link.merchant.name}, from your dollar account.`
         }
         newLabel="Pay with Face ID"

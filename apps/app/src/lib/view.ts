@@ -1,4 +1,4 @@
-import { type ActivityItem, type CreditLine, dueAt, type Plan, type Subscription } from "./data";
+import { type ActivityItem, type CreditLine, describeInterval, dueAt, type PaymentLink, type Plan, type Subscription, type SubscriptionOffer } from "./data";
 import { shortDate, time } from "./dates";
 import { type Micros, toNumber, usd } from "./money";
 
@@ -11,6 +11,27 @@ const MS_DAY = 86_400_000;
 
 /** Dollars as a number, for the @polaris/ui components (which take dollars). */
 export const n = (micros: Micros): number => toNumber(micros);
+
+/**
+ * A subscription's own name, from the merchant's description: "Halcyon
+ * Coffee Club, monthly · HC-94626" at Halcyon is "Coffee Club" (the merchant,
+ * the period and the order number are said elsewhere).
+ */
+export function subscriptionName(description: string, merchant: string): string {
+  let name = description.split(" · ")[0]!.trim();
+  name = name.replace(/,\s*(monthly|weekly|yearly|annually|daily|every [a-z0-9 ]+)$/i, "").trim();
+  if (merchant && name.toLowerCase().startsWith(`${merchant.toLowerCase()} `)) name = name.slice(merchant.length + 1).trim();
+  return name || description;
+}
+
+/**
+ * What confirming a subscription says, the same on the phone and the desktop:
+ * "Coffee Club at Halcyon, $18.00 every month. Cancel any time under
+ * Subscriptions." (both layouts list them under that heading).
+ */
+export function subscribeSummary(link: Pick<PaymentLink, "merchant">, sub: Pick<SubscriptionOffer, "name" | "price" | "periodSeconds">): string {
+  return `${subscriptionName(sub.name, link.merchant.name)} at ${link.merchant.name}, ${usd(sub.price)} ${describeInterval(sub.periodSeconds)}. Cancel any time under Subscriptions.`;
+}
 
 /**
  * Whether a row moved money in or out of the dollar account. Opening a Pay in 4

@@ -35,7 +35,7 @@ import { prefetchDomains } from "@/lib/domains";
 import { usd } from "@/lib/money";
 import type { RelayReceipt } from "@/lib/relayer";
 import { useNow } from "@/lib/use-now";
-import { n } from "@/lib/view";
+import { n, subscribeSummary } from "@/lib/view";
 
 export type Paid = { mode: PayMode; receipt: RelayReceipt; at: number };
 
@@ -123,7 +123,8 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
       ),
     },
     { label: "For", value: link.description },
-    { label: "Order", value: link.orderId },
+    // A merchant's checkout names its order in the description ("Halcyon order HC-39073"); the internal ref is only for sample links.
+    ...(link.session ? [] : [{ label: "Order", value: link.orderId }]),
   ];
   if (mode === "later" && later && now) {
     const ORDINAL = ["First", "Second", "Third"];
@@ -262,7 +263,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
           confirming === "later" && later
             ? `${later.installments} × ${each} to ${link.merchant.name}, the first on ${payDate(0)}. Nothing to pay today. ${usd(later.interest)} interest in total.`
             : confirming === "subscription" && sub
-              ? `${sub.name} at ${link.merchant.name}, ${describeInterval(sub.periodSeconds)}. Cancel any time in Plans.`
+              ? subscribeSummary(link, sub)
               : `To ${link.merchant.name}, from your dollar account.`
         }
         newLabel="Pay with Face ID"
@@ -317,7 +318,7 @@ export function Receipt({ link, paid, onDone }: { link: PaymentLink; paid: Paid;
   } else {
     rows.push({ label: "Paid", value: usd(link.amount) });
   }
-  rows.push({ label: "Order", value: link.orderId });
+  if (!link.session) rows.push({ label: "Order", value: link.orderId });
 
   const done = () => {
     if (!returnToMerchant(link)) onDone();
