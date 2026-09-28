@@ -10,6 +10,8 @@ importers:
 
   .: {}
 
+  apps/android: {}
+
   apps/app:
     dependencies:
       '@category-labs/mera':
