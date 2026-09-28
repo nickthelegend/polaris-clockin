@@ -170,6 +170,14 @@ export function failureReasonOf(reason: Hex): "insufficient_funds" | "allowance_
     case "InvalidLoan":
     case "SubscriptionNotActive":
       return "stale";
+    case "Error": {
+      // A token that reverts with a message (OpenZeppelin 4's "ERC20: insufficient allowance"), read as the
+      // indexer (packages/indexer src/lib/revert.ts) and the collections workflow (outcomes.ts) read it.
+      const message = typeof revert.args[0] === "string" ? revert.args[0].toLowerCase() : "";
+      if (message.includes("allowance")) return "allowance_lost";
+      if (message.includes("balance")) return "insufficient_funds";
+      return "other";
+    }
     default:
       return "other";
   }
