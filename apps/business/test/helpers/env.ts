@@ -6,6 +6,7 @@ import { getAddress, type Abi, type Address } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 
 import {
+  collateralVaultAbi,
   collectionsReceiverAbi,
   iausdAbi,
   merchantRegistryAbi,
@@ -43,9 +44,10 @@ export const ADDR = {
   collections: at("CollectionsReceiver"),
   underwriting: at("UnderwritingReceiver"),
   guardian: at("GuardianReceiver"),
+  vault: at("CollateralVault"),
 };
 
-export const ALL_ABIS = [polarisCheckoutAbi, polarisPaymentsAbi, polarisLoanEngineAbi, polarisSendAbi, merchantRegistryAbi, iausdAbi, collectionsReceiverAbi] as unknown as Abi[];
+export const ALL_ABIS = [polarisCheckoutAbi, polarisPaymentsAbi, polarisLoanEngineAbi, polarisSendAbi, merchantRegistryAbi, iausdAbi, collectionsReceiverAbi, collateralVaultAbi] as unknown as Abi[];
 
 export type TestEnv = {
   chain: FakeChain;

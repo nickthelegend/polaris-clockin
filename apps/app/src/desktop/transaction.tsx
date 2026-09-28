@@ -77,7 +77,7 @@ export function TransactionDrawerContent({ id }: { id: string }) {
         : { label: "Status", value: statusOf(item) };
   const tiles: KeyValue[] = [
     { label: "Amount", value: usd(item.amount) },
-    { label: "Fee", value: "None" },
+    { label: "Network fee", value: "None" },
     plan && progress
       ? {
           label: "Plan",

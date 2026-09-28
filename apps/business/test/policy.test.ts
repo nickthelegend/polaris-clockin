@@ -1,7 +1,7 @@
 import { encodeFunctionData, erc20Abi, getAddress, zeroHash, type Address } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { iausdAbi, merchantRegistryAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi, polarisSendAbi } from "@polarispay/contracts/abi";
+import { collateralVaultAbi, iausdAbi, merchantRegistryAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi, polarisSendAbi } from "@polarispay/contracts/abi";
 import { buildPayoutPolicy, TWA_TYPES } from "@/server/policy/payout";
 import {
   buildRegistryAdminPolicy,
@@ -20,8 +20,9 @@ const addresses: RelayerAddresses = {
   loanEngine: "0x0000000000000000000000000000000000001E01",
   registry: "0x0000000000000000000000000000000000004E01",
   stablecoin: "0x00000000000000000000000000000000000A05D0",
+  vault: "0x000000000000000000000000000000000000Ca01",
 };
-for (const k of Object.keys(addresses) as (keyof RelayerAddresses)[]) addresses[k] = getAddress(addresses[k]);
+for (const k of Object.keys(addresses) as (keyof RelayerAddresses)[]) addresses[k] = getAddress(addresses[k] as Address);
 const expected = { chainId: 10143, addresses };
 const someone = "0x1111111111111111111111111111111111111111" as Address;
 const merchant = "0x2222222222222222222222222222222222222222" as Address;
@@ -50,6 +51,30 @@ describe("the relayer's allow-list (checkRelayerCall)", () => {
     expect(buildRelayerPolicy(expected).rules.some((r) => r.name === "Re-sign: PolarisCheckout.reauthorize")).toBe(true);
     const bare = encodeFunctionData({ abi: iausdAbi, functionName: "permit", args: [someone, merchant, 1n, 2n, 27, zeroHash, zeroHash] });
     expect(() => checkRelayerCall({ to: addresses.stablecoin, data: bare, chainId: 10143 }, expected)).toThrow(/allow-list/);
+  });
+
+  it("carries a borrower's permit to CollateralVault.lockWithPermit (a secured line with no MON), above the minimum only", () => {
+    const lock = (amount: bigint) => encodeFunctionData({ abi: collateralVaultAbi, functionName: "lockWithPermit", args: [someone, amount, 2_000_000_000n, 27, zeroHash, zeroHash] });
+    const withMin = { ...expected, minAmountUnits: 100_000n };
+    expect(checkRelayerCall({ to: addresses.vault, data: lock(202_000_000n), chainId: 10143 }, withMin)).toMatchObject({ contract: "vault", functionName: "lockWithPermit" });
+    expect(() => checkRelayerCall({ to: addresses.vault, data: lock(1n), chainId: 10143 }, withMin)).toThrow(/100000 base units or more/);
+    // The vault's own lock (msg.sender's), withdraw and owner calls are not the relayer's.
+    const bare = encodeFunctionData({ abi: collateralVaultAbi, functionName: "lock", args: [1_000_000n] });
+    expect(() => checkRelayerCall({ to: addresses.vault, data: bare, chainId: 10143 }, expected)).toThrow(/allow-list/);
+    const seize = encodeFunctionData({ abi: collateralVaultAbi, functionName: "seize", args: [someone, 1n, merchant] });
+    expect(() => checkRelayerCall({ to: addresses.vault, data: seize, chainId: 10143 }, expected)).toThrow(/allow-list/);
+    const rule = buildRelayerPolicy(withMin).rules.find((r) => r.name === "Secure a line: CollateralVault.lockWithPermit");
+    expect(rule?.conditions).toContainEqual(expect.objectContaining({ field: "lockWithPermit.amount", operator: "gte", value: "100000" }));
+  });
+
+  it("without a vault in the deployment, has no collateral rule and refuses the call", () => {
+    const { vault, ...rest } = addresses;
+    const noVault = { chainId: 10143, addresses: { ...rest, vault: null } };
+    const lock = encodeFunctionData({ abi: collateralVaultAbi, functionName: "lockWithPermit", args: [someone, 1_000_000n, 2_000_000_000n, 27, zeroHash, zeroHash] });
+    expect(() => checkRelayerCall({ to: vault as Address, data: lock, chainId: 10143 }, noVault)).toThrow(/isn't a Polaris contract/);
+    const policy = buildRelayerPolicy(noVault);
+    expect(policy.rules.some((r) => r.name.includes("CollateralVault"))).toBe(false);
+    expect(policy.rules).toHaveLength(RELAYER_CALLS.length);
   });
 
   it("refuses a relayer that tries to send MON", () => {
@@ -104,7 +129,8 @@ describe("the Privy relayer policy (buildRelayerPolicy)", () => {
     for (const [i, call] of RELAYER_CALLS.entries()) {
       const rule = policy.rules[i + 1];
       const [to, chain, fn] = rule?.conditions ?? [];
-      expect(to).toEqual({ field_source: "ethereum_transaction", field: "to", operator: "in", value: [addresses[call.contract], addresses[call.contract].toLowerCase()] });
+      const at = addresses[call.contract] as Address;
+      expect(to).toEqual({ field_source: "ethereum_transaction", field: "to", operator: "in", value: [at, at.toLowerCase()] });
       expect(chain).toEqual({ field_source: "ethereum_transaction", field: "chain_id", operator: "eq", value: "10143" });
       expect(fn).toMatchObject({ field_source: "ethereum_calldata", field: "function_name", operator: "eq", value: call.functionName });
       const abi = (fn as { abi: Array<{ type: string; name: string }> }).abi;

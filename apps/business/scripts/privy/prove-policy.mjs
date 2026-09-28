@@ -11,7 +11,7 @@
 
 import { encodeFunctionData, erc20Abi, zeroHash } from "viem";
 
-import { iausdAbi, polarisCheckoutAbi } from "@polarispay/contracts/abi";
+import { collateralVaultAbi, iausdAbi, polarisCheckoutAbi } from "@polarispay/contracts/abi";
 import { banner, flag, loadDeployment, loadEnv, privyClient } from "./lib.mjs";
 
 const env = loadEnv();
@@ -47,6 +47,21 @@ const cases = [
   },
   { expect: "denied", what: "a plain MON transfer", tx: { to: buyer, value: "0x2386f26fc10000" } },
 ];
+if (addresses.vault) {
+  const lock = (amount) =>
+    encodeFunctionData({ abi: collateralVaultAbi, functionName: "lockWithPermit", args: [buyer, amount, 4_000_000_000n, 27, zeroHash, zeroHash] });
+  cases.splice(
+    2,
+    0,
+    { expect: "allowed", what: `CollateralVault.lockWithPermit of ${minAmountUnits} base units (a secured line, no MON)`, tx: { to: addresses.vault, data: lock(minAmountUnits) } },
+    { expect: "denied", what: "CollateralVault.lockWithPermit of 0", tx: { to: addresses.vault, data: lock(0n) } },
+    {
+      expect: "denied",
+      what: "CollateralVault.seize (the loan engine's call, not the relayer's)",
+      tx: { to: addresses.vault, data: encodeFunctionData({ abi: collateralVaultAbi, functionName: "seize", args: [buyer, 1n, merchant] }) },
+    },
+  );
+}
 
 banner(`Relayer policy proof on chain ${chainId}`);
 for (const c of cases) console.log(`  expect ${c.expect.padEnd(8)} ${c.what}`);

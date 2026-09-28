@@ -124,7 +124,7 @@ function ClaimReady({ parsed, onDone }: { parsed: { key: Hex; amount: Micros; na
   const rows = [
     { label: "From", value: parsed.name },
     { label: "Amount", value: usd(amount) },
-    { label: "Fee", value: "None" },
+    { label: "Network fee", value: "None" },
   ];
 
   // From 1024px the receipt takes the claim's place in its one Dialog.
@@ -166,7 +166,7 @@ function ClaimReady({ parsed, onDone }: { parsed: { key: Hex; amount: Micros; na
         <ListGroup>
           <ListRow icon={<ScanFace />} title="Face ID is your account" description="No password, no forms. Or use your email." />
           <ListRow icon={<Globe />} title="Dollars, wherever you are" description="Hold them, pay with them, send them on." />
-          <ListRow icon={<Zap />} title="No fees to claim" description="It lands in under a second." />
+          <ListRow icon={<Zap />} title="No network fee to claim" description="Polaris pays it. It lands in under a second." />
         </ListGroup>
 
         {state !== undefined && state !== "open" && !claimed ? (

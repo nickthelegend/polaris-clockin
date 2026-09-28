@@ -196,7 +196,9 @@ Other commands (`pnpm --filter @polaris/business <cmd>`):
 | `dev:merchant` | Create a local merchant with `sk_test_`/`pk_test_` keys (and a webhook endpoint) without Privy |
 | `privy:setup-relayer` | Create the relayer wallet and its policy in your Privy app (dry run unless `-- --apply`) |
 | `privy:setup-payouts` | Create the payout signer for automatic payouts (dry run unless `-- --apply`) |
-| `privy:prove-policy` | Ask Privy to sign one allowed and four forbidden calls, and show what it refused (`-- --run`) |
+| `privy:prove-policy` | Ask Privy to sign the allowed calls and the forbidden ones, and show what it refused (`-- --run`) |
+| `privy:smoke` | One $0.50 Pay now through the Privy relayer against a running server (`-- --run`) |
+| `smoke:testnet` | Every buyer and merchant action on Monad testnet through the relayer (the Privy server wallet once it is set up), with fresh accounts that never hold MON; writes [`docs/demo/testnet`](../../docs/demo/testnet/README.md) (`-- --run`) |
 
 ## How a payment flows
 
@@ -249,6 +251,7 @@ belongs to a checkout session, and one PolarisCheckout already settled.
 | `PolarisSend.send` / `claim` / `cancel` | sender + link key / link key / sender | the link key's signature names the recipient |
 | `PolarisLoanEngine.repayWithSig` | borrower: `RepayIntent` | |
 | `PolarisCheckout.reauthorize` | borrower: ERC-2612 `Permit` to the loan engine | the contract checks spender, signer and that the value covers everything owed; the relayer refuses first when nothing is owed, the approval already covers it, or the permit is short |
+| `CollateralVault.lockWithPermit` | borrower: ERC-2612 `Permit` to the vault | the vault moves exactly the permitted amount into the borrower's own position, nowhere else; no fallback to a standing allowance (a secured Pay in 4 line with no MON) |
 | `MerchantRegistry.registerFor` / `updatePayoutAddressWithSig` | merchant's embedded wallet | the merchant signs name and payout address |
 | AUSD `transferWithAuthorization` | owner (withdrawals, payouts) | the owner signs `to` and `value` |
 

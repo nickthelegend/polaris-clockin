@@ -14,6 +14,7 @@ import {
 } from "viem";
 
 import {
+  collateralVaultAbi,
   iausdAbi,
   polarisCheckoutAbi,
   polarisLoanEngineAbi,
@@ -55,11 +56,12 @@ import { polarisDomain, TYPES, type Domain } from "./typed-data";
  * | `cancelSend`         | sender: Cancel             | PolarisSend.cancel                          |
  * | `repay`              | borrower: RepayIntent      | PolarisLoanEngine.repayWithSig              |
  * | `reauthorize`        | borrower: Permit (engine)  | PolarisCheckout.reauthorize                 |
+ * | `lockCollateral`     | borrower: Permit (vault)   | CollateralVault.lockWithPermit              |
  * | `cancelSubscription` | subscriber: CancelSubscription | PolarisPayments.cancelWithSignature     |
  * | `transfer`           | owner: TransferWithAuth.   | AUSD.transferWithAuthorization              |
  */
 
-export const RELAY_TYPES = ["pay", "openPlan", "subscribe", "send", "claim", "cancelSend", "repay", "reauthorize", "cancelSubscription", "transfer"] as const;
+export const RELAY_TYPES = ["pay", "openPlan", "subscribe", "send", "claim", "cancelSend", "repay", "reauthorize", "lockCollateral", "cancelSubscription", "transfer"] as const;
 export type RelayType = (typeof RELAY_TYPES)[number];
 
 export type RelayResponse = {
@@ -540,6 +542,46 @@ async function reauthorize(body: Record<string, unknown>, chain: ChainConfig): P
   return respond("reauthorize", result, null);
 }
 
+/**
+ * A secured Pay in 4 line with no MON: the borrower signs one ERC-2612 permit
+ * (spender CollateralVault, value the amount) and the relayer sends
+ * CollateralVault.lockWithPermit, which locks it into the borrower's own
+ * position (it can move it nowhere else). ScoreManager counts it toward the
+ * borrower's limit at once. Refused before any gas when the deployment's
+ * vault can't take a permit, below the relayer's minimum, when the borrower
+ * doesn't hold the amount, or when the permit isn't theirs.
+ */
+async function lockCollateral(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
+  const vault = chain.contracts.vault;
+  if (!vault) throw new HttpError(409, "collateral_unavailable", "Securing a limit with collateral isn't available on this network.");
+  if (body.permit === undefined || body.permit === null) bad("permit", "permit is required.");
+  const replayed = await replay("lockCollateral", relayIdOf("lockCollateral", signature(body, "permit.signature")));
+  if (replayed) return replayed;
+  const borrower = address(body, "borrower");
+  const amount = uint(body, "amount");
+  if (amount === 0n) bad("amount", "amount must be more than zero.");
+  assertMinimum(amount, "amount");
+  const { permit, sig } = await permitOf(body, borrower, vault, chain);
+  if (permit.value !== amount) {
+    throw new HttpError(400, "wrong_amount", "The amount you confirmed isn't the amount to lock. Try again.", { param: "permit.value" });
+  }
+  const balance = (await publicClient().readContract({ address: chain.contracts.stablecoin, abi: iausdAbi, functionName: "balanceOf", args: [borrower] })) as bigint;
+  if (balance < amount) throw new HttpError(409, "insufficient_balance", "You don't have that much to set aside right now.", { param: "amount" });
+  countVerified(borrower, { open: true });
+  const result = await carry({
+    kind: "lockCollateral",
+    relayId: relayIdOf("lockCollateral", sig as Hex),
+    to: vault,
+    data: encodeFunctionData({
+      abi: collateralVaultAbi,
+      functionName: "lockWithPermit",
+      args: [borrower, amount, permit.deadline, permit.v, permit.r, permit.s],
+    }),
+    signer: borrower,
+  });
+  return respond("lockCollateral", result, null);
+}
+
 async function cancelSubscription(body: Record<string, unknown>, chain: ChainConfig): Promise<RelayResponse> {
   const subId = uint(body, "subId");
   const cancelDeadline = deadline(uint(body, "deadline"), "deadline", { maxAheadSeconds: 3600 });
@@ -660,6 +702,8 @@ export async function handleRelay(body: Record<string, unknown>): Promise<RelayR
       return repay(body, chain);
     case "reauthorize":
       return reauthorize(body, chain);
+    case "lockCollateral":
+      return lockCollateral(body, chain);
     case "cancelSubscription":
       return cancelSubscription(body, chain);
     case "transfer":

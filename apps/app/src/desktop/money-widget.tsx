@@ -343,7 +343,7 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
           rows={[
             { label: "To", value: result.to.name },
             { label: "Amount", value: usd(result.amount) },
-            { label: "Fee", value: "None" },
+            { label: "Network fee", value: "None" },
           ]}
           primary={{ label: "Done", onClick: finish }}
         />

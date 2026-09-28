@@ -91,7 +91,7 @@ export function CheckoutDesktop({ link }: { link: PaymentLink }) {
         : [
             { label: "You pay today", value: usd(link.amount) },
             { label: "Interest", value: usd(0n) },
-            { label: "Fees", value: usd(0n) },
+            { label: "Network fee", value: "None" },
             { label: "From", value: signedIn ? usd(available) : "Your dollars" },
           ];
 

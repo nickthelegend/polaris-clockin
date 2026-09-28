@@ -9,6 +9,7 @@ import "server-only";
 export {
   aggregatorV3InterfaceAbi,
   batchSettlementAbi,
+  collateralVaultAbi,
   collectionsReceiverAbi,
   guardianReceiverAbi,
   iausdAbi,

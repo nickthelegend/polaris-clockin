@@ -21,7 +21,7 @@ export const GET = withPublic(async () => {
     chainId: chain.id,
     name: chain.name,
     explorerUrl: chain.explorerUrl,
-    contracts: { stablecoin: c.stablecoin, payments: c.payments, checkout: c.checkout, send: c.send, loanEngine: c.loanEngine, registry: c.registry },
+    contracts: { stablecoin: c.stablecoin, payments: c.payments, checkout: c.checkout, send: c.send, loanEngine: c.loanEngine, registry: c.registry, vault: c.vault },
     domains: {
       stablecoin: { ...chain.stablecoinDomain, chainId: chain.id, verifyingContract: c.stablecoin },
       checkout: polarisDomain("checkout", chain.id, c.checkout),
