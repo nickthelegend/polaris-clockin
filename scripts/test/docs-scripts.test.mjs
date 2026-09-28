@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { anchorsOf, hexRefsOf, inEvidence, isExternal, linksOf, slug } from "../check-docs-links.mjs";
+import { anchorsOf, hexRefsOf, inEvidence, isExternal, linksOf, shortLinkMismatches, slug } from "../check-docs-links.mjs";
 import { folderOf, summarise, toMarkdown } from "../submission-diffstat.mjs";
 
 test("slug follows GitHub's heading anchors", () => {
@@ -72,6 +72,16 @@ test("hexRefsOf and inEvidence: full and shortened hashes and addresses", () => 
   for (const r of refs) assert.equal(inEvidence(r.value, known), true, r.value);
   assert.equal(inEvidence("0x1116fbb4…000000", known), false);
   assert.equal(inEvidence(`0x${"ab".repeat(32)}`, known), false);
+});
+
+test("shortLinkMismatches catches a shortened hash that is not its own link's", () => {
+  const full = "0xef12c0718ccb1fb7f2552d143e8de507f568a4646627c892caeff017be70854c";
+  const good = "[`0xef12c071…70854c`](https://testnet.monadscan.com/tx/" + full + ")";
+  const bad = "[`0xef12c071…68a4c`](https://testnet.monadscan.com/tx/" + full + ")";
+  assert.deepEqual(shortLinkMismatches(good), []);
+  assert.deepEqual(shortLinkMismatches("x\n" + bad), [{ line: 2, short: "0xef12c071…68a4c", full }]);
+  const address = "[`0x4201…45CC`](https://testnet.monadscan.com/address/0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC)";
+  assert.deepEqual(shortLinkMismatches(address), []);
 });
 
 test("folderOf groups apps and packages by name", () => {

@@ -21,6 +21,10 @@
  *     records, the CRE runs, the workflows' configs), and every shortened
  *     one ("0x1116fbb4…292c4d", "0x4201…45CC") matches one that does.
  *
+ * And in every file: a link whose text is a shortened hash or address
+ * ([`0x1116fbb4…292c4d`](https://…/tx/0x1116…)) must shorten the one in its
+ * own URL.
+ *
  * External links (https:, mailto:) are counted, not fetched. Exit code 1 on
  * any failure, each listed as file:line.
  */
@@ -197,6 +201,26 @@ export function inEvidence(value, known) {
   return false;
 }
 
+/**
+ * Links whose text is a shortened hash or address ("0x1116fbb4…292c4d") that
+ * does not match the full one in the link's own URL.
+ * @param {string} text
+ * @returns {{ line: number, short: string, full: string }[]}
+ */
+export function shortLinkMismatches(text) {
+  const out = [];
+  text.split(/\r?\n/).forEach((line, index) => {
+    for (const m of line.matchAll(/\[`?(0x[0-9a-fA-F]+)…([0-9a-fA-F]*)`?\]\([^)\s]*?(0x[0-9a-fA-F]{64}|0x[0-9a-fA-F]{40})[^)]*\)/g)) {
+      const [, prefix, suffix, full] = m;
+      const f = full.toLowerCase();
+      if (!f.startsWith(prefix.toLowerCase()) || !f.endsWith(suffix.toLowerCase())) {
+        out.push({ line: index + 1, short: `${prefix}…${suffix}`, full });
+      }
+    }
+  });
+  return out;
+}
+
 /** @param {string} p a repository-relative path */
 const toPosix = (p) => p.split(sep).join("/");
 
@@ -301,6 +325,9 @@ function main() {
         refs++;
         if (!inEvidence(value, known)) failures.push(`${rel}:${line}  ${value}  (not in the committed evidence)`);
       }
+    }
+    for (const { line, short, full } of shortLinkMismatches(text)) {
+      failures.push(`${rel}:${line}  ${short}  (the link's text does not match its target ${full})`);
     }
   }
 
