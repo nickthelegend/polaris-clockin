@@ -56,7 +56,9 @@
  * DEMO_FAST_PLANS).
  *
  * Then open http://127.0.0.1:3600, add something to the bag and check out
- * with Polaris. The dashboard is http://localhost:3100/dashboard.
+ * with Polaris. The dashboard is http://localhost:3100/dashboard. To split a
+ * bill, open the app's More sheet (Split a bill on the desktop); the split is
+ * PolarisSplit on this chain, and `pnpm demo:e2e:split` plays it headless.
  *
  * Ports: DEMO_NODE_PORT (8545), DEMO_BUSINESS_PORT (3100), DEMO_APP_PORT
  * (3000), DEMO_SHOP_PORT (3600), DEMO_TRIGGER_PORT (2000), DEMO_FAUCET_PORT
@@ -489,6 +491,7 @@ async function main() {
     NEXT_PUBLIC_PAYMENTS_ADDRESS: at("PolarisPayments"),
     NEXT_PUBLIC_CHECKOUT_ADDRESS: at("PolarisCheckout"),
     NEXT_PUBLIC_SEND_ADDRESS: at("PolarisSend"),
+    NEXT_PUBLIC_SPLIT_ADDRESS: at("PolarisSplit"),
     NEXT_PUBLIC_LOAN_ENGINE_ADDRESS: at("PolarisLoanEngine"),
     NEXT_PUBLIC_LOCAL_DEMO: "1",
     NEXT_PUBLIC_LOCAL_FAUCET_URL: FAUCET_URL,
@@ -562,6 +565,7 @@ async function main() {
       `/api/public/credit/${zero}`,
       `/api/public/credit/${zero}/messages`,
       `/api/public/buyers/${zero}`,
+      `/api/public/splits/0x${"0".repeat(64)}`,
       "/api/public/network",
       "/api/public/credit-guard",
       "/api/chainlink",
@@ -603,6 +607,8 @@ async function main() {
     "/pay/cs_test_warmupwarmup",
     "/send",
     "/claim",
+    "/split/new",
+    `/split/0x${"0".repeat(64)}`,
     "/add",
     "/receive",
     "/activity",
@@ -647,6 +653,10 @@ Polaris is running locally (chain ${deployment.chainId}; nothing is live, no Pri
   Faucet         POST ${FAUCET_URL}/mint {"address": "0x…"}   (or Add money in the app)
   Chain          ${RPC}
 
+Split a bill: in the app, More (or Split a bill on the desktop) → the bill,
+equally or by name → one link; open it in another browser profile to pay a
+share (a new visitor creates an account there, then Add money → test
+dollars). Every share is PolarisSplit on this chain, relayed.
 Pay in 4 needs a credit line: in the checkout, Raise your limit runs the CRE
 underwriting workflow locally (sample history from fixtures, not Nansen).
 The CRE collections workflow runs every minute and on every Reauthorized

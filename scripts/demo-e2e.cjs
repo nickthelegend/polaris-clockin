@@ -7,8 +7,9 @@
 // bag -> Polaris checkout popup -> Pay now; Halcyon -> popup -> Raise your limit (the
 // CRE underwriting workflow, local trigger) -> Pay in 4; both shop orders marked paid
 // by Polaris webhooks; the merchant's dashboard showing the payments, the plan and its
-// on-chain registration. Screenshots go to docs/demo (OUT to change it). Exits 1 if a
-// step fails.
+// on-chain registration; then split the bill (scripts/demo-e2e-split.cjs: one link, four
+// people, shares paid, the split closed; DEMO_E2E_SPLIT=0 skips it). Screenshots go to
+// docs/demo (OUT to change it). Exits 1 if a step fails.
 // Playwright isn't a dependency of the repo: install it anywhere and point PLAYWRIGHT_MODULE at it,
 // or run from a folder where `require("playwright")` resolves.
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
@@ -446,6 +447,15 @@ async function receiptInPopup(popup, name) {
       }
       await buyerPage.close().catch(() => {});
     }
+  }
+
+  // ── Split the bill: four people, one link (scripts/demo-e2e-split.cjs; `pnpm demo:e2e:split` runs it alone) ──
+  if (process.env.DEMO_E2E_SPLIT !== "0") {
+    const { runSplit } = require("./demo-e2e-split.cjs");
+    const urls = { app: APP, business: BUSINESS, rpc: RPC, stablecoin: demo.contracts?.Stablecoin ?? null };
+    await runSplit({ chromium, urls, out: path.join(OUT, "split"), profile: `${PROFILE}-split`, step }).catch((e) =>
+      step("Split: the scenario ran to the end", false, String(e?.message ?? e).slice(0, 200)),
+    );
   }
 
   await context.close();
