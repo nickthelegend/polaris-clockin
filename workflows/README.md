@@ -4,9 +4,10 @@
 the official TypeScript SDK (`@chainlink/cre-sdk` 1.22.0), orchestrate Pay in 4
 on Monad with all three CRE trigger types: one decides who gets credit (HTTP),
 one collects what is owed (cron, plus an EVM log trigger that collects the
-moment a dunned buyer re-signs), and one guards the pool (cron), reading
-Chainlink's AUSD/USD Data Feed on Monad mainnet to pause new Pay in 4 plans on
-a depeg, a cash shortfall, bad debt or a stale price.
+moment a dunned buyer re-signs), and one guards the pool (cron), bringing
+Chainlink's AUSD/USD Data Feed from Monad mainnet to the pool on Monad testnet,
+where new Pay in 4 plans pause on a depeg or a stale price (and, read from the
+pool itself, a cash shortfall or bad debt).
 
 ```
                          ┌────────────────────── Chainlink DON ──────────────────────┐
@@ -35,8 +36,8 @@ a depeg, a cash shortfall, bad debt or a stale price.
  every minute (demo) ────▶ polaris-guardian (cron trigger)                           │
  every 10 min (prod)     │  Monad MAINNET: Chainlink AUSD/USD latestRoundData        │
                          │  Monad testnet, one finalized block: header, then         │──▶ GuardianReceiver
-                         │    GuardianReceiver.currentInputs (free cash, owed, bad   │      (re-evaluates the verdict;
-                         │    debt, originated, the owner's thresholds)              │       a pool-health feed)
+                         │    GuardianReceiver.currentInputs (free cash, owed, bad   │      (re-checks the verdict; reads
+                         │    debt, originated, the owner's thresholds)              │       the pool live; a feed)
                          │  verdict: depeg | low cash | bad debt | stale price       │      └▶ PolarisCheckout.openPlan
                          │  written on a change, a heartbeat or a large move         │         refuses Pay in 4 while
                          └───────────────────────────────┬───────────────────────────┘         paused; Pay now, Send,
@@ -53,10 +54,12 @@ a depeg, a cash shortfall, bad debt or a stale price.
   `requireUnderwriting`. A new Polaris account has no line until the
   `polaris-underwrite` workflow's report lands, so `PolarisCheckout.openPlan`
   refuses Pay in 4 (`ExceedsCreditLimit`) without it.
-- **No CRE run, no collections.** Instalments, subscription renewals and
-  liquidations happen when a `polaris-collections` report is delivered to
-  `CollectionsReceiver`. The dunning ladder hears about failures from the
-  same run.
+- **CRE is how collections run on schedule.** Instalments, subscription
+  renewals and liquidations happen when a `polaris-collections` report is
+  delivered to `CollectionsReceiver`, and the dunning ladder hears about
+  failures from the same run. Anyone can also call them directly on the loan
+  engine ([Anyone can run the collections](#anyone-can-run-the-collections)):
+  the workflow is the schedule, not a gate.
 - **No history, no report.** `ScoreManager` opens any underwritten account
   at the $200 floor, and an account with no history costs nothing to make.
   So the workflow attests only facts with the history `ScoreManager.isThinFile`
@@ -72,15 +75,18 @@ a depeg, a cash shortfall, bad debt or a stale price.
   minutes. The workflow verifies the account's own consent and the
   Bring-your-history signature itself before it spends a provider call, so
   whoever fires the trigger cannot underwrite an account that did not ask.
-- **No healthy pool, no new Pay in 4.** `PolarisCheckout.openPlan` asks
-  `GuardianReceiver` first, and `GuardianReceiver` holds what the last
-  `polaris-guardian` report attested: Chainlink's AUSD/USD price (from Monad
-  mainnet) and the pool's free cash, bad debt and originations (from Monad
-  testnet), judged by thresholds the owner sets on chain. The receiver
-  recomputes the verdict itself and refuses a report that disagrees, so the
-  workflow cannot pause or unpause credit on its own say. A guardian that goes
-  quiet fails open after `maxAttestationAge` (an hour), so an outage of CRE
-  never locks buyers out.
+- **No healthy peg, no new Pay in 4.** `PolarisCheckout.openPlan` asks
+  `GuardianReceiver` first. What only CRE can bring is the price: Chainlink's
+  AUSD/USD lives on Monad mainnet, the pool on Monad testnet, and the
+  `polaris-guardian` report carries the round it read. The receiver checks
+  the report's verdict against the thresholds the owner sets on chain and
+  refuses one that disagrees; it trusts the DON for the mainnet price, and
+  for nothing on its own chain: it reads the pool's free cash and bad debt
+  itself on every call (a report whose pool verdict is not the live pool's is
+  refused), so no report can pause or resume credit on the pool's figures.
+  The price reasons fail open once the latest attestation is older than
+  `maxAttestationAge` (an hour), so an outage of CRE never locks buyers out;
+  the pool's never do.
 - **A re-signed buyer is collected in seconds, not hours.** A lost allowance
   is dunned on the ladder (the next try 6 h later). The buyer's fresh permit
   goes through `PolarisCheckout.reauthorize`, whose `Reauthorized` log fires
@@ -91,9 +97,9 @@ a depeg, a cash shortfall, bad debt or a stale price.
 |---|---|
 | Build a CRE workflow | Three: [`collections/main.ts`](collections/main.ts) → [`src/collections/workflow.ts`](src/collections/workflow.ts) (+ [`retry.ts`](src/collections/retry.ts)), [`underwriting/main.ts`](underwriting/main.ts) → [`src/underwriting/workflow.ts`](src/underwriting/workflow.ts), [`guardian/main.ts`](guardian/main.ts) → [`src/guardian/workflow.ts`](src/guardian/workflow.ts); `project.yaml`, `workflow.yaml`, `secrets.yaml`, per-target configs |
 | Used as an orchestration layer | All three trigger types: cron (collections, guardian), HTTP (underwriting), EVM log (collections' retry on `PolarisCheckout.Reauthorized`). EVM reads on two chains in one run (the guardian: Chainlink AUSD/USD on Monad mainnet, the pool on Monad testnet at one finalized block via `headerByNumber`); `checkTasks`, `dueTasksFor`, `profileOf`, `linkedUserOf`, `balanceOf`, gas estimates, receipts; HTTP with consensus (Envio, Nansen, Zerion, Etherscan, RPC); Confidential HTTP; signed reports written through the forwarder, each changing what the contracts do next (credit lines, collections, the Pay in 4 pause); a signed callback the Polaris API verifies and acts on (`apps/business` `POST /api/cre/callback`) |
-| Simulate or deploy | `cre workflow simulate … --broadcast` against the local Monad stand-in or Monad testnet (needs `cre login`, see below), one command per trigger; `pnpm --filter @polaris/cre-workflows evidence` runs each workflow once on Monad testnet (and the log trigger on a real `reauthorize` with `--retry-tx`) and keeps its log and transaction hashes in [`evidence/`](evidence/); `cre workflow build` compiles all three to WASM without a login |
+| Simulate or deploy | `cre workflow simulate … --broadcast` against the local Monad stand-in or Monad testnet (needs `cre login`, see below), one command per trigger; `pnpm --filter @polaris/cre-workflows evidence` runs each workflow once on Monad testnet (and the log trigger on a real `reauthorize` with `--retry-tx`) and keeps its log and transaction hashes in [`evidence/`](evidence/); `cre workflow build` compiles all three to WASM without a login. **Not run yet**: this machine has no `cre login`, so no CLI log or CRE transaction exists; the SDK test runtime runs (`test`, `e2e:local`, `demo:local`) are not the CLI |
 | Monad | Writes to Monad testnet (10143) through Chainlink's forwarder; every target in `project.yaml` also reads Monad mainnet (143), where the guardian reads Chainlink's AUSD/USD feed (`0xE207…9e13`), without writing there |
-| Chainlink privacy | The paid provider calls go through CRE's Confidential HTTP (a switch, on in simulation): see [Confidential HTTP](#confidential-http) |
+| Chainlink privacy | The paid provider calls go through CRE's Confidential HTTP (a switch, on in simulation): see [Confidential HTTP](#confidential-http). Implemented and unit-tested on the SDK's test runtime; **not yet exercised against the real capability** (that needs a CLI run with a provider key) |
 
 ## One command
 
@@ -223,8 +229,10 @@ says you are logged in; `packages/contracts/deployments/monad-testnet.json`
 the workflows need (collections also needs PolarisCheckout, the guardian
 GuardianReceiver); `CRE_ETH_PRIVATE_KEY` is set, holds testnet MON, and is
 every receiver's `simulationTransmitter()` (read on chain; only its address
-is printed); a `--retry-tx` is a transaction with PolarisCheckout's
-`Reauthorized` in it. Then it fills the three `config.staging.json` from the
+is printed); every variable the workflows' secrets files name is defined (see
+below); a `--retry-tx` is a transaction with PolarisCheckout's
+`Reauthorized` in it; a `--callback <url>` comes with
+`POLARIS_CALLBACK_SECRET`, the key it is signed with. Then it fills the three `config.staging.json` from the
 record (`configure staging`), keeps `cre workflow supported-chains`, and runs
 each workflow with `simulate --broadcast` (underwriting with a freshly signed
 payload; with `--retry-tx`, collections' trigger 1 too, as
@@ -232,15 +240,42 @@ payload; with `--retry-tx`, collections' trigger 1 too, as
 testnet: landed or reverted, the block, and the forwarder's `ReportProcessed`
 result for the receiver (a log-triggered run's own write only, not the
 `reauthorize` that fired it). It writes `evidence/<UTC date>/<run>-<time>.log`,
-`runs.json` and a `README.md` table, and prints the table. A run that wrote
-nothing (nothing due, a thin file, a guardian with nothing new) is recorded as
-such: no hash is invented.
+`runs.json` and a `README.md` table, and prints the table (and warns if
+git would ignore any of those files: the root `.gitignore` keeps
+`workflows/evidence/**/*.log`). A run that wrote nothing (nothing due, a thin
+file, a guardian with nothing new) is recorded as such: no hash is invented.
 
-Every script that starts `cre workflow simulate` here (`cre`, the
-`simulate:*` scripts, the loops, `retry:listen`, `evidence`) also sets
-`ZERION_BASIC_AUTH = base64("<ZERION_API_KEY>:")` for the CLI when
-`ZERION_API_KEY` is set and it is not: the credential Confidential HTTP
-templates into Zerion's header ([Confidential HTTP](#confidential-http)).
+A run whose config must differ from the committed one gets its own, for that
+run only, through `simulate --config` (written to `workflows/.local/evidence/`,
+and named in the log's header and `runs.json`'s `configChanges`):
+
+- **underwriting without the providers that have no key.** Under
+  Confidential HTTP the workflow never reads a key, so it cannot tell an
+  empty one from a real one; without this the enclave would template `""`
+  into each paid request and spend the run's calls on 401s.
+- **`--callback <url>`:** collections and underwriting post their signed run
+  callback to that URL (the Polaris API's `/api/cre/callback`, local or not),
+  so the HTTP capability shows in the log. The committed staging config keeps
+  `callback: null`, and so a testnet run without it makes no HTTP call at all:
+  its candidates come from the chain.
+
+**Secrets under simulation.** CLI v1.35.0 resolves every name in the secrets
+file a workflow.yaml target points at before the run, and aborts the whole
+run on one that is not set at all ("environment variable X for secret value
+not found"), whether or not the workflow reads it. So the guardian points at
+no secrets file (`secrets-path: ""`), collections at its own
+(`collections/secrets.yaml`: only `POLARIS_CALLBACK_SECRET`), underwriting at
+`secrets.yaml` (the provider keys and the callback key; `cre secrets create`
+uploads this one). Every script that starts `cre workflow simulate` here
+(`cre`, the `simulate:*` scripts, the loops, `retry:listen`, `evidence`)
+defines each of those variables that neither the shell nor `workflows/.env`
+sets, as `""` (a key that is not configured, which every workflow reads as
+missing; a value in either place always wins), puts the pinned Bun on PATH
+(the CLI compiles TypeScript with it), and sets
+`ZERION_BASIC_AUTH = base64("<ZERION_API_KEY>:")` when `ZERION_API_KEY` is
+set and it is not: the credential Confidential HTTP templates into Zerion's
+header ([Confidential HTTP](#confidential-http)). A bare `cre` run needs
+them in `workflows/.env` (`.env.example` lists them).
 
 For live underwriting, keep the simulator listening and let the API queue
 requests (the HTTP trigger fires at most once per 30 s):
@@ -252,14 +287,16 @@ pnpm --filter @polaris/cre-workflows cre workflow simulate ./underwriting -T sta
 
 **The demo's depeg (decision 28).** AUSD sits at about $0.9998, so the guard
 is shown by raising its threshold, not by faking a price: the owner sets the
-depeg line above the real price, the next guardian run reads the real
-Chainlink round and pauses Pay in 4, and restoring the line resumes it. Caption
-it "threshold raised for demo".
+depeg line above the real price. GuardianReceiver judges the latest attested
+round by the new line at once, and the next guardian run reads the real
+Chainlink round again and attests the pause; restoring the line resumes it
+(at once, and attested on the next run). Caption it "threshold raised for
+demo".
 
 ```bash
 GUARD_ACTION=thresholds GUARD_MIN_PRICE=1.001 pnpm --filter @polarispay/contracts guardian:monad   # owner only
 pnpm --filter @polaris/cre-workflows simulate:guardian staging-settings                            # verdict: paused (depeg)
-GUARD_ACTION=thresholds pnpm --filter @polarispay/contracts guardian:monad                        # back to decision 9's defaults
+GUARD_ACTION=thresholds pnpm --filter @polarispay/contracts guardian:monad                        # back to the defaults
 pnpm --filter @polaris/cre-workflows simulate:guardian staging-settings                            # verdict: healthy, resumed
 ```
 
@@ -291,7 +328,7 @@ buyer at the next rung).
 
 ## Anyone can run the collections
 
-There is no fallback keeper. Every action a collections report carries is
+CRE is how collections run on schedule, but it is not a gate. There is no fallback keeper. Every action a collections report carries is
 permissionless on its target: `PolarisLoanEngine.collectInstallment(id)` and
 `liquidate(id)`, `PolarisPayments.chargeDue(id)`. The schedule the buyer
 signed decides what moves and when, so a stranger calling them can only do
@@ -507,6 +544,14 @@ on, see the next section.
 
 #### Confidential HTTP
 
+**Status: implemented and unit-tested on the SDK's test runtime (its mocks and
+the underwriting package's synthesized fixtures); not yet exercised against
+the real capability.** No run of the CLI has sent a real request through it:
+that needs `cre login` and at least one provider key (a free Etherscan key is
+enough), then `evidence --only underwriting`, whose log records the call.
+Without a key, `evidence` leaves that provider out of the run's config, so
+the run shows no Confidential HTTP call at all rather than a 401.
+
 `confidentialHttp: true` (staging and local; production keeps `false` until a
 deployed run shows Monad's DON serves the capability) sends the paid calls,
 Nansen, Zerion and Etherscan, through CRE's Confidential HTTP capability
@@ -585,8 +630,9 @@ in production). [`src/guardian/workflow.ts`](src/guardian/workflow.ts),
    every read after it names that number, so the figures are one consistent
    state even though Monad's finalized head moves every 400 ms:
    `GuardianReceiver.currentInputs()` (PolarisLoanEngine's `poolState()`:
-   free cash, what buyers owe, bad debt, lifetime originations; and the
-   thresholds the owner set), `creditStatus()`, `latestAttestation()`.
+   free cash, what buyers owe, bad debt, lifetime originations; the
+   thresholds the owner set; the bad debt the owner acknowledged),
+   `creditStatus()`, `latestAttestation()`.
 2. **The peg, on Monad mainnet.** A second EVM client, for `monad-mainnet`,
    reads Chainlink's AUSD/USD proxy `0xE20751C7B5867bCBef815ffc1b284c3f412a9e13`
    at mainnet's last finalized block: `decimals()` must be 8 and
@@ -599,18 +645,24 @@ in production). [`src/guardian/workflow.ts`](src/guardian/workflow.ts),
    thresholds read in step 1, so the owner changes policy on chain without
    touching the workflow:
 
-   | Bit | Reason | Paused when (defaults, decision 9) |
-   |---:|---|---|
-   | 1 | depeg | price < `minPrice` ($0.995) |
-   | 2 | low cash | free cash < `minFreeCash` ($1,000) |
-   | 4 | bad debt | bad debt > `maxBadDebtBps` (5%) of lifetime originations |
-   | 8 | stale price | the round is older than `maxPriceAge` (2 h) at `observedAt`, or never updated |
+   | Bit | Reason | Paused when (defaults) | Where GuardianReceiver takes it from |
+   |---:|---|---|---|
+   | 1 | depeg | price < `minPrice` ($0.995) or > `maxPrice` ($1.005) | the latest attestation (the DON's read of Monad mainnet), under today's thresholds; fails open once it is stale |
+   | 2 | low cash | free cash < `minFreeCash` ($1,000) | the pool, read live on every call |
+   | 4 | bad debt | once `minOriginated` ($10,000) is lent, bad debt beyond what the owner acknowledged > `maxBadDebtBps` (5%) of lifetime originations | the pool, read live on every call |
+   | 8 | stale price | the round is older than `maxPriceAge` (2 h) at `observedAt`, or never updated | the latest attestation, under today's thresholds; fails open once it is stale |
 
-   Bad debt is against lifetime originations, not today's book: bad debt never
-   falls while the book shrinks with every repayment (GuardianReceiver's
-   NatSpec has the reasoning), so a bad-debt pause does not lift by itself;
-   the owner's `setOverride(ForceResume)` does. Depeg, low cash and a stale
-   price lift on the next healthy report.
+   The ceiling catches an upward break and an absurd answer (a faulty feed
+   can no longer only go stale). Bad debt is against lifetime originations,
+   not today's book: bad debt never falls while the book shrinks with every
+   repayment (GuardianReceiver's NatSpec has the reasoning). So a bad-debt
+   pause does not lift by itself: the owner acknowledges the loss
+   (`acknowledgeBadDebt()`, `GUARD_ACTION=acknowledge`), after which only new
+   losses count, and nothing about the price is switched off. The
+   `minOriginated` floor keeps one default on a young pool (the testnet pool
+   has lent $200) from pausing Pay in 4 for everyone. Depeg and a stale price
+   lift as soon as the price is back in the band; low cash as soon as the pool
+   is funded.
 4. **The write, when there is something new** (`writeDecision`, like a Data
    Feed's heartbeat and deviation threshold, because Monad bills every
    write's gas limit): the first attestation; a changed verdict (a pause, a
@@ -629,31 +681,41 @@ in production). [`src/guardian/workflow.ts`](src/guardian/workflow.ts),
    `CreditGuardUpdated(round, creditPaused, reasons, attestation)` means
    accepted (`status: "written"`, and `round` is the new round of the
    receiver's pool-health feed); `AttestationRefused(observedAt, reason)` is
-   decoded (`VerdictMismatch`, `AttestationOutOfOrder`,
+   decoded (`VerdictMismatch`, `PoolMismatch`, `AttestationOutOfOrder`,
    `ObservationInFuture`, `AttestationTooOld`) into `status: "refused"`
-   without failing the run: a threshold changed between the read and the
-   write refuses one report, and the next run reads the new threshold. A
-   reverted delivery fails the run.
+   without failing the run: a threshold changed, or the pool crossed one,
+   between the read and the write refuses one report, and the next run reads
+   the chain anew. A reverted delivery fails the run.
 
 What it moves on chain: `PolarisCheckout.openPlan` asks
 `GuardianReceiver.isCreditPaused()` first and reverts
-`CreditPausedByGuardian(reasons)` while the attested verdict is paused.
-Pay now, Send, Subscribe, collections, repayments and `reauthorize` never ask.
-The guard fails open: no attestation, or one older than `maxAttestationAge`,
-reads as open (so a simulate-only setup, which runs only when someone runs
-it, cannot lock Pay in 4), and the owner's override outranks everything. The
-receiver is also an `AggregatorV3Interface` ("Polaris pool health, computed
-by CRE", 8 decimals): each accepted attestation is a round whose answer is
-free cash in dollars at the attested price, or 0 while it pauses credit. That
-is a Polaris attestation computed by a CRE workflow, not a Chainlink Data Feed
-or Proof of Reserve.
+`CreditPausedByGuardian(reasons)` while it says paused. Pay now, Send,
+Subscribe, collections, repayments and `reauthorize` never ask. What the
+receiver trusts this workflow for is the price: it checks every report's
+verdict against the thresholds on chain, reads low cash and bad debt from
+the pool itself (so a report can neither pause credit by claiming an empty
+pool nor keep it open through a real shortfall; either is `PoolMismatch`),
+and judges the latest attested round by today's thresholds (a threshold
+change applies at once). The price reasons fail open: no attestation, or one
+older than `maxAttestationAge`, reads as no depeg (so a simulate-only setup,
+which runs only when someone runs it, cannot lock Pay in 4); the pool's apply
+whatever the attestations say. The owner's override outranks everything, and
+a forced resume ends by itself (at most a day ahead). The receiver is also an
+`AggregatorV3Interface` ("Polaris pool health, computed by CRE", 8 decimals):
+each accepted attestation is a round whose answer is the pool's free cash
+when the report landed (read from the pool, not the report) in dollars at
+the attested price, or 0 while it pauses credit. That is a Polaris
+attestation computed by a CRE workflow, not a Chainlink Data Feed or Proof of
+Reserve.
 
 The result says it all in one object: `status`, `why`, `transition` (first,
 paused, resumed, reasons-changed, unchanged), `verdict { creditPaused,
 reasons, reasonNames }`, `price { kind, chain, feed, answer, roundId,
 updatedAt, ageSeconds }`, `pool { block, observedAt, freeCash, totalOwed,
-badDebt, totalOriginated }`, `thresholds`, `before` (what openPlan applied,
-the override, staleness), `round`, `refusal`, `txHash`, `gasLimit`, `note`
+badDebt, totalOriginated, badDebtAcknowledged }`, `thresholds` (with the
+ceiling and the originations floor), `before` (what openPlan applied and
+why: the pool's reasons and the price's, the override and until when,
+staleness), `round`, `refusal`, `txHash`, `gasLimit`, `note`
 (an owner override that decides, or a heartbeat that outlives the
 attestation). Reads: at most 10 of 15 (header, 3 on the receiver, 3 on the
 feed, the transmitter, the estimate, the receipt). No HTTP, no secrets.
@@ -737,17 +799,21 @@ that wrote nothing (a retry that wrote nothing posts nothing).
   11 static words whose tail is `GuardianReceiver.evaluate`'s own calldata;
   every threshold at its edge; on 5,000 seeded random attestations near every
   edge the verdict equals `lib/cre.js` `guardianReasons` (which the contract
-  suite fuzzes against `evaluate`); the demo's raised threshold turns the real
-  price into a depeg; the write policy (first, verdict, stale, heartbeat,
-  deviation, unchanged, not-newer); `polaris-guardian` hashes to
-  `0x64383734313635346335`.
+  suite fuzzes against `evaluate`), the ceiling, the originations floor and
+  the acknowledged bad debt included; which reasons the receiver reads from
+  the pool and which from the report; the demo's raised threshold turns the
+  real price into a depeg; the feed's answer saturates as the receiver's does;
+  the write policy (first, verdict, stale, heartbeat, deviation, unchanged,
+  not-newer); `polaris-guardian` hashes to `0x64383734313635346335`.
 - `test/guardian.workflow.test.ts`: the handler with two EVM mocks, Monad
   testnet and Monad mainnet: the pool read at one finalized block by number,
   the feed on mainnet with its identity checked (a wrong description or the
   18-decimal variant fails the run before any write); a raised threshold
-  pauses, a healthy run after a pause resumes; every reason; the heartbeat and
-  deviation; a refusal decoded, not thrown; a reverted delivery fails the run;
-  gas behind a transmitter; 10 reads a run.
+  pauses, a healthy run after a pause resumes; every reason; the ceiling, the
+  originations floor and the acknowledgement read from the chain; the
+  heartbeat and deviation; a refusal decoded, not thrown; a reverted delivery
+  fails the run; gas behind a transmitter; a forced resume's end in the note;
+  10 reads a run.
 - The instant retry, in `test/collections.workflow.test.ts`: the
   `Reauthorized` topic0; trigger 1 filtered on PolarisCheckout and that topic
   with FINALIZED confidence (`retry: null` leaves one trigger); a real-shaped
@@ -755,11 +821,20 @@ that wrote nothing (a retry that wrote nothing posts nothing).
   candidate scan, and the callback names the trigger; nothing due writes
   nothing; a still-short buyer is dunned again; a log from another contract or
   event, or one a reorg removed, collects nothing; `maxTasksPerReport` holds.
+- `test/secrets-env.test.ts`: for every target, the guardian resolves no
+  secret, collections only its callback key, underwriting its providers and
+  the callback key; the environment every script starts the CLI with defines
+  each of them (`""` when unset, never shadowing a value in `workflows/.env`
+  or the shell) and puts Bun first on PATH; the evidence preflight names a
+  variable left unset; underwriting's run config leaves out every provider
+  without a key; `--callback` reaches collections and underwriting through
+  `--config` for that run only.
 - `test/evidence-script.test.ts`: the evidence and loop scripts read a run
   from the CLI's own output format, find its transaction, read the receipt's
   `ReportProcessed`, refuse (logged out, no deployment, a missing address,
   another chain, no transmitter key, a bad `--retry-tx`) before sending
-  anything, and redact every secret; the guardian's result reads as its
+  anything, and redact every secret; git keeps every file they write (the
+  simulate logs included); the guardian's result reads as its
   verdict; a log-triggered run's hash is its own write, not the
   `reauthorize` that fired it; `--retry-tx` finds `Reauthorized` after the
   token's `Approval` and passes `--evm-event-index 1`; the listener cuts each
@@ -785,8 +860,9 @@ that wrote nothing (a retry that wrote nothing posts nothing).
      file: no report, and `creditLimitOf` stays 0;
   2. the guardian's first attestation is healthy, and GuardianReceiver decodes
      exactly the workflow's bytes (`latestAttestation()` equals them) and
-     re-evaluates them to the same verdict; the pool-health feed answers free
-     cash x price; no second write inside the heartbeat. The owner raises the
+     re-evaluates them to the same verdict (its pool verdict is the live
+     pool's); the pool-health feed answers free cash x price; no second write
+     inside the heartbeat. The owner raises the
      depeg threshold to $1.001: the next run pauses, `creditPaused()` is
      `(true, 1)` and `openPlan` reverts `CreditPausedByGuardian(1)`;
      restored, the next run resumes. A depeg and then a stale round on the
@@ -802,9 +878,12 @@ that wrote nothing (a retry that wrote nothing posts nothing).
   6. a revoked allowance and an empty balance become `allowance_lost` and
      `insufficient_funds`; past grace the plan is liquidated in the same
      report; an unknown action is skipped, not fatal;
-  7. the guardian after that loss: the liquidation's shortfall is bad debt, the
-     next run pauses Pay in 4 (`(true, 4)`), and only the owner's
-     `ForceResume` lifts it.
+  7. the guardian after that loss: the liquidation's shortfall is bad debt.
+     The local pool has lent less than the $10,000 floor, so it pauses nobody;
+     with the floor lowered, GuardianReceiver reads it from the pool and pauses
+     Pay in 4 at once (`(true, 4)`), the next run attests it, and only the
+     owner's acknowledgement (`acknowledgeBadDebt()`) lifts it, after which the
+     next run attests the resume.
 
 Gas on the local node (Hardhat, chain 10143), the limit each report was sent
 with against what it used. Every receiver there has the deployer as its
@@ -814,15 +893,15 @@ overhead added), as on the simulation forwarder on testnet:
 | Report | Gas used | Limit sent |
 |---|---:|---:|
 | Underwriting, one buyer with a history wallet (Confidential HTTP on) | 144,224 | 165,857 |
-| Guardian, the first attestation (first writes of its storage) | 228,612 | 262,903 |
-| Guardian, a later attestation (a pause) | 114,590 | 150,000 (the floor) |
-| Guardian, the bad-debt pause | 157,298 | 180,892 |
+| Guardian, the first attestation (first writes of its storage) | 253,670 | 291,720 |
+| Guardian, a later attestation (a pause) | 139,590 | 160,528 |
+| Guardian, the bad-debt pause | 185,405 | 213,215 |
 | Collections, one instalment collected (cron) | 158,510 | 185,846 |
 | Collections, one instalment skipped (dunning) | 80,614 | 150,000 (the floor) |
 | Collections, one instalment collected (the log-triggered retry) | 142,835 | 168,109 |
 | Collections, a skip plus a liquidation | 165,406 | 208,048 |
 
-(`e2e:local` on 28 Sep 2026: 12 of 12 pass.)
+(`e2e:local` on 28 Sep 2026, after the guardian's review fixes: 12 of 12 pass. The guardian's writes cost about 25,000 gas more than before: GuardianReceiver now reads the pool in the same call to check the report against it.)
 
 ## Status
 
@@ -830,13 +909,13 @@ overhead added), as on the simulation forwarder on testnet:
 |---|---|
 | The three workflows compile to WASM with `cre workflow build` (CLI v1.35.0, SDK 1.22.0) | done, no login needed (28 Sep 2026: collections 2.78 MB with both triggers, underwriting 2.89 MB, guardian 2.74 MB) |
 | `project.yaml` with the `monad-mainnet` read target | accepted: `cre workflow hash -T <target>` loads the settings of every target (a misspelt chain name is refused: `invalid chain name`); `cre workflow hash ./guardian -T staging-settings --public_key <any address>` compiles and hashes the guardian with both chains (28 Sep 2026); `cre workflow build` does not read them |
-| Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`: 195 pass; `e2e:local`: 12 of 12) |
-| `cre workflow simulate --broadcast` on Monad testnet | ready (`evidence`, `evidence --retry-tx`, the loops, `retry:listen`), and the transmitter `CRE_ETH_PRIVATE_KEY` (0xBBb4…2EA6) is funded with 1 testnet MON and set on all three receivers; needs only `cre login`. Then: `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002` (a real `Reauthorized` from the testnet smoke test). Its runs land in [`evidence/`](evidence/). Not run yet: no login here |
-| `polaris-guardian` | done: cron; Chainlink AUSD/USD read on Monad mainnet (address and decimals checked on chain), the pool on Monad testnet at one finalized block, the verdict re-evaluated by GuardianReceiver, pause and resume of `openPlan` shown on real contracts (`e2e:local`) |
+| Unit tests on the SDK's test runtime; the on-chain round trip on a local node | done (`test`: 209 pass; `e2e:local`: 12 of 12) |
+| `cre workflow simulate --broadcast` on Monad testnet | ready (`evidence`, `evidence --retry-tx`, the loops, `retry:listen`), and the transmitter `CRE_ETH_PRIVATE_KEY` (0xBBb4…2EA6) is funded with 1 testnet MON and set on all three receivers. What blocked every run even after a login (the CLI aborting on the unset provider-key variables in the shared secrets file) is fixed and tested. Needs `cre login`; then `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002` (a real `Reauthorized` from the testnet smoke test). Its runs land in [`evidence/`](evidence/). **Not run yet: no login here**, so no CLI log and no CRE transaction exist |
+| `polaris-guardian` | done: cron; Chainlink AUSD/USD read on Monad mainnet (address and decimals checked on chain), the pool on Monad testnet at one finalized block, the verdict re-checked by GuardianReceiver (which reads the pool itself), pause and resume of `openPlan` shown on real contracts (`e2e:local`) |
 | The instant retry (EVM log trigger) | done: trigger 1 of `polaris-collections` on `PolarisCheckout.Reauthorized`; shown on real contracts with a real `reauthorize` receipt (`e2e:local`); under the CLI, `simulate:retry` (one past transaction) or `retry:listen` (live) |
-| Monad testnet | deployed 28 Sep 2026 (`packages/contracts/deployments/monad-testnet.json`): CollectionsReceiver 0x4201…45CC, UnderwritingReceiver 0x523e…4a19, GuardianReceiver 0xF825…26D8, behind Chainlink's simulation forwarder; the three `config.staging.json` are filled from it (`configure staging`; `test/config.test.ts` holds them to the record) |
+| Monad testnet | deployed 28 Sep 2026 (`packages/contracts/deployments/monad-testnet.json`): CollectionsReceiver 0x4201…45CC, UnderwritingReceiver 0x523e…4a19, GuardianReceiver 0x4c99…e3Df (redeployed the same day with the review's fixes; it replaced 0xF825…26D8), behind Chainlink's simulation forwarder; the three `config.staging.json` are filled from it (`configure staging`; `test/config.test.ts` holds them to the record) |
 | Monad mainnet reads | every target reads `monad-mainnet` (public RPC); nothing writes there |
-| Confidential HTTP | on in staging and local; production off until a deployed run shows Monad's DON serves it |
+| Confidential HTTP | on in staging and local; production off until a deployed run shows Monad's DON serves it. Implemented and unit-tested; not yet exercised against the real capability (needs a CLI run with a provider key) |
 | Deploy to the DON | waits for deploy access (`cre account access`) |
 | The Polaris API side of the callback | done: `apps/business` `POST /api/cre/callback` verifies the HMAC (`POLARIS_CRE_CALLBACK_SECRET`), records `credit.underwritten` / `credit.refused` / `credit.thin` for the app, and runs the chain sync on `collections.run`. The committed configs keep `callback: null` until a deployment has an API URL to put there |
 | Firing `polaris-underwrite` from the product | done: the app's **Raise your limit** (Bring your history) signs the consent and the history wallet's proof; `apps/business` `POST /api/credit/underwrite` verifies both and fires the HTTP trigger at most once per 30 s (`CRE_UNDERWRITING_TRIGGER_URL`) |
@@ -885,9 +964,12 @@ the log trigger 10 events per 6 s and 5 addresses per filter (we use one).
   Pay in 4 plans only. Its price is the Chainlink feed's latest round on
   mainnet, which the receiver cannot check across chains: the DON's consensus
   on the read is what vouches for it, and the round id is in every report so
-  anyone can look it up. Under simulation the report is signed by the
-  simulator, and the receivers accept only the simulation transmitter's
-  origin (PolarisReceiver).
+  anyone can look it up. The pool's figures the receiver checks itself. Under
+  simulation the report is signed by the simulator, and the receivers accept
+  only the simulation transmitter's origin (PolarisReceiver): whoever holds
+  that key can attest a price, which is why it is a dedicated key and why the
+  receivers move to the production forwarder, whose DON signatures replace
+  it, once the workflows are deployed.
 
 ## Attribution
 
