@@ -32,15 +32,16 @@ browsers allow over plain http.
 ## Environment
 
 Copy [`.env.example`](.env.example) to `.env.local`. Everything is `NEXT_PUBLIC_*`,
-inlined at build time, and public, except the optional server-side `FX_RPC_*`.
+inlined at build time, and public, except the optional server-side `FX_RPC_*`
+and `POLARIS_ANDROID_*`, which are read per request.
 
 | Variable | Default | What it is |
 |---|---|---|
 | `NEXT_PUBLIC_RP_ID` | the page's hostname | The WebAuthn relying party. **Production: `polarispay.app`**, so `app.` and `pay.` share one account per person. A passkey, and the account derived from it, belongs to this id forever. |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | unset | The Privy app (the dashboard's) behind **Continue with email**. Unset hides the option; Face ID works either way. |
 | `NEXT_PUBLIC_PRIVY_CLIENT_ID` | unset | Optional: a Privy *app client* made for the web origin. |
-| `NEXT_PUBLIC_BUILD_TARGET` | unset | `android` for the Android build only. |
-| `NEXT_PUBLIC_PRIVY_ANDROID_CLIENT_ID` | unset | The Privy app client for the **Android build** (read only when `NEXT_PUBLIC_BUILD_TARGET=android`). It is locked to the Android package, so the web build never passes it as its `clientId`. |
+| `NEXT_PUBLIC_BUILD_TARGET` | unset | `android` for a bundle built for a native Android shell only. The Android app in [`apps/android`](../android/README.md) is a Trusted Web Activity: it opens this app's hosted **web** build in Chrome, so it never sets this. |
+| `NEXT_PUBLIC_PRIVY_ANDROID_CLIENT_ID` | unset | The Privy app client for a native Android build (read only when `NEXT_PUBLIC_BUILD_TARGET=android`). It is locked to the Android package, so the web build, and with it the Trusted Web Activity, never passes it as its `clientId`. |
 | `NEXT_PUBLIC_DEV_SIGNER` | unset | `1` replaces Face ID with a random key in the tab's `sessionStorage`, for headless runs. A "Dev signer" badge is always on screen while it is set. Never set it in a deployment. |
 | `NEXT_PUBLIC_CHAIN_ID` | `10143` | Monad testnet; `143` for mainnet |
 | `NEXT_PUBLIC_RPC_URL` | viem's default for the chain | Read-only RPC (EIP-712 domains, permit nonces) |
@@ -49,6 +50,8 @@ inlined at build time, and public, except the optional server-side `FX_RPC_*`.
 | `NEXT_PUBLIC_POLARIS_API_URL` | unset | Polaris for Business (e.g. `http://localhost:3100`): the relayer (`POST /api/relay`), checkout sessions and payment links (`/api/public/…`), and the network's contracts and EIP-712 domains (`/api/public/network`). Unset: the stub relayer and sample links. |
 | `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
 | `FX_RPC_MONAD`, `FX_RPC_ETHEREUM`, `FX_RPC_POLYGON`, `FX_RPC_BASE` | public RPCs (`packages/fx/src/feeds.ts`) | **Server only.** Comma-separated JSON-RPC URLs `/api/fx` reads the Chainlink FX feeds from (Monad mainnet, Ethereum, Polygon, Base). Read-only calls; no key needed |
+| `POLARIS_ANDROID_SHA256_FINGERPRINTS` | unset | **Server only.** The SHA-256 fingerprints of the certificates the Android app is signed with, comma-separated (`AA:BB:…`, as `pnpm --filter @polaris/android fingerprint` prints). `/.well-known/assetlinks.json` serves them, which verifies the Android app. Unset: that route is 404 and the Android app shows an address bar |
+| `POLARIS_ANDROID_PACKAGE` | `app.polarispay.twa` | **Server only.** The Android app's package name in `/.well-known/assetlinks.json` |
 
 ## With Polaris for Business (the real relayer)
 
@@ -142,6 +145,18 @@ is always offered before creating a second account.
   deployed build never holds a key in browser storage.
 - **A phone** needs a real https domain inside the rpId, for example
   `dev.polarispay.app` with `NEXT_PUBLIC_RP_ID=polarispay.app`.
+
+### The Android app
+
+[`apps/android`](../android/README.md) wraps this app, as hosted, in a
+Trusted Web Activity: an Android app whose screen is Chrome showing
+`https://app.polarispay.app`. Face ID is the same WebAuthn ceremony as in
+Chrome (the same rpId, the same Google Password Manager passkey), so one
+account works in the tab, the installed PWA and the Android app. The site
+proves the app is its own with `/.well-known/assetlinks.json`
+(`src/app/.well-known/assetlinks.json/route.ts`, from
+`POLARIS_ANDROID_SHA256_FINGERPRINTS`); without it Chrome still opens the app,
+with an address bar.
 
 ## Screens
 
@@ -295,6 +310,8 @@ in [`docs/design/chainlink`](../../docs/design/chainlink).
 | `src/lib/checkout-return.ts` | The `polaris:checkout` postMessage protocol back to the merchant page (`announceReady`, `finishCheckout`, `cancelCheckout`) |
 | `src/lib/data/` | The data interface every screen reads: `live.ts` (chain and API) with the API set, `mock.ts` (the offline demo's sample data, marked Sample) without |
 | `src/app/api/fx/route.ts`, `src/lib/fx.ts` | The Chainlink rate behind the local-currency line: the server route (`@polaris/fx`) and the tab's shared, cached fetch |
+| `src/app/.well-known/assetlinks.json/route.ts`, `src/lib/assetlinks.ts` | Digital Asset Links for the Android app (`test/assetlinks.test.ts`) |
+| `src/app/manifest.ts`, `src/app/icons/[name]/route.tsx` | The web app manifest, and its icons from `@polaris/brand` (the Android app's launcher, splash and shortcut icons come from the same URLs) |
 | `src/lib/underwriting.ts` | Pay in 4 credit: consent and link-proof signatures, the CRE underwriting request, waiting for the decision |
 | `src/lib/credit-guard.ts`, `src/lib/collection.ts` | The risk guard in the buyer's words; a plan's collection after a lost approval (sign again, collecting, collected) |
 | `src/desktop/` | The desktop layouts (from 1024px): Home and its money widget, the pages, the checkout card, onboarding; `lib/series.ts` draws their charts |

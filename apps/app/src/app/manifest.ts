@@ -18,9 +18,23 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
+    // The Android app (apps/android/twa-manifest.json) offers Send and Receive with the same icons.
     shortcuts: [
       { name: "Pay or claim", url: "/pay", description: "Scan or paste a Polaris link" },
-      { name: "Send money", url: "/send", description: "Send dollars with a link" },
+      {
+        name: "Send money",
+        short_name: "Send",
+        url: "/send",
+        description: "Send dollars with a link",
+        icons: [{ src: "/icons/shortcut-send.png", sizes: "192x192", type: "image/png" }],
+      },
+      {
+        name: "Receive money",
+        short_name: "Receive",
+        url: "/receive",
+        description: "Your code for receiving dollars",
+        icons: [{ src: "/icons/shortcut-receive.png", sizes: "192x192", type: "image/png" }],
+      },
     ],
   };
 }
