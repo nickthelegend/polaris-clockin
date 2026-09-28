@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { AccountProviders } from "@/lib/account/privy-bridge";
 import { EmailLoginSheet } from "../email-login-sheet";
-import { DevSignerBadge } from "./chrome";
+import { BuildBadges } from "./chrome";
 import { SheetHost } from "./sheet-host";
 
 /**
@@ -30,7 +30,7 @@ export function Providers({ children, sheet }: { children: ReactNode; sheet: Rea
             <EmailLoginSheet />
           </SheetHost>
         </SheetStage>
-        <DevSignerBadge />
+        <BuildBadges />
         <Toaster />
       </AccountProviders>
     </IconProvider>

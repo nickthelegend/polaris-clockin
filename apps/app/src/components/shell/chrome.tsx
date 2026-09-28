@@ -9,7 +9,7 @@ import { DEMO_MODE } from "@/lib/api";
  * Polaris API: sample data, and a stub relayer whose "transactions" never
  * reach a chain, so no receipt links to an explorer).
  */
-export function DevSignerBadge() {
+export function BuildBadges() {
   if (!DEV_SIGNER && !DEMO_MODE) return null;
   return (
     <div className="pointer-events-none fixed inset-x-0 top-[calc(4px+env(safe-area-inset-top))] z-[1000] flex justify-center gap-1.5">
