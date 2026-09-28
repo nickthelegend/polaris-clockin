@@ -6,8 +6,9 @@ month.
 - **The Polaris app** (buyers and senders): open a link, create an account with
   Face ID ([Mera](https://docs.monad.xyz/guides/mera) passkeys), and pay in
   dollars (AUSD). Pay in full, in four instalments against a credit line read
-  from your on-chain history, or on a subscription, and send dollars across
-  borders by link. No wallet, no gas, no seed phrase.
+  from your on-chain history, or on a subscription, send dollars across
+  borders by link, and split a bill with one link (each friend pays their
+  share, straight to whoever paid). No wallet, no gas, no seed phrase.
 - **Polaris for Business** (merchants and platforms): payment links, a checkout
   API and SDK, a collections dashboard, webhooks, and one-tap or automatic
   payouts. Built on [Privy](https://privy.io).
@@ -107,6 +108,23 @@ same run):
 | A dashboard payment link: paid, the receipt says **Done** and goes Home; the next visitor gets a fresh checkout | [`45-dashboard-share-link`](docs/demo/45-dashboard-share-link.png), [`46-link-3-app-receipt`](docs/demo/46-link-3-app-receipt.png), [`46-link-4-next-visitor`](docs/demo/46-link-4-next-visitor.png) |
 | After the run: a send link from "Maya" (name asked once), claimed on a new phone, "Your link was claimed"; Home, Activity, Credit, the dashboard at 1280 and 390 | [`x-1440-send-confirm`](docs/demo/x-1440-send-confirm.png), [`x-1440-send-link-ready`](docs/demo/x-1440-send-link-ready.png), [`x-390-claim-open`](docs/demo/x-390-claim-open.png), [`x-1440-notifications`](docs/demo/x-1440-notifications.png), [`x-1440-home`](docs/demo/x-1440-home.png), [`x-1440-activity`](docs/demo/x-1440-activity.png), [`x-1440-credit-score`](docs/demo/x-1440-credit-score.png), [`x-1280-dashboard-overview`](docs/demo/x-1280-dashboard-overview.png), [`x-1280-dashboard-payments`](docs/demo/x-1280-dashboard-payments.png), [`x-390-dashboard-payments`](docs/demo/x-390-dashboard-payments.png), [`x-1280-landing`](docs/demo/x-1280-landing.png) |
 
+**Split the bill.** `pnpm demo:e2e:split`
+([`scripts/demo-e2e-split.cjs`](scripts/demo-e2e-split.cjs); `pnpm demo:e2e`
+runs it too, after its own steps) plays it against the same run with four
+browser profiles. Maya splits a $200 dinner five ways on her phone (her own
+share stays hers) and shares one link. Sam opens it on a laptop with no
+account: Pay with Face ID makes his account in the same step and tells him to
+add $40 before anything is signed; he adds test dollars and pays. Priya pays
+hers on a phone. Maya sees 2 of 4 paid and $80 in her account, in Activity
+on the phone and the desktop, and closes the split; Jon opens it afterwards
+and owes nothing. A second split, by named amounts, is paid in full. Each
+share is `PolarisSplit.payShare` on the local chain, relayed; every step is
+checked against the chain and `GET /api/public/splits/{id}`: 22 of 22, with
+the screens at 402×877 and 1440×900 in
+[`docs/design/split`](docs/design/split/README.md). In the app, **Split a
+bill** is in Home's More sheet (on the desktop, in the Send widget and
+Activity's Your splits).
+
 ### Each app on its own
 
 [`.claude/launch.json`](.claude/launch.json) has all four dev servers:
@@ -128,21 +146,22 @@ the API. Each app's README lists its environment.
 
 | Package | Command | Result on this branch |
 |---|---|---|
-| Contracts | `pnpm --filter @polarispay/contracts test` | 543 passing |
-| `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 151 passing; ESM and CJS builds |
+| Contracts | `pnpm --filter @polarispay/contracts test` | 580 passing (PolarisSplit's 34 among them) |
+| `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 157 passing; ESM and CJS builds |
 | Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 263 passing |
 | Gateway | `pnpm --filter @polarispay/gateway test` | 7 passing |
 | `@polaris/db` | `pnpm --filter @polaris/db test` | 29 passing |
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
 | CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 209 passing; all three workflows compile to WASM |
-| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 232 passing; the API auth check covers every route |
-| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 9 passing (the Chainlink states, a credit line's provenance, the dollar it signs for); 43 signature checks against the Solidity typehashes |
+| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 243 passing; the API auth check covers every route |
+| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 22 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, split plans and links); 53 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 88 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
 | Chainlink FX rates | `pnpm --filter @polaris/fx test`, `typecheck` (`check:live` reads every feed) | 46 passing |
 | End to end | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e` | 24 of 24 steps (Pay now, Pay in 4 with CRE underwriting, a new buyer's one-tap line, a CRE collection, Subscribe, direct wallet pay, the dashboard, a dashboard payment link paid and reopened); [`docs/demo`](docs/demo) |
 | | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e:chainlink` | 18 of 18 steps (FX in pesos, CRE underwriting with the line labelled a local run, the guardian pausing and resuming Pay in 4 from Chainlink AUSD/USD on Monad mainnet with Pay now still working, a dunned buyer collected by the log trigger 2 s after signing again, the Chainlink dashboard); [`docs/demo/chainlink`](docs/demo/chainlink/README.md) |
+| | `pnpm demo:local` + `pnpm demo:e2e:split` | 22 of 22 steps (a split made on a phone, a share paid by a friend with no account and one with, the same share relayed twice paying once, the organiser's Activity, closing it, a split by named amounts paid in full); [`docs/design/split`](docs/design/split/README.md) |
 | | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
 | | `pnpm --filter @polarispay/contracts e2e:local` | all twelve flows (the credit guard and `reauthorize` among them); the buyer, sender and freelancer never hold MON |
 | | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 passing (all three workflows and every trigger against real contracts on a local node) |
@@ -157,13 +176,13 @@ the API. Each app's README lists its environment.
 
 | Path | What it is |
 |---|---|
-| [`apps/app`](apps/app/README.md) | **The Polaris app**: the buyer's installable PWA, phone and desktop layouts. Face ID accounts (Mera), the hosted checkout `/pay/[id]` (Pay now, Pay in 4, Subscribe), send by link, plans, the credit line and score. Reads the chain and the API (`src/lib/data/live.ts`); an offline demo without the API |
+| [`apps/app`](apps/app/README.md) | **The Polaris app**: the buyer's installable PWA, phone and desktop layouts. Face ID accounts (Mera), the hosted checkout `/pay/[id]` (Pay now, Pay in 4, Subscribe), send by link, split the bill (`/split/new`, `/split/[id]`), plans, the credit line and score. Reads the chain and the API (`src/lib/data/live.ts`); an offline demo without the API |
 | [`apps/business`](apps/business/README.md) | **Polaris for Business**: the merchant landing, Privy sign-in, the dashboard (payments, links, Pay in 4 ledger, payouts, developers, settings), and the API: checkout sessions, the relayer (`/api/relay`), webhooks, payouts, merchant registration, CRE underwriting requests and callbacks, the buyer's book |
 | [`apps/shop`](apps/shop/README.md) | **Halcyon**, a demo store paying through `polarispay-sdk`: Pay now, Pay in 4, a subscription and direct wallet payment, with signed webhooks |
 | `apps/landing` | The Polaris landing page |
 | [`apps/gateway`](apps/gateway/README.md) | The underwriting API (`/v1/underwrite`, `/v1/explain`) on port 3510 |
-| [`packages/contracts`](packages/contracts/README.md) | Solidity: `PolarisCheckout` (Pay now, Pay in 4, Subscribe), `PolarisLoanEngine`, `ScoreManager`, `PolarisPayments`, `PolarisSend`, `MerchantRegistry`, `CollateralVault`, `BatchSettlement`, the CRE receivers; deploy, local end to end, ABIs |
-| [`packages/sdk`](packages/sdk/README.md) | `polarispay-sdk` 0.3: server client (sessions, webhooks), the checkout popup and its v1 postMessage protocol, React components, Pay in 4 quotes on the engine's schedule |
+| [`packages/contracts`](packages/contracts/README.md) | Solidity: `PolarisCheckout` (Pay now, Pay in 4, Subscribe), `PolarisLoanEngine`, `ScoreManager`, `PolarisPayments`, `PolarisSend`, `PolarisSplit` (split the bill by link; no owner, no custody), `MerchantRegistry`, `CollateralVault`, `BatchSettlement`, the CRE receivers; deploy, local end to end, ABIs |
+| [`packages/sdk`](packages/sdk/README.md) | `polarispay-sdk` 0.3: server client (sessions, webhooks, `splits.retrieve`), the checkout popup and its v1 postMessage protocol, React components, Pay in 4 quotes on the engine's schedule, `splits.link()` (the app's Split a bill, filled in) |
 | [`packages/underwriting`](packages/underwriting/README.md) | Nansen-powered underwriting: provider clients, the Facts the DON attests, the thin-file gate (the contract's), the score, the Pay in 4 decision and plain-language reasons |
 | [`packages/indexer`](packages/indexer/README.md) | The Envio HyperIndex indexer for every Polaris event, with a webhook outbox |
 | `packages/indexer/client` | `@polarispay/indexer-client`: typed queries the dashboard, the CRE collections workflow and webhooks use |
@@ -173,7 +192,7 @@ the API. Each app's README lists its environment.
 | `packages/brand` | The Polaris mark and wordmark |
 | `packages/keeperhub` | The dunning ladder the collections path uses |
 | [`workflows`](workflows/README.md) | The Chainlink CRE workflows: `polaris-underwrite` (HTTP trigger), `polaris-collections` (cron and an EVM log trigger), `polaris-guardian` (cron, reading Chainlink AUSD/USD on Monad mainnet); and their local runners `trigger:local`, `collections:local`, `guardian:local` |
-| `scripts` | `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), the Lottie generators |
+| `scripts` | `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), `demo-e2e-split.cjs` (`pnpm demo:e2e:split`), the Lottie generators |
 | `docs` | [`plan.md`](docs/plan.md), the design contract (`design/system.md`), research, [`demo`](docs/demo) |
 
 ---
@@ -251,6 +270,13 @@ and the apps' `.env.example` files carry these addresses; tests hold each of
 them to the record. The guardian's redeploy moved only GuardianReceiver, which
 only the record, PolarisCheckout and the guardian's staging config name.
 
+**PolarisSplit (split the bill) is not on testnet yet.** It came after this
+deployment; `pnpm --filter @polarispay/contracts deploy-split:monad` adds it
+in one transaction without moving anything (it has no owner, no roles and
+holds nothing) and records it, and `check:deployment:monad` then reads it
+back. Until then the API reports no split contract and the app says split
+the bill isn't available there; it runs end to end on the local chain.
+
 PolarisCheckout on testnet is the deploy commit's: the review's two
 `reauthorize` fixes are in the code and its tests, not on chain (a redeploy
 would move every address the apps, the indexer and the workflows use, and
@@ -271,6 +297,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 | Requirement | Where | Verify |
 |---|---|---|
 | A consumer payments product on Monad | Pay by link, Pay now, Pay in 4, subscriptions, send by link, payouts: `packages/contracts/contracts/PolarisCheckout.sol`, `PolarisSend.sol`, `apps/app`, `apps/business` | `pnpm demo:local`, `docs/demo` |
+| Track 02's third example idea: split the bill | `PolarisSplit`: the organiser signs `CreateSplit` (equal or named shares); each friend pays exactly their share with one ERC-3009 `ReceiveWithAuthorization` whose nonce is the split and the share, forwarded to the organiser in the same call (no custody); `closeSplit` cancels the rest. The app's create, link, pay and organiser screens; `GET /api/public/splits/{id}` | `pnpm demo:e2e:split` (22 of 22, [`docs/design/split`](docs/design/split/README.md)); `PolarisSplit.test.js`. Local chain only: not on testnet until `deploy-split:monad` runs |
 | Gasless for the user | Every buyer action is an EIP-712 / ERC-3009 signature relayed by `apps/business` `POST /api/relay`; the buyer holds no MON | `pnpm --filter @polarispay/contracts e2e:local` (buyer, sender and freelancer end with 0 MON) |
 | Contract addresses on a Monad network | Monad testnet, 28 Sep 2026: [every address and transaction](#monad-testnet-deployment) (`deploy:monad` refuses mainnet) | `pnpm --filter @polarispay/contracts check:deployment:monad` (65 of 65); `pnpm --filter @polaris/business smoke:testnet -- --run` (10 of 10) |
 
@@ -519,6 +546,8 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 - **Local-currency rates** are live Chainlink rates read from public RPCs and
   labelled "indicative"; only EUR, GBP, JPY, CHF and CAD come from Monad (the
   rest from Ethereum, Polygon or Base), and 10 currencies have no feed and no line.
+- **Split the bill** has only run on the local chain: PolarisSplit is not on
+  Monad testnet yet (`deploy-split:monad`, not run).
 - The app's offline demo (no API configured) shows sample data and says so.
 
 ## What only you can do
@@ -533,6 +562,10 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
      has changed since); `VERIFY_DRY_RUN=1` checks all 12 with no key first.
    - Real AUSD: if Agora sends testnet AUSD, a redeploy with `AUSD_MODE=ausd`
      (or `fund-pool:monad` on a real-AUSD deployment) replaces the mock dollar.
+   - **PolarisSplit** (split the bill): `pnpm --filter @polarispay/contracts deploy-split:monad`
+     (one transaction, about 1.9M gas; nothing else moves), then restart
+     Polaris for Business, `privy:setup-relayer -- --apply` once the relayer
+     is Privy's, and `check:deployment:monad`.
    - Optional: a PolarisCheckout redeploy for the two `reauthorize` fixes
      (it moves every address the apps, the indexer and the workflows use, so
      after the freeze). The deployer has about 0.30 MON left.
@@ -593,6 +626,8 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
   addresses the apps, the indexer and the workflows use.
 - **Real AUSD** on testnet, then mainnet credit after an audit.
 - **CCIP** to take Pay in 4 repayments in AUSD from another chain.
+- **Split the bill on testnet** (`deploy-split:monad`), and then in the
+  Envio indexer (its events are in the API's chain sync today).
 
 ---
 
@@ -646,6 +681,26 @@ side by side.
 
 More desktop captures of the app, from the end-to-end run, are in
 [`docs/demo`](docs/demo) (`01`, `30`-`32` and the `x-1440-*` screens).
+
+### Split the bill
+
+One link, four friends, each share straight to whoever paid: on a phone the
+organiser's split and a friend paying theirs; on the desktop a friend with
+no account yet, and the organiser's split in Activity. Every capture is in
+[`docs/design/split`](docs/design/split/README.md), from `pnpm demo:e2e:split`.
+
+<table>
+  <tr>
+    <td width="22%"><img src="docs/design/split/02-phone-new-details.png" alt="Split a bill on a phone"></td>
+    <td width="22%"><img src="docs/design/split/14-phone-friend-picked.png" alt="A friend picks their share"></td>
+    <td width="56%"><img src="docs/design/split/21-desktop-organiser-split.png" alt="The organiser's split on the desktop"></td>
+  </tr>
+  <tr>
+    <td>Split $200 five ways</td>
+    <td>A friend picks their name and pays</td>
+    <td>The organiser: 2 of 4 paid, remind or close</td>
+  </tr>
+</table>
 
 ### Halcyon, the demo shop
 
