@@ -172,7 +172,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 | Requirement | Where | Verify |
 |---|---|---|
 | Passkey accounts, no seed phrase, no extension, no custody | `apps/app/src/lib/account/mera.ts` (`createPasskeyWithPrfOutput`, `createSecp256k1SigningSession`), key derived in the browser and zeroed (`derive.ts`); the relayer never holds user funds | `apps/app/README.md` "Accounts" |
-| Nothing else stands in for it | The dev signer only exists with `NEXT_PUBLIC_DEV_SIGNER=1` and refuses the production domain. The app also offers **Continue with email** (a Privy embedded wallet) beneath Face ID | ask Mera whether the email option is acceptable, or drop it |
+| Nothing else stands in for it | The dev signer only exists in `next dev` with `NEXT_PUBLIC_DEV_SIGNER=1` (a production build blanks the flag, `apps/app/next.config.ts`) and refuses the production domain. The app also offers **Continue with email** (a Privy embedded wallet) beneath Face ID | ask Mera whether the email option is acceptable, or drop it |
 
 ### Privy: beyond authentication
 
@@ -253,7 +253,10 @@ What each sponsor asks for, where this repository meets it, and how to check.
    Business as one long-lived Node process with a persistent disk (a VM, Fly
    or Railway with a volume), with `POLARIS_CHECKOUT_ORIGIN`,
    `POLARIS_PUBLIC_URL`, `POLARIS_KEY_PEPPER`, `CRON_SECRET`,
-   `POLARIS_TRUSTED_PROXIES` and `NEXT_PUBLIC_DEMO_SHOP_URL`.
+   `POLARIS_TRUSTED_PROXIES` and `NEXT_PUBLIC_DEMO_SHOP_URL`. Never set
+   `NEXT_PUBLIC_DEV_SIGNER` for a deployed app: `next build` blanks it (and
+   `NEXT_PUBLIC_DEV_SIGNER_PERSIST`) unless `POLARIS_ALLOW_DEV_SIGNER_BUILD=1`,
+   so a hosted build only offers Face ID (Mera) and email (Privy).
 7. **Ask the sponsors:** Agora, whether a PWA counts as a mobile app; Mera,
    whether the app's email option (Privy) beside Face ID is acceptable.
 

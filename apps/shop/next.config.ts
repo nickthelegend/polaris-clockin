@@ -34,6 +34,8 @@ export default function config(phase: string): NextConfig {
   return {
     reactStrictMode: true,
     poweredByHeader: false,
+    // No AGENTS.md / CLAUDE.md written into the app by `next dev`.
+    agentRules: false,
     // The demo is recorded against `next dev`; keep Next's badge out of the shot
     // (it also sits where the "Built with Polaris" button does).
     devIndicators: false,

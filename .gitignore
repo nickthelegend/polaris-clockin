@@ -42,3 +42,11 @@ workflows/**/.cre_build_tmp.js
 
 # pnpm demo:local: the local chain, databases and logs of the last run
 .demo/
+
+# Claude Code: run notes and worktrees stay on this machine; .claude/launch.json is shared
+.claude/handoff/
+.claude/worktrees/
+.claude/settings.local.json
+# written into each app by `next dev`
+apps/*/AGENTS.md
+apps/*/CLAUDE.md

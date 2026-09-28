@@ -136,6 +136,9 @@ is always offered before creating a second account.
   (`WebAuthn.addVirtualAuthenticator` with `hasPrf: true`), which is how
   Mera's own end-to-end tests run.
 - **The dev signer** (`NEXT_PUBLIC_DEV_SIGNER=1`) skips WebAuthn entirely.
+  It exists in `next dev` only: `next build` blanks the flag (see
+  `next.config.ts`) unless `POLARIS_ALLOW_DEV_SIGNER_BUILD=1` is set, so a
+  deployed build never holds a key in browser storage.
 - **A phone** needs a real https domain inside the rpId, for example
   `dev.polarispay.app` with `NEXT_PUBLIC_RP_ID=polarispay.app`.
 
