@@ -147,6 +147,17 @@ describe("POST /api/webhooks/polaris", () => {
     expect(await status()).toBe("paid");
   });
 
+  it("acknowledges events that were never a Halcyon order: a dashboard link's payment, the dashboard's test event", async () => {
+    const linkPayment = paidEvent({ orderId: "link-pl_ZpcaQPYAGdX0UU-AZLDD2Kudu", sessionId: null });
+    const res = await deliver(linkPayment);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ received: true, ignored: true });
+    const test = paidEvent({ orderId: "ord_test_Ab12Cd34", sessionId: null });
+    (test.data as { metadata?: Record<string, string> }).metadata = { test: "true" };
+    expect((await deliver(test)).status).toBe(200);
+    expect(await status()).toBe("awaiting_payment");
+  });
+
   it("flags a payment made to another address", async () => {
     const e = paid();
     (e.data as { merchant: string }).merchant = "0x2222222222222222222222222222222222222222";

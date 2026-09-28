@@ -11,8 +11,11 @@ export const dynamic = "force-dynamic";
  * 2. polaris.webhooks.verify() checks the HMAC and the timestamp (the replay window).
  * 3. The event id is recorded, so a redelivery changes nothing.
  * 4. The order moves forward if the event matches it (amount, currency, kind,
- *    and the store's payout address). An order event for no order here gets
- *    a 404 and isn't remembered, so Polaris delivers it again.
+ *    and the store's payout address). An event naming a Halcyon payRef
+ *    (hcp_…) the store hasn't saved yet gets a 404 and isn't remembered, so
+ *    Polaris delivers it again. Events that were never a Halcyon order (the
+ *    merchant's dashboard payment links, the dashboard's test event) are
+ *    acknowledged and ignored.
  */
 export async function POST(req: Request) {
   const raw = await req.text();
@@ -36,5 +39,8 @@ export async function POST(req: Request) {
   if (result.status === 404) {
     console.error(`[webhook] ${event.type} ${event.id} names no order here; answering 404 so Polaris retries it.`);
   }
-  return Response.json({ received: true, outcome: result.outcome }, { status: result.status });
+  return Response.json(
+    { received: true, outcome: result.outcome, ...(result.status === 200 && result.outcome === "ignored" ? { ignored: true } : {}) },
+    { status: result.status },
+  );
 }

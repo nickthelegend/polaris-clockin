@@ -134,6 +134,23 @@ export function DevDrawer() {
   const reduce = useReducedMotion();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const devMock = polarisConfig.ok && polarisConfig.target === "dev-mock";
+  // On a phone the round button would sit on whatever scrolls under it (a product title, the
+  // checkout's copy): it steps aside while the page moves and comes back when it stops.
+  const [scrolling, setScrolling] = useState(false);
+  useEffect(() => {
+    let timer: number | undefined;
+    const onScroll = () => {
+      if (window.innerWidth >= 640) return;
+      setScrolling(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setScrolling(false), 900);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   const orderId = pathname.startsWith("/orders/") ? pathname.split("/")[2] ?? currentOrderId : currentOrderId;
 
@@ -201,9 +218,9 @@ export function DevDrawer() {
         aria-expanded={open}
         aria-controls="dev-drawer"
         aria-label="Built with Polaris"
-        className={`fixed right-3 z-30 inline-flex h-10 w-10 items-center justify-center gap-2 rounded-full bg-[#151514] text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-[transform,bottom] hover:scale-[1.03] sm:bottom-6 sm:right-6 sm:w-auto sm:pl-3 sm:pr-4 ${
+        className={`fixed right-3 z-30 inline-flex h-10 w-10 items-center justify-center gap-2 rounded-full bg-[#151514] text-[0.82rem] font-medium text-[#f5f5f5] shadow-[0_10px_30px_-10px_rgb(0_0_0/0.5)] transition-[transform,bottom,opacity] hover:scale-[1.03] sm:bottom-6 sm:right-6 sm:w-auto sm:pl-3 sm:pr-4 ${
           buyBar ? "bottom-[5.5rem]" : "bottom-3"
-        }`}
+        } ${scrolling && !open ? "pointer-events-none translate-x-16 opacity-0" : ""}`}
       >
         <PolarisMark className="!block !h-4 !w-4 ![filter:none]" />
         <span className="hidden sm:inline">Built with Polaris</span>

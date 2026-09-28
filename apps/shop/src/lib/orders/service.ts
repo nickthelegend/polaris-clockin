@@ -273,6 +273,14 @@ export function recordEvent(
     }
     const order = orderId ? data.orders[orderId] : undefined;
     if (!order) {
+      // Only a Halcyon payRef (hcp_…) can be an order this store hasn't saved yet: answer 404 so Polaris
+      // retries it. Anything else (a dashboard payment link's payment, the dashboard's "Send test event")
+      // was never a Halcyon order: acknowledge it once, so Polaris doesn't retry it for 34 hours.
+      const test = (event.data as { metadata?: { test?: unknown } }).metadata?.test === "true" || Boolean(named?.startsWith("ord_test_"));
+      if (test || !named?.startsWith("hcp_")) {
+        remember(null);
+        return { status: 200, outcome: "ignored" as const, orderId: null, reason: test ? "A test event." : "Not a Halcyon order." };
+      }
       return { status: 404, outcome: "ignored" as const, orderId: null, reason: "No order matches this event." };
     }
 

@@ -8,8 +8,8 @@
     "dev": "pnpm --filter polarispay-sdk build && next dev -H 127.0.0.1 -p 3600",
     "build": "pnpm --filter polarispay-sdk build && next build && node scripts/assert-no-dev-mock.mjs",
     "start": "next start -p 3600",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "lint": "pnpm --filter polarispay-sdk build && eslint .",
+    "typecheck": "pnpm --filter polarispay-sdk build && tsc --noEmit",
     "test": "pnpm --filter polarispay-sdk build && vitest run"
   },
   "dependencies": {
