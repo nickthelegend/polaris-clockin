@@ -39,7 +39,11 @@ import {IReceiver} from "./IReceiver.sol";
  *        offset 109 ...     body
  */
 contract MockKeystoneForwarder {
-    string public constant typeAndVersion = "MockKeystoneForwarder 1.0.0 (Polaris local)";
+    /// What Chainlink's forwarders answer too ("MockKeystoneForwarder 1.0.0",
+    /// "KeystoneForwarder 1.0.0"): lib/lock.js reads it before trusting one.
+    function typeAndVersion() external pure virtual returns (string memory) {
+        return "MockKeystoneForwarder 1.0.0 (Polaris local)";
+    }
 
     uint256 internal constant METADATA_LENGTH = 109;
     uint256 internal constant FORWARDER_METADATA_LENGTH = 45;

@@ -21,7 +21,12 @@
  *   CRE_WORKFLOW_ID_UNDERWRITE    polaris-underwrite's id   a receiver without
  *   CRE_WORKFLOW_ID_GUARDIAN      polaris-guardian's id     one is untouched)
  *   CRE_FORWARDER                 "production" (default) or "simulation"
- *   CRE_FORWARDER_ADDRESS         overrides the production forwarder (local tests)
+ *   CRE_FORWARDER_ADDRESS         overrides the production forwarder, on a local
+ *                                 chain only (refused on Monad testnet)
+ *
+ * The production forwarder must answer typeAndVersion() as Chainlink's
+ * KeystoneForwarder does. Chainlink's MockKeystoneForwarder (the simulation
+ * forwarder, which anyone can call) is refused, and then nothing is sent.
  *
  * Writes the result into the deployment record's `cre.locked`, and each
  * workflow's `workflowId`. Refuses Monad mainnet.
@@ -34,7 +39,7 @@ const { join } = require("node:path");
 const hre = require("hardhat");
 
 const { MONAD_TESTNET } = require("../lib/deploy");
-const { RECEIVERS, lockReceivers, applyLock } = require("../lib/lock");
+const { RECEIVERS, lockReceivers, applyLock, isLocalNetwork } = require("../lib/lock");
 const { deploymentFile } = require("./deploy-monad");
 
 async function main() {
@@ -46,6 +51,11 @@ async function main() {
   if (BigInt(record.chainId) !== chainId) throw new Error(`${file} is for chain ${record.chainId}, this network is ${chainId}`);
 
   const forwarderKind = env.CRE_FORWARDER || "production";
+  if (env.CRE_FORWARDER_ADDRESS && !isLocalNetwork(hre)) {
+    throw new Error(
+      `CRE_FORWARDER_ADDRESS is for a local chain; on ${hre.network.name} the production forwarder is Chainlink's KeystoneForwarder (${MONAD_TESTNET.CRE_KEYSTONE_FORWARDER}).`
+    );
+  }
   const workflowIds = Object.fromEntries(RECEIVERS.filter((r) => env[r.idEnv]).map((r) => [r.contract, env[r.idEnv]]));
   const missing = RECEIVERS.filter((r) => !env[r.idEnv]).map((r) => r.idEnv);
 

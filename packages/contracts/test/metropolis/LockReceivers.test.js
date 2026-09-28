@@ -9,7 +9,8 @@ const hre = require("hardhat");
 const { ethers } = hre;
 
 const { deployPolaris, USD } = require("../../lib/deploy");
-const { lockReceivers, applyLock, RECEIVERS } = require("../../lib/lock");
+const { lockReceivers, applyLock, RECEIVERS, productionForwarderProblem, isLocalNetwork } = require("../../lib/lock");
+const { MONAD_TESTNET } = require("../../lib/deploy");
 const cre = require("../../lib/cre");
 
 describe("lock-receivers (lib/lock.js)", () => {
@@ -34,8 +35,9 @@ describe("lock-receivers (lib/lock.js)", () => {
       demoMerchant: ethers.Wallet.createRandom(),
       poolSeed: USD(10_000),
     });
-    // Stands in for Chainlink's production KeystoneForwarder on this local chain.
-    production = await (await ethers.getContractFactory("MockKeystoneForwarder")).deploy();
+    // Stands in for Chainlink's production KeystoneForwarder on this local chain
+    // (typeAndVersion "KeystoneForwarder ..."; test-only, it checks no signatures).
+    production = await (await ethers.getContractFactory("TestKeystoneForwarder")).deploy();
   });
 
   async function deliver(forwarder, receiverName, body, { from = stranger, workflowId, owner = workflowOwner.address, name } = {}) {
@@ -81,6 +83,7 @@ describe("lock-receivers (lib/lock.js)", () => {
     const wrongOwner = await deliver(production, "CollectionsReceiver", body, { ...right, owner: stranger.address });
     expect(collections.interface.parseError(wrongOwner.revert).name).to.equal("InvalidAuthor");
     const oldForwarder = await ethers.getContractAt("MockKeystoneForwarder", record.contracts.MockKeystoneForwarder.address);
+    expect(await oldForwarder.typeAndVersion()).to.match(/^MockKeystoneForwarder /);
     const viaOld = await deliver(oldForwarder, "CollectionsReceiver", body, { ...right, from: deployer });
     expect(collections.interface.parseError(viaOld.revert).name).to.equal("InvalidSender");
 
@@ -133,5 +136,58 @@ describe("lock-receivers (lib/lock.js)", () => {
       expect(err?.message, String(message)).to.match(message);
     }
     expect(await ethers.provider.getTransactionCount(deployer.address)).to.equal(nonce, "nothing was sent");
+  });
+
+  // PoC F5 (security review): production mode took any forwarder, Chainlink's
+  // public MockKeystoneForwarder included, then cleared the transmitter, and a
+  // stranger could deliver a forged report with the locked identity through it.
+  it("refuses a simulation forwarder as the production one, and sends nothing: the transmitter guard stays", async () => {
+    const mock = await (await ethers.getContractFactory("MockKeystoneForwarder")).deploy();
+    const nonce = await ethers.provider.getTransactionCount(deployer.address);
+    let err;
+    try {
+      await lockReceivers(hre, record, { workflowOwner: workflowOwner.address, workflowIds: ids, forwarderKind: "production", forwarderAddress: await mock.getAddress() });
+    } catch (e) {
+      err = e;
+    }
+    expect(err?.message).to.match(/MockKeystoneForwarder/);
+    expect(await ethers.provider.getTransactionCount(deployer.address)).to.equal(nonce, "nothing was sent");
+    const guardian = await at("GuardianReceiver");
+    expect(await guardian.simulationTransmitter()).to.equal(deployer.address);
+
+    // So the forged attestation of the PoC still does not land through the
+    // public forwarder the receivers trust: a stranger is not the transmitter.
+    const trusted = await ethers.getContractAt("MockKeystoneForwarder", record.contracts.MockKeystoneForwarder.address);
+    const now = (await ethers.provider.getBlock("latest")).timestamp;
+    const forged = cre.encodeGuardianReport(
+      cre.buildAttestation({ price: 90_000_000n, priceRoundId: 1n, priceUpdatedAt: now, pool: await guardian.currentInputs().then(([s]) => s), observedAt: now })
+    );
+    const r = await deliver(trusted, "GuardianReceiver", forged, { workflowId: ids.GuardianReceiver, name: cre.WORKFLOW_NAMES.GUARDIAN });
+    expect(r.ok).to.equal(false);
+    expect(guardian.interface.parseError(r.revert).name).to.equal("NotSimulationTransmitter");
+    expect((await guardian.creditStatus()).paused).to.equal(false);
+  });
+
+  it("refuses a production forwarder that is not a KeystoneForwarder, or that is not Chainlink's on public Monad testnet", async () => {
+    const tv = (typeAndVersion, extra = {}) => productionForwarderProblem({ address: "0x00000000000000000000000000000000000000f1", typeAndVersion, chainId: 31337, local: true, ...extra });
+    expect(tv("KeystoneForwarder 1.0.0")).to.equal(null);
+    expect(tv("MockKeystoneForwarder 1.0.0")).to.match(/MockKeystoneForwarder: anyone can call it/);
+    expect(tv(null)).to.match(/no typeAndVersion/);
+    expect(tv("OCR2Aggregator 1.0.0")).to.match(/not a KeystoneForwarder/);
+    expect(productionForwarderProblem({ address: MONAD_TESTNET.CRE_MOCK_FORWARDER, typeAndVersion: "KeystoneForwarder 1.0.0", chainId: 10143, local: false })).to.match(
+      /Chainlink's MockKeystoneForwarder/
+    );
+    // On the public chain only Chainlink's own KeystoneForwarder address is taken; CRE_FORWARDER_ADDRESS is for local chains.
+    expect(productionForwarderProblem({ address: "0x00000000000000000000000000000000000000f1", typeAndVersion: "KeystoneForwarder 1.0.0", chainId: 10143, local: false })).to.match(
+      /only Chainlink's KeystoneForwarder/
+    );
+    expect(productionForwarderProblem({ address: MONAD_TESTNET.CRE_KEYSTONE_FORWARDER, typeAndVersion: "KeystoneForwarder 1.0.0", chainId: 10143, local: false })).to.equal(null);
+  });
+
+  it("knows a local chain from Monad testnet: the in-process network and 127.0.0.1 nodes, never testnet-rpc", () => {
+    expect(isLocalNetwork(hre)).to.equal(true);
+    expect(isLocalNetwork({ network: { name: "monadLocal", config: { url: "http://127.0.0.1:8600" } } })).to.equal(true);
+    expect(isLocalNetwork({ network: { name: "monadTestnet", config: { url: "https://testnet-rpc.monad.xyz" } } })).to.equal(false);
+    expect(isLocalNetwork({ network: { name: "somewhere", config: { url: "https://rpc.example" } } })).to.equal(false);
   });
 });

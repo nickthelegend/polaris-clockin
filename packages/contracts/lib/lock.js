@@ -15,15 +15,80 @@
  * them: the production forwarder's transmitting node is never the simulation
  * transmitter.
  *
+ * The production forwarder is checked before anything is sent, and again
+ * before the transmitter is cleared (productionForwarderProblem): it must
+ * answer `typeAndVersion()` as Chainlink's KeystoneForwarder does, never as a
+ * MockKeystoneForwarder, which anyone can call with any report and any
+ * metadata (behind one, clearing the transmitter would let a stranger write
+ * credit facts). On public Monad testnet only Chainlink's own address is
+ * taken; another address is for a local chain only.
+ *
  * Idempotent: it reads each setting first and sends only what differs.
  */
 
 "use strict";
 
-const { ZeroAddress, getAddress, isHexString, ZeroHash } = require("ethers");
+const { Contract, ZeroAddress, getAddress, isHexString, ZeroHash } = require("ethers");
 
 const tx = require("./tx");
 const { WORKFLOW_NAMES, workflowNameBytes10 } = require("./cre");
+
+/** Chainlink's forwarders on Monad testnet (as lib/deploy.js MONAD_TESTNET; verified on chain). */
+const CRE_MOCK_FORWARDER = "0xB9F79d863261869B234c481D1f9A7af84AeAd192";
+const CRE_KEYSTONE_FORWARDER = "0xF8344CFd5c43616a4366C34E3EEE75af79a74482";
+
+/**
+ * True for the in-process Hardhat network and a node on this machine
+ * (127.0.0.1 or localhost), never for a public RPC. The chain id can't tell:
+ * the CRE workflows' local node runs as chain 10143, like Monad testnet.
+ */
+function isLocalNetwork(hre) {
+  const net = hre.network ?? {};
+  if (net.name === "hardhat") return true;
+  const url = net.config?.url;
+  return typeof url === "string" && /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(url);
+}
+
+/**
+ * Why `address` can't be the production forwarder, or null when it can:
+ *   - Chainlink's MockKeystoneForwarder, or anything whose typeAndVersion()
+ *     says MockKeystoneForwarder: anyone can call it, so a receiver behind
+ *     it without the transmitter guard accepts forged reports;
+ *   - no typeAndVersion(), or one that is not "KeystoneForwarder ...";
+ *   - on public chain 10143, anything but Chainlink's KeystoneForwarder.
+ */
+function productionForwarderProblem({ address, typeAndVersion, chainId, local }) {
+  const a = getAddress(address);
+  if (a === getAddress(CRE_MOCK_FORWARDER)) {
+    return `${a} is Chainlink's MockKeystoneForwarder (the simulation forwarder): anyone can call it, so the transmitter guard must stay`;
+  }
+  if (typeof typeAndVersion !== "string") return `${a} has no typeAndVersion(): not a KeystoneForwarder`;
+  if (/^MockKeystoneForwarder\b/.test(typeAndVersion)) {
+    return `${a} says "${typeAndVersion}", a MockKeystoneForwarder: anyone can call it, so the transmitter guard must stay`;
+  }
+  if (!/^KeystoneForwarder\b/.test(typeAndVersion)) return `${a} says "${typeAndVersion}": not a KeystoneForwarder`;
+  if (!local && Number(chainId) === 10143 && a !== getAddress(CRE_KEYSTONE_FORWARDER)) {
+    return `on Monad testnet only Chainlink's KeystoneForwarder (${CRE_KEYSTONE_FORWARDER}) is taken, not ${a}; another address is for a local chain`;
+  }
+  return null;
+}
+
+/** Read `address`'s typeAndVersion() (null when it has none), and throw productionForwarderProblem's reason. */
+async function assertProductionForwarder(hre, address) {
+  const provider = hre.ethers.provider;
+  let typeAndVersion = null;
+  if ((await provider.getCode(address)) !== "0x") {
+    try {
+      typeAndVersion = await new Contract(address, ["function typeAndVersion() view returns (string)"], provider).typeAndVersion();
+    } catch {
+      typeAndVersion = null;
+    }
+  }
+  const { chainId } = await provider.getNetwork();
+  const problem = productionForwarderProblem({ address, typeAndVersion, chainId, local: isLocalNetwork(hre) });
+  if (problem) throw new Error(`Refusing the production forwarder: ${problem}.`);
+  return typeAndVersion;
+}
 
 /** The receivers, their workflow's key in deployments' `cre.workflows`, and its name. */
 const RECEIVERS = [
@@ -64,6 +129,8 @@ async function lockReceivers(hre, record, opts, log = () => {}) {
     if (!isHexString(id, 32) || id === ZeroHash) throw new Error(`${r.contract}: workflow id must be a non-zero bytes32, got ${id}`);
     if (!record.contracts[r.contract]) throw new Error(`${r.contract} is not in the deployment record`);
   }
+  // Before anything is sent: never move a receiver behind a forwarder anyone can call.
+  if (production) await assertProductionForwarder(hre, forwarder);
 
   const out = { at: new Date().toISOString(), workflowOwner, forwarderKind: opts.forwarderKind, receivers: {} };
   for (const r of targets) {
@@ -83,7 +150,13 @@ async function lockReceivers(hre, record, opts, log = () => {}) {
     if ((await receiver.getExpectedWorkflowId()).toLowerCase() !== id) await send("setExpectedWorkflowId", [id], `id ${id}`);
     if (production) {
       if ((await receiver.getForwarderAddress()) !== forwarder) await send("setForwarderAddress", [forwarder], `forwarder ${forwarder}`);
-      if ((await receiver.simulationTransmitter()) !== ZeroAddress) await send("setSimulationTransmitter", [ZeroAddress], "simulation transmitter cleared");
+      if ((await receiver.simulationTransmitter()) !== ZeroAddress) {
+        // Read back what the receiver now trusts, and check it again, before the last guard goes.
+        const trusted = await receiver.getForwarderAddress();
+        if (trusted !== forwarder) throw new Error(`${r.contract} trusts ${trusted}, not ${forwarder}: the simulation transmitter stays`);
+        await assertProductionForwarder(hre, trusted);
+        await send("setSimulationTransmitter", [ZeroAddress], "simulation transmitter cleared");
+      }
     }
     if (sent.length === 0) log(`  ${r.contract.padEnd(21)} already locked`);
 
@@ -118,4 +191,4 @@ function applyLock(record, lock) {
   return record;
 }
 
-module.exports = { RECEIVERS, lockReceivers, applyLock };
+module.exports = { RECEIVERS, lockReceivers, applyLock, productionForwarderProblem, assertProductionForwarder, isLocalNetwork };

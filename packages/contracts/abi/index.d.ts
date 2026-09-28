@@ -10866,7 +10866,7 @@ export declare const mockKeystoneForwarderAbi: readonly [
         readonly "type": "string";
       }
     ];
-    readonly "stateMutability": "view";
+    readonly "stateMutability": "pure";
     readonly "type": "function";
   }
 ];
