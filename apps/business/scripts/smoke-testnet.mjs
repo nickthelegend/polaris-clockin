@@ -196,7 +196,9 @@ async function main() {
 
   /** One transaction, read back: who sent it, to what, whether it landed, and its events. */
   async function onChain(what, hash, { from, to, by }) {
-    const [tx, receipt] = await Promise.all([client.getTransaction({ hash }), client.waitForTransactionReceipt({ hash, timeout: 120_000 })]);
+    // The receipt first: a public RPC may not serve a transaction it has only just accepted.
+    const receipt = await client.waitForTransactionReceipt({ hash, timeout: 120_000 });
+    const tx = await until(`transaction ${hash}`, () => client.getTransaction({ hash }), { timeoutMs: 30_000 });
     assert(receipt.status === "success", `${what}: ${hash} reverted`);
     if (from) assert(getAddress(tx.from) === getAddress(from), `${what}: sent by ${tx.from}, expected ${from}`);
     if (to) assert(getAddress(tx.to) === getAddress(to), `${what}: sent to ${tx.to}, expected ${to}`);
