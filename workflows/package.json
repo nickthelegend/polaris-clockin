@@ -32,6 +32,7 @@
     "simulate:retry": "node scripts/cre.mjs workflow simulate ./collections --non-interactive --trigger-index 1 --broadcast --evm-event-index 1 -T",
     "trigger:local": "node scripts/local-trigger.mjs",
     "collections:local": "node scripts/local-collections.mjs",
+    "guardian:local": "node scripts/local-guardian.mjs",
     "collections:loop": "node scripts/collections-loop.mjs",
     "guardian:loop": "node scripts/collections-loop.mjs --workflow guardian",
     "retry:listen": "node scripts/retry-listen.mjs",

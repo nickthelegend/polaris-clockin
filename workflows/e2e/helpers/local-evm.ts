@@ -146,6 +146,43 @@ export function bridgeEvm(evm: EvmMock, p: { url: string; forwarder: Address; tr
 }
 
 /**
+ * A public chain's EVM capability for reads only: the guardian's second EVM
+ * client, which reads Chainlink's AUSD/USD on Monad mainnet. `callContract`
+ * and `headerByNumber` go to `url` (the "last finalized" sentinel reads the
+ * chain's `finalized` block, as the DON would); anything that writes or
+ * estimates a write throws, so a local run can never send a transaction to a
+ * public chain. The node must answer `eth_chainId` with `chainId`.
+ */
+export function bridgeReadOnlyEvm(evm: EvmMock, p: { url: string; chainId: number }): { reads: number } {
+  const chain = Number(BigInt(rpcSync<Hex>(p.url, "eth_chainId")));
+  if (chain !== p.chainId) throw new Error(`${p.url} is chain ${chain}, not ${p.chainId}`);
+  const record = { reads: 0 };
+  const tag = (b: { absVal: Uint8Array; sign: bigint } | undefined): string => {
+    if (!b) return "finalized";
+    if (b.sign < 0n) return protoBigIntToBigint(b) === -2n ? "latest" : "finalized";
+    return `0x${protoBigIntToBigint(b).toString(16)}`;
+  };
+  evm.callContract = (req) => {
+    record.reads++;
+    const result = rpcSync<Hex>(p.url, "eth_call", [{ to: hex(req.call?.to), data: hex(req.call?.data) }, tag(req.blockNumber)]);
+    return { data: hexToBase64(result) };
+  };
+  evm.headerByNumber = (req) => {
+    record.reads++;
+    const b = rpcSync<{ number: Hex; timestamp: Hex; hash: Hex; parentHash: Hex }>(p.url, "eth_getBlockByNumber", [tag(req.blockNumber), false]);
+    return {
+      header: { timestamp: BigInt(b.timestamp).toString(), blockNumber: blockNumber(BigInt(b.number)), hash: hexToBase64(b.hash), parentHash: hexToBase64(b.parentHash) },
+    };
+  };
+  const refuse = (what: string) => () => {
+    throw new Error(`${what} on chain ${p.chainId}: this bridge only reads (a local run never writes to a public chain)`);
+  };
+  evm.writeReport = refuse("writeReport");
+  evm.estimateGas = refuse("estimateGas");
+  return record;
+}
+
+/**
  * What an EVM log trigger hands its handler, from a landed transaction's
  * receipt: the log at `index` among the receipt's logs (the simulator's
  * `--evm-event-index` counts the same way), with its transaction, block and
