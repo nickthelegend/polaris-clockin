@@ -373,11 +373,16 @@ async function orderPaid(page, pattern) {
     await page.goto(`${APP}/pay/${sessionId}`, { waitUntil: "networkidle", timeout: POPUP_MS });
     await settle(page, 3000);
     await until("the checkout", async () => (await buttons(page)).some((t) => /^(Pay now|Pay \$)/.test(t)), 90000).catch(() => {});
+    // It opens on Pay now; the Pay in 4 tab shows why it is off.
+    const tab = page.getByRole("tab", { name: /Pay in 4/i }).first();
+    if (await tab.count()) await tab.click();
+    await sleep(1200);
     const appPaused = (await page.getByText(/paused by our risk guard/).count()) > 0;
+    const disabled = await page.getByRole("button", { name: /Pay in 4 is paused/ }).first().isDisabled().catch(() => false);
     await shot(page, "10-paused-app-checkout", caption);
     step(
       "Checkout: on a session that offers Pay in 4, the app shows it paused with the guard's words, and the API refuses it",
-      appPaused && session?.payIn4?.available === false,
+      appPaused && disabled && session?.payIn4?.available === false,
       session ? `payIn4.available=${session.payIn4?.available}, reason ${JSON.stringify(session.payIn4?.reason ?? null)}` : `no session (${res.status})`,
     );
     await page.close();
