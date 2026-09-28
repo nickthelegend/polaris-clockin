@@ -51,9 +51,12 @@ interface IChargeableSubscriptions {
  *      Every action is permissionless on its target, because the schedule the
  *      buyer signed, not the caller, decides what moves. So this receiver adds
  *      no power: it is the DON's way of calling what anyone may call, and a
- *      forged report can do nothing a stranger could not. That is why it
- *      needs no simulation-only guard while it trusts the permissionless
- *      MockKeystoneForwarder, unlike UnderwritingReceiver.
+ *      forged report can move no money a stranger could not. It still carries
+ *      the simulation transmitter guard, as all three receivers do
+ *      (PolarisReceiver): its TaskExecuted and TaskSkipped events are the
+ *      record of what the collections workflow did, which the dunning ladder
+ *      reads, and only the workflow should write that record. Anyone can
+ *      still collect by calling the loan engine directly.
  *
  *      Each task runs in its own try/catch. A task that reverts is skipped with
  *      its revert data in `TaskSkipped`, and the rest of the batch still runs.
