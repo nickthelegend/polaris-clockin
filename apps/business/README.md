@@ -128,6 +128,23 @@ real session it is implemented over this server's routes (`http.ts`).
   refresh that fails while older data is on screen shows its age and Retry;
   **Sign out** goes to `/login` with no `next`.
 
+### Sign-in modes
+
+There are three, and only the first exists in a production build:
+
+1. **Privy** (`NEXT_PUBLIC_PRIVY_APP_ID`, `PRIVY_APP_SECRET`): the real one.
+   The server verifies Privy's access token on every dashboard route.
+2. **The development mock session** (`POLARIS_DEV_MOCK_SESSION`), below: a
+   mock merchant in the browser, for screenshots; it never calls the API.
+3. **The demo:local session** (`POLARIS_LOCAL_SESSION_TOKEN` and `_WALLET`
+   on the server, `NEXT_PUBLIC_POLARIS_LOCAL_SESSION`, `_WALLET` and `_KEY`
+   in the browser), which `pnpm demo:local` sets: the real API, signed in as
+   the seeded merchant with a random token. The server accepts it only
+   outside production, on a local chain (31337), with
+   `POLARIS_DISABLE_PRIVY=1` (`src/server/env.ts` `localSessionFrom` throws
+   otherwise), and `next.config.ts` blanks the public variables outside
+   `next dev`.
+
 **The development mock session** (`POLARIS_DEV_MOCK_SESSION=1`, or `=empty` for
 a merchant who has just signed up) serves every read and write from sample data
 in the browser and simulates the signing flows, for screenshots. It never calls
