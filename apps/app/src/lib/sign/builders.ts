@@ -4,6 +4,8 @@ import {
   cancelSubscriptionTypes,
   cancelTypes,
   claimTypes,
+  closeSplitTypes,
+  createSplitTypes,
   openTypes,
   permitTypes,
   planIntentTypes,
@@ -74,6 +76,11 @@ export type Cancel = { linkKey: Address; deadline: bigint };
 
 export type CancelSubscription = { subId: bigint; deadline: bigint };
 
+/** PolarisSplit.Creation, as the organiser signs it. */
+export type CreateSplit = { organiser: Address; salt: Hex; amounts: bigint[]; memoHash: Hex; expiresAt: bigint; deadline: bigint };
+
+export type CloseSplit = { splitId: Hex; deadline: bigint };
+
 export type RepayIntent = { loanId: bigint; amount: bigint; expectedRepaid: bigint; nonce: bigint; deadline: bigint };
 
 /** PolarisCheckout.openPlan: signed by the buyer together with a Permit. */
@@ -141,6 +148,22 @@ export function buildCancel(
   message: Cancel,
 ): Typed<typeof cancelTypes, "Cancel", Cancel> {
   return { domain, types: cancelTypes, primaryType: "Cancel", message };
+}
+
+/** PolarisSplit.createSplit: signed by the organiser. At most 50 shares, each more than zero, each fitting a uint128. */
+export function buildCreateSplit(
+  domain: Eip712Domain,
+  message: CreateSplit,
+): Typed<typeof createSplitTypes, "CreateSplit", CreateSplit> {
+  if (message.amounts.length < 1 || message.amounts.length > 50) throw new RangeError("a split has 1 to 50 shares");
+  if (message.amounts.some((a) => a <= 0n || a >= 1n << 128n)) throw new RangeError("every share must be more than zero and fit a uint128");
+  if (message.expiresAt < 0n || message.expiresAt > 0xffffffffffffffffn) throw new RangeError("expiresAt must fit a uint64");
+  return { domain, types: createSplitTypes, primaryType: "CreateSplit", message };
+}
+
+/** PolarisSplit.closeSplit: signed by the organiser. */
+export function buildCloseSplit(domain: Eip712Domain, message: CloseSplit): Typed<typeof closeSplitTypes, "CloseSplit", CloseSplit> {
+  return { domain, types: closeSplitTypes, primaryType: "CloseSplit", message };
 }
 
 /** PolarisLoanEngine.repayWithSig: signed by the borrower. */

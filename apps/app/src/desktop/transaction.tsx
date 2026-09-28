@@ -172,6 +172,10 @@ export function TransactionDrawerContent({ id }: { id: string }) {
           <PrimaryButton size="lg" onClick={() => router.push(`/plans/${plan.id}`, { scroll: false })}>
             View plan
           </PrimaryButton>
+        ) : item.splitId ? (
+          <PrimaryButton size="lg" onClick={() => router.push(`/split/${item.splitId}`, { scroll: false })}>
+            See the split
+          </PrimaryButton>
         ) : contact ? (
           <PrimaryButton size="lg" onClick={() => router.push(`/send?contact=${contact.id}`, { scroll: false })}>
             Send again

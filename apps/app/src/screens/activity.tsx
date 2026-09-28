@@ -8,6 +8,7 @@ import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar } from "@/components/avatars";
 import { FiltersSheet } from "@/components/filters-sheet";
 import { TabScreen } from "@/components/screen";
+import { SplitTiles } from "@/components/splits";
 import { ActivityDesktop } from "@/desktop/activity";
 import { useOwner } from "@/lib/account/hooks";
 import { type ActivityItem, getActivity } from "@/lib/data";
@@ -32,6 +33,8 @@ const KIND_OF: Record<ActivityItem["kind"], Kind> = {
   received: "transfers",
   refund: "transfers",
   added: "transfers",
+  "split-paid": "links",
+  "split-received": "links",
 };
 
 const QUICK: { id: string; label: string; set: Partial<Filters> }[] = [
@@ -106,6 +109,8 @@ function ActivityPhone() {
           </Chip>
         ))}
       </div>
+
+      <SplitTiles className="mt-6" />
 
       <SectionHeader
         title="All activity"

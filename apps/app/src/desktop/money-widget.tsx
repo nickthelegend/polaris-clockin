@@ -22,7 +22,7 @@ import {
   SwapToggle,
   TextTabs,
 } from "@polaris/ui";
-import { ArrowDownLeft, ArrowUpRight, Check, Link2, Plus, RefreshCw, ScanFace, ScanLine, Settings, Share2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, Link2, Plus, RefreshCw, ScanFace, ScanLine, Settings, Share2, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -80,7 +80,7 @@ function LinkCoin({ size = 42 }: { size?: number }) {
 /**
  * Ref E's trade widget, mapped to the buyer: SEND is the two stacked cards
  * (your dollars over what they get, by link or straight to someone), the lime
- * Send, "Pay a Polaris link" and your credit in the outlined card; RECEIVE
+ * Send, "Pay a link" and "Split a bill", and your credit in the outlined card; RECEIVE
  * is your code, your link and Add money.
  */
 export function MoneyWidget({ defaultTab = "send", className }: { defaultTab?: MoneyTab; className?: string }) {
@@ -171,7 +171,7 @@ export function useRecipientFromUrl(params: URLSearchParams | null, contacts: Pe
 /**
  * The two stacked cards: "USD · You send · 25.00 · Balance 1,284.50" over
  * "Link · They get · 25.00 · Anyone with the link". The round button on the
- * seam changes who gets it. Then Send (Face ID) and "Pay a Polaris link".
+ * seam changes who gets it. Then Send (Face ID), "Pay a link" and "Split a bill".
  */
 export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipient; onDone?: () => void; showPay?: boolean }) {
   const router = useRouter();
@@ -261,9 +261,14 @@ export function SendForm({ initial, onDone, showPay = true }: { initial?: Recipi
         </PrimaryButton>
       )}
       {showPay ? (
-        <SecondaryButton size="lg" block iconRight={<ScanLine />} onClick={() => router.push("/pay", { scroll: false })}>
-          Pay a Polaris link
-        </SecondaryButton>
+        <div className="grid grid-cols-2 gap-3">
+          <SecondaryButton size="lg" block iconRight={<ScanLine />} onClick={() => router.push("/pay", { scroll: false })}>
+            Pay a link
+          </SecondaryButton>
+          <SecondaryButton size="lg" block iconRight={<Users />} onClick={() => router.push("/split/new", { scroll: false })}>
+            Split a bill
+          </SecondaryButton>
+        </div>
       ) : null}
 
       <Dialog open={picking} onOpenChange={setPicking} size="sm" title="Send to" description="By link, or straight to someone you've paid before.">

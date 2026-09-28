@@ -10,7 +10,8 @@
  *   2. the digest viem signs equals the one the contract computes by hand,
  *      keccak256(0x1901 ‖ domainSeparator ‖ keccak256(abi.encode(TYPEHASH, ...fields)));
  *   3. a signature from the builder recovers to its signer.
- * It also pins the two nonce derivations and the ERC-5267 field filtering.
+ * It also pins the nonce derivations (a payment, a send link, a split's
+ * share), the split id, and the ERC-5267 field filtering.
  *
  * The sources come from packages/contracts/contracts. A contract that isn't in
  * this checkout yet (PolarisCheckout lives on its own branch until it merges)
@@ -45,6 +46,8 @@ import {
   buildCancel,
   buildCancelSubscription,
   buildClaim,
+  buildCloseSplit,
+  buildCreateSplit,
   buildOpen,
   buildPermit,
   buildPlanIntent,
@@ -56,6 +59,8 @@ import {
   type Eip712Domain,
   paymentNonce,
   sendNonce,
+  shareNonce,
+  splitIdOf,
   TYPE_REGISTRY,
 } from "../src/lib/sign/index.ts";
 
@@ -160,10 +165,15 @@ for (const entry of TYPE_REGISTRY) {
   });
 }
 
-/** EIP-712 encodeData for one field: dynamic `string` and `bytes` are hashed. */
+/**
+ * EIP-712 encodeData for one field: dynamic `string` and `bytes` are
+ * hashed, and an array of atoms is the hash of its elements, each padded to a
+ * word (Solidity's keccak256(abi.encodePacked(array))).
+ */
 function encodeField(type: string, value: unknown): { type: string; value: unknown } {
   if (type === "string") return { type: "bytes32", value: keccak256(stringToBytes(value as string)) };
   if (type === "bytes") return { type: "bytes32", value: keccak256(value as Hex) };
+  if (/^u?int\d*\[\]$/.test(type)) return { type: "bytes32", value: keccak256(concat((value as bigint[]).map((v) => pad(numberToHex(v))))) };
   return { type, value };
 }
 
@@ -212,6 +222,15 @@ const cases = [
   buildCancel(domain, { linkKey: merchant, deadline: now }),
   buildCancelSubscription(domain, { subId: 12n, deadline: now }),
   buildRepayIntent(domain, { loanId: 3n, amount: 151_150_684n, expectedRepaid: 50_383_562n, nonce: 0n, deadline: now + 600n }),
+  buildCreateSplit(domain, {
+    organiser: buyer.address,
+    salt: keccak256(toHex("salt")),
+    amounts: [30_000_000n, 30_000_000n, 30_000_001n],
+    memoHash: keccak256(toHex("Dinner at Lucia")),
+    expiresAt: now + 1_209_600n,
+    deadline: now + 600n,
+  }),
+  buildCloseSplit(domain, { splitId: keccak256(toHex("split")), deadline: now + 600n }),
 ] as const;
 
 for (const typed of cases) {
@@ -250,6 +269,16 @@ await check("send nonce is keccak256(abi.encode(linkKey, uint64 expiresAt))", ()
   const expiresAt = 1_790_604_800n;
   const encoded: Hex = concat([pad(merchant), pad(numberToHex(expiresAt))]);
   assert.equal(sendNonce(merchant, expiresAt), keccak256(encoded));
+});
+
+await check("share nonce is keccak256(abi.encode(bytes32 splitId, uint256 index))", () => {
+  const splitId = keccak256(toHex("split"));
+  assert.equal(shareNonce(splitId, 2n), keccak256(concat([splitId, pad(numberToHex(2n))])));
+});
+
+await check("split id is keccak256(abi.encode(organiser, bytes32 salt))", () => {
+  const salt = keccak256(toHex("salt"));
+  assert.equal(splitIdOf(merchant, salt), keccak256(concat([pad(merchant), salt])));
 });
 
 await check("ERC-5267 fields 0x0f drop the unused salt", () => {

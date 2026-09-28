@@ -20,6 +20,7 @@ const ID = /^[a-z0-9][a-z0-9_-]{1,135}$/i;
  *   https://pay.polarispay.app/sol-brand       → /pay/sol-brand
  *   https://<this origin>/claim#k=…            → /claim#k=…
  *   https://<this origin>/send?to=…            → /send?to=…
+ *   https://<this origin>/split/0x…#d=…        → /split/0x…#d=…  (a split's words stay in the fragment)
  *   sol-brand                                  → /pay/sol-brand
  *   https://pay.polarispay.app/pay/cs_test_…   → /pay/cs_test_…  (a checkout session)
  */
@@ -46,6 +47,8 @@ export function toAppPath(input: string, origin: string): string | null {
   const pay = url.pathname.match(/^\/pay\/([a-z0-9][a-z0-9_-]{1,135})\/?$/i);
   if (pay) return `/pay/${pay[1]}`;
   if (url.pathname === "/claim" && url.hash.length > 1) return `/claim${url.hash}`;
+  const split = url.pathname.match(/^\/split\/(0x[0-9a-f]{64})\/?$/i);
+  if (split) return `/split/${split[1]!.toLowerCase()}${url.hash}`;
   if (url.pathname === "/send" && url.search) return `/send${url.search}`;
   return null;
 }

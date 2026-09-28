@@ -58,6 +58,8 @@ export const env = {
     payments: address(process.env.NEXT_PUBLIC_PAYMENTS_ADDRESS),
     checkout: address(process.env.NEXT_PUBLIC_CHECKOUT_ADDRESS),
     send: address(process.env.NEXT_PUBLIC_SEND_ADDRESS),
+    /** PolarisSplit: split-the-bill links. Unset with Polaris configured: the one its deployment reports (none before deploy-split). */
+    split: address(process.env.NEXT_PUBLIC_SPLIT_ADDRESS),
     loanEngine: address(process.env.NEXT_PUBLIC_LOAN_ENGINE_ADDRESS),
   },
 } as const;

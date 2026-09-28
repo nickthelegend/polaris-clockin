@@ -160,7 +160,11 @@ export type ActivityKind =
   | "received"
   | "claimed"
   | "refund"
-  | "added";
+  | "added"
+  /** You paid your share of someone's split. */
+  | "split-paid"
+  /** A friend's share of your split arrived. */
+  | "split-received";
 
 export type ActivityItem = {
   id: string;
@@ -184,6 +188,9 @@ export type ActivityItem = {
   linkKey?: Address;
   /** A sent link: when it was claimed (or taken back). */
   settledAt?: number;
+  /** A share of a split (split-paid, split-received): which split, and which share. */
+  splitId?: Hex;
+  shareIndex?: number;
 };
 
 export type PlanOffer = {
@@ -259,6 +266,42 @@ export type SendLinkStatus = {
   settledAt: number | null;
 };
 
+/** One share of a split. */
+export type SplitShare = {
+  index: number;
+  amount: Micros;
+  paid: boolean;
+  /** Who paid it (compared with your own account; never shown). */
+  payer: Address | null;
+  paidAt: number | null;
+  txHash: Hex | null;
+  /** Null on a local chain, or when the sync hasn't seen the transaction. */
+  explorerUrl: string | null;
+};
+
+/**
+ * A split-the-bill link as the chain has it (PolarisSplit): the organiser,
+ * each share's amount and who paid it. Its words (what it's for, the names)
+ * are not here: they travel in the link (lib/split.ts), and `memoHash` is
+ * what the link's words are checked against.
+ */
+export type SplitStatus = {
+  id: Hex;
+  organiser: Address;
+  status: "open" | "settled" | "closed" | "expired";
+  total: Micros;
+  paid: Micros;
+  shareCount: number;
+  paidCount: number;
+  expiresAt: number;
+  memoHash: Hex;
+  shares: SplitShare[];
+  createdAt: number | null;
+  closedAt: number | null;
+  /** The offline demo's sample splits carry their words; a real split's come from its link. */
+  sampleMemo?: { description: string; organiserName: string; billTotal: Micros; labels: string[] };
+};
+
 /**
  * Every read the app makes. `mock.ts` implements it with placeholder data; a
  * later step swaps in chain reads and the Envio indexer behind the same
@@ -275,6 +318,10 @@ export interface PolarisData {
   getContacts(owner: Address | null): Promise<Person[]>;
   getPaymentLink(id: string): Promise<PaymentLink | null>;
   getSendLink(linkKey: Address): Promise<SendLinkStatus | null>;
+  /** A split by its id, or null when there is none. `viewer` is who is looking (the offline demo's own splits are theirs). */
+  getSplit(id: Hex, viewer: Address | null): Promise<SplitStatus | null>;
+  /** The splits this account organised, newest first. */
+  getSplits(owner: Address | null): Promise<SplitStatus[]>;
   /** Fires when anything above may have changed (new block, indexer event). */
   subscribe(listener: () => void): () => void;
 }

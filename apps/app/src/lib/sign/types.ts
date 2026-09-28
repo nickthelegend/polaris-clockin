@@ -39,6 +39,17 @@ export const CLAIM_TYPE = "Claim(address to,uint256 deadline)";
 /** PolarisSend: the sender takes an unclaimed link back. */
 export const CANCEL_TYPE = "Cancel(address linkKey,uint256 deadline)";
 
+/**
+ * PolarisSplit: the organiser opens a split. `amounts` is one per share;
+ * `memoHash` is the hash of the link's words (lib/split.ts), which never go
+ * on chain; the split's id is keccak256(abi.encode(organiser, salt)).
+ */
+export const CREATE_SPLIT_TYPE =
+  "CreateSplit(address organiser,bytes32 salt,uint128[] amounts,bytes32 memoHash,uint64 expiresAt,uint256 deadline)";
+
+/** PolarisSplit: the organiser closes a split; unpaid shares can't be paid after. */
+export const CLOSE_SPLIT_TYPE = "CloseSplit(bytes32 splitId,uint256 deadline)";
+
 /** PolarisPayments: the subscriber leaves without holding gas. */
 export const CANCEL_SUBSCRIPTION_TYPE = "CancelSubscription(uint256 subId,uint256 deadline)";
 
@@ -120,6 +131,24 @@ export const cancelTypes = {
   ],
 } as const;
 
+export const createSplitTypes = {
+  CreateSplit: [
+    { name: "organiser", type: "address" },
+    { name: "salt", type: "bytes32" },
+    { name: "amounts", type: "uint128[]" },
+    { name: "memoHash", type: "bytes32" },
+    { name: "expiresAt", type: "uint64" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
+export const closeSplitTypes = {
+  CloseSplit: [
+    { name: "splitId", type: "bytes32" },
+    { name: "deadline", type: "uint256" },
+  ],
+} as const;
+
 export const cancelSubscriptionTypes = {
   CancelSubscription: [
     { name: "subId", type: "uint256" },
@@ -184,6 +213,8 @@ export const TYPE_REGISTRY = [
   { primaryType: "Open", types: openTypes, solidity: OPEN_TYPE, contract: "PolarisSend.sol", constant: "OPEN_TYPEHASH" },
   { primaryType: "Claim", types: claimTypes, solidity: CLAIM_TYPE, contract: "PolarisSend.sol", constant: "CLAIM_TYPEHASH" },
   { primaryType: "Cancel", types: cancelTypes, solidity: CANCEL_TYPE, contract: "PolarisSend.sol", constant: "CANCEL_TYPEHASH" },
+  { primaryType: "CreateSplit", types: createSplitTypes, solidity: CREATE_SPLIT_TYPE, contract: "PolarisSplit.sol", constant: "CREATE_TYPEHASH" },
+  { primaryType: "CloseSplit", types: closeSplitTypes, solidity: CLOSE_SPLIT_TYPE, contract: "PolarisSplit.sol", constant: "CLOSE_TYPEHASH" },
   {
     primaryType: "CancelSubscription",
     types: cancelSubscriptionTypes,

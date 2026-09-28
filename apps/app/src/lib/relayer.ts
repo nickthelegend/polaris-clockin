@@ -5,7 +5,8 @@ import { notifyDataChanged } from "./data/changes";
 import { mockLedger } from "./data/mock";
 import type { PaymentLink, Person } from "./data/types";
 import type { Micros } from "./money";
-import type { Authorization, Cancel, CancelSubscription, Claim, Open, Permit, PlanIntent, RepayIntent, SubscribeIntent } from "./sign";
+import type { Authorization, Cancel, CancelSubscription, Claim, CloseSplit, CreateSplit, Open, Permit, PlanIntent, RepayIntent, SubscribeIntent } from "./sign";
+import type { SplitMemo } from "./split";
 
 /**
  * The relayer carries signatures to the chain (plan §5.3). The app signs; the
@@ -39,6 +40,8 @@ export type RelayReceipt = {
   paymentId?: string;
   planId?: string;
   subscriptionId?: string;
+  splitId?: string;
+  shareIndex?: string;
 };
 
 /** PolarisCheckout.pay */
@@ -91,7 +94,25 @@ export type PayEarlyRequest = { planId: string; loanId: bigint; borrower: Addres
  */
 export type ReauthorizeRequest = { buyer: Address; permit: Signed<Permit> };
 
+/**
+ * PolarisSplit.createSplit: the organiser's CreateSplit. `memo` is for the
+ * offline stub's sample book only: the real relayer never sends the split's
+ * words (only their hash, inside `creation`).
+ */
+export type CreateSplitRequest = { creation: Signed<CreateSplit>; splitId: Hex; memo: SplitMemo };
+
+/** PolarisSplit.payShare: a friend's ERC-3009 authorisation for exactly their share. */
+export type PayShareRequest = { splitId: Hex; index: number; payer: Address; authorization: Signed<Authorization> };
+
+/** PolarisSplit.closeSplit: the organiser's CloseSplit. */
+export type CloseSplitRequest = { close: Signed<CloseSplit> };
+
 export interface Relayer {
+  /** "http": Polaris for Business's relayer; "stub": the offline demo's. */
+  readonly kind: "http" | "stub";
+  createSplit(request: CreateSplitRequest): Promise<RelayReceipt>;
+  payShare(request: PayShareRequest): Promise<RelayReceipt>;
+  closeSplit(request: CloseSplitRequest): Promise<RelayReceipt>;
   payNow(request: PayNowRequest): Promise<RelayReceipt>;
   openPlan(request: OpenPlanRequest): Promise<RelayReceipt>;
   subscribe(request: SubscribeRequest): Promise<RelayReceipt>;
@@ -138,6 +159,10 @@ const REASONS: Record<string, RelayErrorReason> = {
   payment_in_progress: "already-settled",
   nothing_owed: "already-settled",
   already_authorised: "already-settled",
+  split_closed: "already-settled",
+  split_expired: "expired",
+  split_exists: "already-settled",
+  split_unavailable: "unavailable",
 };
 
 type RelayResponse = {
@@ -149,6 +174,8 @@ type RelayResponse = {
   paymentId?: string;
   planId?: string;
   subscriptionId?: string;
+  splitId?: string;
+  shareIndex?: string;
 };
 
 async function relay(body: Record<string, unknown>): Promise<RelayReceipt> {
@@ -169,6 +196,8 @@ async function relay(body: Record<string, unknown>): Promise<RelayReceipt> {
     paymentId: out.paymentId,
     planId: out.planId,
     subscriptionId: out.subscriptionId,
+    splitId: out.splitId,
+    shareIndex: out.shareIndex,
   };
 }
 
@@ -179,6 +208,32 @@ function permitBody(permit: Signed<Permit>) {
 }
 
 const httpRelayer: Relayer = {
+  kind: "http",
+  createSplit: ({ creation }) =>
+    relay({
+      type: "createSplit",
+      creation: {
+        organiser: creation.message.organiser,
+        salt: creation.message.salt,
+        amounts: creation.message.amounts.map(str),
+        memoHash: creation.message.memoHash,
+        expiresAt: str(creation.message.expiresAt),
+        deadline: str(creation.message.deadline),
+      },
+      signature: creation.signature,
+    }),
+  payShare: ({ splitId, index, payer, authorization }) =>
+    relay({
+      type: "payShare",
+      splitId,
+      index: String(index),
+      payer,
+      amount: str(authorization.message.value),
+      validAfter: str(authorization.message.validAfter),
+      validBefore: str(authorization.message.validBefore),
+      signature: authorization.signature,
+    }),
+  closeSplit: ({ close }) => relay({ type: "closeSplit", splitId: close.message.splitId, deadline: str(close.message.deadline), signature: close.signature }),
   payNow: ({ link, payer, authorization }) =>
     relay({
       type: "pay",
@@ -291,6 +346,22 @@ function needBalance(amount: Micros): void {
 }
 
 const stubRelayer: Relayer = {
+  kind: "stub",
+  async createSplit({ creation, splitId, memo }) {
+    assertSignature(creation);
+    return settle(() => mockLedger.createSplit(splitId, creation.message.amounts, Number(creation.message.expiresAt) * 1000, memo));
+  },
+  async payShare({ splitId, index, payer, authorization }) {
+    assertSignature(authorization);
+    needBalance(authorization.message.value);
+    const outcome = mockLedger.canPayShare(splitId, index);
+    if (outcome) throw new RelayError(outcome.reason, outcome.message);
+    return settle((tx) => mockLedger.payShare(splitId, index, payer, tx));
+  },
+  async closeSplit({ close }) {
+    assertSignature(close);
+    return settle(() => mockLedger.closeSplit(close.message.splitId));
+  },
   async payNow({ link, authorization }) {
     assertSignature(authorization);
     needBalance(authorization.message.value);

@@ -22,8 +22,9 @@ export type Network = {
 type Remote = {
   chainId: number;
   explorerUrl: string;
-  contracts: { stablecoin: Address; payments: Address; checkout: Address; send: Address; loanEngine: Address };
-  domains: { stablecoin: Eip712Domain; payments: Eip712Domain; checkout: Eip712Domain; send: Eip712Domain; loanEngine: Eip712Domain };
+  /** `split` is null (or absent, from an older API) where PolarisSplit isn't deployed. */
+  contracts: { stablecoin: Address; payments: Address; checkout: Address; send: Address; split?: Address | null; loanEngine: Address };
+  domains: { stablecoin: Eip712Domain; payments: Eip712Domain; checkout: Eip712Domain; send: Eip712Domain; split?: Eip712Domain | null; loanEngine: Eip712Domain };
 };
 
 const REMOTE_NAME: Record<ContractName, keyof Remote["contracts"]> = {
@@ -31,8 +32,12 @@ const REMOTE_NAME: Record<ContractName, keyof Remote["contracts"]> = {
   payments: "payments",
   checkout: "checkout",
   send: "send",
+  split: "split",
   loanEngine: "loanEngine",
 };
+
+/** Contracts a deployment may not have yet: reported as the zero address, and the app doesn't offer what needs them. */
+const OPTIONAL = new Set<ContractName>(["split"]);
 
 let pending: Promise<Network> | null = null;
 
@@ -48,11 +53,17 @@ async function load(): Promise<Network> {
   const contracts = {} as Record<ContractName, Address>;
   const domains = {} as Record<ContractName, Eip712Domain>;
   for (const name of Object.keys(REMOTE_NAME) as ContractName[]) {
-    const reported = getAddress(remote.contracts[REMOTE_NAME[name]]);
+    const raw = remote.contracts[REMOTE_NAME[name]];
+    if (!raw && OPTIONAL.has(name)) {
+      contracts[name] = zeroAddress;
+      domains[name] = { name: `${name} (not deployed)`, version: "1", chainId: remote.chainId, verifyingContract: zeroAddress };
+      continue;
+    }
+    const reported = getAddress(raw as Address);
     const configured = env.contracts[name];
     if (configured !== zeroAddress && getAddress(configured) !== reported) throw new NetworkMismatch(name);
     contracts[name] = reported;
-    domains[name] = { ...remote.domains[REMOTE_NAME[name]], verifyingContract: reported };
+    domains[name] = { ...(remote.domains[REMOTE_NAME[name]] as Eip712Domain), verifyingContract: reported };
   }
   if (remote.chainId !== env.chainId) throw new Error(`Polaris runs on chain ${remote.chainId}; this app is built for ${env.chainId}.`);
   return { chainId: remote.chainId, explorerUrl: remote.explorerUrl, contracts, domains };

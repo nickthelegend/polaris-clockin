@@ -14,7 +14,7 @@ import {
   TxRow,
   useIsDesktop,
 } from "@polaris/ui";
-import { ArrowDown, BadgeDollarSign, CalendarClock, Gauge, Layers, Pencil, Plus, ScanLine, Zap } from "lucide-react";
+import { ArrowDown, BadgeDollarSign, CalendarClock, Gauge, Layers, Pencil, Plus, ScanLine, Users, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -145,6 +145,7 @@ function HomePhone() {
           <ListGroup>
             {[
               { icon: <ScanLine />, title: "Pay or claim a link", description: "Scan a code or paste a link", href: "/pay" },
+              { icon: <Users />, title: "Split a bill", description: "One link; everyone pays their share", href: "/split/new" },
               { icon: <Layers />, title: "Credit line", description: "What you can spend with Pay in 4", href: "/credit" },
               { icon: <Gauge />, title: "Credit score", description: "How it moves, week by week", href: "/credit/score" },
               { icon: <CalendarClock />, title: "Plans", description: "Pay in 4 and subscriptions", href: "/insights?view=plans" },
