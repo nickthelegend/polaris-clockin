@@ -47,7 +47,7 @@ inlined at build time, and public, except the optional server-side `FX_RPC_*`.
 | `NEXT_PUBLIC_EXPLORER_URL` | `https://testnet.monadvision.com` | Where "View receipt" goes |
 | `NEXT_PUBLIC_AUSD_ADDRESS` | AUSD on Monad testnet | The dollar token |
 | `NEXT_PUBLIC_POLARIS_API_URL` | unset | Polaris for Business (e.g. `http://localhost:3100`): the relayer (`POST /api/relay`), checkout sessions and payment links (`/api/public/…`), and the network's contracts and EIP-712 domains (`/api/public/network`). Unset: the stub relayer and sample links. |
-| `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts. With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
+| `NEXT_PUBLIC_PAYMENTS_ADDRESS`, `_CHECKOUT_ADDRESS`, `_SEND_ADDRESS`, `_SPLIT_ADDRESS`, `_LOAN_ENGINE_ADDRESS` | unset | Polaris contracts (`_SPLIT_ADDRESS`: PolarisSplit, split-the-bill links; not on Monad testnet until `deploy-split:monad` runs, and Split a bill says so). With the API set they come from it (and, if set here too, must match it). Without either, unset ones sign against a local placeholder domain, which only the stub relayer accepts. |
 | `FX_RPC_MONAD`, `FX_RPC_ETHEREUM`, `FX_RPC_POLYGON`, `FX_RPC_BASE` | public RPCs (`packages/fx/src/feeds.ts`) | **Server only.** Comma-separated JSON-RPC URLs `/api/fx` reads the Chainlink FX feeds from (Monad mainnet, Ethereum, Polygon, Base). Read-only calls; no key needed |
 
 ## With Polaris for Business (the real relayer)
@@ -65,7 +65,9 @@ the balance is `AUSD.balanceOf` read from the chain; plans, subscriptions and
 activity come from `/api/public/buyers/{address}` (the API's records of chain
 events); the credit line, score and reasons from `/api/public/credit/{address}`
 (ScoreManager and the CRE workflow's explained decision); a send link's state
-from `PolarisSend`. *Raise your limit* signs the account's consent (Face ID)
+from `PolarisSend`; a split's shares and who paid them from
+`/api/public/splits/{id}` (PolarisSplit's own state, with when each share
+landed). *Raise your limit* signs the account's consent (Face ID)
 and the history wallet's link proof (its own prompt), and the API fires the
 CRE underwriting workflow (`src/lib/underwriting.ts`).
 
@@ -168,6 +170,8 @@ out again even when the browser's Back removed it.
 | `/pay` | full sheet | Scan a code, paste a link, or try a sample |
 | `/pay/[id]` | full sheet | Checkout (ref C): Pay now, Pay in 4 or Subscribe, the limit, Raise your limit |
 | `/claim` | full sheet | Reads the link's fragment, which never reaches a server; claim with one Face ID |
+| `/split/new` | full sheet | Split a bill: the bill on the keypad, then equally between some people (you in or out, names optional) or by named amounts; one Face ID opens it; the link, its QR, Share and Copy. `?amount=…&people=…&name=…` or `&share=Name:amount` fills it in (polarispay-sdk `splits.link()`) |
+| `/split/[id]` | full sheet | The split link. A friend: who asked and what for, "2 of 4 paid", their share (they pick their name when the shares are named), and **Pay with Face ID**, which makes their account in the same step; short of dollars, it says how much to add first. The organiser: who paid and when, Remind (the link again), Close split |
 | `/accounts` | half sheet | Select account (the card carousel); which one Home shows |
 | `/activity/[id]` | half sheet | Payment details and *View receipt*; an unclaimed send link can be cancelled here |
 | `/plans/[id]` | half, drags to full | Plan detail and *Pay early* |
@@ -207,7 +211,7 @@ merchant web. Below 1024px nothing changes.
 | `/activity`, `/cards`, `/insights`, `/profile` | Pages in the frame |
 | `/plans` | Pay in 4: every plan with its ticks, subscriptions (a phone goes to `/insights?view=plans`) |
 | `/activity/[id]`, `/plans/[id]`, `/notifications` | Right Drawer |
-| `/send`, `/receive`, `/add`, `/pay`, `/claim`, `/accounts` | Centred Dialog |
+| `/send`, `/receive`, `/add`, `/pay`, `/claim`, `/accounts`, `/split/new`, `/split/[id]` | Centred Dialog |
 | `/credit`, `/credit/score`, `/settings` | Pages in the frame |
 | `/pay/[id]` | The checkout card on its own, under the wordmark |
 | `/onboard` | Sign-up beside the animated art |
@@ -287,7 +291,8 @@ in [`docs/design/chainlink`](../../docs/design/chainlink).
 | Path | What it is |
 |---|---|
 | `src/lib/account/` | The account layer: one interface; Mera (Face ID), Privy (email) and the dev signer; capability check |
-| `src/lib/sign/` | EIP-712 builders for `PlanIntent`, `SubscribeIntent`, ERC-3009, ERC-2612, `Claim`, `Cancel`, `CancelSubscription`; domain reading (ERC-5267); nonce derivations |
+| `src/lib/sign/` | EIP-712 builders for `PlanIntent`, `SubscribeIntent`, ERC-3009, ERC-2612, `Claim`, `Cancel`, `CancelSubscription`, `CreateSplit`, `CloseSplit`; domain reading (ERC-5267); nonce derivations (a split's id, a share's nonce) |
+| `src/lib/split.ts` | Split-the-bill links: the words in the link's fragment and their hash (what the organiser signs), equal shares to the micro-dollar, the create form's plan and its prefill, what this device knows (`polaris.splits.v1`) |
 | `src/lib/actions.ts` | Each money action: build, sign, relay |
 | `src/lib/relayer.ts` | The relayer client: `POST {NEXT_PUBLIC_POLARIS_API_URL}/api/relay`, errors mapped to `RelayError` with the server's message for the buyer. Without the API, a local stub |
 | `src/lib/network.ts`, `src/lib/api.ts` | The network (contracts and EIP-712 domains) from Polaris for Business; the fetch helper |

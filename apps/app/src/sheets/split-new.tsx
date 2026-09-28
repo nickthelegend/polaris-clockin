@@ -8,6 +8,7 @@ import {
   IconButton,
   Input,
   Keypad,
+  Notice,
   PrimaryButton,
   ScreenHeader,
   SecondaryButton,
@@ -21,6 +22,7 @@ import {
 import { Copy, Minus, Plus, Share2, UserPlus, X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { zeroAddress } from "viem";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { LocalEquivalent } from "@/components/local-equivalent";
 import { QrCode } from "@/components/qr";
@@ -31,9 +33,10 @@ import { useOwner } from "@/lib/account/hooks";
 import { getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { longDate } from "@/lib/dates";
-import { prefetchDomains } from "@/lib/domains";
+import { getDomain, prefetchDomains } from "@/lib/domains";
 import { parseAmount, usd } from "@/lib/money";
 import { setPrefs, usePrefs } from "@/lib/prefs";
+import { RELAYER_IS_STUB } from "@/lib/relayer";
 import { cleanText, MAX_PEOPLE, planSplit, type SplitMemo, type SplitMode, type SplitRow, splitPrefill } from "@/lib/split";
 
 /**
@@ -84,6 +87,27 @@ function useSplitForm() {
 }
 
 type Form = ReturnType<typeof useSplitForm>;
+
+/**
+ * Whether this network has PolarisSplit: false on a deployment that predates
+ * it (the API reports no split contract), so the form says so before anyone
+ * fills it in. null while it's being read, or if it can't be; the confirm
+ * then says so instead. The offline demo's stub relayer always can.
+ */
+function useSplitAvailable(): boolean | null {
+  const [available, setAvailable] = useState<boolean | null>(RELAYER_IS_STUB ? true : null);
+  useEffect(() => {
+    if (RELAYER_IS_STUB) return;
+    let live = true;
+    getDomain("split")
+      .then((d) => live && setAvailable(d.verifyingContract !== zeroAddress))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  return available;
+}
 
 /** Create a split, on a phone: the keypad, then the details. */
 export function SplitNewSheet() {
@@ -136,7 +160,9 @@ function SplitDetails({ form, onDone, withAmount = false }: { form: Form; onDone
   const [confirming, setConfirming] = useState(false);
   const [nameField, setNameField] = useState("");
   const [created, setCreated] = useState<CreatedSplit | null>(null);
+  const available = useSplitAvailable();
   const { plan, mode } = form;
+  const canCreate = plan.ok && available !== false;
   const organiserName = prefs.name || profile.value?.name || "";
   const friends = mode === "equal" ? Math.max(0, form.people - (form.includeMe ? 1 : 0)) : form.rows.length;
 
@@ -164,6 +190,11 @@ function SplitDetails({ form, onDone, withAmount = false }: { form: Form; onDone
   return (
     <>
       <Sheet.Body className="flex flex-col [&>*]:shrink-0 gap-4 pt-1">
+        {available === false ? (
+          <Notice tone="neutral" title="Splitting a bill isn't available here yet">
+            Paying, sending and everything else work as usual.
+          </Notice>
+        ) : null}
         {withAmount ? (
           <div className="grid gap-1.5">
             <Input
@@ -307,11 +338,11 @@ function SplitDetails({ form, onDone, withAmount = false }: { form: Form; onDone
       </Sheet.Body>
       <Sheet.Footer className="lg:[&>*]:flex-1">
         {desktop ? (
-          <PrimaryButton size="lg" disabled={!plan.ok} onClick={() => setConfirming(true)}>
+          <PrimaryButton size="lg" disabled={!canCreate} onClick={() => setConfirming(true)}>
             {plan.ok ? `Create link for ${usd(plan.collect, { trim: true })}` : "Create link"}
           </PrimaryButton>
         ) : (
-          <Button variant="lime" size="lg" disabled={!plan.ok} onClick={() => setConfirming(true)}>
+          <Button variant="lime" size="lg" disabled={!canCreate} onClick={() => setConfirming(true)}>
             {plan.ok ? `Create link for ${usd(plan.collect, { trim: true })}` : "Create link"}
           </Button>
         )}

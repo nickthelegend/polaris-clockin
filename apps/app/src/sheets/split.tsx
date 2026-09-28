@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Avatar,
   Button,
   DetailsList,
   EmptyState,
@@ -24,7 +25,6 @@ import { Check, CircleCheck, Copy, ExternalLink, Link2Off, Plus, ScanFace, Share
 import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useState, useSyncExternalStore } from "react";
 import type { Address, Hex } from "viem";
-import { PersonAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { LocalEquivalent } from "@/components/local-equivalent";
 import { QrCode } from "@/components/qr";
@@ -66,7 +66,8 @@ import { n, when } from "@/lib/view";
  * The amounts and who paid come from the chain (PolarisSplit, through the
  * API). The words come from the link's fragment, or from this device if it
  * made or opened the link before, and are shown only when they hash to what
- * the organiser signed.
+ * the organiser signed. A share wears its name's initials, never one of the
+ * sample people's photos: the name is whatever the organiser typed.
  */
 
 const subscribeHash = (onChange: () => void) => {
@@ -111,7 +112,8 @@ function statusText(split: SplitStatus): { tone: "lime" | "amber" | "neutral" | 
     case "expired":
       return { tone: "neutral", text: "Expired" };
     default:
-      return { tone: "amber", text: `${split.paidCount} of ${split.shareCount} paid` };
+      // The line beside it already says "2 of 3 paid".
+      return { tone: "amber", text: "Collecting" };
   }
 }
 
@@ -276,7 +278,7 @@ function OrganiserView({ split, memo, onDone }: { split: SplitStatus; memo: Spli
             <ListRow
               key={share.index}
               well={false}
-              icon={<PersonAvatar name={shareLabel(memo, share.index)} decorative />}
+              icon={<Avatar name={shareLabel(memo, share.index)} decorative />}
               title={shareLabel(memo, share.index)}
               description={shareStatus(split, share.index, owner)}
               trailing={
@@ -318,22 +320,30 @@ function OrganiserView({ split, memo, onDone }: { split: SplitStatus; memo: Spli
           ]}
         />
       </Sheet.Body>
-      <Sheet.Footer className="flex-col gap-2 lg:[&>*]:flex-1">
+      <Sheet.Footer className={open ? "flex-col gap-2" : "[&>*]:flex-1"}>
         {open ? (
           <>
             <div className="grid w-full grid-cols-2 gap-2">
               {desktop ? (
-                <SecondaryButton size="lg" icon={<Share2 />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void remind()}>
-                  Remind
-                </SecondaryButton>
+                // Ref E's pair: two quiet buttons of one size, the primary action being the share itself.
+                <>
+                  <SecondaryButton size="lg" icon={<Share2 />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void remind()}>
+                    Remind
+                  </SecondaryButton>
+                  <SecondaryButton size="lg" icon={<Copy />} className="bg-ui-surface-2 hover:bg-ui-surface-3" onClick={() => void copy()}>
+                    Copy link
+                  </SecondaryButton>
+                </>
               ) : (
-                <Button variant="white" size="lg" icon={<Share2 />} onClick={() => void remind()}>
-                  Remind
-                </Button>
+                <>
+                  <Button variant="white" size="lg" icon={<Share2 />} onClick={() => void remind()}>
+                    Remind
+                  </Button>
+                  <Button variant="dark" size="lg" icon={<Copy />} onClick={() => void copy()}>
+                    Copy link
+                  </Button>
+                </>
               )}
-              <Button variant="dark" size="lg" icon={<Copy />} className="lg:bg-ui-surface-2 lg:hover:bg-ui-surface-3" onClick={() => void copy()}>
-                Copy link
-              </Button>
             </div>
             <Button variant="ghost" size="sm" className="text-ui-down" onClick={() => setClosing(true)}>
               Close split
@@ -443,7 +453,7 @@ function FriendView({ split, words, owner, onDone }: { split: SplitStatus; words
               <ListRow
                 key={s.index}
                 well={false}
-                icon={<PersonAvatar name={shareLabel(memo, s.index)} decorative />}
+                icon={<Avatar name={shareLabel(memo, s.index)} decorative />}
                 title={shareLabel(memo, s.index)}
                 description={shareStatus(split, s.index, owner)}
                 trailing={

@@ -38,17 +38,10 @@ export function splitWords(split: SplitStatus): SplitMemo | null {
   return memoMatches(known, split.memoHash) ? known : null;
 }
 
+/** The tile's last line; its subtitle already names the status ("Closed"), so this doesn't repeat it. */
 function statusLine(split: SplitStatus): string {
-  switch (split.status) {
-    case "settled":
-      return "Everyone paid";
-    case "closed":
-      return `Closed · ${split.paidCount} of ${split.shareCount} paid`;
-    case "expired":
-      return `Expired · ${split.paidCount} of ${split.shareCount} paid`;
-    default:
-      return `${split.paidCount} of ${split.shareCount} paid · until ${shortDate(split.expiresAt)}`;
-  }
+  const paid = `${split.paidCount} of ${split.shareCount} paid`;
+  return split.status === "open" ? `${paid} · until ${shortDate(split.expiresAt)}` : paid;
 }
 
 function useSplits() {
