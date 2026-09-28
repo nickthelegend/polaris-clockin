@@ -26,6 +26,10 @@ every hash and address is in the committed evidence.
 4. If a "not done yet" item gets done before the deadline (the Privy relayer,
    Envio Cloud, a live underwriting report), update its answer here and in
    the write-up, with the new transaction hashes.
+5. At the commit you submit, run `pnpm docs:diffstat` and paste the table it
+   prints into [`writeup.md` §5](writeup.md#5-whats-new-in-metropolis) with
+   the new totals (the committed figures stop at `ae2ce19`, 28 Sep 2026), then
+   `pnpm docs:check`.
 
 ## Evidence items (every bounty)
 
