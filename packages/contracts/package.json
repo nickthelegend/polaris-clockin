@@ -13,6 +13,7 @@
     "fund-pool:monad": "hardhat run scripts/fund-pool.js --network monadTestnet",
     "grant-relayer:monad": "hardhat run scripts/grant-relayer.js --network monadTestnet",
     "verify:monad": "hardhat run scripts/verify-monad.js --network monadTestnet",
+    "check:deployment:monad": "hardhat run scripts/check-deployment.js --network monadTestnet",
     "lock-receivers:monad": "hardhat run scripts/lock-receivers.js --network monadTestnet",
     "guardian:monad": "hardhat run scripts/guardian.js --network monadTestnet",
     "node:local": "hardhat node --hostname 127.0.0.1 --port 8600",

@@ -1,0 +1,1 @@
+# pnpm --filter @polarispay/contracts check:deployment:monad, 2026-09-28T02:14:37Z (read-only, Monad testnet public RPC)
