@@ -3,6 +3,7 @@
   "chainId": 10143,
   "deployer": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
   "deployedAt": "2026-09-28T02:10:55.406Z",
+  "sourceCommit": "020484b2aea74bde3f2cbc918d534dbda1348723",
   "contracts": {
     "Stablecoin": {
       "address": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",

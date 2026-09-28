@@ -15,6 +15,7 @@
 const { Wallet, ZeroAddress, getAddress, id: eventTopic } = require("ethers");
 
 const tx = require("./tx");
+const { headSource } = require("./verify");
 const { TYPES, DOMAIN_NAMES, AUSD_DOMAIN_NAME, readDomain, domainJson } = require("./eip712");
 const {
   ACTION,
@@ -88,6 +89,9 @@ async function deployPolaris(hre, cfg, log = () => {}) {
     chainId: Number(net.chainId),
     deployer: deployer.address,
     deployedAt: new Date().toISOString(),
+    // The commit the bytecode is built from: what verify:monad submits for a
+    // contract whose sources change later (lib/verify.js).
+    ...sourceCommitOf(log),
     contracts: {},
     config: {},
     roles: {},
@@ -413,6 +417,21 @@ function guardianRecordConfig(t, maxAttestationAge) {
   };
 }
 
+/**
+ * { sourceCommit } for the record: the commit HEAD is at, with
+ * sourceDirty: true (and a warning) when contracts/ has uncommitted changes,
+ * which no commit reproduces. {} outside a git checkout.
+ */
+function sourceCommitOf(log = () => {}) {
+  try {
+    const { commit, dirty } = headSource();
+    if (dirty) log("  WARNING: contracts/ has uncommitted changes: verify:monad cannot rebuild this bytecode from any commit");
+    return dirty ? { sourceCommit: commit, sourceDirty: true } : { sourceCommit: commit };
+  } catch {
+    return {};
+  }
+}
+
 /** Bigints as decimal strings, recursively, so a record serialises. */
 function jsonSafe(v) {
   if (typeof v === "bigint") return v.toString();
@@ -426,4 +445,4 @@ function randomWallet() {
   return Wallet.createRandom();
 }
 
-module.exports = { deployPolaris, MONAD_TESTNET, USD, randomWallet, ZeroAddress, GUARDIAN_VIEW, guardianRecordConfig, jsonSafe };
+module.exports = { deployPolaris, MONAD_TESTNET, USD, randomWallet, ZeroAddress, GUARDIAN_VIEW, guardianRecordConfig, jsonSafe, sourceCommitOf };
