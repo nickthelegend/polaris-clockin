@@ -335,6 +335,21 @@ describe("Monadscan through Etherscan V2 (lib/monadscan.js)", () => {
     expect(codeUrl("https://testnet.monadscan.com/", "0x1")).to.equal("https://testnet.monadscan.com/address/0x1#code");
   });
 
+  it("the committed verification record covers every contract verify:monad targets, each verified", () => {
+    const record = require("../../deployments/monad-testnet.json");
+    const out = require("../../deployments/monad-testnet.verification.json");
+    const targets = verificationTargets(record);
+    expect(out).to.include({ chainId: record.chainId, explorer: record.explorer, total: targets.length, verified: targets.length });
+    expect(out.contracts.map((c) => c.address)).to.deep.equal(targets.map((t) => t.address));
+    for (const c of out.contracts) {
+      expect(c.verified, c.name).to.equal(true);
+      expect(c.explorerUrl).to.equal(codeUrl(record.explorer, c.address));
+      expect(c.compilerVersion, c.name).to.match(/^v0\.8\.24\+commit\.[0-9a-f]{8}$/);
+      expect(c.sourceCommit, c.name).to.match(/^[0-9a-f]{40}$/);
+    }
+    expect(out.contracts.find((c) => c.name === "PolarisCheckout").sources).to.equal(`commit ${DEPLOY_COMMIT}`);
+  });
+
   it("gives hardhat-verify one key, so it speaks V2 with chainid 10143 too", () => {
     const { Etherscan } = require("@nomicfoundation/hardhat-verify/etherscan");
     const { apiKey, customChains } = hre.config.etherscan;

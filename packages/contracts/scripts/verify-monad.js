@@ -15,7 +15,9 @@
  *     (`sourceCommit`, per contract, per replaced contract, or for the whole
  *     record), rebuilt from git and checked to reproduce the code first. So a
  *     contract fixed in code since it was deployed (PolarisCheckout's
- *     reauthorize) still verifies as what is on chain;
+ *     reauthorize) still verifies as what is on chain, and one whose
+ *     comments alone changed (CollectionsReceiver's NatSpec) shows the text
+ *     deployed, as an exact match;
  *   - cut down to the files it is built from, when those alone still
  *     reproduce it (what the explorer shows);
  *   - its constructor arguments, read from its creation transaction (the
