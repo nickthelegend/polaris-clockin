@@ -117,7 +117,13 @@ export function PayoutsView() {
             </dl>
           </section>
 
-          <AutoPayoutsPanel auto={state?.auto} wallet={wallet} onChange={(auto) => payouts.mutate((s) => (s ? { ...s, auto } : s))} onPaidOut={payouts.reload} />
+          <AutoPayoutsPanel
+            auto={state?.auto}
+            wallet={wallet}
+            suggested={state?.history.find((p) => p.status !== "failed" && !p.sample)?.destination ?? null}
+            onChange={(auto) => payouts.mutate((s) => (s ? { ...s, auto } : s))}
+            onPaidOut={payouts.reload}
+          />
 
           <section aria-label="Payout history" className="min-w-0">
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -184,9 +190,12 @@ function AutoPayoutsPanel({
   wallet,
   onChange,
   onPaidOut,
+  suggested,
 }: {
   auto?: AutoPayouts;
   wallet: string | null;
+  /** Where the merchant last withdrew to: the address the form starts with until one is saved. */
+  suggested?: string | null;
   onChange: (a: AutoPayouts) => void;
   onPaidOut: () => void;
 }) {
@@ -196,7 +205,7 @@ function AutoPayoutsPanel({
   // null until edited: the input shows the saved payout address, the same one
   // the status row below names.
   const [draft, setDraft] = useState<string | null>(null);
-  const address = draft ?? auto?.payoutAddress ?? "";
+  const address = draft ?? auto?.payoutAddress ?? suggested ?? "";
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [running, setRunning] = useState(false);
@@ -315,7 +324,8 @@ function AutoPayoutsPanel({
                       {shortAddress(auto.payoutAddress, 6, 4)}
                     </span>
                   ) : (
-                    "Not set"
+                    // Withdrawals and the daily sweep keep their own addresses; this one is saved by turning it on.
+                    "Not set yet (its own setting)"
                   ),
                 },
                 { label: "Next payout", value: enabled && !blocker && auto.nextRunAt ? formatDateTime(auto.nextRunAt) : "—" },

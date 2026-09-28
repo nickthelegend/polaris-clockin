@@ -212,7 +212,14 @@ function WithdrawPanel({ payouts, payments, onSwitch }: { payouts: QueryState<Pa
   const ready = !blocker && Boolean(wallet) && state !== undefined;
   // A control that can't work yet is disabled, with its reason under it.
   const empty = state !== undefined && balance === 0;
-  const reason = blocker ?? (empty ? "Nothing to withdraw yet. Your first payment lands here in under a second." : null);
+  const withdrawnBefore = state?.history.some((p) => p.status !== "failed") ?? false;
+  const reason =
+    blocker ??
+    (empty
+      ? withdrawnBefore
+        ? "All withdrawn. New payments land here in under a second."
+        : "Nothing to withdraw yet. Your first payment lands here in under a second."
+      : null);
 
   const toReview = () => {
     if (cents === null) return setError("Enter an amount, like 250 or 99.50.");
