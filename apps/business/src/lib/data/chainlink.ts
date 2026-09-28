@@ -93,6 +93,8 @@ export type ChainlinkWorkflow = {
 export type ChainlinkOverview = {
   /** False on a server with no deployment: the page then shows labelled sample data. */
   deployed: boolean;
+  /** Invented for the preview (placeholderChainlink): every card says Sample, no hash links anywhere. */
+  sample?: boolean;
   network: { chainId: number; name: string; explorerUrl: string | null } | null;
   /**
    * How reports reach the receivers:
