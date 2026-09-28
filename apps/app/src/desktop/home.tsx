@@ -183,6 +183,8 @@ function chipFor(series: Series, suffix: string): { delta: number | null; label?
   if (!series.explained) return null;
   const change = series.end - series.start;
   if (Math.abs(change) < 0.005) return { delta: 0, label: "No change" };
+  // Started the frame at $0 (a new account): "New", as the phone and Cards say, not a percentage of nothing.
+  if (series.start < 0.005 && change > 0) return { delta: null, label: `New ${suffix}` };
   if (series.deltaPct !== null && Math.abs(series.deltaPct) < 1000) return { delta: series.deltaPct };
   return { delta: null, label: `${change > 0 ? "+" : "−"}${dollars(Math.abs(change))} ${suffix}` };
 }

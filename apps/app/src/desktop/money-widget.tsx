@@ -375,7 +375,7 @@ export function CreditSummary({ className }: { className?: string }) {
       aria-label={`Pay later line: ${usd(c.available)} available to spend. Open Credit`}
     >
       <BalanceSummaryCard
-        label="Available to spend"
+        label="Pay later available"
         value={<Money value={n(c.available)} />}
         badge={withSample(
           freed > 0 ? (

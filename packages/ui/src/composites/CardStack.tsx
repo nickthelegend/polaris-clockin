@@ -41,8 +41,9 @@ export type CardStackProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & 
   /** Ref D's space after the "$"; off beside figures written "$1,284.50". */
   spaced?: boolean;
   deltaLabel?: string;
+  /** Percent change, or a word ("New", "No change") shown as it is. */
   /** Percent. */
-  delta?: number;
+  delta?: number | string;
   /** The side squares, top to bottom (up to three). */
   actions?: CardStackAction[];
   /** A small mark on the card face, top right. */
@@ -116,7 +117,7 @@ export function CardStack({
           {delta !== undefined ? (
             <div className="mt-3 flex items-center justify-between gap-3 text-[14px]">
               <span className="text-ui-text/65">{deltaLabel}</span>
-              <DeltaBadge value={delta} size="sm" className="text-[14px]" />
+              {typeof delta === "string" ? <span className="text-[14px] font-medium">{delta}</span> : <DeltaBadge value={delta} size="sm" className="text-[14px]" />}
             </div>
           ) : null}
         </div>

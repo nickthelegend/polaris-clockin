@@ -82,8 +82,10 @@ export type BalanceCardProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> 
   labels?: string[];
   /** Dollars. */
   balance: number;
-  /** Percent change beside the figure. */
-  delta?: number;
+  /** Percent change beside the figure, or a word ("New"). */
+  delta?: number | string;
+  /** The period the change is over ("this week"), after it. */
+  deltaNote?: string;
   /** The black round buttons, top right (bolt, pencil). */
   quickActions?: Action[];
   /** The white action row at the bottom. */
@@ -105,6 +107,7 @@ export function BalanceCard({
   labels = ["USD", "AUSD"],
   balance,
   delta,
+  deltaNote,
   quickActions = [],
   actions = [],
   more,
@@ -140,8 +143,15 @@ export function BalanceCard({
         <Money value={balance} dim="symbol" dimOpacity={0.38} className="text-[48px] leading-none font-semibold tracking-[-0.04em]" />
         {delta !== undefined ? (
           <span className="ui-figure mb-1.5 text-[12px] font-medium">
-            {delta >= 0 ? "+" : "-"}
-            {Math.abs(delta).toFixed(2)}%
+            {typeof delta === "string" ? (
+              delta
+            ) : (
+              <>
+                {delta >= 0 ? "+" : "-"}
+                {Math.abs(delta).toFixed(2)}%
+              </>
+            )}
+            {deltaNote ? <span className="opacity-70"> {deltaNote}</span> : null}
           </span>
         ) : null}
       </div>

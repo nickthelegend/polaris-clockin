@@ -27,7 +27,7 @@ import { HomeDesktop } from "@/desktop/home";
 import { useOwner } from "@/lib/account/hooks";
 import { getActivity, getContacts, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
-import { subAmount, balanceChange, when } from "@/lib/view";
+import { balanceDelta, DELTA_PERIOD, deltaFigure, subAmount, when } from "@/lib/view";
 
 /** Home: ref A's first screen on a phone, ref E's main screen from 1024px. */
 export function Home() {
@@ -47,8 +47,9 @@ function HomePhone() {
 
   const open = (href: string) => router.push(href, { scroll: false });
   const name = profile.value?.name ?? "";
+  // The same change, over the same week, as the desktop's Home and Cards.
   const delta =
-    selected?.id === "dollar" && balance && activity.value ? balanceChange(balance.available, activity.value) : undefined;
+    selected?.id === "dollar" && balance && activity.value ? deltaFigure(balanceDelta(balance.available, activity.value)) : undefined;
 
   return (
     <TabScreen gutter="tight">
@@ -71,6 +72,7 @@ function HomePhone() {
           labels={["USD", "AUSD"]}
           balance={selected.balance}
           delta={delta}
+          deltaNote={delta !== undefined ? DELTA_PERIOD : undefined}
           quickActions={[
             { label: "Credit line", icon: <Zap fill="currentColor" />, onClick: () => open("/credit") },
             { label: "Edit your name", icon: <Pencil fill="currentColor" />, onClick: () => open("/settings") },

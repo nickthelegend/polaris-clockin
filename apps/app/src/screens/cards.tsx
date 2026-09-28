@@ -12,7 +12,7 @@ import { getActivity, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { monthYear } from "@/lib/dates";
 import { usd } from "@/lib/money";
-import { balanceChange } from "@/lib/view";
+import { balanceDelta, deltaFigure } from "@/lib/view";
 
 /** Cards, on ref D's balance card with side squares: your account, its three faces, and its details. */
 export function Cards() {
@@ -43,8 +43,8 @@ function CardsPhone() {
           last4={dollar.last4}
           meta="USD"
           balance={dollar.balance}
-          deltaLabel="Today"
-          delta={activity.value ? balanceChange(balance.available, activity.value) : undefined}
+          deltaLabel="This week"
+          delta={activity.value ? deltaFigure(balanceDelta(balance.available, activity.value)) : undefined}
           actions={[
             { label: "Add money", icon: <Plus />, tone: "outline", onClick: () => open("/add") },
             { label: "Send", icon: <ArrowUpFromLine />, tone: "mint", onClick: () => open("/send") },

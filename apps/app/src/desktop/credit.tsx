@@ -105,7 +105,7 @@ export function CreditDesktop() {
         main={
           <>
             <FigureRow
-              caption="Available to spend"
+              caption="Pay later available"
               value={c ? <Money value={n(c.available)} /> : undefined}
               deltaLabel={c ? `of ${usd(c.limit, { trim: true })} · ${c.aprBps / 100}% APR` : undefined}
               badge={withSample()}

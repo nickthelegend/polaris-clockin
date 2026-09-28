@@ -115,16 +115,33 @@ export function subAmount(item: ActivityItem): string {
   }
 }
 
-/** What the balance did over the last `days` days, in percent. */
-export function balanceChange(balance: Micros, activity: ActivityItem[], days = 1, now = Date.now()): number {
+/** The one period every screen's balance change is over, and how it reads. */
+export const DELTA_DAYS = 7;
+export const DELTA_PERIOD = "this week";
+
+/**
+ * What the dollar balance did over the last week, one rule for every screen
+ * (Home on the phone and the desktop, Cards): a percentage when the week
+ * started with money; "New" when it started at $0 (a percentage of nothing
+ * says nothing); "No change" when nothing moved.
+ */
+export type BalanceDelta = { kind: "pct"; pct: number } | { kind: "new" } | { kind: "none" };
+
+export function balanceDelta(balance: Micros, activity: ActivityItem[], now = Date.now(), days = DELTA_DAYS): BalanceDelta {
   let net = 0n;
   for (const a of activity) {
     if (now - a.at > days * MS_DAY || !movesBalance(a)) continue;
     net += a.direction === "in" ? a.amount : -a.amount;
   }
+  if (net === 0n) return { kind: "none" };
   const before = balance - net;
-  if (before <= 0n) return 0;
-  return (toNumber(net) / toNumber(before)) * 100;
+  if (before <= 0n) return { kind: "new" };
+  return { kind: "pct", pct: (toNumber(net) / toNumber(before)) * 100 };
+}
+
+/** "+2.10%", "New" or "No change": the figure beside the period (DELTA_PERIOD). */
+export function deltaFigure(d: BalanceDelta): number | string {
+  return d.kind === "pct" ? d.pct : d.kind === "new" ? "New" : "No change";
 }
 
 /* ── Spending ────────────────────────────────────────────────────────────── */

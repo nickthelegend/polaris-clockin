@@ -21,7 +21,7 @@ import { getActivity, getProfile } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
 import { monthYear } from "@/lib/dates";
 import { usd } from "@/lib/money";
-import { balanceChange, n } from "@/lib/view";
+import { balanceDelta, DELTA_PERIOD, deltaFigure, n } from "@/lib/view";
 import { PageCoin, PageGrid, PageHead, SectionTitle, SideNote, withSample } from "./bits";
 
 const ABOUT: Record<AccountView["id"], string> = {
@@ -42,7 +42,9 @@ export function CardsDesktop() {
   const { accounts, selected, balance, credit } = useAccounts();
   const open = (href: string) => router.push(href, { scroll: false });
   const dollar = accounts.find((a) => a.id === "dollar");
-  const delta = balance && activity.value ? balanceChange(balance.available, activity.value) : undefined;
+  // The same change, over the same week, as Home.
+  const change = balance && activity.value ? balanceDelta(balance.available, activity.value) : undefined;
+  const delta = change ? deltaFigure(change) : undefined;
 
   return (
     <>
@@ -50,11 +52,12 @@ export function CardsDesktop() {
       <PageGrid
         main={
           <>
+            {/* The dollars you hold; the Pay later line is credit, said beside it, never added to them. */}
             <FigureRow
-              caption="All your accounts"
-              value={balance && credit ? <Money value={n(balance.available) + n(credit.available)} /> : undefined}
-              deltaLabel={credit ? `${usd(credit.available)} of it is Pay later` : undefined}
-              deltaTitle="Your dollar account plus what your Pay later line can spend"
+              caption="Dollar account"
+              value={balance ? <Money value={n(balance.available)} /> : undefined}
+              deltaLabel={credit ? `Pay later available: ${usd(credit.available)}` : undefined}
+              deltaTitle="What your Pay later line can spend, apart from your dollars"
               badge={withSample()}
             />
             <SectionTitle className="mt-10">Accounts</SectionTitle>
@@ -121,7 +124,7 @@ export function CardsDesktop() {
                 meta="USD"
                 balance={dollar.balance}
                 decimals={2}
-                deltaLabel="Today"
+                deltaLabel="This week"
                 delta={delta}
                 actions={[
                   { label: "Add money", icon: <Plus />, tone: "outline", onClick: () => open("/add") },
@@ -137,7 +140,13 @@ export function CardsDesktop() {
                 className="mt-1"
                 label="Dollar account"
                 value={<Money value={n(balance.available)} />}
-                badge={withSample(<DeltaChip value={delta ?? null} suffix="today" variant="strong" />)}
+                badge={withSample(
+                  change?.kind === "pct" ? (
+                    <DeltaChip value={change.pct} suffix={DELTA_PERIOD} variant="strong" />
+                  ) : (
+                    <DeltaChip value={null} label={`${change?.kind === "new" ? "New" : "No change"} ${DELTA_PERIOD}`} variant="strong" />
+                  ),
+                )}
                 stats={[
                   { label: "Pay later", value: usd(credit.available) },
                   { label: "Boost", value: "$0.00" },

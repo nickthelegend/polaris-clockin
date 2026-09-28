@@ -54,7 +54,8 @@ function InsightsPhone() {
   const days = PERIOD_DAYS[period];
   const spent = activity.value ? spentBetween(activity.value, days, 0) : 0;
   const before = activity.value ? spentBetween(activity.value, days * 2, days) : 0;
-  const delta = before > 0 ? ((spent - before) / before) * 100 : 0;
+  // Nothing spent in the period before: nothing to compare (as the desktop says), never "0.00%".
+  const delta = before > 0 ? ((spent - before) / before) * 100 : null;
   const series = activity.value ? dailySpending(activity.value, days) : [];
 
   const categoryOf = (name: string) => {
@@ -77,7 +78,13 @@ function InsightsPhone() {
           layout="side"
           label="My spending"
           value={<Money value={spent} dim="none" />}
-          meta={<DeltaBadge value={delta} note={period === "week" ? "From last week" : period === "month" ? "From last month" : "From before"} size="sm" tone="current" />}
+          meta={
+            delta === null ? (
+              <span className="text-[13px] opacity-80">Nothing to compare yet</span>
+            ) : (
+              <DeltaBadge value={delta} note={period === "week" ? "From last week" : period === "month" ? "From last month" : "From before"} size="sm" tone="current" />
+            )
+          }
           chart={<LineArea label={`Spending, ${PERIOD_LABEL[period].toLowerCase()}`} data={series} height={78} curve="linear" strokeWidth={2} glow={false} />}
         />
       ) : (
