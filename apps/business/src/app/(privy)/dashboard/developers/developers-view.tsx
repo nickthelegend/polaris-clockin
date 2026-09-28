@@ -62,7 +62,7 @@ export function DevelopersView() {
           </PageCoin>,
           <PolarisCoin key="p" size={50} />,
         ]}
-        description="Take payments from your own site or app: create a checkout session on your server, send the buyer to it, and fulfil from a signed webhook. Everything is test mode on Monad testnet."
+        description="Take payments from your own site or app: create a checkout session on your server, send the buyer to it, and fulfil from a signed webhook. Everything is test mode: no real money moves."
         actions={
           <IconSquareButton
             label={DEMO_SHOP_URL ? "Open the demo shop (a new tab)" : DEMO_SHOP_SOON}

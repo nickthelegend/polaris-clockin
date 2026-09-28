@@ -1,15 +1,13 @@
 "use client";
 
-import { Button, ErrorState, Input, PrimaryButton, Skeleton, StatusPill, TopNav, toast } from "@polaris/ui";
-import { ArrowRight, Check, CircleHelp, CodeXml, House, Link2, LoaderCircle, LockKeyhole, Store, Tag } from "lucide-react";
-import Link from "next/link";
+import { Button, ErrorState, Input, PrimaryButton, Skeleton, StatusPill, toast } from "@polaris/ui";
+import { ArrowRight, Check, LoaderCircle, LockKeyhole, Store } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { BusinessLogo } from "@/components/app/brand";
 import { SetupScreen } from "@/components/app/setup-screen";
 import { LandingFrame } from "@/components/landing/frame";
-import { NetworkPill } from "@/components/landing/nav";
+import { LandingNav } from "@/components/landing/nav";
 import { SalesPreview } from "@/components/landing/preview";
 import { BlurWords, Rise } from "@/components/motion";
 import { useAuth } from "@/lib/auth-context";
@@ -44,14 +42,6 @@ export function LoginView() {
   );
 }
 
-const LOGIN_NAV = [
-  { key: "home", label: "Home", href: "/", icon: <House /> },
-  { key: "ways", label: "Ways to pay", href: "/#ways", icon: <Link2 /> },
-  { key: "developers", label: "Developers", href: "/#developers", icon: <CodeXml /> },
-  { key: "pricing", label: "Pricing", href: "/#pricing", icon: <Tag /> },
-  { key: "faq", label: "FAQ", href: "/#faq", icon: <CircleHelp /> },
-];
-
 /**
  * The page, in ref E's frame: the top nav, the form on the left and, from
  * 1024px, the Overview's chart panel on the right, built from the same
@@ -60,21 +50,14 @@ const LOGIN_NAV = [
 export function LoginFrame({ children }: { children: ReactNode }) {
   return (
     <LandingFrame className="flex flex-col">
-      <TopNav
-        brand={<BusinessLogo height={30} />}
-        brandHref="/"
-        brandLabel="Polaris for Business, home"
-        items={LOGIN_NAV}
-        linkAs={Link}
-        sheetTitle="Polaris for Business"
-        actions={<NetworkPill />}
-      />
+      {/* The landing's own bar (same links, same network pill), without a Sign in to the page you are on. */}
+      <LandingNav onLanding={false} signIn={false} contained={false} />
       <main className="grid flex-1 grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 px-4 pt-4 pb-10 sm:px-6 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:px-10 lg:pt-6 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)] xl:px-14 xl:pb-8">
         <div className="flex flex-col">
           <div className="flex flex-1 flex-col justify-center py-6 lg:py-10">
             <div className="w-full max-w-[460px]">{children}</div>
           </div>
-          <p className="text-[13px] text-ui-muted">Test mode on Monad testnet. No real money moves.</p>
+          <p className="text-[13px] text-ui-muted">Test mode. No real money moves.</p>
         </div>
         <Showcase />
       </main>

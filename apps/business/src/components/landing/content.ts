@@ -17,7 +17,8 @@ export const nav = {
 };
 
 export const hero = {
-  eyebrow: "Polaris for Business · live on Monad testnet",
+  /** Followed by where it runs, from the server's deployment (nav.tsx networkLabel). */
+  eyebrow: "Polaris for Business",
   headline: ["Get paid in full.", "Let them pay in 4."],
   sub: "One payment link. Your buyer pays now, in four payments on Polaris credit, or by subscription. You're paid in full, in dollars, in 0.8 seconds.",
   primary: "Start accepting payments",
@@ -216,7 +217,7 @@ export const faq = {
     },
     {
       q: "Is it live?",
-      a: "Polaris runs on Monad testnet today, with test dollars. Payment links, Pay in 4, subscriptions and payouts run end to end there; mainnet starts with Pay now and payouts, capped.",
+      a: "It runs end to end today on a local Monad stand-in, with test dollars: payment links, Pay in 4, subscriptions and payouts, the credit checks and the collections. The Monad testnet launch is in October; mainnet then starts with Pay now and payouts, capped.",
     },
   ],
 };

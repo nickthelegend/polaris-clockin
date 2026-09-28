@@ -44,28 +44,36 @@ import { money, parseAmount, payInFourQuote } from "@/lib/data/format";
 
 type Frame = "1h" | "24h" | "1w" | "1m";
 
-const FRAMES: Record<Frame, { n: number; stepMin: number; scale: number; seed: number; total: number; delta: number }> = {
-  "1h": { n: 61, stepMin: 1, scale: 0.06, seed: 3.1, total: 1_482_00, delta: 4.12 },
-  "24h": { n: 73, stepMin: 20, scale: 1, seed: 0.6, total: 24_575_00, delta: 3.27 },
-  "1w": { n: 85, stepMin: 120, scale: 5.2, seed: 1.7, total: 139_240_00, delta: 8.4 },
-  "1m": { n: 91, stepMin: 480, scale: 19, seed: 2.4, total: 562_910_00, delta: 12.6 },
+const FRAMES: Record<Frame, { n: number; stepMin: number; seed: number; total: number; delta: number }> = {
+  "1h": { n: 61, stepMin: 1, seed: 3.1, total: 1_482_00, delta: 4.12 },
+  "24h": { n: 73, stepMin: 20, seed: 0.6, total: 24_575_00, delta: 3.27 },
+  "1w": { n: 85, stepMin: 120, seed: 1.7, total: 139_240_00, delta: 8.4 },
+  "1m": { n: 91, stepMin: 480, seed: 2.4, total: 562_910_00, delta: 12.6 },
 };
 
-/** A sales line with a price chart's texture: a slow swell, a dip, and fine noise. */
+/**
+ * Sales so far in the frame, as the Overview draws them (docs/design/system.md):
+ * a running total that only ever goes up, a step per sale (busier and quieter
+ * stretches, a few flat spells), ending exactly on the headline figure.
+ */
 function series(frame: Frame): GradientPoint[] {
-  const { n, stepMin, scale, seed } = FRAMES[frame];
+  const { n, stepMin, seed, total } = FRAMES[frame];
   const start = Date.UTC(2026, 8, 27, 1, 0);
-  return Array.from({ length: n }, (_, i) => {
-    const v =
-      1480 +
-      520 * Math.sin(i / 7.5 + seed) +
-      240 * Math.sin(i / 2.6 + seed * 2) +
-      120 * Math.cos(i / 1.4) +
-      60 * Math.sin(i * 1.9 + seed) +
-      i * 11 -
-      (i > 8 && i < 20 ? 420 * Math.sin(((i - 8) / 12) * Math.PI) : 0);
-    return { t: start + i * stepMin * 60_000, value: Math.round(v * scale * 100) / 100 };
+  // Deterministic "sales" per step: a slow swell of busy and quiet, some texture, and a few steps with none.
+  const weights = Array.from({ length: n }, (_, i) => {
+    if (i === 0 || (i * 37 + Math.round(seed * 10)) % 6 === 0) return 0;
+    const swell = 0.55 + 0.45 * Math.sin(i / 6 + seed);
+    const texture = 0.6 + ((i * 7919 + Math.round(seed * 100)) % 13) / 13;
+    return swell * swell * texture;
   });
+  const sum = weights.reduce((a, w) => a + w, 0) || 1;
+  let acc = 0;
+  const points = weights.map((w, i) => {
+    acc += w;
+    return { t: start + i * stepMin * 60_000, value: Math.floor((total * acc) / sum) / 100 };
+  });
+  points[n - 1] = { t: points[n - 1]!.t, value: total / 100 };
+  return points;
 }
 
 function timeLabel(frame: Frame) {

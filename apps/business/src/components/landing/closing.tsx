@@ -71,7 +71,7 @@ export function Footer() {
         </nav>
       </Shell>
       <Shell className="mt-10 flex flex-wrap items-center justify-between gap-3 text-[13px] text-ui-muted">
-        <p>© 2026 Polaris. Test mode on Monad testnet: no real money moves.</p>
+        <p>© 2026 Polaris. Test mode: no real money moves.</p>
         <p>Monad · Privy · Chainlink CRE · Nansen · Envio · Agora AUSD · Mera</p>
       </Shell>
     </footer>

@@ -1,17 +1,9 @@
-import { AppFrame, Button, PrimaryButton, TopNav } from "@polaris/ui";
-import { CircleHelp, CodeXml, House, LogIn, Tag } from "lucide-react";
+import { AppFrame, Button, PrimaryButton } from "@polaris/ui";
 import Link from "next/link";
 
-import { BusinessLogo } from "@/components/app/brand";
+import { LandingNav } from "@/components/landing/nav";
 
 export const metadata = { title: "Page not found" };
-
-const NAV = [
-  { key: "home", label: "Home", href: "/", icon: <House /> },
-  { key: "developers", label: "Developers", href: "/#developers", icon: <CodeXml /> },
-  { key: "pricing", label: "Pricing", href: "/#pricing", icon: <Tag /> },
-  { key: "faq", label: "FAQ", href: "/#faq", icon: <CircleHelp /> },
-];
 
 /**
  * The 404, in ref E's frame like every other page: the panel on the lime
@@ -19,24 +11,10 @@ const NAV = [
  * mounted here.
  */
 export default function NotFound() {
-  const signIn = (
-    <PrimaryButton asChild size="sm" iconRight={<LogIn />}>
-      <a href="/login">Sign in</a>
-    </PrimaryButton>
-  );
   return (
     <AppFrame panelClassName="flex flex-col">
-      <TopNav
-        brand={<BusinessLogo height={30} />}
-        brandHref="/"
-        brandLabel="Polaris for Business, home"
-        items={NAV}
-        linkAs="a"
-        contained
-        sheetTitle="Polaris for Business"
-        actions={signIn}
-        compactActions={signIn}
-      />
+      {/* The landing's own bar: the same links, the network pill and Sign in. */}
+      <LandingNav onLanding={false} />
       <main className="grid flex-1 place-items-center px-4 pt-6 pb-20">
         <div className="grid max-w-[520px] justify-items-center gap-6 text-center">
           <p className="ui-figure text-[96px] leading-none font-medium tracking-[-0.06em] text-ui-lime-active sm:text-[120px]">404</p>

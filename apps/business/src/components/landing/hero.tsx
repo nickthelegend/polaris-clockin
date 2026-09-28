@@ -8,6 +8,7 @@ import { BlurWords, Rise } from "@/components/motion";
 import { useDemoShopUrl } from "@/lib/demo-shop";
 import { DEMO_SHOP_SOON } from "@/lib/features";
 import { hero } from "./content";
+import { networkLabel, useNetworkName } from "./nav";
 import { ProductPreview } from "./preview";
 
 /**
@@ -17,13 +18,14 @@ import { ProductPreview } from "./preview";
  */
 export function Hero() {
   const DEMO_SHOP_URL = useDemoShopUrl();
+  const network = useNetworkName();
   return (
     <section aria-labelledby="hero-title" className="relative isolate pt-4 pb-16 sm:pt-6 lg:pb-24">
       <div className="mx-auto flex max-w-[1280px] flex-col items-center px-4 text-center sm:px-6 lg:px-8">
         {/* From lg the nav already carries the network pill. */}
         <Rise y={10} blur={6} duration={0.7} className="lg:hidden">
           <StatusPill tone="lime" size="md" icon={<span className="block size-2 rounded-full bg-current" />}>
-            {hero.eyebrow}
+            {network === undefined ? hero.eyebrow : `${hero.eyebrow} · ${network ? `running on ${networkLabel(network)}` : networkLabel(network)}`}
           </StatusPill>
         </Rise>
 
