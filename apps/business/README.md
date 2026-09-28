@@ -447,9 +447,14 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
   buyers' addresses and its own share of each collections run only. The
   schedules come from the workflows' own configs (`workflows/<dir>/config.<CRE_TARGET>.json`,
   staging by default).
-- **On `pnpm demo:local`**, `node scripts/demo-chainlink.mjs` drives every
-  state (see its header; collections and guardian reports there are
-  hand-built and say so). Captures: [`docs/design/chainlink`](../../docs/design/chainlink).
+- **On `pnpm demo:local`**, the three workflows run for real on the local
+  chain (`trigger:local`, `collections:local` with its log trigger,
+  `guardian:local` reading Chainlink AUSD/USD on Monad mainnet), and
+  `node scripts/demo-chainlink.mjs` does what a person would (the owner's
+  demo threshold, a buyer's revoke). `pnpm demo:e2e:chainlink` plays it all
+  headless: [`docs/demo/chainlink`](../../docs/demo/chainlink/README.md).
+  Earlier captures of every state, with hand-built collections and guardian
+  reports: [`docs/design/chainlink`](../../docs/design/chainlink).
 
 ## Environment
 
