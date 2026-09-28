@@ -13,7 +13,7 @@ import { creEnv } from "../scripts/cre.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
 import { loopPreflight, loopRecord } from "../scripts/collections-loop.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
-import { preflight, REAUTHORIZED_TOPIC, reauthorizedLogIndex, simulateArgs, WORKFLOWS } from "../scripts/evidence.mjs";
+import { plannedRuns, preflight, REAUTHORIZED_TOPIC, reauthorizedLogIndex, simulateArgs, WORKFLOWS } from "../scripts/evidence.mjs";
 // @ts-expect-error: plain ESM scripts, no type declarations
 import { listenPreflight, takeRuns } from "../scripts/retry-listen.mjs";
 import { REAUTHORIZED_TOPIC as WORKFLOW_REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
@@ -203,6 +203,18 @@ describe("refusing before anything is sent", () => {
     expect(preflight({ ...ok, deployment: { ...full, contracts: { ...full.contracts, PolarisCheckout: undefined } } })).toEqual([
       "The deployment has no PolarisCheckout address, which collections needs.",
     ]);
+  });
+
+  test("--retry-tx runs the log trigger before the cron, which would otherwise take what it came to collect", () => {
+    const retry = { txHash: TX, eventIndex: 1 };
+    expect(plannedRuns(["collections", "underwriting", "guardian"], retry).map((r: { label: string }) => r.label)).toEqual([
+      "collections-retry",
+      "collections",
+      "underwriting",
+      "guardian",
+    ]);
+    expect(plannedRuns(["collections", "guardian"]).map((r: { label: string }) => r.label)).toEqual(["collections", "guardian"]);
+    expect(plannedRuns(["collections"], retry)[0]).toEqual({ w: "collections", label: "collections-retry", retry });
   });
 
   test("--retry-tx: a transaction hash, and only with collections", () => {

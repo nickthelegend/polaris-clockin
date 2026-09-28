@@ -23,7 +23,8 @@
  *      PolarisCheckout, the guardian's Chainlink AUSD/USD on Monad mainnet.
  *   5. `cre workflow supported-chains`, kept as the organisation's view of
  *      Monad testnet and mainnet.
- *   6. Each workflow: `cre workflow simulate <dir> -T <target> --non-interactive
+ *   6. With --retry-tx, collections' log trigger first (plannedRuns), then
+ *      each workflow: `cre workflow simulate <dir> -T <target> --non-interactive
  *      --trigger-index 0 --broadcast` (underwriting with a freshly signed
  *      payload, scripts/underwriting-payload.mjs). A cron workflow fires at its
  *      next scheduled tick, so a run can wait up to a minute. With
@@ -102,6 +103,16 @@ export function simulateArgs(w, target, retry = null) {
   const args = ["workflow", "simulate", spec.dir, "-T", target, "--non-interactive", "--trigger-index", "0", "--broadcast"];
   if (spec.trigger === "http") args.push("--http-payload", "./underwriting/payload.json");
   return args;
+}
+
+/**
+ * The runs in order. The log trigger (collections-retry) goes first: its
+ * run collects what is due for the buyer who signed again, and the cron run
+ * that follows would otherwise collect that instalment itself (or, past
+ * grace, liquidate the plan), leaving the retry with nothing to show.
+ */
+export function plannedRuns(workflows, retry = null) {
+  return [...(retry ? [{ w: "collections", label: "collections-retry", retry }] : []), ...workflows.map((w) => ({ w, label: w, retry: null }))];
 }
 
 const TARGETS = { "staging-settings": "staging", "local-settings": "local" };
@@ -252,7 +263,7 @@ async function main() {
   const runsFile = join(dir, "runs.json");
   const runs = existsSync(runsFile) ? JSON.parse(readFileSync(runsFile, "utf8")) : [];
   const fresh = [];
-  const planned = [...workflows.map((w) => ({ w, label: w, retry: null })), ...(retry ? [{ w: "collections", label: "collections-retry", retry }] : [])];
+  const planned = plannedRuns(workflows, retry);
   for (const { w, label, retry: r } of planned) {
     const spec = WORKFLOWS[w];
     console.log(`\n── ${label} (${r ? "EVM log trigger: Reauthorized" : `${spec.trigger} trigger`}) ─────────────────────────────────────`);
