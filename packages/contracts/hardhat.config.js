@@ -53,11 +53,12 @@ module.exports = {
   },
   etherscan: {
     // One Etherscan V2 key covers Sepolia and Monadscan (Monad testnet is on
-    // the free tier: https://docs.etherscan.io/supported-chains).
-    apiKey: {
-      sepolia: process.env.ETHERSCAN_API_KEY || "",
-      monadTestnet: process.env.ETHERSCAN_API_KEY || "",
-    },
+    // the free tier: https://docs.etherscan.io/supported-chains). A single
+    // string, not one per network: hardhat-verify then speaks V2 and sends
+    // `chainid` on every call. Given an object it falls back to V1, drops the
+    // `chainid` from the URL below when it checks a contract or polls a
+    // submission, and V2 answers "Missing chainid parameter".
+    apiKey: process.env.ETHERSCAN_API_KEY || "",
     customChains: [
       {
         network: "sepolia",
@@ -71,7 +72,7 @@ module.exports = {
         network: "monadTestnet",
         chainId: 10143,
         urls: {
-          apiURL: "https://api.etherscan.io/v2/api?chainid=10143",
+          apiURL: "https://api.etherscan.io/v2/api",
           browserURL: "https://testnet.monadscan.com",
         },
       },

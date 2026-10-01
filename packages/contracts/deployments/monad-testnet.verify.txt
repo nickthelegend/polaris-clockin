@@ -1,0 +1,34 @@
+# pnpm --filter @polarispay/contracts verify:monad, 2026-09-28T10:39Z (Etherscan V2 API, chainid 10143; the key came from the git-ignored .env and is not in this log)
+
+
+> @polarispay/contracts@0.1.0 verify:monad F:\Projects\polaris\.claude\worktrees\live-verify\packages\contracts
+> hardhat run scripts/verify-monad.js --network monadTestnet
+
+verified Stablecoin                    0x3F9554F15f58Bb5900822224f37A05be81eF9723  today's sources; 22 files, exact match, args none from the creation tx
+verified ScoreManager                  0xB3D34eF62Cb64b985C230079D2815787619E6061  today's sources; 3 files, exact match, args 1 words from the creation tx
+verified PolarisLoanEngine             0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a  today's sources; 24 files, exact match, args 6 words from the creation tx
+verified PolarisPayments               0x7C774CF3E664B10057Cb2dDa66bA298e831292F1  today's sources; 23 files, exact match, args 4 words from the creation tx
+verified MerchantRegistry              0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4  today's sources; 16 files, exact match, args 1 words from the creation tx
+verified CollateralVault               0xD0e777f8DfA2E62F500054E85F815fC54fae3E72  today's sources; 11 files, exact match, args 2 words from the creation tx
+verified BatchSettlement               0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53  today's sources; 11 files, exact match, args 2 words from the creation tx
+verified PolarisSend                   0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55  today's sources; 24 files, exact match, args 1 words from the creation tx
+verified PolarisCheckout               0x3874ef1bcE222755525a96f8284631780b9bC70B  sources at 020484b2ae; 33 files, exact match, args 4 words from the creation tx
+verified CollectionsReceiver           0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC  sources at 020484b2ae; 7 files, exact match, args 4 words from the creation tx
+verified UnderwritingReceiver          0x523e9791d0e324525F66F91b21B478C18e284a19  today's sources; 8 files, exact match, args 3 words from the creation tx
+verified GuardianReceiver              0x4c99136634F670cd59E73fc284fED164C662e3Df  today's sources; 14 files, exact match, args 10 words from the creation tx
+verified GuardianReceiver (replaced)   0xF8259426519d7908e7AF63f20aea3FfCF52426D8  sources at 020484b2ae; 14 files, exact match, args 8 words from the creation tx
+
+13 of 13 verified on https://testnet.monadscan.com; wrote deployments\monad-testnet.verification.json
+  yes  Stablecoin                    https://testnet.monadscan.com/address/0x3F9554F15f58Bb5900822224f37A05be81eF9723#code
+  yes  ScoreManager                  https://testnet.monadscan.com/address/0xB3D34eF62Cb64b985C230079D2815787619E6061#code
+  yes  PolarisLoanEngine             https://testnet.monadscan.com/address/0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a#code
+  yes  PolarisPayments               https://testnet.monadscan.com/address/0x7C774CF3E664B10057Cb2dDa66bA298e831292F1#code
+  yes  MerchantRegistry              https://testnet.monadscan.com/address/0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4#code
+  yes  CollateralVault               https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72#code
+  yes  BatchSettlement               https://testnet.monadscan.com/address/0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53#code
+  yes  PolarisSend                   https://testnet.monadscan.com/address/0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55#code
+  yes  PolarisCheckout               https://testnet.monadscan.com/address/0x3874ef1bcE222755525a96f8284631780b9bC70B#code
+  yes  CollectionsReceiver           https://testnet.monadscan.com/address/0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC#code
+  yes  UnderwritingReceiver          https://testnet.monadscan.com/address/0x523e9791d0e324525F66F91b21B478C18e284a19#code
+  yes  GuardianReceiver              https://testnet.monadscan.com/address/0x4c99136634F670cd59E73fc284fED164C662e3Df#code
+  yes  GuardianReceiver (replaced)   https://testnet.monadscan.com/address/0xF8259426519d7908e7AF63f20aea3FfCF52426D8#code

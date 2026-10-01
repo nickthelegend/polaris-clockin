@@ -147,7 +147,7 @@ the API. Each app's README lists its environment.
 | | `pnpm --filter @polarispay/contracts e2e:local` | all twelve flows (the credit guard and `reauthorize` among them); the buyer, sender and freelancer never hold MON |
 | | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 passing (all three workflows and every trigger against real contracts on a local node) |
 | Monad testnet | `pnpm --filter @polarispay/contracts check:deployment:monad` | 65 of 65 (every address has code, every role and threshold as recorded; read-only), after the guardian's redeploy |
-| | `VERIFY_DRY_RUN=1 pnpm --filter @polarispay/contracts verify:monad` | 12 of 12 reproduced from source (PolarisCheckout from the deploy commit, rebuilt from git), ready for Monadscan once an Etherscan key is set |
+| | `pnpm --filter @polarispay/contracts verify:monad` | 13 of 13 verified on Monadscan, every one an exact match (the 12 in the record and the GuardianReceiver the redeploy replaced; PolarisCheckout and CollectionsReceiver from the deploy commit, rebuilt from git): [`monad-testnet.verification.json`](packages/contracts/deployments/monad-testnet.verification.json) |
 | | `pnpm --filter @polaris/business smoke:testnet -- --run` | 10 of 10 (Pay now, Pay in 4, a re-signed approval, relayed on Monad testnet; [hashes](packages/contracts/deployments/monad-testnet.smoke.json)) |
 | Lockfile | `pnpm install --frozen-lockfile` | passes |
 
@@ -200,8 +200,15 @@ nothing asks it. The files behind it:
   (and `redeploys` in the record)
 - the read-back after it, 65 of 65 checks:
   [`monad-testnet.check.txt`](packages/contracts/deployments/monad-testnet.check.txt)
+- the source verification, 13 of 13 on Monadscan, each an exact match:
+  [`monad-testnet.verification.json`](packages/contracts/deployments/monad-testnet.verification.json)
+  (the run: [`monad-testnet.verify.txt`](packages/contracts/deployments/monad-testnet.verify.txt))
 
 Chain 10143; explorer [testnet.monadscan.com](https://testnet.monadscan.com).
+Every contract below has its source verified there (the **Contract** tab of
+each address; Solidity 0.8.24, optimizer 200 runs, cancun), and so has the
+replaced GuardianReceiver,
+[`0xF825…26D8`](https://testnet.monadscan.com/address/0xF8259426519d7908e7AF63f20aea3FfCF52426D8#code).
 
 | Contract | Address | Deployed in |
 |---|---|---|
@@ -256,7 +263,7 @@ PolarisCheckout on testnet is the deploy commit's: the review's two
 would move every address the apps, the indexer and the workflows use, and
 the deployer's MON went to the guardian first). `verify:monad` verifies the
 deployed one from the deploy commit's sources, rebuilt from git and checked
-against the chain.
+against the chain: Monadscan shows the code that runs, not today's.
 
 ---
 
@@ -272,7 +279,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 |---|---|---|
 | A consumer payments product on Monad | Pay by link, Pay now, Pay in 4, subscriptions, send by link, payouts: `packages/contracts/contracts/PolarisCheckout.sol`, `PolarisSend.sol`, `apps/app`, `apps/business` | `pnpm demo:local`, `docs/demo` |
 | Gasless for the user | Every buyer action is an EIP-712 / ERC-3009 signature relayed by `apps/business` `POST /api/relay`; the buyer holds no MON | `pnpm --filter @polarispay/contracts e2e:local` (buyer, sender and freelancer end with 0 MON) |
-| Contract addresses on a Monad network | Monad testnet, 28 Sep 2026: [every address and transaction](#monad-testnet-deployment) (`deploy:monad` refuses mainnet) | `pnpm --filter @polarispay/contracts check:deployment:monad` (65 of 65); `pnpm --filter @polaris/business smoke:testnet -- --run` (10 of 10) |
+| Contract addresses on a Monad network | Monad testnet, 28 Sep 2026: [every address and transaction](#monad-testnet-deployment) (`deploy:monad` refuses mainnet), every source verified on Monadscan ([13 of 13](packages/contracts/deployments/monad-testnet.verification.json), exact matches) | `pnpm --filter @polarispay/contracts check:deployment:monad` (65 of 65); `pnpm --filter @polaris/business smoke:testnet -- --run` (10 of 10) |
 
 ### Agora: AUSD cross-border payments
 
@@ -473,7 +480,7 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 | The WASM builds | `pnpm --filter @polaris/cre-workflows build` | all three compile (no login needed) |
 | Real contracts, every trigger | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 of 12 on a local node |
 | `cre workflow simulate --broadcast` on Monad testnet, with hashes | `pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xf02c45bd…` writes logs and hashes to `workflows/evidence/` | **Done** for collections (log and cron triggers) and the guardian: [`0x1116fbb4…`](https://testnet.monadscan.com/tx/0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d), [`0xd7bcf41e…`](https://testnet.monadscan.com/tx/0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4), [`0x015bd95d…`](https://testnet.monadscan.com/tx/0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080). Underwriting's report needs provider keys ([the runs](#cre-runs-on-monad-testnet-28-sep-2026)) |
-| The receivers' sources on Monadscan | `ETHERSCAN_API_KEY=… pnpm --filter @polarispay/contracts verify:monad` | *Not yet*: needs an Etherscan key (step 1); `VERIFY_DRY_RUN=1` shows all 12 contracts reproduce from source today |
+| The receivers' sources on Monadscan | `ETHERSCAN_API_KEY=… pnpm --filter @polarispay/contracts verify:monad` | **Done**, exact matches: [`CollectionsReceiver`](https://testnet.monadscan.com/address/0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC#code), [`UnderwritingReceiver`](https://testnet.monadscan.com/address/0x523e9791d0e324525F66F91b21B478C18e284a19#code), [`GuardianReceiver`](https://testnet.monadscan.com/address/0x4c99136634F670cd59E73fc284fED164C662e3Df#code), and every other Polaris contract ([`monad-testnet.verification.json`](packages/contracts/deployments/monad-testnet.verification.json)) |
 | Receivers locked to the deployed workflows | `pnpm --filter @polarispay/contracts lock-receivers:monad` | after a DON deploy |
 
 ### Nansen: a product powered by its data
@@ -525,12 +532,9 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 
 1. **Monad testnet:** done on 28 Sep 2026 ([the deployment](#monad-testnet-deployment)),
    and GuardianReceiver redeployed the same day with the review's fixes. What
-   is left:
-   - **Source verification on Monadscan** (the judges' explorer links show
-     no source today): create a free Etherscan V2 API key, then
-     `ETHERSCAN_API_KEY=… pnpm --filter @polarispay/contracts verify:monad`.
-     It verifies PolarisCheckout from the deploy commit's sources (reauthorize
-     has changed since); `VERIFY_DRY_RUN=1` checks all 12 with no key first.
+   is left (source verification on Monadscan is done: 13 of 13, exact
+   matches, [`monad-testnet.verification.json`](packages/contracts/deployments/monad-testnet.verification.json);
+   after any redeploy, run `verify:monad` again):
    - Real AUSD: if Agora sends testnet AUSD, a redeploy with `AUSD_MODE=ausd`
      (or `fund-pool:monad` on a real-AUSD deployment) replaces the mock dollar.
    - Optional: a PolarisCheckout redeploy for the two `reauthorize` fixes
