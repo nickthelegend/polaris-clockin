@@ -38,6 +38,8 @@ async function open({ width = 1440, height = 900, profile = PROFILE } = {}) {
     ...(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {}),
     viewport: { width, height },
   });
+  // A page of `next dev` on a busy machine can take more than Playwright's 30 s to settle (as demo:e2e:chainlink allows).
+  context.setDefaultNavigationTimeout(180000);
   context.on("page", (p) => watch(p));
   for (const p of context.pages()) watch(p);
   return context;
