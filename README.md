@@ -25,10 +25,14 @@ Track 02: Consumer Products & Payments. The plan is in
 [`docs/plan.md`](docs/plan.md).
 
 > **Status (28 Sep 2026):** Polaris is live on **Monad testnet**. Every
-> contract is deployed and wired, and read back on chain (65 of 65), and the
-> smoke test ran Pay now and Pay in 4 through the API and the relayer. The
-> CRE guardian's receiver was redeployed the same day with the review's
-> fixes (still 65 of 65). The addresses are in
+> contract is deployed and wired, and read back on chain (65 of 65). The
+> relayer is now a **policy-locked Privy server wallet**, and the smoke test
+> ran every buyer and merchant action through it on Monad testnet, 14 of 14:
+> registration, Pay now, Pay in 4, a subscription, an early instalment, a
+> re-signed approval, a send by link and its claim, and a one-tap withdraw,
+> with five fresh accounts that never held MON
+> ([the run](docs/demo/testnet/README.md)). The CRE guardian's receiver and
+> CollateralVault were redeployed the same day (still 65 of 65). The addresses are in
 > [Monad testnet deployment](#monad-testnet-deployment). The dollar there is
 > a clearly labelled **mock** (`MockAUSD`), because the deployer held no
 > testnet AUSD. The whole product also runs end to end on a local chain with
@@ -146,9 +150,11 @@ the API. Each app's README lists its environment.
 | | `pnpm --filter @polaris/business e2e:local` | 13 of 13 checks (SDK sessions, relayed Pay now and Pay in 4, verified webhooks, a collection) |
 | | `pnpm --filter @polarispay/contracts e2e:local` | all twelve flows (the credit guard and `reauthorize` among them); the buyer, sender and freelancer never hold MON |
 | | `pnpm --filter @polaris/cre-workflows e2e:local` | 12 passing (all three workflows and every trigger against real contracts on a local node) |
-| Monad testnet | `pnpm --filter @polarispay/contracts check:deployment:monad` | 65 of 65 (every address has code, every role and threshold as recorded; read-only), after the guardian's redeploy |
+| Monad testnet | `pnpm --filter @polarispay/contracts check:deployment:monad` | 65 of 65 (every address has code, every role and threshold as recorded; read-only), after the guardian's and the vault's redeploys, with the Privy relayer and registry admin in their roles |
 | | `VERIFY_DRY_RUN=1 pnpm --filter @polarispay/contracts verify:monad` | 12 of 12 reproduced from source (PolarisCheckout from the deploy commit, rebuilt from git), ready for Monadscan once an Etherscan key is set |
-| | `pnpm --filter @polaris/business smoke:testnet -- --run` | 10 of 10 (Pay now, Pay in 4, a re-signed approval, relayed on Monad testnet; [hashes](packages/contracts/deployments/monad-testnet.smoke.json)) |
+| | `pnpm --filter @polaris/business smoke:testnet -- --run` | 14 of 14, through the **Privy server wallet**: every buyer and merchant action on Monad testnet, five fresh accounts at 0 MON and nonce 0 before and after ([`docs/demo/testnet`](docs/demo/testnet/README.md)); `smoke:testnet:verify` reads all 19 receipts back |
+| | `pnpm --filter @polaris/business privy:prove-policy -- --run` | Privy signed the 3 allowed calls and refused the 7 forbidden ones with `policy_violation` ([output](docs/demo/testnet/privy-prove-policy.txt)) |
+| | `pnpm --filter @polaris/business privy:smoke:harness -- --run` | `privy:smoke -- --run`: a $0.50 Pay now relayed by the Privy server wallet, session paid, the buyer at 0 MON ([output](docs/demo/testnet/privy-smoke.txt)) |
 | Lockfile | `pnpm install --frozen-lockfile` | passes |
 
 ---
@@ -187,7 +193,14 @@ GuardianReceiver alone with the review's fixes (2 transactions, 0.353 MON):
 the receiver now reads the pool itself and trusts the CRE report for the
 mainnet price only ([Chainlink CRE](#chainlink-cre-an-orchestration-layer)).
 The one it replaced, `0xF825…26D8`, stays on chain with no rounds, and
-nothing asks it. The files behind it:
+nothing asks it. Later that day `redeploy-vault:monad` replaced
+CollateralVault alone with one that takes `lockWithPermit` (5 transactions,
+0.138 MON), so a borrower secures a line with a permit the relayer carries and
+never needs MON; the old vault, `0xD0e7…3E72`, no longer raises a limit. Then
+the Privy server wallet became the relayer (`grant-relayer:monad`) and a
+second Privy server wallet, the registry admin, took MerchantRegistry
+(`transfer-registry-owner.mjs`):
+[`apps/business/privy-live.md`](apps/business/privy-live.md). The files behind it:
 
 - the record:
   [`packages/contracts/deployments/monad-testnet.json`](packages/contracts/deployments/monad-testnet.json)
@@ -195,9 +208,13 @@ nothing asks it. The files behind it:
   [`monad-testnet.deploy.txt`](packages/contracts/deployments/monad-testnet.deploy.txt)
 - every transaction, decoded:
   [`monad-testnet.transactions.json`](packages/contracts/deployments/monad-testnet.transactions.json)
-- the guardian's redeploy:
-  [`monad-testnet.redeploy-guardian.txt`](packages/contracts/deployments/monad-testnet.redeploy-guardian.txt)
+- the guardian's and the vault's redeploys:
+  [`monad-testnet.redeploy-guardian.txt`](packages/contracts/deployments/monad-testnet.redeploy-guardian.txt),
+  [`monad-testnet.redeploy-vault.txt`](packages/contracts/deployments/monad-testnet.redeploy-vault.txt)
   (and `redeploys` in the record)
+- the Privy relayer's roles and the registry's move:
+  [`monad-testnet.grant-relayer.txt`](packages/contracts/deployments/monad-testnet.grant-relayer.txt),
+  [`monad-testnet.transfer-registry-owner.txt`](packages/contracts/deployments/monad-testnet.transfer-registry-owner.txt)
 - the read-back after it, 65 of 65 checks:
   [`monad-testnet.check.txt`](packages/contracts/deployments/monad-testnet.check.txt)
 
@@ -210,7 +227,7 @@ Chain 10143; explorer [testnet.monadscan.com](https://testnet.monadscan.com).
 | PolarisLoanEngine (the credit pool: 10,000 mock dollars) | [`0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a`](https://testnet.monadscan.com/address/0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a) | [`0xe8c4f3bf…`](https://testnet.monadscan.com/tx/0xe8c4f3bf90429faea48931eb0b5c2da008bc691ebe0f9921b865f654d56a374f) |
 | PolarisPayments | [`0x7C774CF3E664B10057Cb2dDa66bA298e831292F1`](https://testnet.monadscan.com/address/0x7C774CF3E664B10057Cb2dDa66bA298e831292F1) | [`0x056b4738…`](https://testnet.monadscan.com/tx/0x056b47385754c208dc2d696b9ce4b8fe7c2090dc844c3bc75b8dde194609e18e) |
 | MerchantRegistry | [`0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4`](https://testnet.monadscan.com/address/0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4) | [`0x50637e33…`](https://testnet.monadscan.com/tx/0x50637e33dde8b8ba6401ac9c9a0dc1714d0ba0c1e649dc381d18ecabb9c636fa) |
-| CollateralVault | [`0xD0e777f8DfA2E62F500054E85F815fC54fae3E72`](https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72) | [`0xcbd8ef90…`](https://testnet.monadscan.com/tx/0xcbd8ef906cbdc850f01c534c8610b5dbc29ac63ed84a054ab408a78423a70fb9) |
+| CollateralVault, redeployed with `lockWithPermit` (gasless collateral); ScoreManager and the loan engine point at it ([`0xa92056b7…`](https://testnet.monadscan.com/tx/0xa92056b74bd168240ee76a17b14d05b0638dab141c5dd212abc9dae50654d512), [`0x960c2699…`](https://testnet.monadscan.com/tx/0x960c26990a1420f01c4a196cbda530831e1359ca2faa5c69dca8bc11b850993f)) | [`0xC2F006aE9836a700CE8F1e457d11346cc42e23dc`](https://testnet.monadscan.com/address/0xC2F006aE9836a700CE8F1e457d11346cc42e23dc) | [`0x4c71da11…`](https://testnet.monadscan.com/tx/0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453) |
 | BatchSettlement | [`0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53`](https://testnet.monadscan.com/address/0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53) | [`0x28d8c131…`](https://testnet.monadscan.com/tx/0x28d8c131cc2b7bb3fe9aa5805e5e9af32274ba17fb04302752a8dbea7f81d083) |
 | PolarisSend | [`0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55`](https://testnet.monadscan.com/address/0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55) | [`0x9f81549c…`](https://testnet.monadscan.com/tx/0x9f81549cd07cf46f018c77f175f596ab7cf535f484f87bf6079ce57fb84924b9) |
 | PolarisCheckout | [`0x3874ef1bcE222755525a96f8284631780b9bC70B`](https://testnet.monadscan.com/address/0x3874ef1bcE222755525a96f8284631780b9bC70B) | [`0x5df03907…`](https://testnet.monadscan.com/tx/0x5df039074ed9a5b6e11c517955b42393a430d369a12c554096316a1d64dc020c) |
@@ -222,14 +239,42 @@ Chain 10143; explorer [testnet.monadscan.com](https://testnet.monadscan.com).
 |---|---|
 | Chainlink's simulation forwarder, which the receivers trust | [`0xB9F79d863261869B234c481D1f9A7af84AeAd192`](https://testnet.monadscan.com/address/0xB9F79d863261869B234c481D1f9A7af84AeAd192) |
 | CRE simulation transmitter (`CRE_ETH_PRIVATE_KEY`, 1 MON) | [`0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6`](https://testnet.monadscan.com/address/0xBBb420B7e4b0263d053e00bFD363eD7cF21e2EA6) |
-| Dev relayer (the Privy server wallet's stand-in; PolarisPayments and MerchantRegistry operator, BatchSettlement settler) | [`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69) |
+| **The relayer: a Privy server wallet** (`y8sa671n804anaxznbeneh2q`, policy `qqsjm4wxjn9pefv8v4njbmit`; PolarisPayments and MerchantRegistry operator, BatchSettlement settler) | [`0x8366916019bc5452e62A0D36418ABebB45396aE2`](https://testnet.monadscan.com/address/0x8366916019bc5452e62A0D36418ABebB45396aE2) |
+| **The registry admin: a Privy server wallet** (`jznn8nzfi7xuc2ywij67ktld`, policy `jlkptd8dcc0sfv7exe2qmsf0`: only `setActive`, and `setMaxOrderValue` up to $1,000); owns MerchantRegistry ([`0x34f00f29…`](https://testnet.monadscan.com/tx/0x34f00f294ef9da35f43c08bb1606e6dc10a9119cd8ab92632922cf1a60bef710)) | [`0xa089EeEA5B1625C586380596bde502aB46F3e45F`](https://testnet.monadscan.com/address/0xa089EeEA5B1625C586380596bde502aB46F3e45F) |
+| The dev relayer it replaced (`roles.previousRelayers`; it keeps its roles until revoked) | [`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69) |
 | Demo merchant "Polaris Demo Studio" (registered by its own signature, active, $1,000 cap; subscription plans #1 and #2) | [`0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185`](https://testnet.monadscan.com/address/0xA2672c1BaD9aAa4F1408929C677d58EC0E1aC185) |
 
-**The smoke test** (`pnpm --filter @polaris/business smoke:testnet -- --run`,
-10 of 10, every hash in
-[`monad-testnet.smoke.json`](packages/contracts/deployments/monad-testnet.smoke.json)):
-Polaris for Business ran against this deployment with the dev relayer, and a
-fresh buyer signed each step:
+**Gasless through Privy** (`pnpm --filter @polaris/business smoke:testnet -- --run`,
+28 Sep 2026, 14 of 14; every hash in
+[`docs/demo/testnet`](docs/demo/testnet/README.md)): Polaris for Business ran
+against this deployment with `RELAYER_MODE=privy`, and five fresh accounts (a
+merchant, its payout address, a buyer, a send-by-link key and the link's
+recipient) signed every step. None of them was ever sent MON or sent a
+transaction (0 MON and nonce 0, before and after, read from the chain); the
+Privy server wallet sent 15 transactions for them (0.373 MON) and the Privy
+registry admin 2 (0.011 MON):
+
+- the merchant **registers** (its Registration, `registerFor`): [`0x576f4ead…`](https://testnet.monadscan.com/tx/0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74);
+  after its first sale the registry admin caps and **activates** it: [`0x4f33f626…`](https://testnet.monadscan.com/tx/0x4f33f626eaf83f9f37c5361f98c6a29e62db22ce24dcbfc4c93299f80f83f640), [`0x0b9e45ff…`](https://testnet.monadscan.com/tx/0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1);
+- **Pay now** $25: [`0xedc91c93…`](https://testnet.monadscan.com/tx/0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e);
+- a **secured line**, $202 locked by a relayed permit (`lockWithPermit`): [`0x2efc674a…`](https://testnet.monadscan.com/tx/0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc);
+- **Pay in 4** $200, plan #2: [`0x70cd0468…`](https://testnet.monadscan.com/tx/0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06);
+- **Subscribe** $5 a month: [`0xda41c41f…`](https://testnet.monadscan.com/tx/0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224), cancelled by signature: [`0x9c35028b…`](https://testnet.monadscan.com/tx/0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6);
+- an instalment **paid early**: [`0x557e6f99…`](https://testnet.monadscan.com/tx/0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d);
+- a lost approval **signed again** (`Reauthorized`): [`0xc34da0c3…`](https://testnet.monadscan.com/tx/0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19);
+- **Send by link** $10: [`0xc262b283…`](https://testnet.monadscan.com/tx/0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913), **claimed**: [`0x30ee0025…`](https://testnet.monadscan.com/tx/0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a);
+- the merchant's one-tap **withdraw**, $100: [`0x5ab0ecc0…`](https://testnet.monadscan.com/tx/0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48).
+
+Five webhooks arrived, each verified with polarispay-sdk. The buyer's Pay in
+4 line is secured, because an unsecured line needs a CRE underwriting report,
+which needs provider keys (the workflow runs, and without keys it returns
+`incomplete` rather than guess). The only other sender was the harness (the
+deployer minting mock dollars, and submitting the buyer's own signed
+`permit(0)` to play a lost approval), labelled as such.
+
+**The earlier run with the dev relayer** (10 of 10, every hash in
+[`monad-testnet.smoke.json`](packages/contracts/deployments/monad-testnet.smoke.json)),
+before the Privy relayer existed:
 
 - **Pay now** $25: [`0x5d533afe…`](https://testnet.monadscan.com/tx/0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2),
   followed by a `payment.succeeded` webhook verified with polarispay-sdk.
@@ -238,18 +283,16 @@ fresh buyer signed each step:
 - A lost approval **signed again**: [`0xf02c45bd…`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002),
   which emitted `Reauthorized`.
 
-The buyer's Pay in 4 line is secured: the buyer locked $202 in
-CollateralVault itself. An unsecured line needs a CRE underwriting report,
-which needs provider keys (the workflow runs, and without keys it returns
-`incomplete` rather than guess). Apart from those two calls and one approval,
-the buyer sent nothing: every Polaris step was a signature the dev relayer
-carried.
+There the buyer locked its collateral itself (the old vault had no permit
+path), so it sent two calls and one approval; every Polaris step was a
+signature the dev relayer carried.
 
 The SDK presets (`packages/sdk/src/deployments.ts`), the indexer
 (`packages/indexer/config.yaml`, from block 66288120), the CRE staging configs
 and the apps' `.env.example` files carry these addresses; tests hold each of
 them to the record. The guardian's redeploy moved only GuardianReceiver, which
-only the record, PolarisCheckout and the guardian's staging config name.
+only the record, PolarisCheckout and the guardian's staging config name; the
+vault's moved only CollateralVault (the record, the SDK preset, the indexer).
 
 PolarisCheckout on testnet is the deploy commit's: the review's two
 `reauthorize` fixes are in the code and its tests, not on chain (a redeploy
