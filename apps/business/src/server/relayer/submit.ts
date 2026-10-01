@@ -52,6 +52,7 @@ export function relayerAddresses(chain: ChainConfig): RelayerAddresses {
     loanEngine: c.loanEngine,
     registry: c.registry,
     stablecoin: c.stablecoin,
+    vault: c.vault,
   };
 }
 

@@ -55,7 +55,7 @@ export const DEPLOYMENTS: Readonly<Record<number, ChainSettings>> = {
       "PolarisLoanEngine": "0xdaf74fa6a5cf2e03df8e12613a8c8bf3a569204a",
       "PolarisPayments": "0x7c774cf3e664b10057cb2dda66ba298e831292f1",
       "MerchantRegistry": "0x40a351282c9843c49f5dd788d730a3d9fe7627b4",
-      "CollateralVault": "0xd0e777f8dfa2e62f500054e85f815fc54fae3e72",
+      "CollateralVault": "0xc2f006ae9836a700ce8f1e457d11346cc42e23dc",
       "BatchSettlement": "0x4f9478c66a82ceb1e1f8fe0117849e3f330cfc53",
       "PolarisSend": "0x67d336c69881a4f3fa4aaa2909cfcd95178dfc55",
       "PolarisCheckout": "0x3874ef1bce222755525a96f8284631780b9bc70b",

@@ -10,6 +10,8 @@
 // .env, AFTER grant-relayer:monad (setting the relayer as a registry operator
 // needs the owner). Gas: estimate + 15%, as every Polaris sender.
 
+import { readFileSync, writeFileSync } from "node:fs";
+
 import { createPublicClient, createWalletClient, defineChain, getAddress, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
@@ -30,6 +32,7 @@ if (getAddress(current) === newOwner) {
   console.log("Already done.");
   process.exit(0);
 }
+if (deployment.chainId === 143) throw new Error("Refusing Monad mainnet.");
 if (!flag("apply")) {
   console.log("\nNothing sent. Re-run with --apply.");
   process.exit(0);
@@ -43,3 +46,10 @@ const gas = ((await client.estimateContractGas(request)) * 115n) / 100n;
 const hash = await wallet.writeContract({ ...request, gas });
 const receipt = await client.waitForTransactionReceipt({ hash });
 console.log(`transferOwnership: ${receipt.status} in block ${receipt.blockNumber} (${hash})`);
+if (receipt.status !== "success") process.exit(1);
+// The record names the registry's owner, so check:deployment reads the new one back.
+const record = JSON.parse(readFileSync(deployment.file, "utf8"));
+record.roles = { ...record.roles, registryAdmin: newOwner, registryAdminTx: hash };
+writeFileSync(deployment.file, `${JSON.stringify(record, null, 2)}
+`);
+console.log(`Recorded roles.registryAdmin in ${deployment.file}`);

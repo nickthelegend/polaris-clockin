@@ -1,0 +1,19 @@
+privy:smoke harness on Monad testnet
+  merchant   0x41b556dEE537D2cfB2b12Fb2C45833Cbbb20a038 (Smoke Studio mul5ca1p)
+  relayer    0x8366916019bc5452e62A0D36418ABebB45396aE2
+  harness    minted $1.00 of MockAUSD to the throwaway buyer 0x37210AD83DC4f9561bA6b3c90eE8181012f3bA51 (0x2911287062ab03f32db1829beae7c5770719924216a81b6dbc99b3021754c3bc)
+
+Polaris relayer on Monad testnet: Privy smoke test
+──────────────────────────────────────────────────
+  server      http://localhost:3963
+  chain       10143 (Monad Testnet)
+  relayer     privy 0x8366916019bc5452e62A0D36418ABebB45396aE2
+  buyer       0x37210AD83DC4f9561bA6b3c90eE8181012f3bA51 (signs only; holds no MON)
+
+  session     cs_test_uwQMPpBiGau4RwDhcTk32TX6
+  relayed     confirmed 0x5ef22fced32a6c4d2192a25691caddbf604700934bd505a35830e77922c4f983
+  explorer    https://testnet.monadvision.com/tx/0x5ef22fced32a6c4d2192a25691caddbf604700934bd505a35830e77922c4f983
+  session     complete / paid
+
+Evidence: the transaction above was signed by the Privy server wallet under its policy and paid for by it; the buyer sent nothing.
+  buyer      0x37210AD83DC4f9561bA6b3c90eE8181012f3bA51: 0 MON before, 0 MON after, nonce 0

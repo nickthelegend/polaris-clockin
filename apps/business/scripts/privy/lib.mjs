@@ -1,5 +1,6 @@
 // Shared by the Privy setup scripts. Nothing here talks to Privy by itself.
 
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -65,6 +66,8 @@ export function loadDeployment(env) {
       loanEngine: at("PolarisLoanEngine"),
       registry: at("MerchantRegistry"),
       stablecoin: at("Stablecoin"),
+      // Optional: a deployment without the vault has no gasless collateral rule.
+      vault: d.contracts?.CollateralVault?.address ?? null,
     },
   };
 }
@@ -115,6 +118,10 @@ export function banner(title) {
   console.log(`\n${title}\n${"─".repeat(title.length)}`);
 }
 
+/**
+ * Name a secret without showing any of it: a short SHA-256 fingerprint, so two
+ * runs can be told apart but no character of the key reaches a terminal or a log.
+ */
 export function mask(value) {
-  return value ? `${String(value).slice(0, 6)}…${String(value).slice(-4)}` : "(unset)";
+  return value ? `sha256:${createHash("sha256").update(String(value)).digest("hex").slice(0, 8)} (not shown)` : "(unset)";
 }

@@ -1,0 +1,538 @@
+{
+  "at": "2026-09-28T11:12:01.426Z",
+  "chainId": 10143,
+  "network": "Monad testnet",
+  "note": "Written by pnpm --filter @polaris/business smoke:testnet -- --run. The dollar is MockAUSD, a labelled mock for the testnet demo. Every account under `users` was generated for this run and never held MON. The buyer's Pay in 4 line is secured by collateral locked with a relayed permit (CollateralVault.lockWithPermit): an unsecured line needs a CRE underwriting report, which a fresh account can't get (requireUnderwriting is on). The merchant's registration is its Registration signature relayed as registerFor (the dashboard's route needs a Privy login); its withdraw is its TransferWithAuthorization relayed as transferWithAuthorization (what the dashboard's Withdraw relays). Harness rows are test setup by the deployer.",
+  "relayer": {
+    "mode": "privy",
+    "address": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+    "walletId": "y8sa671n804anaxznbeneh2q",
+    "policyId": "qqsjm4wxjn9pefv8v4njbmit",
+    "transactions": 15,
+    "monSpent": "0.372994824"
+  },
+  "activator": {
+    "address": "0xa089EeEA5B1625C586380596bde502aB46F3e45F",
+    "walletId": "jznn8nzfi7xuc2ywij67ktld",
+    "monSpent": "0.01117818"
+  },
+  "harness": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
+  "merchant": {
+    "address": "0x41b556dEE537D2cfB2b12Fb2C45833Cbbb20a038",
+    "name": "Smoke Studio mul5ca1p",
+    "payoutAddress": "0xd516876FB1e2E84A60fe7867B84c0C75168D9bC2",
+    "earned": "229.85",
+    "withdrawn": "100"
+  },
+  "users": [
+    {
+      "role": "merchant (registers, is paid, withdraws)",
+      "address": "0x41b556dEE537D2cfB2b12Fb2C45833Cbbb20a038",
+      "monBefore": "0",
+      "monAfter": "0",
+      "nonceBefore": 0,
+      "nonceAfter": 0
+    },
+    {
+      "role": "the merchant's payout address",
+      "address": "0xd516876FB1e2E84A60fe7867B84c0C75168D9bC2",
+      "monBefore": "0",
+      "monAfter": "0",
+      "nonceBefore": 0,
+      "nonceAfter": 0
+    },
+    {
+      "role": "buyer (Pay now, collateral, Pay in 4, subscribe, pay early, re-sign, send, cancel)",
+      "address": "0xA38c9E92fC91CEAFc6c50eCD2D16F62A61C3a652",
+      "monBefore": "0",
+      "monAfter": "0",
+      "nonceBefore": 0,
+      "nonceAfter": 0
+    },
+    {
+      "role": "send-by-link key (opens and claims the link)",
+      "address": "0x39B8F8C0a2417b7784D36EC114baD129E0679919",
+      "monBefore": "0",
+      "monAfter": "0",
+      "nonceBefore": 0,
+      "nonceAfter": 0
+    },
+    {
+      "role": "the link's recipient",
+      "address": "0x785764220c1CDa0De85C228566BaD22E00AdBA12",
+      "monBefore": "0",
+      "monAfter": "0",
+      "nonceBefore": 0,
+      "nonceAfter": 0
+    }
+  ],
+  "payNow": {
+    "sessionId": "cs_test_LfL9f15PvffOYqOh9104STlZ",
+    "orderId": "smoke-now-1790593849613",
+    "txHash": "0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e",
+    "webhook": "evt_1309530e5f0800b1ff9e516c0b5f"
+  },
+  "collateral": {
+    "amount": "202",
+    "txHash": "0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc",
+    "creditLimit": "202"
+  },
+  "payIn4": {
+    "sessionId": "cs_test_umJP406JNXzE5OOfOpoLkTxV",
+    "orderId": "smoke-plan-1790593891003",
+    "planId": "2",
+    "intervalSeconds": 60,
+    "txHash": "0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06",
+    "webhook": "evt_d91606267068d6b21429735a0095",
+    "schedule": [
+      {
+        "index": 1,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T11:12:35.000Z"
+      },
+      {
+        "index": 2,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T11:13:35.000Z"
+      },
+      {
+        "index": 3,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T11:14:35.000Z"
+      },
+      {
+        "index": 4,
+        "amount": "50.000038",
+        "dueAt": "2026-09-28T11:15:35.000Z"
+      }
+    ]
+  },
+  "subscription": {
+    "sessionId": "cs_test_RH8S7yDForAq2OIsP0kKyzqc",
+    "orderId": "smoke-sub-1790593896009",
+    "planId": "3",
+    "subscriptionId": "1",
+    "txHash": "0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224",
+    "canceledTxHash": "0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6",
+    "webhook": "evt_59ca41551c8719d94cd80c48c3f3"
+  },
+  "repay": {
+    "planId": "2",
+    "amount": "50.000038",
+    "txHash": "0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d"
+  },
+  "reauthorize": {
+    "txHash": "0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19",
+    "evidence": "pnpm --filter @polaris/cre-workflows evidence --retry-tx 0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19"
+  },
+  "send": {
+    "linkKey": "0x39B8F8C0a2417b7784D36EC114baD129E0679919",
+    "amount": "10",
+    "txHash": "0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913",
+    "claimTxHash": "0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a",
+    "recipient": "0x785764220c1CDa0De85C228566BaD22E00AdBA12"
+  },
+  "withdraw": {
+    "from": "0x41b556dEE537D2cfB2b12Fb2C45833Cbbb20a038",
+    "to": "0xd516876FB1e2E84A60fe7867B84c0C75168D9bC2",
+    "amount": "100",
+    "txHash": "0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48"
+  },
+  "registration": {
+    "txHash": "0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74",
+    "activation": [
+      "0x4f33f626eaf83f9f37c5361f98c6a29e62db22ce24dcbfc4c93299f80f83f640",
+      "0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1"
+    ]
+  },
+  "webhooks": [
+    {
+      "type": "payment.succeeded",
+      "id": "evt_1309530e5f0800b1ff9e516c0b5f"
+    },
+    {
+      "type": "plan.opened",
+      "id": "evt_d91606267068d6b21429735a0095"
+    },
+    {
+      "type": "subscription.charged",
+      "id": "evt_59ca41551c8719d94cd80c48c3f3"
+    },
+    {
+      "type": "installment.collected",
+      "id": "evt_266b61192513a3bf28d903d53ae5"
+    },
+    {
+      "type": "subscription.canceled",
+      "id": "evt_1b58c6cf9afdea15b2f3b65524d4"
+    }
+  ],
+  "steps": [
+    {
+      "what": "The merchant registers on MerchantRegistry: its Registration signature, registerFor sent by the relayer",
+      "signedBy": "merchant",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+      "contract": "MerchantRegistry",
+      "txHash": "0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74",
+      "block": 66392905,
+      "status": 1,
+      "gasLimit": "312755",
+      "gasUsed": "312755",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "MerchantRegistered",
+        "MerchantRegisteredBy"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74"
+    },
+    {
+      "what": "Harness: mint $1000 of MockAUSD (the labelled mock dollar) to the buyer",
+      "signedBy": "harness",
+      "by": "harness (deployer)",
+      "from": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
+      "to": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+      "contract": "Stablecoin",
+      "txHash": "0x89b8a0de0522a64a1ae5fde80297c63f22c1588bd4983b82f9c10953f4017567",
+      "block": 66392909,
+      "status": 1,
+      "gasLimit": "64046",
+      "gasUsed": "64046",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "Transfer"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x89b8a0de0522a64a1ae5fde80297c63f22c1588bd4983b82f9c10953f4017567"
+    },
+    {
+      "what": "Pay now $25: PolarisCheckout.pay",
+      "signedBy": "buyer (ReceiveWithAuthorization)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "contract": "PolarisCheckout",
+      "txHash": "0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e",
+      "block": 66393023,
+      "status": 1,
+      "gasLimit": "413948",
+      "gasUsed": "413948",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "CheckoutPaid"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e"
+    },
+    {
+      "what": "The registry admin caps the merchant: MerchantRegistry.setMaxOrderValue",
+      "signedBy": "none (the registry admin's own call, under its Privy policy)",
+      "by": "Privy registry admin",
+      "from": "0xa089EeEA5B1625C586380596bde502aB46F3e45F",
+      "to": "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+      "contract": "MerchantRegistry",
+      "txHash": "0x4f33f626eaf83f9f37c5361f98c6a29e62db22ce24dcbfc4c93299f80f83f640",
+      "block": 66393029,
+      "status": 1,
+      "gasLimit": "59690",
+      "gasUsed": "59690",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "MerchantUpdated"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x4f33f626eaf83f9f37c5361f98c6a29e62db22ce24dcbfc4c93299f80f83f640"
+    },
+    {
+      "what": "The registry admin activates the merchant for Pay in 4: MerchantRegistry.setActive",
+      "signedBy": "none (the registry admin's own call, under its Privy policy)",
+      "by": "Privy registry admin",
+      "from": "0xa089EeEA5B1625C586380596bde502aB46F3e45F",
+      "to": "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",
+      "contract": "MerchantRegistry",
+      "txHash": "0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1",
+      "block": 66393034,
+      "status": 1,
+      "gasLimit": "49900",
+      "gasUsed": "49900",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "MerchantActivated"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1"
+    },
+    {
+      "what": "A secured line: the buyer sets $202 aside, CollateralVault.lockWithPermit",
+      "signedBy": "buyer (Permit to the vault)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc",
+      "contract": "CollateralVault",
+      "txHash": "0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc",
+      "block": 66393041,
+      "status": 1,
+      "gasLimit": "248073",
+      "gasUsed": "248073",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "CollateralLocked"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc"
+    },
+    {
+      "what": "Pay in 4 $200 (4 instalments, 60 s apart): PolarisCheckout.openPlan",
+      "signedBy": "buyer (PlanIntent + Permit)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "contract": "PolarisCheckout",
+      "txHash": "0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06",
+      "block": 66393057,
+      "status": 1,
+      "gasLimit": "744160",
+      "gasUsed": "744160",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "LoanCreated"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06",
+      "planId": "2"
+    },
+    {
+      "what": "The merchant's subscription plan: PolarisPayments.createPlanFor (operator)",
+      "signedBy": "none (operator: the session's terms)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+      "contract": "PolarisPayments",
+      "txHash": "0x5c304b0fb31f96f825f0cce31e4bd62ad10f625cd4db6d27c9ad1cbcca2d739c",
+      "block": 66393070,
+      "status": 1,
+      "gasLimit": "158725",
+      "gasUsed": "158725",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "PlanCreated"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x5c304b0fb31f96f825f0cce31e4bd62ad10f625cd4db6d27c9ad1cbcca2d739c"
+    },
+    {
+      "what": "Subscribe $5 a month, first month charged: PolarisCheckout.subscribe",
+      "signedBy": "buyer (SubscribeIntent + Permit)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "contract": "PolarisCheckout",
+      "txHash": "0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224",
+      "block": 66393078,
+      "status": 1,
+      "gasLimit": "503482",
+      "gasUsed": "503482",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "Subscribed",
+        "SubscriptionCharged"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224",
+      "subscriptionId": "1"
+    },
+    {
+      "what": "Pay an instalment early, $50.000038: PolarisLoanEngine.repayWithSig",
+      "signedBy": "buyer (RepayIntent)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a",
+      "contract": "PolarisLoanEngine",
+      "txHash": "0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d",
+      "block": 66393087,
+      "status": 1,
+      "gasLimit": "283787",
+      "gasUsed": "283787",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "InstallmentPaid"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d"
+    },
+    {
+      "what": "Harness: a lost approval (the buyer's signed permit(0) to the loan engine, submitted by the deployer)",
+      "signedBy": "buyer (Permit, value 0)",
+      "by": "harness (deployer)",
+      "from": "0x6Df4a0b84BD608123D1f3412709AcaC69523c115",
+      "to": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+      "contract": "Stablecoin",
+      "txHash": "0xcaafc22b0d43cd5af633c2357d7f02c2bc3809eaa4f385606726ff9c8602a2e4",
+      "block": 66393092,
+      "status": 1,
+      "gasLimit": "56295",
+      "gasUsed": "56295",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "Approval"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xcaafc22b0d43cd5af633c2357d7f02c2bc3809eaa4f385606726ff9c8602a2e4"
+    },
+    {
+      "what": "The buyer signs again: PolarisCheckout.reauthorize (Reauthorized: the CRE collections log trigger)",
+      "signedBy": "buyer (Permit to the loan engine)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x3874ef1bcE222755525a96f8284631780b9bC70B",
+      "contract": "PolarisCheckout",
+      "txHash": "0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19",
+      "block": 66393099,
+      "status": 1,
+      "gasLimit": "146803",
+      "gasUsed": "146803",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "Reauthorized"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19"
+    },
+    {
+      "what": "Send $10 by link: PolarisSend.send",
+      "signedBy": "sender (ReceiveWithAuthorization) + link key (Open)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55",
+      "contract": "PolarisSend",
+      "txHash": "0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913",
+      "block": 66393107,
+      "status": 1,
+      "gasLimit": "249055",
+      "gasUsed": "249055",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "Sent"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913"
+    },
+    {
+      "what": "The link is claimed on a new phone: PolarisSend.claim",
+      "signedBy": "link key (Claim naming the recipient)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55",
+      "contract": "PolarisSend",
+      "txHash": "0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a",
+      "block": 66393114,
+      "status": 1,
+      "gasLimit": "128153",
+      "gasUsed": "128153",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "Claimed"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a"
+    },
+    {
+      "what": "Cancel the subscription: PolarisPayments.cancelWithSignature",
+      "signedBy": "subscriber (CancelSubscription)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+      "contract": "PolarisPayments",
+      "txHash": "0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6",
+      "block": 66393121,
+      "status": 1,
+      "gasLimit": "50190",
+      "gasUsed": "50190",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "SubscriptionCancelled"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6"
+    },
+    {
+      "what": "The merchant withdraws $100 in one tap: AUSD transferWithAuthorization",
+      "signedBy": "merchant (TransferWithAuthorization)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x3F9554F15f58Bb5900822224f37A05be81eF9723",
+      "contract": "Stablecoin",
+      "txHash": "0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48",
+      "block": 66393130,
+      "status": 1,
+      "gasLimit": "120114",
+      "gasUsed": "120114",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "AuthorizationUsed",
+        "Transfer"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48"
+    },
+    {
+      "what": "The session's price pinned on its order: PolarisPayments.quoteOrder (operator)",
+      "signedBy": "none (operator: the session's price)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+      "contract": "PolarisPayments",
+      "txHash": "0xfb2e5c92f10bb18736d297cb0d559a33ab888c496cc6d1ecf1a26bebb90936ae",
+      "block": 66392922,
+      "status": 1,
+      "gasLimit": "99199",
+      "gasUsed": "99199",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "OrderQuoted"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xfb2e5c92f10bb18736d297cb0d559a33ab888c496cc6d1ecf1a26bebb90936ae"
+    },
+    {
+      "what": "The session's price pinned on its order: PolarisPayments.quoteOrder (operator)",
+      "signedBy": "none (operator: the session's price)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+      "contract": "PolarisPayments",
+      "txHash": "0xb321eda5a1bd9639b6ceca0d423f6bd5ae3cb6173704acb0efdc5eeb36ec3e6e",
+      "block": 66393048,
+      "status": 1,
+      "gasLimit": "99184",
+      "gasUsed": "99184",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "OrderQuoted"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0xb321eda5a1bd9639b6ceca0d423f6bd5ae3cb6173704acb0efdc5eeb36ec3e6e"
+    },
+    {
+      "what": "The session's price pinned on its order: PolarisPayments.quoteOrder (operator)",
+      "signedBy": "none (operator: the session's price)",
+      "by": "Privy relayer",
+      "from": "0x8366916019bc5452e62A0D36418ABebB45396aE2",
+      "to": "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
+      "contract": "PolarisPayments",
+      "txHash": "0x1d17fb34344ffc183f3d8e345edb51e15749215656a0af714da7dd3797fd5a9a",
+      "block": 66393064,
+      "status": 1,
+      "gasLimit": "99184",
+      "gasUsed": "99184",
+      "effectiveGasPrice": "102000000000",
+      "value": "0",
+      "events": [
+        "OrderQuoted"
+      ],
+      "explorer": "https://testnet.monadscan.com/tx/0x1d17fb34344ffc183f3d8e345edb51e15749215656a0af714da7dd3797fd5a9a"
+    }
+  ]
+}

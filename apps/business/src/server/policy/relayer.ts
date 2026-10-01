@@ -45,6 +45,7 @@
 
 import { decodeFunctionData, getAddress, type Abi, type Address, type Hex } from "viem";
 import {
+  collateralVaultAbi,
   iausdAbi,
   merchantRegistryAbi,
   polarisCheckoutAbi,
@@ -53,7 +54,7 @@ import {
   polarisSendAbi,
 } from "@polarispay/contracts/abi";
 
-export type RelayerContract = "checkout" | "payments" | "send" | "loanEngine" | "registry" | "stablecoin";
+export type RelayerContract = "checkout" | "payments" | "send" | "loanEngine" | "registry" | "stablecoin" | "vault";
 
 export type AllowedCall = {
   contract: RelayerContract;
@@ -91,6 +92,14 @@ export const RELAYER_CALLS: readonly AllowedCall[] = [
   { contract: "send", functionName: "claim", rule: "Claim a link: PolarisSend.claim", why: "The link key's Claim naming the recipient", signedBy: "owner" },
   { contract: "send", functionName: "cancel", rule: "Cancel a link: PolarisSend.cancel", why: "Sender's Cancel signature", signedBy: "owner" },
   { contract: "loanEngine", functionName: "repayWithSig", rule: "Pay early: PolarisLoanEngine.repayWithSig", why: "Borrower's RepayIntent", signedBy: "owner" },
+  {
+    contract: "vault",
+    functionName: "lockWithPermit",
+    rule: "Secure a line: CollateralVault.lockWithPermit",
+    why: "Borrower's ERC-2612 permit to the vault, locked into their own position (a secured Pay in 4 line with no MON)",
+    signedBy: "owner",
+    minAmountArg: "amount",
+  },
   { contract: "registry", functionName: "registerFor", rule: "Onboard: MerchantRegistry.registerFor", why: "Merchant's Registration signature (Privy embedded wallet)", signedBy: "owner" },
   { contract: "registry", functionName: "updatePayoutAddressWithSig", rule: "Payout address: updatePayoutAddressWithSig", why: "Merchant's PayoutUpdate signature", signedBy: "owner" },
   { contract: "stablecoin", functionName: "transferWithAuthorization", rule: "Payouts: AUSD transferWithAuthorization", why: "Owner's ERC-3009 TransferWithAuthorization (withdrawals, payouts, sends to a user)", signedBy: "owner", minAmountArg: "value" },
@@ -103,9 +112,20 @@ export const CONTRACT_ABIS: Record<RelayerContract, Abi> = {
   loanEngine: polarisLoanEngineAbi as unknown as Abi,
   registry: merchantRegistryAbi as unknown as Abi,
   stablecoin: iausdAbi as unknown as Abi,
+  vault: collateralVaultAbi as unknown as Abi,
 };
 
-export type RelayerAddresses = Record<RelayerContract, Address>;
+/**
+ * The contracts the relayer may call. The vault is optional: a deployment
+ * without one (or with one that predates `lockWithPermit`) simply has no
+ * gasless collateral, and no rule for it.
+ */
+export type RelayerAddresses = Record<Exclude<RelayerContract, "vault">, Address> & { vault?: Address | null };
+
+/** The contracts that have an address in this deployment. */
+function presentContracts(addresses: RelayerAddresses): RelayerContract[] {
+  return (Object.keys(addresses) as RelayerContract[]).filter((c) => Boolean(addresses[c]));
+}
 
 export class PolicyViolation extends Error {
   readonly rule: string;
@@ -146,7 +166,7 @@ export function checkRelayerCall(
   }
   if (!tx.to) throw new PolicyViolation("to", "The relayer never deploys contracts.");
   const to = getAddress(tx.to);
-  const contract = (Object.keys(expected.addresses) as RelayerContract[]).find((c) => getAddress(expected.addresses[c]) === to);
+  const contract = presentContracts(expected.addresses).find((c) => getAddress(expected.addresses[c] as Address) === to);
   if (!contract) throw new PolicyViolation("to", `${to} isn't a Polaris contract the relayer may call.`);
   if (!tx.data || tx.data.length < 10) throw new PolicyViolation("function_name", "The relayer only calls contract functions.");
 
@@ -214,10 +234,12 @@ export function buildRelayerPolicy(input: { chainId: number; addresses: RelayerA
       conditions: [{ field_source: "ethereum_transaction", field: "value", operator: "gt", value: "0" }],
     },
   ];
+  const present = presentContracts(input.addresses);
   for (const call of RELAYER_CALLS) {
+    if (!present.includes(call.contract)) continue;
     const abi = functionFragments(CONTRACT_ABIS[call.contract], call.functionName);
     const conditions: Condition[] = [
-      { field_source: "ethereum_transaction", field: "to", operator: "in", value: bothCases(input.addresses[call.contract]) },
+      { field_source: "ethereum_transaction", field: "to", operator: "in", value: bothCases(input.addresses[call.contract] as Address) },
       onChain,
       { field_source: "ethereum_calldata", field: "function_name", abi, operator: "eq", value: call.functionName },
     ];

@@ -1,0 +1,44 @@
+Polaris on Monad testnet: gasless, end to end
+
+  deployment  /packages/contracts/deployments/monad-testnet.json
+  relayer     0x8366916019bc5452e62A0D36418ABebB45396aE2 (Privy server wallet y8sa671n804anaxznbeneh2q)
+  activator   0xa089EeEA5B1625C586380596bde502aB46F3e45F (Privy registry admin; owns MerchantRegistry)
+  harness     0x6Df4a0b84BD608123D1f3412709AcaC69523c115 (mints the mock dollar; plays the lost approval)
+   1. PASS  five fresh accounts, none holding MON or having sent anything  0x41b556 0xd51687 0xA38c9E 0x39B8F8 0x785764
+   2. PASS  Polaris for Business is up on Monad testnet with the privy relayer  (0x8366916019bc5452e62A0D36418ABebB45396aE2)
+   3. PASS  merchant registered on chain, gas paid by the relayer  (0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74)
+   4. PASS  Pay now relayed and settled; payment.succeeded arrived, verified by polarispay-sdk  (0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e)
+   5. PASS  the Privy registry admin activated the merchant after its first sale  (cap $1000)
+   6. PASS  secured credit line from collateral locked by a relayed permit (no CRE underwriting report for a throwaway account)  (limit $202)
+   7. PASS  Pay in 4 opened, merchant paid in full; plan.opened arrived with the schedule  (plan #2)
+   8. PASS  subscribed, first period charged  (subscription #1, subscription.charged webhook)
+   9. PASS  an instalment paid early through the relayer  (0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d)
+  10. PASS  a lost approval signed again, Reauthorized emitted  (0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19)
+  11. PASS  sent by link and claimed by a recipient with no MON  ($10 received)
+  12. PASS  subscription cancelled by signature  (0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6)
+  13. PASS  merchant withdrew to its payout address with no MON  ($229.85 earned, $100 withdrawn)
+  14. PASS  the five users never held MON and never sent a transaction; every step was a signature the relayer carried  (relayer: 15 transactions, 0.372994824 MON)
+
+All 14 checks passed. Every hash: docs/demo/testnet/results.json and README.md
+
+| Step | Sent by | Transaction |
+|---|---|---|
+| The merchant registers on MerchantRegistry: its Registration signature, registerFor sent by the relayer | Privy relayer | [0x576f4ead…](https://testnet.monadscan.com/tx/0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74) |
+| Harness: mint $1000 of MockAUSD (the labelled mock dollar) to the buyer | harness (deployer) | [0x89b8a0de…](https://testnet.monadscan.com/tx/0x89b8a0de0522a64a1ae5fde80297c63f22c1588bd4983b82f9c10953f4017567) |
+| Pay now $25: PolarisCheckout.pay | Privy relayer | [0xedc91c93…](https://testnet.monadscan.com/tx/0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e) |
+| The registry admin caps the merchant: MerchantRegistry.setMaxOrderValue | Privy registry admin | [0x4f33f626…](https://testnet.monadscan.com/tx/0x4f33f626eaf83f9f37c5361f98c6a29e62db22ce24dcbfc4c93299f80f83f640) |
+| The registry admin activates the merchant for Pay in 4: MerchantRegistry.setActive | Privy registry admin | [0x0b9e45ff…](https://testnet.monadscan.com/tx/0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1) |
+| A secured line: the buyer sets $202 aside, CollateralVault.lockWithPermit | Privy relayer | [0x2efc674a…](https://testnet.monadscan.com/tx/0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc) |
+| Pay in 4 $200 (4 instalments, 60 s apart): PolarisCheckout.openPlan | Privy relayer | [0x70cd0468…](https://testnet.monadscan.com/tx/0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06) |
+| The merchant's subscription plan: PolarisPayments.createPlanFor (operator) | Privy relayer | [0x5c304b0f…](https://testnet.monadscan.com/tx/0x5c304b0fb31f96f825f0cce31e4bd62ad10f625cd4db6d27c9ad1cbcca2d739c) |
+| Subscribe $5 a month, first month charged: PolarisCheckout.subscribe | Privy relayer | [0xda41c41f…](https://testnet.monadscan.com/tx/0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224) |
+| Pay an instalment early, $50.000038: PolarisLoanEngine.repayWithSig | Privy relayer | [0x557e6f99…](https://testnet.monadscan.com/tx/0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d) |
+| Harness: a lost approval (the buyer's signed permit(0) to the loan engine, submitted by the deployer) | harness (deployer) | [0xcaafc22b…](https://testnet.monadscan.com/tx/0xcaafc22b0d43cd5af633c2357d7f02c2bc3809eaa4f385606726ff9c8602a2e4) |
+| The buyer signs again: PolarisCheckout.reauthorize (Reauthorized: the CRE collections log trigger) | Privy relayer | [0xc34da0c3…](https://testnet.monadscan.com/tx/0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19) |
+| Send $10 by link: PolarisSend.send | Privy relayer | [0xc262b283…](https://testnet.monadscan.com/tx/0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913) |
+| The link is claimed on a new phone: PolarisSend.claim | Privy relayer | [0x30ee0025…](https://testnet.monadscan.com/tx/0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a) |
+| Cancel the subscription: PolarisPayments.cancelWithSignature | Privy relayer | [0x9c35028b…](https://testnet.monadscan.com/tx/0x9c35028b916d2fa02f53b343373530771c083bf4af75afbfa78b5a6b66cbfbe6) |
+| The merchant withdraws $100 in one tap: AUSD transferWithAuthorization | Privy relayer | [0x5ab0ecc0…](https://testnet.monadscan.com/tx/0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48) |
+| The session's price pinned on its order: PolarisPayments.quoteOrder (operator) | Privy relayer | [0xfb2e5c92…](https://testnet.monadscan.com/tx/0xfb2e5c92f10bb18736d297cb0d559a33ab888c496cc6d1ecf1a26bebb90936ae) |
+| The session's price pinned on its order: PolarisPayments.quoteOrder (operator) | Privy relayer | [0xb321eda5…](https://testnet.monadscan.com/tx/0xb321eda5a1bd9639b6ceca0d423f6bd5ae3cb6173704acb0efdc5eeb36ec3e6e) |
+| The session's price pinned on its order: PolarisPayments.quoteOrder (operator) | Privy relayer | [0x1d17fb34…](https://testnet.monadscan.com/tx/0x1d17fb34344ffc183f3d8e345edb51e15749215656a0af714da7dd3797fd5a9a) |

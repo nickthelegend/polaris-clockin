@@ -116,7 +116,7 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
             { label: "Amount", value: usd(link.amount) },
             { label: "You pay today", value: usd(link.amount) },
             { label: "Interest", value: usd(0n) },
-            { label: "Fees", value: usd(0n) },
+            { label: "Network fee", value: "None" },
           ];
 
   const details: KeyValue[] = [
@@ -145,6 +145,8 @@ export function CheckoutSheet({ link }: { link: PaymentLink }) {
       value: available !== undefined && state.status !== "none" ? `Dollar account · ${usd(available)}` : "Your dollar account",
     });
   }
+  // Pay now says it in its tiles; Pay in 4 and Subscribe say it here. Polaris's relayer pays the gas for every step.
+  if (mode !== "now") details.push({ label: "Network fee", value: "None, Polaris pays it" });
 
   async function share() {
     const url = window.location.href;

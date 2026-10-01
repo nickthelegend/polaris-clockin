@@ -1,0 +1,4 @@
+tx  0x7e333d47c39290011bfcacf60cc798c100c2bbcdac9a5bf3fa0821e46dbda763  PolarisPayments.setOperator(0x8366916019bc5452e62A0D36418ABebB45396aE2, true)  block 66390049
+tx  0xe0625c7668e4d394b0fe95bd6f80812ead4b13612551f587fbae81800b22c528  MerchantRegistry.setOperator(0x8366916019bc5452e62A0D36418ABebB45396aE2, true)  block 66390054
+tx  0x815671523a70b9c2ac5e86031e3eb0e354a6421c115a73e61a5813c5d2e77a4e  BatchSettlement.setSettler(0x8366916019bc5452e62A0D36418ABebB45396aE2, true)  block 66390059
+Relayer 0x8366916019bc5452e62A0D36418ABebB45396aE2: PolarisPayments operator, MerchantRegistry operator, BatchSettlement settler.

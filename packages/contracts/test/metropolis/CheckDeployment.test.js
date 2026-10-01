@@ -82,6 +82,16 @@ describe("check-deployment (lib/check.js)", () => {
     ]);
   });
 
+  it("accepts MerchantRegistry owned by the recorded registry admin, and only by it", async () => {
+    const [, , , admin, other] = await ethers.getSigners();
+    await (await (await at("MerchantRegistry")).transferOwnership(admin.address)).wait();
+    expect(failed(await checkDeployment(ethers, record))).to.deep.equal(["MerchantRegistry is owned by the deployer"]);
+    record.roles.registryAdmin = admin.address;
+    expect(failed(await checkDeployment(ethers, record))).to.deep.equal([]);
+    record.roles.registryAdmin = other.address;
+    expect(failed(await checkDeployment(ethers, record))).to.deep.equal(["MerchantRegistry is owned by the registry admin (Privy)"]);
+  });
+
   it("fails when the relayer is given the power to originate", async () => {
     await (await at("PolarisLoanEngine")).setOriginator(relayer.address, true);
     expect(failed(await checkDeployment(ethers, record))).to.deep.equal(["relayer: does not originate loans"]);

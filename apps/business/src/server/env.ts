@@ -62,6 +62,8 @@ export type ContractAddresses = {
   underwriting: Address | null;
   /** GuardianReceiver: the CRE guardian's attestations, and the credit guard PolarisCheckout.openPlan asks. */
   guardian: Address | null;
+  /** CollateralVault: a secured Pay in 4 line, locked with the borrower's permit (lockWithPermit), relayed. */
+  vault: Address | null;
 };
 
 export type ChainConfig = {
@@ -288,6 +290,7 @@ function contractsFrom(d: Deployment): ContractAddresses {
     collections: maybe("CollectionsReceiver"),
     underwriting: maybe("UnderwritingReceiver"),
     guardian: maybe("GuardianReceiver"),
+    vault: maybe("CollateralVault"),
   };
 }
 

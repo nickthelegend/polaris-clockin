@@ -30,7 +30,7 @@ export const DEPLOYMENTS: { monadTestnet: DeploymentRecord; monad: DeploymentRec
       payments: "0x7C774CF3E664B10057Cb2dDa66bA298e831292F1",
       loanEngine: "0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a",
       scoreManager: "0xB3D34eF62Cb64b985C230079D2815787619E6061",
-      collateralVault: "0xD0e777f8DfA2E62F500054E85F815fC54fae3E72",
+      collateralVault: "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc",
       checkout: "0x3874ef1bcE222755525a96f8284631780b9bC70B",
       send: "0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55",
       merchantRegistry: "0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4",

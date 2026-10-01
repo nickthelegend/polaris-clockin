@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -91,11 +92,40 @@ contract CollateralVault is Ownable, ReentrancyGuard {
 
     /// @notice Lock collateral to raise your credit limit.
     function lock(uint256 amount) external nonReentrant {
+        _lock(msg.sender, amount);
+    }
+
+    /**
+     * @notice Lock collateral for `borrower` with their ERC-2612 permit, so a
+     *         relayer can carry it and the borrower never needs gas.
+     * @dev The permit is the borrower's consent: its spender is this vault and
+     *      its value is exactly `amount`, and the vault only ever moves the
+     *      tokens into the borrower's own position, never anywhere else. Anyone
+     *      may submit it.
+     *
+     *      The permit is deliberately not wrapped in try/catch (PolarisCheckout
+     *      wraps its permits because a separate intent signature carries the
+     *      consent there). A fallback to the standing allowance would let
+     *      anyone lock a borrower's tokens without asking whenever they had
+     *      approved the vault for more than they locked. So a permit that
+     *      someone else submitted first makes this revert and the borrower signs
+     *      again: a nuisance, never a loss.
+     */
+    function lockWithPermit(address borrower, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        nonReentrant
+    {
         if (amount == 0) revert ZeroAmount();
-        collateralToken.safeTransferFrom(msg.sender, address(this), amount);
-        lockedOf[msg.sender] += amount;
+        IERC20Permit(address(collateralToken)).permit(borrower, address(this), amount, deadline, v, r, s);
+        _lock(borrower, amount);
+    }
+
+    function _lock(address borrower, uint256 amount) private {
+        if (amount == 0) revert ZeroAmount();
+        collateralToken.safeTransferFrom(borrower, address(this), amount);
+        lockedOf[borrower] += amount;
         totalLocked += amount;
-        emit CollateralLocked(msg.sender, amount, lockedOf[msg.sender]);
+        emit CollateralLocked(borrower, amount, lockedOf[borrower]);
     }
 
     /**

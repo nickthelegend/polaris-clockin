@@ -145,7 +145,7 @@ chains:
       - name: MerchantRegistry
         address: "0x40a351282c9843c49f5dd788d730a3d9fe7627b4"
       - name: CollateralVault
-        address: "0xd0e777f8dfa2e62f500054e85f815fc54fae3e72"
+        address: "0xc2f006ae9836a700ce8f1e457d11346cc42e23dc"
       - name: BatchSettlement
         address: "0x4f9478c66a82ceb1e1f8fe0117849e3f330cfc53"
       - name: PolarisSend
