@@ -74,6 +74,8 @@ export const KIND_LABEL: Record<ActivityItem["kind"], string> = {
   claimed: "Received by link",
   refund: "Returned",
   added: "Added money",
+  "split-paid": "Your share of a split",
+  "split-received": "A share of your split",
 };
 
 /** A send link nobody has claimed yet: the money is held, and the sender can take it back. */
@@ -112,6 +114,10 @@ export function subAmount(item: ActivityItem): string {
       return "Returned";
     case "added":
       return "Added";
+    case "split-paid":
+      return "Split · your share";
+    case "split-received":
+      return "Split · paid you";
   }
 }
 
@@ -328,6 +334,9 @@ export function notices(
         detail: a.kind === "claimed" ? "You claimed their link" : a.detail,
         href: `/activity/${a.id}`,
       });
+    }
+    if (a.kind === "split-received") {
+      list.push({ id: `in-${a.id}`, at: a.at, kind: "in", title: `${a.title} paid ${usd(a.amount)}`, detail: a.detail.replace(/^Paid their share · /, "Their share of "), href: a.splitId ? `/split/${a.splitId}` : `/activity/${a.id}` });
     }
     if (a.kind === "sent-link" && a.detail === "Claimed") {
       list.push({ id: `claimed-${a.id}`, at: a.settledAt ?? a.at, kind: "claimed", title: "Your link was claimed", detail: `${usd(a.amount)} arrived`, href: `/activity/${a.id}` });

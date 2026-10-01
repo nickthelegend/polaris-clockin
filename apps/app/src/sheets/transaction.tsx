@@ -99,6 +99,10 @@ export function TransactionSheet({ id }: { id: string }) {
           <Button variant="lime" size="lg" onClick={() => router.push(`/plans/${plan.id}`, { scroll: false })}>
             View plan
           </Button>
+        ) : item.splitId ? (
+          <Button variant="lime" size="lg" onClick={() => router.push(`/split/${item.splitId}`, { scroll: false })}>
+            See the split
+          </Button>
         ) : contact ? (
           <Button variant="lime" size="lg" onClick={() => router.push(`/send?contact=${contact.id}`, { scroll: false })}>
             Send again

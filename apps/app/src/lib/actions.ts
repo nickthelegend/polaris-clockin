@@ -5,12 +5,15 @@ import { owedOnOpenPlans } from "./collection";
 import { publicClient } from "./chain";
 import type { PaymentLink, Person, Plan } from "./data/types";
 import { getDomain, isConfigured, resolveContract } from "./domains";
-import { amountParam, type Micros } from "./money";
-import { type RelayReceipt, relayer, type Signed } from "./relayer";
+import { amountParam, type Micros, usd } from "./money";
+import { RELAYER_IS_STUB, RelayError, type RelayReceipt, relayer, type Signed } from "./relayer";
+import { memoHash, rememberSplit, SPLIT_LIFETIME_DAYS, type SplitMemo, splitUrl } from "./split";
 import {
   buildCancel,
   buildCancelSubscription,
   buildClaim,
+  buildCloseSplit,
+  buildCreateSplit,
   buildOpen,
   buildPermit,
   buildPlanIntent,
@@ -21,7 +24,10 @@ import {
   type Eip712Domain,
   paymentNonce,
   sendNonce,
+  shareNonce,
+  splitIdOf,
 } from "./sign";
+import type { SplitStatus } from "./data/types";
 
 /**
  * Each money action as the app performs it: build the typed data, sign it
@@ -278,6 +284,74 @@ export async function cancelSendLink(account: LocalAccount, linkKey: Address): P
   const domain = await getDomain("send");
   const cancel = await sign(account, buildCancel(domain, { linkKey, deadline: now() + 15n * MINUTE }));
   return relayer.cancelSend({ cancel });
+}
+
+/* ── Split the bill (PolarisSplit) ──────────────────────────────────────── */
+
+export type CreatedSplit = { splitId: Hex; url: string; memo: SplitMemo; amounts: Micros[]; expiresAt: number; receipt: RelayReceipt };
+
+/**
+ * Open a split: the organiser signs CreateSplit (the shares, a fresh salt,
+ * the hash of the link's words, the expiry), and the relayer opens it. The
+ * split's id is known before it lands (keccak256(organiser, salt)), so the
+ * link is built here; its words go in the fragment and on this device, never
+ * to a server.
+ */
+export async function createSplit(account: LocalAccount, amounts: Micros[], memo: SplitMemo, origin: string): Promise<CreatedSplit> {
+  const t = now();
+  const expiresAt = t + BigInt(SPLIT_LIFETIME_DAYS) * 86_400n;
+  const salt = randomNonce();
+  const domain = await getDomain("split");
+  if (domain.verifyingContract === zeroAddress && !RELAYER_IS_STUB) {
+    throw new RelayError("unavailable", "Splitting a bill isn't available here yet.");
+  }
+  const creation = await sign(
+    account,
+    buildCreateSplit(domain, { organiser: account.address, salt, amounts, memoHash: memoHash(memo), expiresAt, deadline: t + 15n * MINUTE }),
+  );
+  const splitId = splitIdOf(account.address, salt);
+  const receipt = await relayer.createSplit({ creation, splitId, memo });
+  const url = splitUrl(origin, splitId, memo);
+  rememberSplit(splitId, { memo, url, role: "organiser", at: Date.now() });
+  return { splitId, url, memo, amounts, expiresAt: Number(expiresAt) * 1000, receipt };
+}
+
+/**
+ * Pay share `index` of a split: one ERC-3009 authorisation for exactly its
+ * amount, payable to PolarisSplit, with the nonce it derives from the split
+ * and the share. The dollars go straight on to the organiser. A friend short
+ * of dollars is told before anything is signed.
+ */
+export async function payShare(account: LocalAccount, split: SplitStatus, index: number, opts: { balance?: Micros } = {}): Promise<RelayReceipt> {
+  const share = split.shares[index];
+  if (!share || share.paid) throw new RelayError("already-settled", "This share has already been paid.");
+  if (opts.balance !== undefined && opts.balance < share.amount) {
+    // Rounded up to the cent, so a share of $33.333334 never asks for $0.00.
+    const short = ((share.amount - opts.balance + 9_999n) / 10_000n) * 10_000n;
+    throw new RelayError("insufficient-funds", `Add ${usd(short)} to pay your share.`);
+  }
+  const [domain, to] = await Promise.all([getDomain("ausd"), resolveContract("split")]);
+  const t = now();
+  const authorization = await sign(
+    account,
+    buildReceiveWithAuthorization(domain, {
+      from: account.address,
+      to,
+      value: share.amount,
+      validAfter: 0n,
+      validBefore: t + 10n * MINUTE,
+      // Commits the signature to this split and this share: the relayer can't point it anywhere else.
+      nonce: shareNonce(split.id, BigInt(index)),
+    }),
+  );
+  return relayer.payShare({ splitId: split.id, index, payer: account.address, authorization });
+}
+
+/** Close a split: the organiser signs CloseSplit. Nothing moves; unpaid shares can't be paid after. */
+export async function closeSplit(account: LocalAccount, splitId: Hex): Promise<RelayReceipt> {
+  const domain = await getDomain("split");
+  const close = await sign(account, buildCloseSplit(domain, { splitId, deadline: now() + 15n * MINUTE }));
+  return relayer.closeSplit({ close });
 }
 
 export async function cancelSubscription(account: LocalAccount, subId: bigint): Promise<RelayReceipt> {

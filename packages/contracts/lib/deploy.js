@@ -160,6 +160,8 @@ async function deployPolaris(hre, cfg, log = () => {}) {
   const vault = await deployContract("CollateralVault", [deployer.address, addresses.Stablecoin]);
   const batch = await deployContract("BatchSettlement", [deployer.address, addresses.Stablecoin]);
   await deployContract("PolarisSend", [addresses.Stablecoin]);
+  // Split the bill by link: no owner, no roles, no custody (contracts/PolarisSplit.sol).
+  await deployContract("PolarisSplit", [addresses.Stablecoin]);
   const checkout = await deployContract("PolarisCheckout", [
     deployer.address,
     addresses.PolarisLoanEngine,

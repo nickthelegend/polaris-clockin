@@ -34,6 +34,10 @@ export function activityPill(item: ActivityItem): { tone: StatusPillTone; text: 
       return { tone: "teal", text: "Returned" };
     case "added":
       return { tone: "lime", text: "Added" };
+    case "split-paid":
+      return { tone: "teal", text: "Split · your share" };
+    case "split-received":
+      return { tone: "lime", text: "Split · paid you" };
   }
 }
 

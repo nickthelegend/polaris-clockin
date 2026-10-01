@@ -12,7 +12,15 @@ import {
 } from "@polaris/db";
 import { decodeEventLog, getAddress, type Abi, type Address, type Hex, type Log, type TransactionReceipt } from "viem";
 
-import { collectionsReceiverAbi, guardianReceiverAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi, underwritingReceiverAbi } from "../chain/abis";
+import {
+  collectionsReceiverAbi,
+  guardianReceiverAbi,
+  polarisCheckoutAbi,
+  polarisLoanEngineAbi,
+  polarisPaymentsAbi,
+  polarisSplitAbi,
+  underwritingReceiverAbi,
+} from "../chain/abis";
 import { publicClient, requireChain } from "../chain/client";
 import { failureReasonOf } from "../chain/errors";
 import { centsToUnits, formatUnits, installmentAmounts, thresholdFor, unitsToCents } from "../chain/money";
@@ -21,6 +29,7 @@ import type { ChainConfig } from "../env";
 import { merchantByWallet } from "../merchants";
 import { periodSeconds } from "../sessions/params";
 import { emitEvent } from "../webhooks/events";
+import { recordSharePaid, recordSplitClosed, recordSplitCreated } from "../split";
 import { onCollectionsReport, onGuardianReport, onReauthorized, onUnderwritingItem } from "./cre";
 
 /**
@@ -36,7 +45,7 @@ import { onCollectionsReport, onGuardianReport, onReauthorized, onUnderwritingIt
  * so the next sync retries it.
  */
 
-type Contract = "payments" | "checkout" | "loanEngine" | "collections" | "underwriting" | "guardian";
+type Contract = "payments" | "checkout" | "loanEngine" | "collections" | "underwriting" | "guardian" | "split";
 
 type Decoded = {
   contract: Contract;
@@ -55,6 +64,7 @@ const ABIS: Record<Contract, Abi> = {
   collections: collectionsReceiverAbi as unknown as Abi,
   underwriting: underwritingReceiverAbi as unknown as Abi,
   guardian: guardianReceiverAbi as unknown as Abi,
+  split: polarisSplitAbi as unknown as Abi,
 };
 
 /** The contracts whose logs we read. */
@@ -67,6 +77,8 @@ export function watchedContracts(chain: ChainConfig): Record<Contract, Address |
     // The other CRE receivers' reports, for the Chainlink page (./cre.ts).
     underwriting: chain.contracts.underwriting,
     guardian: chain.contracts.guardian,
+    // Split-the-bill links: who paid which share and when (../split.ts). Null before PolarisSplit is deployed.
+    split: chain.contracts.split,
   };
 }
 
@@ -249,6 +261,32 @@ async function handle(log: Decoded, ctx: Ctx): Promise<number> {
     case "guardian.CreditGuardUpdated":
     case "guardian.AttestationRefused":
       await onGuardianReport(log, await blockTime(ctx, log.blockNumber));
+      return 0;
+    case "split.SplitCreated": {
+      const a = log.args;
+      await recordSplitCreated(
+        {
+          splitId: a.splitId as Hex,
+          organiser: getAddress(a.organiser as string),
+          total: big(a.total),
+          amounts: (a.amounts as readonly bigint[]).map(big),
+          expiresAt: big(a.expiresAt),
+          memoHash: a.memoHash as Hex,
+          txHash: log.txHash,
+          blockNumber: log.blockNumber,
+        },
+        await blockTime(ctx, log.blockNumber),
+      );
+      return 0;
+    }
+    case "split.SharePaid":
+      await recordSharePaid(
+        { splitId: log.args.splitId as Hex, index: big(log.args.index), payer: getAddress(log.args.payer as string), txHash: log.txHash },
+        await blockTime(ctx, log.blockNumber),
+      );
+      return 0;
+    case "split.SplitClosed":
+      await recordSplitClosed({ splitId: log.args.splitId as Hex, txHash: log.txHash }, await blockTime(ctx, log.blockNumber));
       return 0;
     default:
       return 0;

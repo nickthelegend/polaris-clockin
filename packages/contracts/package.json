@@ -2,7 +2,7 @@
   "name": "@polarispay/contracts",
   "version": "0.1.0",
   "private": true,
-  "description": "Polaris contracts on Monad: PolarisCheckout (Pay now, Pay in 4, Subscribe), the BNPL loan engine, credit scores, payments, send-by-link, and the Chainlink CRE receivers (collections, underwriting, the pool guardian).",
+  "description": "Polaris contracts on Monad: PolarisCheckout (Pay now, Pay in 4, Subscribe), the BNPL loan engine, credit scores, payments, send-by-link, split-the-bill links, and the Chainlink CRE receivers (collections, underwriting, the pool guardian).",
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",
@@ -18,6 +18,8 @@
     "guardian:monad": "hardhat run scripts/guardian.js --network monadTestnet",
     "redeploy-guardian:monad": "hardhat run scripts/redeploy-guardian.js --network monadTestnet",
     "redeploy-vault:monad": "hardhat run scripts/redeploy-vault.js --network monadTestnet",
+    "deploy-split:monad": "hardhat run scripts/deploy-split.js --network monadTestnet",
+    "deploy-split:local": "hardhat run scripts/deploy-split.js --network monadLocal",
     "node:local": "hardhat node --hostname 127.0.0.1 --port 8600",
     "deploy:local": "hardhat run scripts/deploy-monad.js --network monadLocal",
     "lock-receivers:local": "hardhat run scripts/lock-receivers.js --network monadLocal",

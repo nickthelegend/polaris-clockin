@@ -87,6 +87,22 @@ export const TYPES = {
       { name: "deadline", type: "uint256" },
     ],
   },
+  CreateSplit: {
+    CreateSplit: [
+      { name: "organiser", type: "address" },
+      { name: "salt", type: "bytes32" },
+      { name: "amounts", type: "uint128[]" },
+      { name: "memoHash", type: "bytes32" },
+      { name: "expiresAt", type: "uint64" },
+      { name: "deadline", type: "uint256" },
+    ],
+  },
+  CloseSplit: {
+    CloseSplit: [
+      { name: "splitId", type: "bytes32" },
+      { name: "deadline", type: "uint256" },
+    ],
+  },
   Registration: {
     Registration: [
       { name: "merchant", type: "address" },
@@ -113,6 +129,7 @@ export const DOMAIN_NAMES = {
   loanEngine: "PolarisLoanEngine",
   payments: "PolarisPayments",
   send: "PolarisSend",
+  split: "PolarisSplit",
   registry: "MerchantRegistry",
 } as const;
 

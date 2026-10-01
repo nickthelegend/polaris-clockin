@@ -24,6 +24,7 @@ const PLACEHOLDER_NAMES: Record<ContractName, string> = {
   payments: "PolarisPayments (unconfigured)",
   checkout: "PolarisCheckout (unconfigured)",
   send: "PolarisSend (unconfigured)",
+  split: "PolarisSplit (unconfigured)",
   loanEngine: "PolarisLoanEngine (unconfigured)",
 };
 

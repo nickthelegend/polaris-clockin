@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import { apiConfigured } from "../api";
 import { liveData } from "./live";
 import { mockData } from "./mock";
@@ -36,3 +36,5 @@ export const getContacts = (owner: Address | null) => data.getContacts(owner);
 /** Checkout sessions (`cs_…`) and payment links (`pl_…`) come from Polaris for Business; sample slugs from the sample data. */
 export const getPaymentLink = (id: string) => (apiConfigured() && isRemoteLinkId(id) ? getRemotePaymentLink(id) : data.getPaymentLink(id));
 export const getSendLink = (linkKey: Address) => data.getSendLink(linkKey);
+export const getSplit = (id: Hex, viewer: Address | null) => data.getSplit(id, viewer);
+export const getSplits = (owner: Address | null) => data.getSplits(owner);

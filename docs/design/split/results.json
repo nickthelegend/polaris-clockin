@@ -1,0 +1,176 @@
+{
+  "ranAt": "2026-09-28T11:07:27.504Z",
+  "results": [
+    {
+      "name": "Split: Maya has an account (dev signer for Face ID), and no dollars",
+      "ok": true,
+      "detail": "0xF471f03C21ABAb5e67aD07be70861364C0B65bc6"
+    },
+    {
+      "name": "Split: $200 between five, Maya included: four friends owe $40 each, $160 to collect",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: one link, its words in the fragment",
+      "ok": true,
+      "detail": "http://localhost:3911/split/0x17f985e141231b5172d00ffee35d07494d70cab06616d677e8ef9272df89cb88#d=Dinner+at+Lucia&n=Maya&t=200&l=Sam&l=Priya&l=Jon&l=Dee"
+    },
+    {
+      "name": "Split: PolarisSplit holds it: Maya organises, 4 shares of $40.00, open",
+      "ok": true,
+      "detail": "created in 0x4e06079ee33c29a3a82c2f9a6728988e786218604a4f379b9f36a6aa9dac1763"
+    },
+    {
+      "name": "Split: the API never sees the split's words (only their hash)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: Sam opens the link: who asked, what for, 0 of 4 paid, pick your name",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: Pay with Face ID made Sam's account in the same step, and asked him to add $40.00 before signing anything",
+      "ok": true,
+      "detail": "0x1614dF8dc3BE5A64e174B22517E7F9166De3fF12"
+    },
+    {
+      "name": "Split: nothing was relayed for Sam's empty account",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: Sam's $40.00 is share 1, paid by his account",
+      "ok": true,
+      "detail": "0xc4e92888bf1d8c30396535e44fe866e7af0836bbdae9cdf3e04eef2cbe45856d"
+    },
+    {
+      "name": "Split: it went straight to Maya (PolarisSplit keeps nothing)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: the same signature relayed again pays nothing more",
+      "ok": true,
+      "detail": "same transaction 0xc4e92888bf1d8c30396535e44fe866e7af0836bbdae9cdf3e04eef2cbe45856d"
+    },
+    {
+      "name": "Split: back on the link, Sam sees he paid (no second Pay button)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: Priya's $40.00 is share 2",
+      "ok": true,
+      "detail": "0xd5f35417b74590544dc0c5af934cb8ca743d696a624ac9174f28fdbd8f49717a"
+    },
+    {
+      "name": "Split: Maya's page: 2 of 4 paid, $80.00 of $160.00 collected",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: $80.00 is in Maya's account",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: Activity lists Maya's split and each share that landed, by name",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: on the desktop, each share reads \"Paid their share · Dinner at Lucia\"",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: closed: 2 of 4 paid, the other two cancelled, nothing moved",
+      "ok": true,
+      "detail": "2026-09-28T11:08:22.000Z"
+    },
+    {
+      "name": "Split: Jon opens the closed link: nothing to pay, nothing charged",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: by amount: Sam $35.50 and Priya $24.50, $60.00 to collect",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: everyone paid the groceries: settled on chain",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Split: Maya received $140.00 in all ($80.00 dinner, $60.00 groceries), straight to her account",
+      "ok": true,
+      "detail": "140"
+    }
+  ],
+  "evidence": {
+    "splits": {
+      "dinner": {
+        "id": "0x17f985e141231b5172d00ffee35d07494d70cab06616d677e8ef9272df89cb88",
+        "url": "http://localhost:3911/split/0x17f985e141231b5172d00ffee35d07494d70cab06616d677e8ef9272df89cb88#d=Dinner+at+Lucia&n=Maya&t=200&l=Sam&l=Priya&l=Jon&l=Dee"
+      },
+      "groceries": {
+        "id": "0x3dff2d7b26a6e318efdfd403a62a804b492f5bef4bb1a677aa3d429d4c9d02a2",
+        "url": "http://localhost:3911/split/0x3dff2d7b26a6e318efdfd403a62a804b492f5bef4bb1a677aa3d429d4c9d02a2#d=Cabin+groceries&n=Maya&t=90&l=Sam&l=Priya"
+      }
+    },
+    "accounts": {
+      "maya": "0xF471f03C21ABAb5e67aD07be70861364C0B65bc6",
+      "sam": "0x1614dF8dc3BE5A64e174B22517E7F9166De3fF12",
+      "priya": "0x413529F80818081a2b7D80B29a98e2267ddA5069"
+    },
+    "relayed": [
+      {
+        "who": "maya",
+        "type": "createSplit",
+        "splitId": null,
+        "index": null
+      },
+      {
+        "who": "sam",
+        "type": "payShare",
+        "splitId": "0x17f985e141231b5172d00ffee35d07494d70cab06616d677e8ef9272df89cb88",
+        "index": "0"
+      },
+      {
+        "who": "priya",
+        "type": "payShare",
+        "splitId": "0x17f985e141231b5172d00ffee35d07494d70cab06616d677e8ef9272df89cb88",
+        "index": "1"
+      },
+      {
+        "who": "maya",
+        "type": "closeSplit",
+        "splitId": "0x17f985e141231b5172d00ffee35d07494d70cab06616d677e8ef9272df89cb88",
+        "index": null
+      },
+      {
+        "who": "maya",
+        "type": "createSplit",
+        "splitId": null,
+        "index": null
+      },
+      {
+        "who": "sam",
+        "type": "payShare",
+        "splitId": "0x3dff2d7b26a6e318efdfd403a62a804b492f5bef4bb1a677aa3d429d4c9d02a2",
+        "index": "0"
+      },
+      {
+        "who": "priya",
+        "type": "payShare",
+        "splitId": "0x3dff2d7b26a6e318efdfd403a62a804b492f5bef4bb1a677aa3d429d4c9d02a2",
+        "index": "1"
+      }
+    ]
+  }
+}

@@ -1,11 +1,12 @@
 import { encodeFunctionData, erc20Abi, getAddress, zeroHash, type Address } from "viem";
 import { describe, expect, it } from "vitest";
 
-import { collateralVaultAbi, iausdAbi, merchantRegistryAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi, polarisSendAbi } from "@polarispay/contracts/abi";
+import { collateralVaultAbi, iausdAbi, merchantRegistryAbi, polarisCheckoutAbi, polarisLoanEngineAbi, polarisPaymentsAbi, polarisSendAbi, polarisSplitAbi } from "@polarispay/contracts/abi";
 import { buildPayoutPolicy, TWA_TYPES } from "@/server/policy/payout";
 import {
   buildRegistryAdminPolicy,
   buildRelayerPolicy,
+  callsFor,
   checkRelayerCall,
   lintPolicy,
   PolicyViolation,
@@ -17,12 +18,14 @@ const addresses: RelayerAddresses = {
   checkout: "0x000000000000000000000000000000000000C4c1",
   payments: "0x0000000000000000000000000000000000009A01",
   send: "0x0000000000000000000000000000000000005E01",
+  split: "0x0000000000000000000000000000000000005B11",
   loanEngine: "0x0000000000000000000000000000000000001E01",
   registry: "0x0000000000000000000000000000000000004E01",
   stablecoin: "0x00000000000000000000000000000000000A05D0",
   vault: "0x000000000000000000000000000000000000Ca01",
 };
 for (const k of Object.keys(addresses) as (keyof RelayerAddresses)[]) addresses[k] = getAddress(addresses[k] as Address);
+const splitAddress = addresses.split as Address;
 const expected = { chainId: 10143, addresses };
 const someone = "0x1111111111111111111111111111111111111111" as Address;
 const merchant = "0x2222222222222222222222222222222222222222" as Address;
@@ -75,6 +78,31 @@ describe("the relayer's allow-list (checkRelayerCall)", () => {
     const policy = buildRelayerPolicy(noVault);
     expect(policy.rules.some((r) => r.name.includes("CollateralVault"))).toBe(false);
     expect(policy.rules).toHaveLength(RELAYER_CALLS.length);
+  });
+
+  it("allows the three split-the-bill calls on PolarisSplit, and nothing else there", () => {
+    const creation = { organiser: someone, salt: zeroHash, amounts: [30_000_000n], memoHash: zeroHash, expiresAt: 2_000_000_000n, deadline: 2_000_000_000n };
+    const create = encodeFunctionData({ abi: polarisSplitAbi, functionName: "createSplit", args: [creation, "0x"] });
+    const pay = encodeFunctionData({ abi: polarisSplitAbi, functionName: "payShare", args: [zeroHash, 0n, someone, 0n, 1n, 27, zeroHash, zeroHash] });
+    const close = encodeFunctionData({ abi: polarisSplitAbi, functionName: "closeSplit", args: [zeroHash, 1n, "0x"] });
+    for (const [data, fn] of [[create, "createSplit"], [pay, "payShare"], [close, "closeSplit"]] as const) {
+      expect(checkRelayerCall({ to: splitAddress, data, chainId: 10143 }, expected)).toMatchObject({ contract: "split", functionName: fn });
+    }
+    // A split call sent to another Polaris contract decodes as nothing there.
+    expect(() => checkRelayerCall({ to: addresses.send, data: pay, chainId: 10143 }, expected)).toThrow(PolicyViolation);
+    const rules = buildRelayerPolicy(expected).rules.map((r) => r.name);
+    expect(rules).toEqual(expect.arrayContaining(["Split a bill: PolarisSplit.createSplit", "Pay a share: PolarisSplit.payShare", "Close a split: PolarisSplit.closeSplit"]));
+  });
+
+  it("without PolarisSplit (a deployment that predates it) the policy has no split rules, and split calls are refused", () => {
+    const old = { chainId: 10143, addresses: { ...addresses, split: null } };
+    const pay = encodeFunctionData({ abi: polarisSplitAbi, functionName: "payShare", args: [zeroHash, 0n, someone, 0n, 1n, 27, zeroHash, zeroHash] });
+    expect(() => checkRelayerCall({ to: splitAddress, data: pay, chainId: 10143 }, old)).toThrow(/isn't a Polaris contract/);
+    const policy = buildRelayerPolicy(old);
+    expect(lintPolicy(policy)).toEqual([]);
+    expect(policy.rules.filter((r) => r.name.includes("PolarisSplit"))).toEqual([]);
+    expect(policy.rules).toHaveLength(RELAYER_CALLS.length - 3 + 1);
+    expect(callsFor(old.addresses).some((c) => c.contract === "split")).toBe(false);
   });
 
   it("refuses a relayer that tries to send MON", () => {

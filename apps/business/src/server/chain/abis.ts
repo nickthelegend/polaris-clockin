@@ -18,6 +18,7 @@ export {
   polarisLoanEngineAbi,
   polarisPaymentsAbi,
   polarisSendAbi,
+  polarisSplitAbi,
   scoreManagerAbi,
   underwritingReceiverAbi,
 } from "@polarispay/contracts/abi";

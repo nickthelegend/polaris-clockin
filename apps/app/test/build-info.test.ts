@@ -70,7 +70,7 @@ describe("buildInfo", () => {
 
   it("lists only the contracts the build pins, and reports an unset API, relying party and Privy app as null", () => {
     const info = buildInfo(
-      inputs({ env: { apiUrl: undefined, rpId: undefined, privyAppId: undefined, contracts: { ausd: ZERO, payments: ZERO, checkout: CHECKOUT, send: ZERO, loanEngine: ZERO } }, buildTarget: "android" }),
+      inputs({ env: { apiUrl: undefined, rpId: undefined, privyAppId: undefined, contracts: { ausd: ZERO, payments: ZERO, checkout: CHECKOUT, send: ZERO, split: ZERO, loanEngine: ZERO } }, buildTarget: "android" }),
     );
     assert.deepEqual(info.pinnedContracts, { checkout: CHECKOUT });
     assert.equal(info.apiUrl, null);

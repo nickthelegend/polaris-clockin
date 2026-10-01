@@ -2,7 +2,7 @@
 
 The Polaris contract layer on Monad: one checkout for **Pay now**, **Pay in 4**
 on a Polaris credit line, and **Subscribe**; the BNPL loan engine and credit
-scores behind it; send-by-link; and the three **Chainlink CRE** receivers that
+scores behind it; send-by-link; split-the-bill links; and the three **Chainlink CRE** receivers that
 run collections, underwriting and the pool guardian (which can pause new Pay in
 4 plans on an AUSD depeg or a pool shortfall). Settled in AUSD. Every user
 action is a signature a relayer submits, so buyers, senders and merchants never
@@ -52,6 +52,7 @@ Then, as needed:
 | `RELAYER_ADDRESS=0x… grant-relayer:monad` | The Privy relayer wallet exists: gives it PolarisPayments and MerchantRegistry operator and BatchSettlement settler. |
 | `ETHERSCAN_API_KEY=… verify:monad` | Verify every contract on Monadscan (Etherscan V2 API, `chainid` 10143 on every call; `lib/monadscan.js`), and the ones a redeploy replaced, each from the sources that built it: today's when they reproduce its code, else those of the commit the record names (`sourceCommit`), rebuilt from git and checked against the chain first (and that commit's too when today's differ only in comments and it gives the exact bytes, so the explorer shows the text deployed), cut down to the files it is built from (`lib/verify.js`). Constructor arguments are read from each creation transaction and checked against the record. Writes `deployments/monad-testnet.verification.json` (address, name, verified, explorer link, compiler) from what the explorer says. `VERIFY_DRY_RUN=1` checks all of them with no key and no submission; `VERIFY_ONLY=A,B` submits some. Done on 28 Sep 2026: 13 of 13 verified, every one an exact match. |
 | `redeploy-guardian:monad` | Replace GuardianReceiver alone with today's code and point PolarisCheckout's credit guard at it (`lib/redeploy.js`); refuses unless the deployer owns PolarisCheckout, the receiver is not already today's code, `contracts/` is committed and the MON is there. Writes the record (with a `redeploys` entry) and appends to `monad-testnet.transactions.json`. |
+| `deploy-split:monad` | Add PolarisSplit (split-the-bill links) to a deployment that predates it, such as testnet's of 28 Sep 2026: one transaction (1.89M gas measured locally), nothing else moves (`lib/split.js`). Refuses mainnet, a record that already has one, uncommitted `contracts/`, and a deployer short of MON. Writes the record (`contracts.PolarisSplit`, `eip712.PolarisSplit`, an `additions` entry) and appends to `monad-testnet.transactions.json`. **Not run yet.** A fresh `deploy:monad` or `deploy:local` includes PolarisSplit already; `deploy-split:local` does the same on a local node. |
 | `check:monad` | Read-only live check of AUSD, the forwarders, Multicall3 and gas. |
 | `guardian:monad` | The credit guard's status (paused, why and from where, stale, override and until when, thresholds, the acknowledged bad debt, the latest attestation). `GUARD_ACTION=thresholds` sets the `GUARD_*` thresholds (the defaults for any unset; `GUARD_MIN_PRICE=1.001` is the demo's raised peg, decision 28, and applies at once), `GUARD_ACTION=override GUARD_OVERRIDE=pause\|resume\|none` (a resume lasts `GUARD_RESUME_SECONDS`, 3600 by default, at most a day), `GUARD_ACTION=acknowledge` (only bad debt beyond today's counts), `GUARD_ACTION=max-age GUARD_MAX_ATTESTATION_AGE_SECONDS=…`. |
 | `CRE_WORKFLOW_OWNER=0x… CRE_WORKFLOW_ID_COLLECTIONS=0x… CRE_WORKFLOW_ID_UNDERWRITE=0x… CRE_WORKFLOW_ID_GUARDIAN=0x… lock-receivers:monad` | After `cre workflow deploy`: each receiver accepts only its workflow's owner, name **and** id, moves to the production KeystoneForwarder, and drops the simulation transmitter (in that order; idempotent). The production forwarder must answer `typeAndVersion()` as Chainlink's KeystoneForwarder; Chainlink's MockKeystoneForwarder (which anyone can call) is refused before anything is sent, on Monad testnet only Chainlink's own address is taken, and the forwarder is read back and checked again before the transmitter is cleared. `CRE_FORWARDER_ADDRESS` is for a local chain only. `CRE_FORWARDER=simulation` adds the identity checks and keeps the simulation forwarder and transmitter. Writes `cre.locked` into the deployment record. |
@@ -80,7 +81,7 @@ unset, and never the deployer, which the script refuses), `CRE_WORKFLOW_OWNER`,
 deployment, which writes the pool totals and the borrower's loan list for the
 first time; 436k for a later one), a collections report 162k, subscribe 335k,
 send 167k, claim 63k, an underwriting report 142k, a guardian attestation 140k
-(254k for the first; it reads the pool to check the report against it), `reauthorize` 77k.
+(254k for the first; it reads the pool to check the report against it), `reauthorize` 77k; PolarisSplit (Hardhat, one run): open a split of 3 shares 161k, pay a share 138k, close 38k.
 
 ## Contracts
 
@@ -91,6 +92,7 @@ send 167k, claim 63k, an underwriting report 142k, a guardian attestation 140k
 | `ScoreManager` | 300–850 scores and credit lines; `underwrite(user, facts)` computes the opening score on chain, capped at $1,000, and opens nothing for a thin file (`isThinFile`: under 90 days or 10 transactions). |
 | `PolarisPayments` | Direct payments (`payWithAuthorization`) and subscriptions (`subscribeFor`, `chargeDue`). 0.5% fee. |
 | `PolarisSend` | Send dollars as a link; claim to any address with the link key's signature. |
+| `PolarisSplit` | Split the bill by link: the organiser opens a split of named or equal shares; each friend pays exactly their share by ERC-3009, straight on to the organiser; the organiser can close it. No owner, no fee, no custody. **Not on Monad testnet yet** (`deploy-split:monad`, below). |
 | `MerchantRegistry` | Merchants, registered by their own signature (`registerFor`), activated with a cap. |
 | `CollateralVault`, `BatchSettlement` | Secured credit; batch payouts with memos. |
 | `cre/CollectionsReceiver` | CRE `polaris-collections` (cron): collects, charges, liquidates in a batch. |
@@ -168,6 +170,37 @@ ceiling ladder, `thresholdFor(k) - thresholdFor(k - 1)` with `thresholdFor(k) = 
 `NothingOwed(buyer)`, `PermitBelowDebt(value, owed)`, `AlreadyAuthorized(allowance, owed)`, `SignatureExpired`,
 `InvalidSignature` (wrong signer, spender or value, or a replayed permit); the engine's `ExceedsCreditLimit`, `InsufficientAllowance(have, need)`,
 `MerchantNotEligible`, `InvalidInterval` bubble up unchanged.
+
+### PolarisSplit
+
+EIP-712 domain `{ name: "PolarisSplit", version: "1", chainId, verifyingContract }`.
+
+```
+CreateSplit(address organiser,bytes32 salt,uint128[] amounts,bytes32 memoHash,uint64 expiresAt,uint256 deadline)
+CloseSplit(bytes32 splitId,uint256 deadline)
+```
+
+| Function | Who signs | Notes |
+|---|---|---|
+| `createSplit(Creation, bytes signature) → splitId` | the organiser: `CreateSplit` | `splitId = keccak256(abi.encode(organiser, salt))`, known before it lands. 1 to 50 shares, each more than zero; open 5 minutes to 60 days. `memoHash` is the hash of the link's words (what it's for, the organiser's name, a label per share: `keccak256(abi.encode(string, string, uint256 billTotal, string[] labels))`); the words themselves never go on chain. |
+| `payShare(splitId, index, payer, validAfter, validBefore, v, r, s)` | the friend: AUSD `ReceiveWithAuthorization`, `to` = **PolarisSplit**, `value` = the share's amount, `nonce` = `shareNonce(splitId, index)` = `keccak256(abi.encode(splitId, index))` | The share is recorded (`paidBy`, `SharePaid`) and its dollars forwarded to the organiser in the same call; nothing stays here. |
+| `closeSplit(splitId, deadline, bytes signature)` | the organiser: `CloseSplit` | Unpaid shares can no longer be paid. Nothing moves. |
+| `splitOf(splitId)`, `sharesOf(splitId) → (amounts, payers)`, `paidBy(splitId, index)` | | Views; `splitOf(...).organiser` is zero for no split. |
+| `splitIdOf`, `shareNonce`, `createDigest`, `closeDigest` | | What a client derives and signs, from the code that checks it. |
+
+Why a contract of its own rather than one PolarisPayments order per share, and
+why `receiveWithAuthorization` into it rather than a transfer straight to the
+organiser, is in its header comment. Every signature's cutoff must fall within
+`MAX_SIGNATURE_WINDOW` (1 hour) of the block. Errors: `SplitExists`,
+`SplitNotFound`, `SplitIsClosed`, `SplitExpired`, `ShareOutOfRange`,
+`ShareAlreadyPaid`, `NoShares`, `TooManyShares`, `InvalidAmount(index)`,
+`InvalidExpiry`, `InvalidSignature`, `SignatureExpired`,
+`SignatureWindowTooLong`, `UnexpectedAmount`; the token's own errors (a wrong
+signer, amount, share or split: `InvalidAuthorizationSignature`; an expired
+authorization) bubble up unchanged. Events: `SplitCreated(splitId, organiser,
+total, amounts, expiresAt, memoHash)`, `SharePaid(splitId, index, payer,
+amount, paidCount, shareCount)`, `SplitClosed(splitId, organiser, paidCount,
+shareCount)`.
 
 ### Chainlink CRE receivers
 
@@ -291,6 +324,11 @@ Subscribe, Send and open plans all working while credit is paused), `Reauthorize
 first, a permit landed on the token first, too small, then the retry collects),
 `LoanEngineTotals.test.js` (the pool totals equal the sum over loans after every step, table-driven
 and random), `LockReceivers.test.js` (and the mock forwarder refused as the production one),
+`PolarisSplit.test.js` (split the bill: the happy path with no gas and no custody, a share paid
+twice, an overpay or underpay, a closed split, a wrong signer for a share, a create or a close, a
+replayed authorization, create or close, and every expiry: the split's, the authorization's, a
+create's and a close's; a token that short-delivers or reenters), `DeploySplit.test.js`
+(PolarisSplit in a fresh deployment, and added to one that predates it with nothing else moving),
 `Deploy.test.js` (every role the deployment grants), `Interfaces.test.js` (ABIs and EIP-712 types
 stay true), `Verify.test.js` (the deploy commit's PolarisCheckout rebuilt from git and told from
 today's), `Redeploy.test.js` (the guardian replaced and read back).

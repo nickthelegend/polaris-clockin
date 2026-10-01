@@ -39,7 +39,7 @@ describe("deploy-monad (in process)", () => {
   it("records every contract with its address, block, transaction and an ABI that exists", async () => {
     const names = [
       "Stablecoin", "ScoreManager", "PolarisLoanEngine", "PolarisPayments", "MerchantRegistry", "CollateralVault",
-      "BatchSettlement", "PolarisSend", "PolarisCheckout", "MockKeystoneForwarder", "CollectionsReceiver", "UnderwritingReceiver",
+      "BatchSettlement", "PolarisSend", "PolarisSplit", "PolarisCheckout", "MockKeystoneForwarder", "CollectionsReceiver", "UnderwritingReceiver",
       "GuardianReceiver", "MockAusdUsdFeed",
     ];
     expect(Object.keys(record.contracts)).to.have.members(names);

@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAccounts } from "@/components/accounts";
 import { FiltersSheet } from "@/components/filters-sheet";
+import { SplitsPanel } from "@/components/splits";
 import { useOwner } from "@/lib/account/hooks";
 import { type ActivityItem, getActivity } from "@/lib/data";
 import { useData } from "@/lib/data/hooks";
@@ -42,6 +43,8 @@ const KIND_OF: Record<ActivityItem["kind"], "payments" | "plans" | "subscription
   received: "transfers",
   refund: "transfers",
   added: "transfers",
+  "split-paid": "links",
+  "split-received": "links",
 };
 
 const QUICK: { value: Quick; label: string; test: (a: ActivityItem) => boolean }[] = [
@@ -197,6 +200,7 @@ export function ActivityDesktop() {
               </SecondaryButton>
             </SideColumn>
             <SideColumn>
+              <SplitsPanel />
               <PanelCard title="Where it went" subtitle="Share of spending, last 30 days" padding="md">
                 {month ? (
                   month.out > 0 ? (

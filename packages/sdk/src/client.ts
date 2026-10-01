@@ -11,6 +11,7 @@ import { requirePublishableKey } from "./keys.js";
 import type { CreditProfile, LegacyMethods } from "./legacy.js";
 import { quotePayIn4, type AmountInput, type PayIn4Options, type PayIn4Quote } from "./money.js";
 import type { PayParams, PayResult, Result } from "./pay/direct.js";
+import { splitLink, type SplitLinkParams } from "./splits.js";
 import type { Address, Eip1193Provider, Hex } from "./types.js";
 
 /**
@@ -86,6 +87,18 @@ export interface Polaris {
   } | null>;
   /** Price Pay in 4 for an amount, as the loan engine will. */
   quote(amount: AmountInput, options?: PayIn4Options): PayIn4Quote;
+
+  /**
+   * Split-the-bill links. A split is the organiser's own request (their Face
+   * ID opens it), so an app hands them the Polaris app's "Split a bill"
+   * screen filled in; nothing is created until they confirm there.
+   */
+  splits: {
+    /** `${checkoutOrigin}/split/new?…`, filled in with the bill and how to split it. */
+    link(params: SplitLinkParams): string;
+    /** Open that screen in a new tab. Call it from a click handler. */
+    open(params: SplitLinkParams): void;
+  };
 
   /** 0.2 wallet methods (the buyer holds gas). */
   subscribe(p: { planId: number | bigint }): Promise<Result>;
@@ -177,6 +190,16 @@ export function createPolaris(options: PolarisOptions = {}, internals: ClientInt
     },
 
     quote: (amount, quoteOptions) => quotePayIn4(amount, quoteOptions),
+
+    splits: {
+      link: (params) => splitLink(launcher.checkoutOrigin, params),
+      open(params) {
+        const url = splitLink(launcher.checkoutOrigin, params);
+        const g = globalThis as { open?: (url: string, target: string, features: string) => unknown };
+        if (typeof g.open !== "function") throw new Error("splits.open runs in a browser; use splits.link on the server.");
+        g.open(url, "_blank", "noopener");
+      },
+    },
 
     subscribe: async (p) => (await loadLegacy()).subscribe(p),
     cancelSubscription: async (p) => (await loadLegacy()).cancelSubscription(p),

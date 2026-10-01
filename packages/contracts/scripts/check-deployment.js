@@ -11,7 +11,8 @@
  * registry are wired; GuardianReceiver is the checkout's credit guard with
  * the recorded thresholds; the three CRE receivers sit behind the recorded
  * forwarder with the recorded simulation transmitter (never the deployer);
- * the relayer's operator roles; the dollar's EIP-712 domain (and, for the
+ * the relayer's operator roles; PolarisSplit's token and domain, when the
+ * deployment has one; the dollar's EIP-712 domain (and, for the
  * mock, that it says it is one); the demo merchant. Exit 1 if any fails.
  */
 

@@ -4,9 +4,9 @@
   "chainId": 10143,
   "explorer": "https://testnet.monadscan.com",
   "api": "https://api.etherscan.io/v2/api?chainid=10143",
-  "checkedAt": "2026-09-28T10:39:31.059Z",
-  "verified": 13,
-  "total": 13,
+  "checkedAt": "2026-10-01T16:57:22.010Z",
+  "verified": 14,
+  "total": 14,
   "contracts": [
     {
       "name": "Stablecoin",
@@ -85,16 +85,16 @@
     },
     {
       "name": "CollateralVault",
-      "address": "0xD0e777f8DfA2E62F500054E85F815fC54fae3E72",
+      "address": "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc",
       "verified": true,
-      "explorerUrl": "https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72#code",
+      "explorerUrl": "https://testnet.monadscan.com/address/0xC2F006aE9836a700CE8F1e457d11346cc42e23dc#code",
       "compilerVersion": "v0.8.24+commit.e11b9ed9",
       "contract": "contracts/CollateralVault.sol:CollateralVault",
       "explorerName": "CollateralVault",
       "optimizer": "enabled, 200 runs",
       "evmVersion": "cancun",
       "sources": "today's (unchanged since deploy)",
-      "sourceCommit": "020484b2aea74bde3f2cbc918d534dbda1348723",
+      "sourceCommit": "20518d2b344afd2a92ad51f4da9b93c516f8df09",
       "match": "exact (metadata too)",
       "current": true
     },
@@ -203,6 +203,22 @@
       "match": "exact (metadata too)",
       "current": false,
       "replacedBy": "0x4c99136634F670cd59E73fc284fED164C662e3Df"
+    },
+    {
+      "name": "CollateralVault (replaced)",
+      "address": "0xD0e777f8DfA2E62F500054E85F815fC54fae3E72",
+      "verified": true,
+      "explorerUrl": "https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72#code",
+      "compilerVersion": "v0.8.24+commit.e11b9ed9",
+      "contract": "contracts/CollateralVault.sol:CollateralVault",
+      "explorerName": "CollateralVault",
+      "optimizer": "enabled, 200 runs",
+      "evmVersion": "cancun",
+      "sources": "commit 020484b2aea74bde3f2cbc918d534dbda1348723",
+      "sourceCommit": "020484b2aea74bde3f2cbc918d534dbda1348723",
+      "match": "exact (metadata too)",
+      "current": false,
+      "replacedBy": "0xC2F006aE9836a700CE8F1e457d11346cc42e23dc"
     }
   ]
 }

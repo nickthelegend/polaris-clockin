@@ -1,5 +1,5 @@
 /**
- * polarispay-sdk/server: checkout sessions and webhook verification.
+ * polarispay-sdk/server: checkout sessions, split status and webhook verification.
  *
  * Holds your secret key, so it refuses to run in a browser. No static Node
  * imports: it works on Node, edge runtimes, Bun and Deno.
@@ -19,6 +19,7 @@ export {
 export type { RawBody, SignatureHeader, VerifyOptions } from "./server/webhooks.js";
 
 export type { CheckoutSessionCreateBody } from "./server/checkout-params.js";
+export type { SplitStatus } from "./splits.js";
 
 export type {
   CheckoutSession,

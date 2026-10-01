@@ -776,7 +776,12 @@ if (event.type === "payment.succeeded") fulfil(event.data.orderId);
 15. Receipts only you can read (Mera *Many Keys*)
 16. Top up and cash out from any chain (Aurora; needs item 22)
 17. Per-second subscriptions (Track 02's second example idea)
-18. Split-the-bill links (Track 02's third example idea)
+18. Split-the-bill links (Track 02's third example idea). **Built, local
+    chain only** (28 Sep): `PolarisSplit` (each share one ERC-3009
+    `receiveWithAuthorization` straight to the organiser, nonce = split and
+    share, no custody), relayed; the app's create, link, pay and organiser
+    screens; `GET /api/public/splits/{id}`; `polaris.splits.link()`;
+    `pnpm demo:e2e:split`. On testnet once `deploy-split:monad` runs
 19. Platform fees, Connect-style: an app that embeds Polaris takes a cut
 20. An Android TWA build, if Agora says a PWA isn't enough (then it's a MUST)
 21. earnAUSD yield on the idle pool

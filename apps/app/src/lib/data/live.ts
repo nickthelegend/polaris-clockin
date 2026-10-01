@@ -6,6 +6,7 @@ import { publicClient } from "../chain";
 import { resolveContract } from "../domains";
 import type { Micros } from "../money";
 import { prefsName } from "../prefs";
+import { knownSplit, shareLabel } from "../split";
 import { dataGeneration, hasDataListeners, notifyDataChanged, onDataChanged } from "./changes";
 import { getRemotePaymentLink } from "./remote";
 import type {
@@ -19,6 +20,7 @@ import type {
   PolarisData,
   Profile,
   SendLinkStatus,
+  SplitStatus,
   Subscription,
 } from "./types";
 
@@ -39,6 +41,9 @@ import type {
  * - Member since: when this device created the account (Face ID's record,
  *   or the dev signer's), or its first move on chain.
  * - A send link: `PolarisSend.linkOf(linkKey)` and `keyUsed(linkKey)`.
+ * - A split: `GET /api/public/splits/{id}` (PolarisSplit's state, with when
+ *   each share was paid), and the splits you organised from the buyer book.
+ *   The split's words come from its link (lib/split.ts), never the API.
  *
  * Contacts are a local address book the app doesn't keep yet: none, rather
  * than sample people with made-up addresses someone could send real money to.
@@ -99,10 +104,12 @@ type BuyerBook = {
     createdAt: string;
   }>;
   payments: Array<{ id: string; kind: "now" | "later" | "subscription"; merchant: ApiMerchant; amountUnits: string; txHash: Hex; createdAt: string }>;
+  /** The splits this address organised; older APIs leave it out. */
+  splits?: ApiSplit[];
   /** Older APIs leave it out. */
   moves?: Array<{
     id: string;
-    kind: "added" | "received" | "sent" | "sent-link" | "claimed" | "link-returned" | "payment" | "refund" | "instalment";
+    kind: "added" | "received" | "sent" | "sent-link" | "claimed" | "link-returned" | "payment" | "refund" | "instalment" | "split-paid" | "split-received";
     direction: "in" | "out";
     amountUnits: string;
     counterparty: Address;
@@ -110,9 +117,53 @@ type BuyerBook = {
     linkKey: Address | null;
     settledAs: "claimed" | "returned" | null;
     settledAt: string | null;
+    /** split-paid and split-received. */
+    splitId?: Hex | null;
+    shareIndex?: number | null;
     at: string;
   }>;
 };
+
+/** A split as the API serves it (apps/business src/server/split.ts `SplitView`). */
+type ApiSplit = {
+  id: Hex;
+  organiser: Address;
+  status: SplitStatus["status"];
+  totalUnits: string;
+  paidUnits: string;
+  shareCount: number;
+  paidCount: number;
+  expiresAt: string;
+  memoHash: Hex;
+  shares: Array<{ index: number; amountUnits: string; paid: boolean; payer: Address | null; paidAt: string | null; txHash: Hex | null; explorerUrl: string | null }>;
+  createdAt: string | null;
+  closedAt: string | null;
+};
+
+export function toSplit(s: ApiSplit): SplitStatus {
+  return {
+    id: s.id.toLowerCase() as Hex,
+    organiser: getAddress(s.organiser),
+    status: s.status,
+    total: BigInt(s.totalUnits),
+    paid: BigInt(s.paidUnits),
+    shareCount: s.shareCount,
+    paidCount: s.paidCount,
+    expiresAt: Date.parse(s.expiresAt),
+    memoHash: s.memoHash,
+    shares: s.shares.map((x) => ({
+      index: x.index,
+      amount: BigInt(x.amountUnits),
+      paid: x.paid,
+      payer: x.payer ? getAddress(x.payer) : null,
+      paidAt: x.paidAt ? Date.parse(x.paidAt) : null,
+      txHash: x.txHash,
+      explorerUrl: x.explorerUrl,
+    })),
+    createdAt: s.createdAt ? Date.parse(s.createdAt) : null,
+    closedAt: s.closedAt ? Date.parse(s.closedAt) : null,
+  };
+}
 
 /** How the underwriting package names its providers. */
 const PROVIDER_NAMES: Record<string, string> = { nansen: "Nansen", zerion: "Zerion", etherscan: "Etherscan", rpc: "the chain" };
@@ -226,6 +277,20 @@ function moveRow(m: Move, merchants: Map<string, Merchant>): ActivityItem | null
       return { ...base, kind: "refund", title: merchant?.name ?? "Refund", detail: "Refund", counterparty: { kind: "merchant", name: merchant?.name ?? "Refund" } };
     case "instalment":
       return { ...base, kind: "instalment", title: "Pay in 4", detail: "Instalment paid", counterparty: { kind: "polaris", name: "Pay in 4" } };
+    case "split-paid":
+    case "split-received": {
+      // The split's words are on this device only if it made or opened the link.
+      const known = m.splitId ? knownSplit(m.splitId) : null;
+      const index = m.shareIndex ?? null;
+      const what = known?.memo.description || "A split";
+      const split = { ...(m.splitId ? { splitId: m.splitId.toLowerCase() as Hex } : {}), ...(index !== null ? { shareIndex: index } : {}) };
+      if (m.kind === "split-paid") {
+        const organiser = known?.memo.organiserName || "Split";
+        return { ...base, kind: "split-paid", title: organiser, detail: `Your share · ${what}`, counterparty: { kind: known?.memo.organiserName ? "person" : "polaris", name: organiser }, ...split };
+      }
+      const who = index !== null ? shareLabel(known?.memo ?? null, index) : "A friend";
+      return { ...base, kind: "split-received", title: who, detail: `Paid their share · ${what}`, counterparty: { kind: "person", name: who }, ...split };
+    }
     case "payment":
       return null;
   }
@@ -402,6 +467,20 @@ export const liveData: PolarisData = {
   },
 
   getPaymentLink: (id) => getRemotePaymentLink(id),
+
+  async getSplit(id): Promise<SplitStatus | null> {
+    try {
+      return toSplit(await api<ApiSplit>(`/api/public/splits/${id}`));
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null;
+      throw error;
+    }
+  },
+
+  async getSplits(owner): Promise<SplitStatus[]> {
+    if (!owner) return [];
+    return ((await book(owner)).splits ?? []).map(toSplit);
+  },
 
   async getSendLink(linkKey): Promise<SendLinkStatus | null> {
     const send = await resolveContract("send");

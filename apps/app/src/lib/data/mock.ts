@@ -1,5 +1,6 @@
 import { type Address, getAddress, type Hex, keccak256, stringToHex } from "viem";
 import { dollars, type Micros } from "../money";
+import { equalShares, memoHash, type SplitMemo } from "../split";
 import { DAY, dueAt, quotePlan, WEEK } from "./quote";
 import type {
   ActivityItem,
@@ -13,6 +14,7 @@ import type {
   PolarisData,
   Profile,
   SendLinkStatus,
+  SplitStatus,
   Subscription,
 } from "./types";
 
@@ -250,8 +252,27 @@ function planFrom(
   };
 }
 
+/**
+ * A split in the sample book. "viewer" stands for whoever is looking: the
+ * sample book's own splits are theirs, and so are the shares they paid.
+ */
+type MockSplit = {
+  id: Hex;
+  organiser: Address | "viewer";
+  amounts: Micros[];
+  payers: Array<Address | "viewer" | null>;
+  paidAt: Array<number | null>;
+  txHashes: Array<Hex | null>;
+  expiresAt: number;
+  closedAt: number | null;
+  createdAt: number;
+  memo: SplitMemo;
+};
+
 type Ledger = {
   balance: Micros;
+  /** Split-the-bill links; absent from a tab's ledger saved before they existed. */
+  splits?: MockSplit[];
   historyLinked: boolean;
   plans: Plan[];
   subscriptions: Subscription[];
@@ -301,8 +322,11 @@ function seed(): Ledger {
   const paid = (id: string, plan: Plan, i: number, label: string) =>
     item(id, "instalment", m(plan.merchant), `${label} · ${i + 1} of 4`, "out", plan.instalments[i]!.amount, plan.instalments[i]!.dueAt, plan.id);
   const { frischmarkt, rota, kiez, kapitel, welle, nomada } = merchants;
+  const splits = seedSplits(t);
+  const dinner = splits[0]!;
 
   return {
+    splits,
     balance: dollars(1284.5),
     historyLinked: false,
     plans: [lumen, kora, grinder],
@@ -335,6 +359,12 @@ function seed(): Ledger {
     activity: [
       // The last 24 hours.
       item("a-coffee", "payment", m(nomada), "Oat flat white", "out", dollars(4.6), ago(0, 0, 25)),
+      {
+        ...item("a-split-tomas", "split-received", p(tomas), `Paid their share · ${dinner.memo.description}`, "in", dinner.amounts[0]!, dinner.paidAt[0]!),
+        title: "Tomás",
+        splitId: dinner.id,
+        shareIndex: 0,
+      },
       item("a-ride", "payment", m(rota), "Ride to Kreuzberg", "out", dollars(12.4), ago(0, 2, 10)),
       item("a-tomas", "received", p(tomas), "Concert tickets, his half", "in", dollars(38), ago(0, 4, 35)),
       item("a-lunch", "payment", m(kiez), "Lunch bowl", "out", dollars(14.2), ago(0, 6, 50)),
@@ -392,7 +422,78 @@ function seed(): Ledger {
   };
 }
 
+/**
+ * Two sample splits: one the sample account organised (dinner, Tomás has
+ * paid), and one a friend organised that the account can pay a share of.
+ */
+function seedSplits(t: number): MockSplit[] {
+  const dinnerMemo: SplitMemo = { description: "Dinner at Lucia", organiserName: "Lena", billTotal: dollars(120), labels: ["Tomás", "Aisha", "Jonas"] };
+  const cabinMemo: SplitMemo = { description: "Ski cabin, February", organiserName: "Marisol", billTotal: dollars(480), labels: ["Marisol's friend", "Ana", "Lena", "Jonas"] };
+  const paidAt = t - 5 * MS_HOUR;
+  return [
+    {
+      id: keccak256(stringToHex("sample-split:dinner")),
+      organiser: "viewer",
+      amounts: equalShares(dollars(90), 3),
+      payers: [fakeAddress("tomas"), null, null],
+      paidAt: [paidAt, null, null],
+      txHashes: [fakeTx("split-dinner-0"), null, null],
+      expiresAt: t + 13 * MS_DAY,
+      closedAt: null,
+      createdAt: t - MS_DAY,
+      memo: dinnerMemo,
+    },
+    {
+      id: keccak256(stringToHex("sample-split:cabin")),
+      organiser: fakeAddress("marisol"),
+      amounts: [dollars(120), dollars(120), dollars(120), dollars(120)],
+      payers: [fakeAddress("marisols-friend"), fakeAddress("ana"), null, null],
+      paidAt: [t - 3 * MS_DAY, t - 2 * MS_DAY, null, null],
+      txHashes: [fakeTx("split-cabin-0"), fakeTx("split-cabin-1"), null, null],
+      expiresAt: t + 10 * MS_DAY,
+      closedAt: null,
+      createdAt: t - 4 * MS_DAY,
+      memo: cabinMemo,
+    },
+  ];
+}
+
+/** The sample book's own account, when nobody is signed in to look. */
+const SAMPLE_VIEWER = fakeAddress("sample-viewer");
+
+function splitView(s: MockSplit, viewer: Address | null): SplitStatus {
+  const who = (a: Address | "viewer" | null) => (a === "viewer" ? (viewer ?? SAMPLE_VIEWER) : a);
+  const paidCount = s.payers.filter((p) => p !== null).length;
+  const status: SplitStatus["status"] = s.closedAt !== null ? "closed" : paidCount === s.amounts.length ? "settled" : Date.now() >= s.expiresAt ? "expired" : "open";
+  return {
+    id: s.id,
+    organiser: who(s.organiser) as Address,
+    status,
+    total: s.amounts.reduce((a, b) => a + b, 0n),
+    paid: s.amounts.reduce((sum, a, i) => (s.payers[i] ? sum + a : sum), 0n),
+    shareCount: s.amounts.length,
+    paidCount,
+    expiresAt: s.expiresAt,
+    memoHash: memoHash(s.memo),
+    shares: s.amounts.map((amount, index) => ({
+      index,
+      amount,
+      paid: s.payers[index] !== null,
+      payer: who(s.payers[index] ?? null),
+      paidAt: s.paidAt[index] ?? null,
+      txHash: s.txHashes[index] ?? null,
+      // Made-up hashes: never linked to an explorer.
+      explorerUrl: null,
+    })),
+    createdAt: s.createdAt,
+    closedAt: s.closedAt,
+    sampleMemo: s.memo,
+  };
+}
+
 let ledger = saved?.ledger ?? seed();
+// A tab's ledger from before split links: give it the sample splits.
+ledger.splits ??= seedSplits(loadedAt);
 const listeners = new Set<() => void>();
 /** Send link → its "Waiting to be claimed" activity row, to update on claim. */
 const sendActivity = saved?.sendActivity ?? new Map<Address, string>();
@@ -509,6 +610,17 @@ export const mockData: PolarisData = {
       80,
     );
   },
+  getSplit: (id, viewer) => {
+    const known = ledger.splits?.find((s) => s.id.toLowerCase() === id.toLowerCase());
+    return settle(known ? splitView(known, viewer) : null, 80);
+  },
+  getSplits: (owner) =>
+    settle(
+      (ledger.splits ?? [])
+        .filter((s) => s.organiser === "viewer" || (owner !== null && s.organiser === owner))
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((s) => splitView(s, owner)),
+    ),
   subscribe: (listener) => {
     listeners.add(listener);
     return () => listeners.delete(listener);
@@ -737,6 +849,69 @@ export const mockLedger = {
         txHash,
       }),
     );
+    changed();
+  },
+
+  /** A split made on this device: the sample book's own, whoever looks. */
+  createSplit(id: Hex, amounts: Micros[], expiresAt: number, memo: SplitMemo) {
+    ledger.splits = [
+      ...(ledger.splits ?? []),
+      {
+        id: id.toLowerCase() as Hex,
+        organiser: "viewer",
+        amounts: [...amounts],
+        payers: amounts.map(() => null),
+        paidAt: amounts.map(() => null),
+        txHashes: amounts.map(() => null),
+        expiresAt,
+        closedAt: null,
+        createdAt: Date.now(),
+        memo,
+      },
+    ];
+    changed();
+  },
+
+  /** Why a share can't be paid now, or null. */
+  canPayShare(id: Hex, index: number): { reason: "already-settled" | "expired"; message: string } | null {
+    const s = ledger.splits?.find((x) => x.id.toLowerCase() === id.toLowerCase());
+    if (!s) return { reason: "expired", message: "We couldn't find that split." };
+    if (s.closedAt !== null) return { reason: "already-settled", message: "This split was closed, so it can't be paid any more. Nothing was charged." };
+    if (Date.now() >= s.expiresAt) return { reason: "expired", message: "This split has expired. Nothing was charged." };
+    if (s.payers[index]) return { reason: "already-settled", message: "This share has already been paid." };
+    return null;
+  },
+
+  payShare(id: Hex, index: number, _payer: Address, txHash: Hex) {
+    const s = ledger.splits?.find((x) => x.id.toLowerCase() === id.toLowerCase());
+    if (!s || s.payers[index]) return;
+    const amount = s.amounts[index]!;
+    s.payers[index] = "viewer";
+    s.paidAt[index] = Date.now();
+    s.txHashes[index] = txHash;
+    // The sample book is one account: its own split's share arrives, anyone else's leaves.
+    const mine = s.organiser === "viewer";
+    ledger.balance += mine ? amount : -amount;
+    ledger.activity.push(
+      newTxItem({
+        kind: mine ? "split-received" : "split-paid",
+        title: mine ? s.memo.labels[index] || `Share ${index + 1}` : s.memo.organiserName || "Split",
+        detail: mine ? `Paid their share · ${s.memo.description}` : `Your share · ${s.memo.description}`,
+        direction: mine ? "in" : "out",
+        amount,
+        counterparty: { kind: "person", name: mine ? s.memo.labels[index] || "A friend" : s.memo.organiserName || "A friend" },
+        txHash,
+        splitId: s.id,
+        shareIndex: index,
+      }),
+    );
+    changed();
+  },
+
+  closeSplit(id: Hex) {
+    const s = ledger.splits?.find((x) => x.id.toLowerCase() === id.toLowerCase());
+    if (!s || s.closedAt !== null) return;
+    s.closedAt = Date.now();
     changed();
   },
 

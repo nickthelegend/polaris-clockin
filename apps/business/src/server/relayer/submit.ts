@@ -49,6 +49,7 @@ export function relayerAddresses(chain: ChainConfig): RelayerAddresses {
     checkout: c.checkout,
     payments: c.payments,
     send: c.send,
+    split: c.split,
     loanEngine: c.loanEngine,
     registry: c.registry,
     stablecoin: c.stablecoin,
