@@ -1,5 +1,7 @@
+import { forgetReceiptKeys, type ReceiptKeys } from "@polaris/receipts";
 import type { Address, LocalAccount } from "viem";
 import { env } from "../env";
+import { registerInbox } from "../receipts/inbox";
 import { requestEmailLogin } from "./email-login";
 import { AccountError, toAccountError } from "./errors";
 import { meraCreate, meraSignIn } from "./mera";
@@ -32,6 +34,13 @@ import { forgetStoredAccount, loadStoredAccount, STORED_ACCOUNT_KEY, saveStoredA
  *   authorize()          What every Confirm calls: a fresh Face ID unless one just
  *                        happened (email accounts use their session).
  *   signOut()            Ends the session (and the Privy session), zeroing any key.
+ *   receiptKeys()        The session's receipt keys (Face ID and dev only), or null.
+ *
+ * A Face ID session also holds the receipt keys the same PRF output derives
+ * (@polaris/receipts): they live and die with the signing key, and opening
+ * the session registers the inbox key with Polaris (receipts/inbox.ts),
+ * signed by the account. Email accounts have no PRF, so no receipt keys:
+ * their receipts stay as they always were.
  *
  * Browser only. Call the ceremonies from click handlers, never from effects,
  * and start them before awaiting anything else in the handler.
@@ -60,8 +69,8 @@ export const DEV_SIGNER = env.devSigner;
 /** True when a Privy app id is configured: "Continue with email" is offered. */
 export const EMAIL_LOGIN = PRIVY_ENABLED;
 
-/** An account that is open for signing, and how to close it. */
-export type Opened = { account: LocalAccount; end: () => void };
+/** An account that is open for signing, how to close it, and its receipt keys (Face ID and dev only). */
+export type Opened = { account: LocalAccount; end: () => void; receipts?: ReceiptKeys | null };
 
 /**
  * What each way of holding an account provides. `stored()` reads only
@@ -79,7 +88,7 @@ export interface AccountImplementation {
   forget(): void | Promise<void>;
 }
 
-type Session = { account: LocalAccount; source: AccountSource; unlockedAt: number; end: () => void };
+type Session = { account: LocalAccount; source: AccountSource; unlockedAt: number; end: () => void; receipts: ReceiptKeys | null };
 
 let session: Session | null = null;
 let inflight: Promise<LocalAccount> | null = null;
@@ -105,12 +114,12 @@ const dev: AccountImplementation = {
   reauthorize: true,
   stored: () => (devModule ? devModule.devStoredAddress() : undefined),
   async create() {
-    const { account } = await (await loadDevModule()).devCreate();
-    return { account, end: () => undefined };
+    const { account, receipts } = await (await loadDevModule()).devCreate();
+    return { account, end: () => undefined, receipts };
   },
   async unlock() {
-    const { account } = await (await loadDevModule()).devSignIn();
-    return { account, end: () => undefined };
+    const { account, receipts } = await (await loadDevModule()).devSignIn();
+    return { account, end: () => undefined, receipts };
   },
   forget: () => devModule?.devForget(),
 };
@@ -133,7 +142,7 @@ const mera: AccountImplementation = {
       createdAt: Date.now(),
       ...(opened.transports ? { transports: [...opened.transports] } : {}),
     });
-    return { account: opened.account, end: opened.end };
+    return { account: opened.account, end: opened.end, receipts: opened.receipts };
   },
   async unlock(opts = {}) {
     const rpId = resolveRpId();
@@ -155,7 +164,7 @@ const mera: AccountImplementation = {
       };
       saveStoredAccount(record);
     }
-    return { account: opened.account, end: opened.end };
+    return { account: opened.account, end: opened.end, receipts: opened.receipts };
   },
   forget: () => forgetStoredAccount(),
 };
@@ -308,15 +317,21 @@ function endSession(): void {
   try {
     session.end();
   } finally {
+    if (session.receipts) forgetReceiptKeys(session.receipts);
     session = null;
     emit();
   }
 }
 
-function startSession(account: LocalAccount, source: AccountSource, end: () => void): LocalAccount {
-  if (session && session.account !== account) session.end();
-  session = { account, source, unlockedAt: Date.now(), end };
+function startSession(account: LocalAccount, source: AccountSource, end: () => void, receipts: ReceiptKeys | null = null): LocalAccount {
+  if (session && session.account !== account) {
+    session.end();
+    if (session.receipts && session.receipts !== receipts) forgetReceiptKeys(session.receipts);
+  }
+  session = { account, source, unlockedAt: Date.now(), end, receipts };
   rememberSource(source);
+  // The inbox key goes to Polaris signed by the account, with the session that is open: no prompt.
+  if (receipts) registerInbox(account, receipts.inboxPublicKey);
   emit();
   return account;
 }
@@ -337,7 +352,7 @@ function once(run: () => Promise<LocalAccount>): Promise<LocalAccount> {
 function open(impl: AccountImplementation, how: "create" | "unlock", opts?: { anyAccount?: boolean }) {
   return once(async () => {
     const opened = how === "create" ? await impl.create() : await impl.unlock(opts);
-    return startSession(opened.account, impl.source, opened.end);
+    return startSession(opened.account, impl.source, opened.end, opened.receipts ?? null);
   });
 }
 
@@ -367,6 +382,15 @@ export function signIn(opts: { anyAccount?: boolean } = {}): Promise<LocalAccoun
 /** The signed-in account for this session, or null. Never prompts. */
 export function getAccount(): LocalAccount | null {
   return session?.account ?? null;
+}
+
+/**
+ * The receipt keys of the open session, or null: no session, an email
+ * account (no PRF, so no keys), or a browser that couldn't derive them.
+ * Never prompts. In memory only, like the signing key.
+ */
+export function receiptKeys(): ReceiptKeys | null {
+  return session?.receipts ?? null;
 }
 
 /** How the current (or remembered) account is held, or null. */

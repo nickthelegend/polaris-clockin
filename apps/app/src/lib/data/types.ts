@@ -191,6 +191,8 @@ export type ActivityItem = {
   /** A share of a split (split-paid, split-received): which split, and which share. */
   splitId?: Hex;
   shareIndex?: number;
+  /** The receipt sealed to this account's Face ID that says what was bought (lib/receipts). */
+  receiptId?: string;
 };
 
 export type PlanOffer = {

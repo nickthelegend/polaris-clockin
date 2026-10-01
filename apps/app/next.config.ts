@@ -39,8 +39,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_DEV_SIGNER: development || process.env.POLARIS_ALLOW_DEV_SIGNER_BUILD === "1" ? (process.env.NEXT_PUBLIC_DEV_SIGNER ?? "") : "",
     NEXT_PUBLIC_DEV_SIGNER_PERSIST: development ? (process.env.NEXT_PUBLIC_DEV_SIGNER_PERSIST ?? "") : "",
   },
-  // The shared component library and the Chainlink rates package ship TypeScript source.
-  transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/fx"],
+  // The shared component library, the Chainlink rates package and the receipts keys ship TypeScript source.
+  transpilePackages: ["@polaris/ui", "@polaris/brand", "@polaris/fx", "@polaris/receipts"],
   // The workspace root, so a parent directory's lockfile is never mistaken for it.
   turbopack: { root: path.resolve(process.cwd(), "../..") },
   async headers() {

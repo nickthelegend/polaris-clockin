@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ActivityAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { LocalEquivalent } from "@/components/local-equivalent";
+import { SealedReceipt } from "@/components/sealed-receipt";
 import { cancelSendLink } from "@/lib/actions";
 import { useOwner } from "@/lib/account/hooks";
 import { receiptUrl } from "@/lib/chain";
@@ -128,6 +129,7 @@ export function TransactionDrawerContent({ id }: { id: string }) {
             ...(tiles.some((t) => t.label === "Status") ? [] : [{ label: "Status", value: statusOf(item) }]),
           ]}
         />
+        <SealedReceipt item={item} owner={owner} />
         {others.length ? (
           <div>
             <h3 className="text-[14px] font-medium text-ui-muted">More with {item.title}</h3>

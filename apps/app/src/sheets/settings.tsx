@@ -1,8 +1,9 @@
 "use client";
 
 import { AdaptiveSheet, Button, Input, ListGroup, ListRow, Select, Sheet } from "@polaris/ui";
-import { LogOut, Trash2 } from "lucide-react";
+import { LockKeyhole, LogOut, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { ReceiptsPrivacyRow } from "@/components/receipts-privacy";
 import { RouteSheet, useCloseSheet } from "@/components/shell/sheet-host";
 import { SettingsDesktop } from "@/desktop/profile";
 import { signOut } from "@/lib/account";
@@ -45,6 +46,11 @@ export function SettingsSheet() {
           onValueChange={(v) => setPrefs({ currency: v === "auto" ? null : v })}
           options={localCurrencyOptions(auto, prefs.currency)}
         />
+        {hasAccount ? (
+          <ListGroup label="Privacy">
+            <ReceiptsPrivacyRow source={state.source} icon={<LockKeyhole />} />
+          </ListGroup>
+        ) : null}
         {hasAccount ? (
           <ListGroup label="Account">
             {state.status === "ready" ? (

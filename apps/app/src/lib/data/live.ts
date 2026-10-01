@@ -6,6 +6,7 @@ import { publicClient } from "../chain";
 import { resolveContract } from "../domains";
 import type { Micros } from "../money";
 import { prefsName } from "../prefs";
+import { pairReceipts, type ReceiptIndexEntry } from "../receipts/pair";
 import { knownSplit, shareLabel } from "../split";
 import { dataGeneration, hasDataListeners, notifyDataChanged, onDataChanged } from "./changes";
 import { getRemotePaymentLink } from "./remote";
@@ -122,6 +123,8 @@ type BuyerBook = {
     shareIndex?: number | null;
     at: string;
   }>;
+  /** Which rows have a receipt sealed to this account's Face ID (never what is in it); older APIs leave it out. */
+  receipts?: ReceiptIndexEntry[];
 };
 
 /** A split as the API serves it (apps/business src/server/split.ts `SplitView`). */
@@ -335,6 +338,12 @@ function toActivity(book: BuyerBook): ActivityItem[] {
       txHash: txHash as Hex,
       status: "settled",
     });
+  }
+  // Rows whose "what" is sealed to this account's Face ID: the transaction sheet opens them.
+  const paired = pairReceipts(items, book.receipts ?? [], (row) => (row.id.startsWith("pay-") ? row.id.slice(4) : null));
+  for (const item of items) {
+    const receiptId = paired.get(item.id);
+    if (receiptId) item.receiptId = receiptId;
   }
   return items.sort((a, b) => b.at - a.at);
 }

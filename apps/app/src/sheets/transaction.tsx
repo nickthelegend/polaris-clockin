@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { ActivityAvatar } from "@/components/avatars";
 import { ConfirmSheet } from "@/components/confirm-sheet";
 import { LocalEquivalent } from "@/components/local-equivalent";
+import { SealedReceipt } from "@/components/sealed-receipt";
 import { RouteSheet } from "@/components/shell/sheet-host";
 import { TransactionDrawerContent } from "@/desktop/transaction";
 import { cancelSendLink } from "@/lib/actions";
@@ -82,6 +83,7 @@ export function TransactionSheet({ id }: { id: string }) {
             { label: "Status", value: statusOf(item) },
           ]}
         />
+        <SealedReceipt item={item} owner={owner} className="mt-1 w-full text-left" />
       </Sheet.Body>
       <Sheet.Footer className="lg:[&>*]:flex-1">
         {receiptUrl(item.txHash) ? (

@@ -5,6 +5,7 @@ import {
   type PasskeyCredentialMetadata,
 } from "@category-labs/mera";
 import { toViemAccount } from "@category-labs/mera/viem";
+import { deriveReceiptKeys, type ReceiptKeys } from "@polaris/receipts";
 import type { LocalAccount } from "viem";
 import { deriveEvmKey } from "./derive";
 
@@ -12,24 +13,38 @@ import { deriveEvmKey } from "./derive";
  * The Mera path: Face ID → PRF (32 bytes) → secp256k1 key → viem account.
  * This is the entire account layer. There is no seed phrase to write down,
  * no extension, and no server that holds a key.
+ *
+ * The same PRF output also gives the receipt keys (@polaris/receipts: an
+ * AES-256-GCM key and the X25519 inbox key pair, each from its own HKDF
+ * label), in the same ceremony: no second Face ID. The wallet derivation
+ * (derive.ts) is unchanged and runs first.
  */
 
 export type OpenedSession = {
   account: LocalAccount;
   /** Zeroes the signing key. Signing afterwards throws SESSION_ENDED. */
   end: () => void;
+  /** The receipt keys, in memory for this session only; null if this browser couldn't derive them. */
+  receipts: ReceiptKeys | null;
   credentialId: string;
   transports?: readonly string[];
 };
 
-/** PRF output → a live signing session. The caller's copies are wiped. */
-function openSession(prfOutput: Uint8Array): Pick<OpenedSession, "account" | "end"> {
-  const privateKey = deriveEvmKey(prfOutput);
+/** PRF output → a live signing session and the receipt keys. The caller's copies are wiped. */
+async function openSession(prfOutput: Uint8Array): Promise<Pick<OpenedSession, "account" | "end" | "receipts">> {
   try {
-    const session = createSecp256k1SigningSession({ privateKey });
-    return { account: toViemAccount(session), end: () => session.end() };
+    const privateKey = deriveEvmKey(prfOutput);
+    let opened: Pick<OpenedSession, "account" | "end">;
+    try {
+      const session = createSecp256k1SigningSession({ privateKey });
+      opened = { account: toViemAccount(session), end: () => session.end() };
+    } finally {
+      privateKey.fill(0);
+    }
+    // Receipts are a convenience on top of the account: if they can't be derived here, signing still works.
+    const receipts = await deriveReceiptKeys(prfOutput).catch(() => null);
+    return { ...opened, receipts };
   } finally {
-    privateKey.fill(0);
     prfOutput.fill(0);
   }
 }
@@ -48,10 +63,11 @@ export async function meraCreate(rpId: string): Promise<OpenedSession> {
       displayName: `Polaris account (${new Date().toLocaleDateString()})`,
     },
   });
-  const { account, end } = openSession(created.prfOutput);
+  const { account, end, receipts } = await openSession(created.prfOutput);
   return {
     account,
     end,
+    receipts,
     credentialId: created.credentialId,
     ...(created.transports ? { transports: created.transports } : {}),
   };
@@ -67,6 +83,6 @@ export async function meraSignIn(rpId: string, credential?: PasskeyCredentialMet
     rpId,
     ...(credential ? { credential } : {}),
   });
-  const { account, end } = openSession(prfOutput);
-  return { account, end, credentialId };
+  const { account, end, receipts } = await openSession(prfOutput);
+  return { account, end, receipts, credentialId };
 }

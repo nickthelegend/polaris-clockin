@@ -7,6 +7,7 @@ import { useState } from "react";
 import { rowAmount } from "@/components/activity-amount";
 import { ActivityAvatar } from "@/components/avatars";
 import { FiltersSheet } from "@/components/filters-sheet";
+import { ReceiptWhat } from "@/components/sealed-receipt";
 import { TabScreen } from "@/components/screen";
 import { SplitTiles } from "@/components/splits";
 import { ActivityDesktop } from "@/desktop/activity";
@@ -144,7 +145,15 @@ function ActivityPhone() {
                   variant="card"
                   leading={<ActivityAvatar item={item} />}
                   title={item.title}
-                  subtitle={`${time(item.at)} · ${subAmount(item)}`}
+                  subtitle={
+                    item.receiptId ? (
+                      <>
+                        {time(item.at)} · <ReceiptWhat item={item} fallback={subAmount(item)} />
+                      </>
+                    ) : (
+                      `${time(item.at)} · ${subAmount(item)}`
+                    )
+                  }
                   {...rowAmount(item)}
                   onClick={() => router.push(`/activity/${item.id}`, { scroll: false })}
                 />
