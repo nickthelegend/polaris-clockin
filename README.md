@@ -194,7 +194,7 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
 | CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 209 passing; all three workflows compile to WASM |
-| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 275 passing (11 for sealed receipts); the API auth check covers every route |
+| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 276 passing (12 for sealed receipts); the API auth check covers every route |
 | The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 47 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, split plans and links, the Android app's `/.well-known/assetlinks.json`, what a build reports to the deploy check, receipt keys beside an unmoved wallet key); 53 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 101 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |

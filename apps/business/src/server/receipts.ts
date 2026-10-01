@@ -199,9 +199,22 @@ export async function sealIfInbox(owner: Address, make: () => Seal | Promise<Sea
   }
 }
 
-/** Drop a completed session's description and line items, once its receipt is sealed. */
+/**
+ * Drop a completed session's description and line items, once its receipt
+ * is sealed: from the session, and from the copy of the create response an
+ * Idempotency-Key replays (sessions/idempotency.ts).
+ */
 export async function scrubSession(sessionId: string, at: string): Promise<void> {
-  await getDb().sessions.update(sessionId, (s) => (s.sealedAt ? s : { ...s, description: SEALED_DESCRIPTION, lineItems: [], sealedAt: at }));
+  const db = getDb();
+  await db.sessions.update(sessionId, (s) => (s.sealedAt ? s : { ...s, description: SEALED_DESCRIPTION, lineItems: [], sealedAt: at }));
+  for (const replay of await db.idempotency.find({ resourceId: sessionId })) {
+    await db.idempotency.update(replay.id, (r) => {
+      if (!r.body) return r;
+      const body = JSON.parse(r.body) as Record<string, unknown>;
+      if (body.description === SEALED_DESCRIPTION) return r;
+      return { ...r, body: JSON.stringify({ ...body, description: SEALED_DESCRIPTION, lineItems: [] }) };
+    });
+  }
 }
 
 /* What each settlement seals. */

@@ -77,7 +77,8 @@ export async function withIdempotency(
     throw error;
   }
   if (result.status >= 200 && result.status < 300) {
-    await db.idempotency.update(id, (r) => ({ ...r, state: "done", status: result.status, body: JSON.stringify(result.body) }));
+    const created = (result.body as { id?: unknown } | null)?.id;
+    await db.idempotency.update(id, (r) => ({ ...r, state: "done", status: result.status, body: JSON.stringify(result.body), resourceId: typeof created === "string" ? created : null }));
   } else {
     await db.idempotency.delete(id);
   }

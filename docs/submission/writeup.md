@@ -595,9 +595,8 @@ we ship option A (keys from the sign-in PRF output: no extra prompt).
 - **The AES key has no writer yet.** It is derived and tested; private notes
   on a receipt would use it.
 - **What stays in the clear:** what the chain shows anyway, the merchant's
-  order id and metadata, a payment link's title and a subscription plan's
-  name (the merchant's catalogue), and a merchant's idempotent-replay copy of
-  the session it created (24 hours).
+  order id and metadata, and a payment link's title and a subscription
+  plan's name (the merchant's catalogue, shared by every buyer).
 - **Option B** (a PRF namespace of its own, so even the recovery phrase
   couldn't read receipts) is not built: it costs a second Face ID.
 

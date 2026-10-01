@@ -11,6 +11,7 @@ import { POST as relayRoute } from "@/app/api/relay/route";
 import { POST as readRoute, GET as readGet } from "@/app/api/receipts/route";
 import { POST as inboxRoute } from "@/app/api/receipts/inbox/route";
 import { GET as retrieveRoute } from "@/app/api/v1/checkout/sessions/[id]/route";
+import { POST as createSessionRoute } from "@/app/api/v1/checkout/sessions/route";
 import { getDb } from "@/server/db";
 import { syncChain } from "@/server/ingest/sync";
 import { TYPES } from "@/server/relayer/typed-data";
@@ -59,8 +60,20 @@ async function read(account: LocalAccount = buyer, issuedAt = Math.floor(Date.no
 
 const lineItemsBody = { lineItems: [{ name: "Logo suite", quantity: 1, unitAmount: "150.00" }, { name: "Brand guidelines", quantity: 2, unitAmount: "25.00" }] };
 
-async function payNow(): Promise<Record<string, any>> {
-  const session = await newSession(merchant, { amount: undefined, description: DESCRIPTION, ...lineItemsBody });
+async function payNow(opts: { idempotencyKey?: string } = {}): Promise<Record<string, any>> {
+  const session = opts.idempotencyKey
+    ? (
+        await json(
+          await createSessionRoute(
+            request("POST", "/api/v1/checkout/sessions", {
+              headers: { authorization: `Bearer ${merchant.secret}`, "idempotency-key": opts.idempotencyKey },
+              body: { description: DESCRIPTION, ...lineItemsBody, modes: ["now"], successUrl: "https://studio.example/thanks", orderId: "INV-idem" },
+            }),
+            params({}),
+          ),
+        )
+      ).body.data
+    : await newSession(merchant, { amount: undefined, description: DESCRIPTION, ...lineItemsBody });
   const auth = await signPayNow(buyer, merchant.account.address, session.orderId, 200_000_000n);
   const res = await json(await relayRoute(request("POST", "/api/relay", { body: { type: "pay", sessionId: session.id, buyer: buyer.address, ...auth } }), params({})));
   expect(res.status).toBe(200);
@@ -193,6 +206,26 @@ describe("Pay now: sealed at settlement, plaintext dropped", () => {
     expect(retrieved).toMatchObject({ paymentStatus: "paid", description: SEALED_DESCRIPTION, lineItems: [], orderId: session.orderId });
     const pub = (await json(await publicSessionRoute(request("GET", `/api/public/sessions/${session.id}`), params({ id: session.id })))).body.data;
     expect(pub.description).toBe(SEALED_DESCRIPTION);
+  });
+
+  it("drops it from the copy an Idempotency-Key replays too", async () => {
+    await register();
+    await payNow({ idempotencyKey: "order-INV-idem" });
+    const [replay] = await getDb().idempotency.find({});
+    expect(replay?.resourceId).toMatch(/^cs_test_/);
+    expect(await everything()).not.toContain(DESCRIPTION);
+    // The merchant's retry still gets its session back, sealed.
+    const again = await json(
+      await createSessionRoute(
+        request("POST", "/api/v1/checkout/sessions", {
+          headers: { authorization: `Bearer ${merchant.secret}`, "idempotency-key": "order-INV-idem" },
+          body: { description: DESCRIPTION, ...lineItemsBody, modes: ["now"], successUrl: "https://studio.example/thanks", orderId: "INV-idem" },
+        }),
+        params({}),
+      ),
+    );
+    expect(again.status).toBe(200);
+    expect(again.body.data).toMatchObject({ id: replay?.resourceId, description: SEALED_DESCRIPTION, lineItems: [] });
   });
 
   it("binds each ciphertext to its owner and id: swapped rows don't open", async () => {

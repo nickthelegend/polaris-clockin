@@ -27,8 +27,19 @@ export function registerInbox(account: LocalAccount, inboxPublicKey: Uint8Array)
   if (known && known.key === key) return known.done;
   const done = (async () => {
     const signature = await account.signMessage({ message: inboxRegistrationMessage(key) });
-    await api(`/api/receipts/inbox`, { method: "POST", body: { address: account.address, inboxPublicKey: key, signature } });
-    return true;
+    // A slow or briefly unreachable server: try again a little later, twice, before leaving it to the next sign-in.
+    for (const wait of [0, 2_000, 8_000]) {
+      if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+      try {
+        await api(`/api/receipts/inbox`, { method: "POST", body: { address: account.address, inboxPublicKey: key, signature } });
+        return true;
+      } catch (error) {
+        // A refusal (a bad signature, a malformed key) won't change on a retry.
+        const status = (error as { status?: number }).status ?? 0;
+        if (status >= 400 && status < 500 && status !== 429) throw error;
+      }
+    }
+    throw new Error("The receipts inbox couldn't be registered");
   })().catch(() => {
     // Not fatal: receipts stay in the clear on the server until the next sign-in registers.
     if (registrations.get(owner)?.done === done) registrations.delete(owner);

@@ -214,6 +214,8 @@ export type IdempotencyRecord = {
   status: number | null;
   /** The response body, as sent. */
   body: string | null;
+  /** The id of what the response created (a session's `cs_…`), so a later change can reach its stored copy. */
+  resourceId?: string | null;
   createdAt: IsoDate;
   /** Epoch ms after which the key may be reused. */
   expiresAtMs: number;
@@ -758,7 +760,7 @@ export const COLLECTIONS = {
   idempotency: {
     name: "idempotency_keys",
     id: (d: IdempotencyRecord) => d.id,
-    indexes: { expiresAtMs: (d: IdempotencyRecord) => d.expiresAtMs },
+    indexes: { expiresAtMs: (d: IdempotencyRecord) => d.expiresAtMs, resourceId: (d: IdempotencyRecord) => d.resourceId ?? null },
   } satisfies CollectionSpec<IdempotencyRecord>,
   relays: {
     name: "relays",

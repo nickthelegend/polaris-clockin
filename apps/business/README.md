@@ -465,14 +465,15 @@ ciphertext sealed to it (`src/server/receipts.ts`):
   minutes old; answers that account's sealed receipts, newest first.
 - **What stays in the clear:** what the chain shows anyway (payer, merchant,
   amount, time, transaction), the merchant's order id and metadata, a payment
-  link's title and a subscription plan's name (the merchant's catalogue), and
-  the response a merchant's `Idempotency-Key` replays (kept 24 hours). Buyers
-  without an inbox (email accounts, which have no PRF) keep today's records.
+  link's title and a subscription plan's name (the merchant's catalogue).
+  The copy of the session an `Idempotency-Key` replays is sealed with it.
+  Buyers without an inbox (email accounts, which have no PRF) keep today's
+  records.
 - **What the merchant sees:** its dashboard and `GET
   /api/v1/checkout/sessions/{id}` show `Sealed for the buyer` in place of the
   description once a sealed payment settles; its own order id stays.
 
-Tested in `test/receipts.test.ts` (registration and forged keys, Pay now,
+Tested in `test/receipts.test.ts` (registration and forged keys, Pay now and its idempotent replay,
 Pay in 4 with a collected instalment, a subscription and its charge, the
 backlog, swapped rows failing to open, no plaintext anywhere in the store
 after settlement, the read route's signature and freshness).
