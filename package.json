@@ -17,6 +17,8 @@
     "contracts:compile": "pnpm --filter @polarispay/contracts compile",
     "contracts:test": "pnpm --filter @polarispay/contracts test",
     "deploy:check": "node scripts/deploy-check.mjs",
-    "test:scripts": "node --test scripts/deploy-check.test.mjs"
+    "docs:check": "node scripts/check-docs-links.mjs",
+    "docs:diffstat": "node scripts/submission-diffstat.mjs",
+    "test:scripts": "node --test scripts/deploy-check.test.mjs \"scripts/test/*.test.mjs\""
   }
 }

@@ -46,6 +46,25 @@ Track 02: Consumer Products & Payments. The plan is in
 
 ---
 
+## Submission
+
+The Metropolis submission kit is in [`docs/submission`](docs/submission):
+
+| File | What it is |
+|---|---|
+| [`writeup.md`](docs/submission/writeup.md) | The write-up: the problem, the product, the first five minutes, how it works, what's new since the foundation import, and one heading per bounty with its requirement, where it is met (code and Monad testnet transactions) and what is not done yet |
+| [`bounty-fields.md`](docs/submission/bounty-fields.md) | Ready-to-paste answers for each bounty's portal fields |
+| [`video-script.md`](docs/submission/video-script.md) | The 3-minute demo: shot list, on-screen text, the command behind each scene |
+| [`profile.md`](docs/submission/profile.md) | Name, one-liner, 50- and 150-word descriptions, track, bounties, tech stack, team |
+| [`diffstat.txt`](docs/submission/diffstat.txt) | `git diff --stat` from the foundation import (`85b29e4`), by folder and in full (`pnpm docs:diffstat` regenerates it) |
+| [`sources.md`](docs/submission/sources.md) | Where each requirement comes from, and what needs the logged-in portal to confirm |
+
+`pnpm docs:check` ([`scripts/check-docs-links.mjs`](scripts/check-docs-links.mjs))
+checks every link in this README and the kit, and every hash and address in
+the kit against the committed deployment and CRE records.
+
+---
+
 ## Run it
 
 Node 22.6+ and pnpm 10.
@@ -193,6 +212,7 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 | | `pnpm --filter @polaris/business privy:prove-policy -- --run` | Privy signed the 3 allowed calls and refused the 7 forbidden ones with `policy_violation` ([output](docs/demo/testnet/privy-prove-policy.txt)) |
 | | `pnpm --filter @polaris/business privy:smoke:harness -- --run` | `privy:smoke -- --run`: a $0.50 Pay now relayed by the Privy server wallet, session paid, the buyer at 0 MON ([output](docs/demo/testnet/privy-smoke.txt)) |
 | Lockfile | `pnpm install --frozen-lockfile` | passes |
+| Docs | `pnpm docs:check`, `pnpm test:scripts` | every link in this README and [`docs/submission`](docs/submission) resolves, every hash in the kit is in the committed evidence; 9 passing |
 
 ---
 
@@ -217,8 +237,8 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 | `packages/brand` | The Polaris mark and wordmark |
 | `packages/keeperhub` | The dunning ladder the collections path uses |
 | [`workflows`](workflows/README.md) | The Chainlink CRE workflows: `polaris-underwrite` (HTTP trigger), `polaris-collections` (cron and an EVM log trigger), `polaris-guardian` (cron, reading Chainlink AUSD/USD on Monad mainnet); and their local runners `trigger:local`, `collections:local`, `guardian:local` |
-| `scripts` | `deploy-check.mjs` (`pnpm deploy:check`, [`docs/deploy.md`](docs/deploy.md)), `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), `demo-e2e-split.cjs` (`pnpm demo:e2e:split`), the Lottie generators |
-| `docs` | [`plan.md`](docs/plan.md), the design contract (`design/system.md`), research, [`demo`](docs/demo) |
+| `scripts` | `deploy-check.mjs` (`pnpm deploy:check`, [`docs/deploy.md`](docs/deploy.md)), `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), `demo-e2e-split.cjs` (`pnpm demo:e2e:split`), `check-docs-links.mjs` (`pnpm docs:check`), `submission-diffstat.mjs` (`pnpm docs:diffstat`), the Lottie generators |
+| `docs` | [`plan.md`](docs/plan.md), the design contract (`design/system.md`), research, [`demo`](docs/demo), the [submission kit](docs/submission) |
 
 ---
 
