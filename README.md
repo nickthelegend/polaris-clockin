@@ -185,7 +185,7 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 
 | Package | Command | Result on this branch |
 |---|---|---|
-| Contracts | `pnpm --filter @polarispay/contracts test` | 580 passing (PolarisSplit's 34 among them) |
+| Contracts | `pnpm --filter @polarispay/contracts test` | 601 passing (PolarisSplit's tests among them) |
 | `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 157 passing; ESM and CJS builds |
 | Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 263 passing |
 | Gateway | `pnpm --filter @polarispay/gateway test` | 7 passing |
@@ -411,8 +411,8 @@ What each sponsor asks for, where this repository meets it, and how to check.
 | Requirement | Where | Verify |
 |---|---|---|
 | Embedded wallets doing real work | The merchant's embedded wallet signs its `MerchantRegistry` registration right after the business is named (`useRegisterMerchant`, `apps/business/src/app/(privy)/login/login-view.tsx`, `components/dashboard/registration.tsx`) and its withdrawals (`useWithdraw`) | `docs/demo/44-dashboard-settings-registered.png` (the same API, signed by the local session's wallet) |
-| Policy-controlled server wallets | The relayer is a Privy server wallet (`src/server/relayer/signer.ts`) held to a policy (`src/server/policy/relayer.ts`: deny MON, allow each Polaris function, $0.10 floor); automatic payouts via `addSigners` with a per-merchant policy (`src/server/policy/payout.ts`) | `pnpm --filter @polaris/business test` (policy tests); `privy:prove-policy -- --run` and `privy:smoke -- --run` need your Privy app |
-| Shown live | *Not yet*: every run here used `RELAYER_MODE=local` with Privy off | [What only you can do](#what-only-you-can-do), step 4 |
+| Policy-controlled server wallets | The relayer is a Privy server wallet (`src/server/relayer/signer.ts`) held to a policy (`src/server/policy/relayer.ts`: deny MON, allow each Polaris function, $0.10 floor); automatic payouts via `addSigners` with a per-merchant policy (`src/server/policy/payout.ts`) | `pnpm --filter @polaris/business test` (policy tests); `privy:prove-policy -- --run` ([output](docs/demo/testnet/privy-prove-policy.txt)) and `privy:smoke -- --run` ([output](docs/demo/testnet/privy-smoke.txt)) |
+| Shown live | **Done on Monad testnet** (28 Sep 2026): the relayer and the registry admin are Privy server wallets under their policies; Privy refused the 7 forbidden calls; `smoke:testnet` ran 14 of 14 through them ([`apps/business/privy-live.md`](apps/business/privy-live.md)). `pnpm demo:local` still uses the dev adapter with Privy off | [`docs/demo/testnet`](docs/demo/testnet/README.md) |
 
 ### Chainlink CRE: an orchestration layer
 
@@ -444,8 +444,8 @@ Two related pieces use Chainlink but are not CRE workflows:
 
 The receivers are deployed and wired, and the smoke test drove real
 transactions through the checkout that asks them (see
-[Monad testnet deployment](#monad-testnet-deployment)); no CRE report has
-reached them yet. `pnpm --filter @polarispay/contracts check:deployment:monad`
+[Monad testnet deployment](#monad-testnet-deployment)); the CRE reports that
+reached them are [below](#cre-runs-on-monad-testnet-28-sep-2026). `pnpm --filter @polarispay/contracts check:deployment:monad`
 reads all of it back (65 of 65, after the guardian's redeploy:
 [`monad-testnet.check.txt`](packages/contracts/deployments/monad-testnet.check.txt)).
 
@@ -517,7 +517,7 @@ read, labelled `description() = "Polaris pool health, computed by CRE"`
   the pool's reasons and the price's apart. `currentInputs()` is the
   workflow's own read of the pool, the thresholds and the acknowledged bad
   debt.
-- On Monad testnet now: `latestRound() = 0` (no CRE run yet), so the price
+- On Monad testnet before the first CRE run (28 Sep 2026): `latestRound() = 0`, so the price
   fails open, and the pool, read live, passes: free cash $9,800, owed
   $200.000152, no bad debt, $200 lent (under the $10,000 floor). So
   `creditPaused() = (false, 0)`. Thresholds $0.995 to $1.005 / $1,000 /
@@ -556,7 +556,7 @@ Basic header and Etherscan's POST body:
 | "Verified by Chainlink CRE" on a credit line | Only for a report delivered through Chainlink's KeystoneForwarder (DON-signed). A simulated run's report reads "Chainlink CRE (simulated)", a local one "CRE workflow, local run" (`apps/business` `src/server/cre/provenance.ts`) |
 | AUSD/USD | **Real**: Chainlink's feed on Monad mainnet, read only; nothing writes to mainnet |
 | The dollar on testnet | **Mock**: `MockAUSD` ("Mock AUSD"), because the deployer held no testnet AUSD for the pool (decision 24) |
-| The relayer on testnet | **The dev adapter** (a generated testnet key, `RELAYER_MODE=local` with `RELAYER_LOCAL_ALLOW_TESTNET=1`), standing in for the Privy server wallet, which does not exist yet |
+| The relayer on testnet | **A Privy server wallet** under its policy (`RELAYER_MODE=privy`), since 28 Sep 2026; the earlier dev adapter key is kept in `roles.previousRelayers` |
 | The demo's pause | The owner raises the depeg threshold above the real price ("threshold raised for demo"). The price is never faked |
 
 **End to end on a local chain, headless** (`DEMO_FAST_PLANS=1 pnpm demo:local`,
@@ -612,11 +612,10 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 
 - **Everything on-chain in `docs/demo` is a local Hardhat chain**, deployed by
   the same script as testnet. Receipts there link nowhere (no explorer).
-- **On Monad testnet** the contracts are real, but the dollar is `MockAUSD`
-  (a labelled mock anyone can mint), and the relayer is the dev adapter's
-  generated key, not the Privy server wallet. The smoke test's Pay in 4 line
-  is secured by collateral, because no CRE underwriting report has run there
-  yet.
+- **On Monad testnet** the contracts are real and the relayer is the Privy
+  server wallet, but the dollar is `MockAUSD` (a labelled mock anyone can
+  mint). The smoke test's Pay in 4 line is secured by collateral, because no
+  CRE underwriting report has run there yet.
 - **The dev signer** stands in for Face ID in the demo (a key kept in the
   browser; badge on every screen).
 - **The CRE runs** in the demo are the real workflow handlers on the SDK's test
@@ -650,8 +649,8 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
      (or `fund-pool:monad` on a real-AUSD deployment) replaces the mock dollar.
    - **PolarisSplit** (split the bill): `pnpm --filter @polarispay/contracts deploy-split:monad`
      (one transaction, about 1.9M gas; nothing else moves), then restart
-     Polaris for Business, `privy:setup-relayer -- --apply` once the relayer
-     is Privy's, and `check:deployment:monad`.
+     Polaris for Business, `privy:setup-relayer -- --apply` (to add it to
+     the Privy relayer's policy), and `check:deployment:monad`.
    - Optional: a PolarisCheckout redeploy for the two `reauthorize` fixes
      (it moves every address the apps, the indexer and the workflows use, so
      after the freeze). The deployer has about 0.30 MON left.
@@ -676,12 +675,13 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 3. **Nansen, Zerion, Etherscan:** create API keys (ask Nansen for credits) and
    run `pnpm --filter @polarispay/underwriting record --linked <a consenting wallet>`
    to replace the synthesized fixtures.
-4. **Privy:** turn on email and Google login and the allowed domains; run
-   `pnpm --filter @polaris/business privy:setup-relayer -- --apply --registry-admin`,
-   `privy:setup-payouts -- --apply`, `grant-relayer:monad`,
-   `privy:prove-policy -- --run` and `privy:smoke -- --run`; set
-   `PRIVY_ADMIN_QUORUM_ID`, `REGISTRY_ACTIVATOR=privy` and move the registry
-   to the Privy admin (`scripts/transfer-registry-owner.mjs`).
+4. **Privy:** the server wallets, their policies, the relayer's roles and the
+   registry's move are done on Monad testnet
+   ([`apps/business/privy-live.md`](apps/business/privy-live.md)). Left, in
+   the Privy dashboard: turn on email and Google login, add the hosted
+   origins as allowed domains, and move the admin key quorum's key
+   (`apps/business/.privy-admin.key`) into a password manager and delete the
+   file.
 5. **Envio:** log in to Envio Cloud, install its GitHub app, deploy
    `packages/indexer` (see its README), and set `POLARIS_INDEXER_URL` on the
    API and `candidates.indexerUrl` in the CRE configs.
