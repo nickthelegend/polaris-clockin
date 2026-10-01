@@ -386,6 +386,45 @@ for Face ID in the local demo; captioned).
 **Question for Mera** (ask before submitting): is the email option beside
 Face ID acceptable?
 
+## Mera: One Passkey, Many Keys
+
+The $2,500 bounty for the most creative non-wallet use of Mera's PRF-derived
+key material. Our entry: **receipts only you can read**.
+
+**Short description:**
+
+```text
+The Face ID that makes your Polaris account also seals your purchase history. The same passkey PRF output that derives the wallet key derives, by HKDF labels of their own, an encryption key and an X25519 inbox key, in the same ceremony: no extra prompt. What you bought is stored on our server only as ciphertext sealed to that inbox, and opens in your Activity with your Face ID. Our database holds your purchase history as ciphertext only your Face ID opens.
+```
+
+**How Mera's key material is used:**
+
+```text
+One Face ID, three keys. Mera's createPasskeyWithPrfOutput / getPasskeyPrfOutput give a 32-byte PRF output. From it the app derives: the wallet key (BIP-39, m/44'/60'/0'/0/0, unchanged); an AES-256-GCM key (HKDF-SHA-256, label polaris/v1/receipts/aes-256-gcm, non-extractable); and an X25519 key pair (RFC 9180 DeriveKeyPair of HKDF label polaris/v1/receipts/hpke-x25519-ikm). Distinct, versioned labels, never Mera's own vault label, intermediate bytes zeroed, nothing stored: every sign-in derives the same keys again, on every device the passkey syncs to.
+
+Why a public key: receipts are written when the buyer isn't there (a Pay in 4 instalment collected, a subscription renewed). So the account registers its inbox public key with our API, signed by the account itself (EIP-191); the server never takes a passkey ceremony as proof. When a payment settles, the server seals what was bought (the merchant's description, line items, order reference, the plan's schedule) with RFC 9180 HPKE (DHKEM X25519, HKDF-SHA256, AES-256-GCM) to that key, then drops the plaintext. The AAD binds each ciphertext to its owner and receipt id, so rows can't be swapped between buyers or records.
+
+Opening: with the account open, the app signs a read request and opens the receipt with the session's keys, no prompt. Locked, it shows "Only your Face ID can open this", and one Face ID opens it. Email accounts have no PRF, so their receipts stay as before, and Settings says so.
+
+What stays public: what the chain shows (payer, merchant, amount, time). What becomes private: what you bought.
+
+Keys and sealing: https://github.com/nickthelegend/polaris-monad/blob/main/packages/receipts/src/keys.ts
+The ceremony: https://github.com/nickthelegend/polaris-monad/blob/main/apps/app/src/lib/account/mera.ts
+Sealing at settlement: https://github.com/nickthelegend/polaris-monad/blob/main/apps/business/src/server/receipts.ts
+Opening on Activity: https://github.com/nickthelegend/polaris-monad/blob/main/apps/app/src/components/sealed-receipt.tsx
+Tests: https://github.com/nickthelegend/polaris-monad/blob/main/apps/business/test/receipts.test.ts
+Write-up: https://github.com/nickthelegend/polaris-monad/blob/main/docs/submission/writeup.md#mera-one-passkey-many-keys
+```
+
+**Not done yet:** opening a receipt after a real Face ID on a phone (the app
+is not hosted yet; the demo's dev signer derives the same keys from a
+stand-in PRF output). The AES key is derived and tested but nothing writes
+with it yet (private notes on a receipt are next).
+
+**Video:** `[m:ss]`, the beat in [`docs/research/mera.md` §16.7](../research/mera.md#167-demo-beat):
+pay, then open Activity on another device with Face ID and see the line
+items; cut to the database row, `enc` and `ct` in base64url. Not recorded yet.
+
 ## Envio
 
 **Short description:**

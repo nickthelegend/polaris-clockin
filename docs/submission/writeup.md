@@ -632,6 +632,41 @@ buyer's linked history wallet; a new testnet account goes through Zerion
   Whether that fits "the entire account layer" is a question for Mera; the
   option can be removed.
 
+### Mera: One Passkey, Many Keys
+
+**Requirement** (the bounty's title on the portal, as our brief records it):
+
+> Most creative non-wallet use of Mera's PRF-derived key material.
+
+Our entry is **receipts only you can read**: the Face ID that derives the
+wallet key also seals the buyer's purchase history, so our database holds it
+as ciphertext only their Face ID opens. The design, its sources and the
+options weighed are in [`docs/research/mera.md` §16](../research/mera.md#16-receipts-only-you-can-read-the-non-wallet-use-of-prf-key-material);
+we ship option A (keys from the sign-in PRF output: no extra prompt).
+
+**Where it is met** ([`apps/app` README, "Receipts only you can read"](../../apps/app/README.md#receipts-only-you-can-read)):
+
+| Requirement | Where |
+|---|---|
+| Keys other than the wallet's, from the PRF output | [`packages/receipts/src/keys.ts`](../../packages/receipts/src/keys.ts): HKDF-SHA-256 with one versioned label per key (`polaris/v1/receipts/aes-256-gcm`, `polaris/v1/receipts/hpke-x25519-ikm`), a non-extractable AES-256-GCM key and an RFC 9180 `DeriveKeyPair` X25519 inbox key pair; intermediate bytes zeroed; nothing stored |
+| In the same ceremony, the wallet untouched | [`mera.ts`](../../apps/app/src/lib/account/mera.ts) derives them from the PRF output of the create or sign-in ceremony before zeroing it; [`derive.ts`](../../apps/app/src/lib/account/derive.ts) is unchanged, and a test pins an address from it |
+| A use that isn't the wallet | What was bought (description, line items, order, the plan's schedule) is sealed to the inbox key with HPKE when a payment settles, including the receipts the server writes while the buyer is away (instalments collected, subscription charges), and the plaintext is dropped ([`server/receipts.ts`](../../apps/business/src/server/receipts.ts), [`ingest.ts`](../../apps/business/src/server/ingest/ingest.ts)) |
+| The server can't swap or forge | The AAD is `polaris.receipt.v1`, the owner and the receipt id; the inbox key is accepted only with the account's own EIP-191 signature, and receipts are served only for a fresh one ([`test/receipts.test.ts`](../../apps/business/test/receipts.test.ts)) |
+| The buyer's path | Activity and the payment's details show **Only your Face ID can open this** until the session opens it; with the account open, no prompt ([`sealed-receipt.tsx`](../../apps/app/src/components/sealed-receipt.tsx)). Settings explains it; email accounts, which have no PRF, are told their receipts are not sealed |
+
+**Not done yet, and why:**
+
+- **Not opened with a real Face ID on a phone.** The app is not hosted on a
+  domain inside its passkey rpId yet; the demo's dev signer derives the same
+  keys from a stand-in PRF output instead.
+- **The AES key has no writer yet.** It is derived and tested; private notes
+  on a receipt would use it.
+- **What stays in the clear:** what the chain shows anyway, the merchant's
+  order id and metadata, and a payment link's title and a subscription
+  plan's name (the merchant's catalogue, shared by every buyer).
+- **Option B** (a PRF namespace of its own, so even the recovery phrase
+  couldn't read receipts) is not built: it costs a second Face ID.
+
 ### Envio
 
 **Requirement** ([`docs/plan.md` §3](../plan.md#3-sponsor-strategy), Envio, all tracks):

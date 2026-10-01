@@ -27,6 +27,7 @@
     "@fontsource-variable/jetbrains-mono": "5.3.0",
     "@polaris/brand": "workspace:*",
     "@polaris/db": "workspace:*",
+    "@polaris/receipts": "workspace:*",
     "@polaris/ui": "workspace:*",
     "@polarispay/contracts": "workspace:*",
     "@polarispay/indexer-client": "workspace:*",

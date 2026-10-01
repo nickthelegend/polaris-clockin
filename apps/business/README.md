@@ -419,8 +419,11 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
   payments to Polaris merchants, from chain events, with only what the chain
   already shows (no descriptions, order ids or metadata); every other dollar
   in or out (`moves`, with `split-paid` and `split-received` naming the
-  split and the share); and `splits`, the split-the-bill links the address
-  organised.
+  split and the share); `splits`, the split-the-bill links the address
+  organised; and `receipts`, which rows have a receipt sealed to the buyer
+  (id, kind, transaction, amount; never what is in one).
+- `POST /api/receipts/inbox`, `POST /api/receipts`: receipts only the buyer
+  can read (below).
 - `GET /api/public/splits/{id}`: a split-the-bill link's status for its page:
   PolarisSplit's `splitOf`/`sharesOf` read now (who organised it, each
   share's amount and payer, open, settled, closed or expired), with when each
@@ -434,6 +437,46 @@ report, and the workflow runs on an HTTP trigger. The product fires it:
   credit (above).
 - `GET /api/public/network`: the contracts and EIP-712 domains.
 - `GET /api/public/credit-guard`: the risk guard (below).
+
+## Receipts only the buyer can read
+
+The buyer's Face ID derives an X25519 inbox key pair beside the wallet key
+([`@polaris/receipts`](../../packages/receipts/README.md),
+`docs/research/mera.md` §16). The server keeps what was bought only as
+ciphertext sealed to it (`src/server/receipts.ts`):
+
+- `POST /api/receipts/inbox` `{ address, inboxPublicKey, signature }`: the
+  account's EIP-191 signature over `Polaris receipts key <inboxPublicKey>` is
+  the credential (a passkey ceremony proves nothing to a server). Stored in
+  `receipt_inboxes`. Registering also seals whatever this buyer's records
+  still hold in the clear (what settled before they registered).
+- **At settlement** (`ingest/ingest.ts`): Pay now, a Pay in 4 plan opening, a
+  subscription starting, each subscription charge and each collected
+  instalment write a sealed receipt (`sealed_receipts`: `enc` and `ct`,
+  RFC 9180 HPKE, AAD `polaris.receipt.v1|<owner>|<id>`) when the payer has an
+  inbox. Then the session's description and line items, and the payment's
+  and plan's descriptions, become `Sealed for the buyer`
+  (`SEALED_DESCRIPTION`); the session records `sealedAt`. An instalment's or
+  a charge's receipt points at its plan's or subscription's
+  (`refersTo`). A settlement that doesn't pay its session is never sealed to
+  its payer.
+- `POST /api/receipts` `{ address, issuedAt, signature }`: the account's
+  signature over `receiptsReadMessage(address, issuedAt)`, at most five
+  minutes old; answers that account's sealed receipts, newest first.
+- **What stays in the clear:** what the chain shows anyway (payer, merchant,
+  amount, time, transaction), the merchant's order id and metadata, a payment
+  link's title and a subscription plan's name (the merchant's catalogue).
+  The copy of the session an `Idempotency-Key` replays is sealed with it.
+  Buyers without an inbox (email accounts, which have no PRF) keep today's
+  records.
+- **What the merchant sees:** its dashboard and `GET
+  /api/v1/checkout/sessions/{id}` show `Sealed for the buyer` in place of the
+  description once a sealed payment settles; its own order id stays.
+
+Tested in `test/receipts.test.ts` (registration and forged keys, Pay now and its idempotent replay,
+Pay in 4 with a collected instalment, a subscription and its charge, the
+backlog, swapped rows failing to open, no plaintext anywhere in the store
+after settlement, the read route's signature and freshness).
 
 ## Chainlink: the risk guard, signing again, and what each CRE report did
 
@@ -520,6 +563,7 @@ src/server/webhooks/           events.ts (emit), dispatcher.ts (deliver, retry)
 src/server/payouts/            withdrawals and the automatic sweep
 src/server/onboarding.ts       MerchantRegistry registration and activation (after settlement history)
 src/server/credit/             CRE underwriting: the texts to sign, the request queue and trigger, the signed callbacks
+src/server/receipts.ts         receipts sealed to the buyer's inbox key: registration, sealing at settlement, the backlog, reads
 src/server/services.ts         the dashboard's reads and writes
 src/instrumentation.ts         starts the background loops on a long-running server
 packages/db                    the store, the record schema, key hashing, webhook signing and delivery

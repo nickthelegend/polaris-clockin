@@ -189,7 +189,20 @@ export type CheckoutSessionRecord = {
   payment: SessionPayment | null;
   /** Settlements of this order that didn't match the session. */
   mismatches?: SessionMismatch[];
+  /**
+   * When the description and line items were sealed to the buyer and dropped
+   * from this record (the buyer has a receipts inbox). Absent or null: the
+   * plaintext is still here.
+   */
+  sealedAt?: IsoDate | null;
 };
+
+/**
+ * What a record says in place of the description once it is sealed to the
+ * buyer: the merchant's dashboard and API show this, and the order id and
+ * metadata, which stay.
+ */
+export const SEALED_DESCRIPTION = "Sealed for the buyer";
 
 /* ── Idempotency ────────────────────────────────────────────────────────── */
 
@@ -201,6 +214,8 @@ export type IdempotencyRecord = {
   status: number | null;
   /** The response body, as sent. */
   body: string | null;
+  /** The id of what the response created (a session's `cs_…`), so a later change can reach its stored copy. */
+  resourceId?: string | null;
   createdAt: IsoDate;
   /** Epoch ms after which the key may be reused. */
   expiresAtMs: number;
@@ -281,6 +296,8 @@ export type PaymentRecord = {
    * is not paid.
    */
   mismatch?: string | null;
+  /** The sealed receipt that holds this payment's description; `description` is then `SEALED_DESCRIPTION`. */
+  receiptId?: string | null;
   sample?: boolean;
 };
 
@@ -314,6 +331,8 @@ export type PlanRecord = {
    */
   reauthorized?: { at: IsoDate; txHash: Hex; collected: { at: IsoDate; txHash: Hex } | null } | null;
   openedTxHash: Hex;
+  /** The sealed receipt that holds this plan's description; `description` is then `SEALED_DESCRIPTION`. */
+  receiptId?: string | null;
   createdAt: IsoDate;
   updatedAt: IsoDate;
   sample?: boolean;
@@ -333,6 +352,8 @@ export type SubscriptionRecord = {
   status: "active" | "canceled" | "lapsed";
   orderId: string | null;
   sessionId: string | null;
+  /** The sealed receipt of what was subscribed to (`subscription:<id>`), once sealed. */
+  receiptId?: string | null;
   createdAt: IsoDate;
   updatedAt: IsoDate;
 };
@@ -658,6 +679,48 @@ export type ReauthorizationRecord = { id: string; buyer: Address; valueUnits: st
 /** A CRE callback we have handled, by its id: every DON node may deliver it. */
 export type CreCallbackRecord = { id: string; type: string; receivedAt: IsoDate };
 
+/* ── Receipts only the buyer can read ───────────────────────────────────── */
+
+/**
+ * A buyer's receipts inbox: the X25519 public key their Face ID derives
+ * (@polaris/receipts), registered with the account's own signature over it.
+ * Public by nature; the private half never leaves the buyer's device.
+ */
+export type ReceiptInboxRecord = {
+  /** The account, lowercased. */
+  id: string;
+  /** `0x` + 64 hex: the 32-byte HPKE X25519 public key. */
+  publicKey: Hex;
+  /** The account's EIP-191 signature over `Polaris receipts key <publicKey>`. */
+  signature: Hex;
+  registeredAt: IsoDate;
+  updatedAt: IsoDate;
+};
+
+/**
+ * A receipt sealed to a buyer's inbox (RFC 9180 HPKE): what was bought,
+ * readable only with the buyer's Face ID. The AAD binds it to `owner` and
+ * `id`, so a row can't be served as another row or another buyer's. The
+ * id is the payment record's (`0x…` Pay now, `plan:<loanId>`,
+ * `sub:<subId>:<period>`), or `subscription:<subId>`, `instalment:<loanId>:<n>`.
+ */
+export type SealedReceiptRecord = {
+  id: string;
+  /** The buyer, lowercased. */
+  owner: string;
+  kind: "payment" | "plan" | "subscription" | "subscription-charge" | "instalment";
+  /** HPKE's encapsulated key, base64url (32 bytes). */
+  enc: string;
+  /** The ciphertext, base64url. */
+  ct: string;
+  /** The transaction it belongs to: public on chain, and how the app pairs it with an activity row. */
+  txHash: Hex | null;
+  /** The public amount of that row, base units, to tell two receipts of one transaction apart. */
+  amountUnits: string | null;
+  merchantId: string | null;
+  createdAt: IsoDate;
+};
+
 /* ── Collections ────────────────────────────────────────────────────────── */
 
 const lower = (a: string | null | undefined) => (a ? a.toLowerCase() : null);
@@ -697,7 +760,7 @@ export const COLLECTIONS = {
   idempotency: {
     name: "idempotency_keys",
     id: (d: IdempotencyRecord) => d.id,
-    indexes: { expiresAtMs: (d: IdempotencyRecord) => d.expiresAtMs },
+    indexes: { expiresAtMs: (d: IdempotencyRecord) => d.expiresAtMs, resourceId: (d: IdempotencyRecord) => d.resourceId ?? null },
   } satisfies CollectionSpec<IdempotencyRecord>,
   relays: {
     name: "relays",
@@ -851,6 +914,20 @@ export const COLLECTIONS = {
     id: (d: FailedLogRecord) => d.id,
     indexes: { blockNumber: (d: FailedLogRecord) => d.blockNumber, dead: (d: FailedLogRecord) => d.deadAt !== null },
   } satisfies CollectionSpec<FailedLogRecord>,
+  receiptInboxes: {
+    name: "receipt_inboxes",
+    id: (d: ReceiptInboxRecord) => d.id,
+    indexes: { registeredAt: (d: ReceiptInboxRecord) => d.registeredAt },
+  } satisfies CollectionSpec<ReceiptInboxRecord>,
+  receipts: {
+    name: "sealed_receipts",
+    id: (d: SealedReceiptRecord) => d.id,
+    indexes: {
+      owner: (d: SealedReceiptRecord) => d.owner.toLowerCase(),
+      txHash: (d: SealedReceiptRecord) => lower(d.txHash),
+      createdAt: (d: SealedReceiptRecord) => d.createdAt,
+    },
+  } satisfies CollectionSpec<SealedReceiptRecord>,
 } as const;
 
 /** Every collection, typed, over one store. */
@@ -881,6 +958,8 @@ export function collections(store: Store) {
     creCallbacks: store.collection(COLLECTIONS.creCallbacks),
     creRuns: store.collection(COLLECTIONS.creRuns),
     reauthorizations: store.collection(COLLECTIONS.reauthorizations),
+    receiptInboxes: store.collection(COLLECTIONS.receiptInboxes),
+    receipts: store.collection(COLLECTIONS.receipts),
   };
 }
 

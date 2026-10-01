@@ -14,7 +14,7 @@ import {
   Skeleton,
   useIsDesktop,
 } from "@polaris/ui";
-import { Bell, CircleHelp, Link2, LogOut, ScanFace, Settings, ShieldCheck, WalletCards } from "lucide-react";
+import { Bell, CircleHelp, Link2, LockKeyhole, LogOut, ScanFace, Settings, ShieldCheck, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { photoFor } from "@/components/avatars";
@@ -34,6 +34,7 @@ const HOW = [
   { icon: <WalletCards />, title: "Pay now, in four, or every month", body: "Pay in 4 shows every payment and the total interest before you confirm." },
   { icon: <Link2 />, title: "Send dollars with a link", body: "Share it anywhere. Whoever opens it gets the dollars in under a second." },
   { icon: <ShieldCheck />, title: "Only you can move your money", body: "Every payment needs your confirmation. Polaris covers the cost of every payment." },
+  { icon: <LockKeyhole />, title: "Only you can read your receipts", body: "With Face ID, what you buy is sealed to your account. Polaris keeps it, but can't read it." },
 ];
 
 /** Profile, on ref D's account card: who you are, how you sign in, settings, and sign out. */

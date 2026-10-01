@@ -27,6 +27,7 @@ import { RelayRejected, RelayUnavailable } from "./relayer/submit";
  * | `withSecretKey`      | `sk_test_…` API key                          | merchants' servers (the SDK)     |
  * | `withPublishableKey` | `pk_test_…` API key                          | merchants' pages (SDK direct pay)|
  * | `withSignedRequest`  | the payer's own EIP-712 / ERC-3009 signature | the Polaris app's relay calls    |
+ * |                      | or EIP-191 (credit consent, receipts)        | and its credit and receipts calls|
  * | `withPublic`         | none: public data only, rate-limited         | the hosted checkout's reads      |
  * | `withCron`           | `CRON_SECRET`                                | schedulers                       |
  *

@@ -17,10 +17,11 @@ import {
   Skeleton,
   StatusPill,
 } from "@polaris/ui";
-import { Bell, Link2, LogOut, ScanFace, Settings2, ShieldCheck, Trash2, User, WalletCards } from "lucide-react";
+import { Bell, Link2, LockKeyhole, LogOut, ScanFace, Settings2, ShieldCheck, Trash2, User, WalletCards } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
 import { useAccounts } from "@/components/accounts";
+import { ReceiptsPrivacyRow } from "@/components/receipts-privacy";
 import { photoFor } from "@/components/avatars";
 import { useNotices } from "@/components/use-notices";
 import { DEV_SIGNER, signIn, signOut } from "@/lib/account";
@@ -213,6 +214,13 @@ export function SettingsDesktop() {
                 wrapperClassName="mt-5 max-w-[480px]"
               />
             </PanelCard>
+            {hasAccount && source ? (
+              <PanelCard title="Privacy" subtitle="What Polaris can and can't see.">
+                <ListGroup className="mt-4">
+                  <ReceiptsPrivacyRow source={source} icon={<LockKeyhole />} />
+                </ListGroup>
+              </PanelCard>
+            ) : null}
             {hasAccount ? (
               <PanelCard title="Account" subtitle="Your account and your money stay safe either way.">
                 <ListGroup className="mt-4">

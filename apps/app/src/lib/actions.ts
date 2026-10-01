@@ -6,6 +6,7 @@ import { publicClient } from "./chain";
 import type { PaymentLink, Person, Plan } from "./data/types";
 import { getDomain, isConfigured, resolveContract } from "./domains";
 import { amountParam, type Micros, usd } from "./money";
+import { inboxReady } from "./receipts/inbox";
 import { RELAYER_IS_STUB, RelayError, type RelayReceipt, relayer, type Signed } from "./relayer";
 import { memoHash, rememberSplit, SPLIT_LIFETIME_DAYS, type SplitMemo, splitUrl } from "./split";
 import {
@@ -128,6 +129,8 @@ export async function payLink(
   mode: PayMode,
   opts: { outstanding?: Micros } = {},
 ): Promise<RelayReceipt> {
+  // A first payment right after Face ID created the account: let its inbox key land, so the receipt is sealed as it settles.
+  await inboxReady(account.address);
   const t = now();
   if (mode === "now") {
     const [domain, payments] = await Promise.all([getDomain("ausd"), resolveContract("payments")]);

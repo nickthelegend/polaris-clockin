@@ -3,6 +3,7 @@
 import { Coin, cn, type CoinTone, Money, PairHeader, StatusPill, type StatusPillTone, TableName, type TableColumn } from "@polaris/ui";
 import type { ReactNode } from "react";
 import { ActivityAvatar } from "@/components/avatars";
+import { ReceiptWhat } from "@/components/sealed-receipt";
 import { type ActivityItem, SAMPLE_DATA } from "@/lib/data";
 import { shortDate, time } from "@/lib/dates";
 import { movesBalance, n, signed, when } from "@/lib/view";
@@ -103,7 +104,7 @@ export function activityColumns({
       hideBelow: "xl",
       render: (a) => (
         <span className="block max-w-[240px] truncate" title={whatOf(a)}>
-          {whatOf(a)}
+          {a.receiptId ? <ReceiptWhat item={a} fallback={whatOf(a)} /> : whatOf(a)}
         </span>
       ),
     },

@@ -100,6 +100,17 @@ describe.each(stores)("%s store", (_name, open) => {
     expect(() => collections(store)).not.toThrow();
   });
 
+  it("finds a buyer's sealed receipts by owner and transaction, whatever the case they were written in", async () => {
+    const db = collections(open());
+    const base = { kind: "payment" as const, enc: "ZW5j", ct: "Y3Q", amountUnits: "1", merchantId: "m", createdAt: "2026-10-01T00:00:00.000Z" };
+    await db.receipts.insert({ ...base, id: "0xa", owner: "0xAbC0000000000000000000000000000000000001", txHash: "0xFF01" });
+    await db.receipts.insert({ ...base, id: "0xb", owner: "0xdef0000000000000000000000000000000000002", txHash: null });
+    expect((await db.receipts.find({ owner: "0xabc0000000000000000000000000000000000001" })).map((r) => r.id)).toEqual(["0xa"]);
+    expect((await db.receipts.find({ txHash: "0xff01" })).map((r) => r.id)).toEqual(["0xa"]);
+    await db.receiptInboxes.upsert({ id: "0xabc0000000000000000000000000000000000001", publicKey: `0x${"11".repeat(32)}`, signature: "0x00", registeredAt: base.createdAt, updatedAt: base.createdAt });
+    expect(await db.receiptInboxes.get("0xabc0000000000000000000000000000000000001")).toMatchObject({ publicKey: `0x${"11".repeat(32)}` });
+  });
+
   it("refuses queries on fields that aren't indexed", async () => {
     const c = open().collection(spec);
     await expect(c.find({ nope: 1 })).rejects.toThrow(/not an indexed field/);

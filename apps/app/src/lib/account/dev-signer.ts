@@ -1,5 +1,7 @@
+import type { ReceiptKeys } from "@polaris/receipts";
 import { type Hex, isHex, type LocalAccount } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+import { devReceiptKeys } from "./dev-receipts";
 import { AccountError } from "./errors";
 
 /**
@@ -54,7 +56,11 @@ function read(): DevRecord | null {
   }
 }
 
-export type DevSession = { account: LocalAccount; createdAt: number };
+export type DevSession = { account: LocalAccount; createdAt: number; receipts: ReceiptKeys | null };
+
+async function open(record: DevRecord): Promise<DevSession> {
+  return { account: privateKeyToAccount(record.privateKey), createdAt: record.createdAt, receipts: await devReceiptKeys(record.privateKey) };
+}
 
 export async function devCreate(): Promise<DevSession> {
   assertEnabled();
@@ -64,14 +70,14 @@ export async function devCreate(): Promise<DevSession> {
   } catch {
     /* the account still works for this page */
   }
-  return { account: privateKeyToAccount(record.privateKey), createdAt: record.createdAt };
+  return open(record);
 }
 
 export async function devSignIn(): Promise<DevSession> {
   assertEnabled();
   const record = read();
   if (!record) throw new AccountError("no-account", "No dev account in this tab yet");
-  return { account: privateKeyToAccount(record.privateKey), createdAt: record.createdAt };
+  return open(record);
 }
 
 /** The dev account's public address, for "locked" state. Never the key. */

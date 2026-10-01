@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   isDuplicateKeyError,
+  SEALED_DESCRIPTION,
   type CheckoutMode,
   type CheckoutSessionRecord,
   type MerchantRecord,
@@ -27,6 +28,7 @@ import { centsToUnits, formatUnits, installmentAmounts, thresholdFor, unitsToCen
 import { getDb } from "../db";
 import type { ChainConfig } from "../env";
 import { merchantByWallet } from "../merchants";
+import { chargeReceipt, instalmentReceipt, paymentReceipt, planReceipt, scrubSession, sealIfInbox, subscriptionReceipt } from "../receipts";
 import { periodSeconds } from "../sessions/params";
 import { emitEvent } from "../webhooks/events";
 import { recordSharePaid, recordSplitClosed, recordSplitCreated } from "../split";
@@ -373,6 +375,9 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
   const payer = getAddress(a.payer as string);
   const chainOrderId = String(a.orderId);
   const mismatch = session ? settlementMismatch(session, { mode: "now", amount }) : null;
+  // What was bought, sealed to the payer's receipts inbox when they have one (../receipts.ts). Never for
+  // a settlement that doesn't pay its session: that payer isn't the session's buyer.
+  const receiptId = mismatch ? null : await sealIfInbox(payer, () => paymentReceipt({ owner: payer, paymentId, merchant, session, amount, orderId: chainOrderId, txHash: log.txHash, at }));
 
   await getDb().payments.upsert({
     id: paymentId,
@@ -381,7 +386,7 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
     sessionId: session?.id ?? null,
     linkId: mismatch ? null : (session?.linkId ?? null),
     orderId: session?.orderId ?? chainOrderId,
-    description: session?.description ?? "Payment",
+    description: receiptId ? SEALED_DESCRIPTION : (session?.description ?? "Payment"),
     payer,
     amountUnits: amount.toString(),
     feeUnits: fee.toString(),
@@ -389,6 +394,7 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
     blockNumber: log.blockNumber,
     createdAt: at,
     mismatch,
+    receiptId,
   });
   if (session && mismatch) {
     await recordMismatch(session, { mode: "now", payer, txHash: log.txHash, reason: mismatch, expectedUnits: centsToUnits(session.amountCents).toString(), gotUnits: amount.toString(), at });
@@ -411,6 +417,8 @@ async function onPaymentMade(log: Decoded, ctx: Ctx): Promise<number> {
       at,
       unitsToCents(amount),
     );
+    // Sealed: the session keeps no description or line items.
+    if (receiptId) await scrubSession(session.id, at);
   }
   await emitEvent({
     merchant,
@@ -462,7 +470,7 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
   const mismatch = session ? settlementMismatch(session, { mode: "later", amount: principal }) : null;
 
   const existing = await db.plans.get(loanId);
-  const plan: PlanRecord = existing ?? {
+  let plan: PlanRecord = existing ?? {
     id: loanId,
     merchantId: merchant.id,
     sessionId: mismatch ? null : (session?.id ?? null),
@@ -483,7 +491,12 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
     createdAt: at,
     updatedAt: at,
   };
-  if (!existing) await db.plans.upsert(plan);
+  if (!existing) {
+    const opened = plan;
+    const receiptId = mismatch ? null : await sealIfInbox(borrower, () => planReceipt({ plan: opened, merchant, session, description: session && !session.sealedAt ? session.description : null }));
+    if (receiptId) plan = { ...plan, description: SEALED_DESCRIPTION, receiptId };
+    await db.plans.upsert(plan);
+  }
   await db.payments.upsert({
     id: `plan:${loanId}`,
     merchantId: merchant.id,
@@ -499,6 +512,7 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
     blockNumber: log.blockNumber,
     createdAt: at,
     mismatch,
+    receiptId: plan.receiptId ?? null,
   });
   if (session && mismatch) {
     await recordMismatch(session, { mode: "later", payer: borrower, txHash: log.txHash, reason: mismatch, expectedUnits: centsToUnits(session.amountCents).toString(), gotUnits: principal.toString(), at });
@@ -511,6 +525,7 @@ async function onPlanOpened(log: Decoded, ctx: Ctx): Promise<number> {
       at,
       unitsToCents(principal),
     );
+    if (plan.receiptId) await scrubSession(session.id, at);
   }
   await emitEvent({
     merchant,
@@ -621,6 +636,8 @@ async function onInstallmentPaid(log: Decoded, ctx: Ctx): Promise<number> {
   const ladder = installmentAmounts(total, plan.installments);
   let events = 0;
   for (let k = before + 1; k <= after; k++) {
+    // The collection's receipt, sealed as it is written: which instalment, pointing at the plan's receipt.
+    await sealIfInbox(plan.borrower, () => instalmentReceipt({ plan, merchant, index: k, amount: ladder[k - 1] ?? 0n, txHash: log.txHash, at }));
     const remaining = k === after ? total - BigInt(plan.repaidUnits) : total - thresholdFor(total, plan.installments, k);
     await emitEvent({
       merchant,
@@ -774,9 +791,20 @@ async function onSubscriptionStarted(log: Decoded, ctx: Ctx): Promise<number> {
     status: existing?.status ?? "active",
     orderId: session?.orderId ?? String(a.orderId),
     sessionId: mismatch ? null : (session?.id ?? null),
+    receiptId: existing?.receiptId ?? null,
     createdAt: existing?.createdAt ?? at,
     updatedAt: at,
   });
+  // What was subscribed to, sealed to the buyer's inbox; each charge's receipt points at it.
+  let receiptId = existing?.receiptId ?? null;
+  if (!receiptId && session && !mismatch) {
+    const sub = await db.subscriptions.get(subId);
+    receiptId = sub ? await sealIfInbox(buyer, () => subscriptionReceipt({ sub, merchant, session, txHash: log.txHash, at })) : null;
+    if (receiptId) {
+      const id = receiptId;
+      await db.subscriptions.update(subId, (s) => ({ ...s, receiptId: id }));
+    }
+  }
   if (session && mismatch) {
     await recordMismatch(session, { mode: "subscribe", payer: buyer, txHash: log.txHash, reason: mismatch, expectedUnits: centsToUnits(session.amountCents).toString(), gotUnits: price.toString(), at });
     return 0;
@@ -788,6 +816,7 @@ async function onSubscriptionStarted(log: Decoded, ctx: Ctx): Promise<number> {
       at,
       unitsToCents(big(a.pricePerPeriod)),
     );
+    if (receiptId) await scrubSession(session.id, at);
   }
   return 0;
 }
@@ -872,15 +901,25 @@ async function onSubscriptionCharged(log: Decoded, ctx: Ctx): Promise<number> {
     updatedAt: at,
   }))) as SubscriptionRecord;
   const merchantAddress = found.merchant.walletAddress ?? ("0x" as Address);
+  const session = sub.sessionId ? await db.sessions.get(sub.sessionId) : null;
+  // The line in the clear, while the checkout still has its description (no inbox, or not sealed yet).
+  const clear = session && !session.sealedAt ? subscriptionDescription(session, period) : null;
+  const paymentId = `sub:${subId}:${period}`;
+  // The server writes this receipt when the buyer isn't there: sealed with their public key as it is written.
+  const receiptId = await sealIfInbox(sub.subscriber, () =>
+    chargeReceipt({ sub, merchant: found.merchant, paymentId, period, amount, description: clear, txHash: log.txHash, at }),
+  );
   await db.payments.upsert({
-    id: `sub:${subId}:${period}`,
+    id: paymentId,
     merchantId: found.merchant.id,
     kind: "subscription",
     sessionId: sub.sessionId,
     linkId: null,
     orderId: sub.orderId ?? `sub-${subId}`,
-    // What the buyer subscribed to, from its checkout ("Halcyon Coffee Club, monthly · HC-94626"), as Pay now and Pay in 4 do.
-    description: subscriptionDescription(sub.sessionId ? await db.sessions.get(sub.sessionId) : null, period),
+    // What the buyer subscribed to, from its checkout ("Halcyon Coffee Club, monthly · HC-94626"), as Pay now and Pay in 4 do;
+    // sealed to the buyer instead when they have a receipts inbox.
+    description: receiptId ? SEALED_DESCRIPTION : (clear ?? subscriptionDescription(null, period)),
+    receiptId,
     payer: sub.subscriber,
     amountUnits: amount.toString(),
     feeUnits: fee.toString(),

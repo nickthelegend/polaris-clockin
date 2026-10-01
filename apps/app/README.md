@@ -122,6 +122,54 @@ Face ID ─► passkey PRF (32 bytes) ─► BIP-39 entropy ─► m/44'/60'/0'/
 - The derivation path is frozen. The same passkey gives the same account on
   every device it syncs to.
 
+### Receipts only you can read
+
+The same Face ID that derives the wallet key also derives the keys that seal
+the buyer's receipts. Polaris for Business stores what was bought only as
+ciphertext sealed to the buyer; the app opens it on Activity.
+
+```
+                       ┌─► BIP-39 ─► m/44'/60'/0'/0/0 ─► the wallet key (unchanged)
+Face ID ─► PRF (32 B) ─┼─► HKDF "polaris/v1/receipts/aes-256-gcm"     ─► AES-256-GCM key
+                       └─► HKDF "polaris/v1/receipts/hpke-x25519-ikm" ─► X25519 inbox key pair (RFC 9180 DeriveKeyPair)
+```
+
+- **No extra Face ID.** The keys come from the PRF output of the ceremony
+  that opens the account (`src/lib/account/mera.ts`), before it is zeroed
+  (option A of `docs/research/mera.md` §16.3). They live in memory with the
+  signing session and go with it (sign-out, leaving the page). Nothing is
+  stored.
+- **Registering the inbox.** Opening a session sends the inbox public key to
+  `POST /api/receipts/inbox`, signed by the account (EIP-191, `Polaris
+  receipts key <key>`), with no prompt (`src/lib/receipts/inbox.ts`). The
+  server takes the signature as proof, never the ceremony. A checkout waits
+  up to 4 s for a registration still in flight, so a first payment is sealed
+  as it settles; anything that settled before is sealed when the
+  registration lands.
+- **Sealing.** When a payment settles, the server seals what was bought (the
+  description, line items, order reference, the plan's schedule) to the
+  inbox key with HPKE (`DHKEM(X25519, HKDF-SHA256)`, `HKDF-SHA256`,
+  `AES-256-GCM`; `@hpke/core` 1.9.0 and the pure-JS `@hpke/dhkem-x25519`
+  1.8.0), then drops the plaintext. The AAD is
+  `polaris.receipt.v1|<owner, lower case>|<receipt id>`, so a row can't be
+  served as another row or another buyer's. The code is shared with the API:
+  [`packages/receipts`](../../packages/receipts/README.md).
+- **Opening.** With the account open, the transaction sheet signs a read
+  request (`POST /api/receipts`, five minutes) and opens the receipt with no
+  prompt. With the account locked it shows **Only your Face ID can open
+  this**, and *Open with Face ID* runs the sign-in ceremony and then opens it
+  (`src/lib/receipts/index.ts`, `components/sealed-receipt.tsx`). On the
+  Activity list, sealed rows carry a small lock until they are opened.
+- **Email accounts** have no PRF, so no keys: their receipts are kept as they
+  always were, and Settings says so (*Receipts only you can read: Off*).
+- **The dev signer** derives the same keys from a stand-in PRF output,
+  HKDF(dev key, `polaris/dev/v1/prf-stand-in`)
+  (`src/lib/account/dev-receipts.ts`), so headless runs seal and open receipts
+  the way Face ID does.
+- **The AES key** is derived, non-extractable, and tested, but nothing in the
+  app writes with it yet: it is for records the device keeps for itself
+  (private notes on a receipt are next).
+
 ### Supported devices
 
 From Mera's authenticator table (see `docs/research/mera.md` §12):
@@ -317,6 +365,7 @@ in [`docs/design/chainlink`](../../docs/design/chainlink).
 | `src/lib/sign/` | EIP-712 builders for `PlanIntent`, `SubscribeIntent`, ERC-3009, ERC-2612, `Claim`, `Cancel`, `CancelSubscription`, `CreateSplit`, `CloseSplit`; domain reading (ERC-5267); nonce derivations (a split's id, a share's nonce) |
 | `src/lib/split.ts` | Split-the-bill links: the words in the link's fragment and their hash (what the organiser signs), equal shares to the micro-dollar, the create form's plan and its prefill, what this device knows (`polaris.splits.v1`) |
 | `src/lib/actions.ts` | Each money action: build, sign, relay |
+| `src/lib/receipts/` | Receipts only you can read: registering the inbox key (`inbox.ts`), reading and opening sealed receipts with the session (`index.ts`), pairing them with Activity rows (`pair.ts`) |
 | `src/lib/relayer.ts` | The relayer client: `POST {NEXT_PUBLIC_POLARIS_API_URL}/api/relay`, errors mapped to `RelayError` with the server's message for the buyer. Without the API, a local stub |
 | `src/lib/network.ts`, `src/lib/api.ts` | The network (contracts and EIP-712 domains) from Polaris for Business; the fetch helper |
 | `src/lib/data/remote.ts` | Real checkout links: `cs_…` sessions and `pl_…` payment links, mapped to `PaymentLink` |
@@ -355,7 +404,9 @@ stand-in, so dropping the files in needs no code change:
   wallet on another device is not wired yet. On `pnpm demo:local` (chain
   31337, `NEXT_PUBLIC_LOCAL_DEMO=1`) a stand-in key signs when the browser
   has no wallet, and the screen says its history is a sample.
-- Receipts only you can read (plan §3.5) and the opt-in recovery key.
+- The opt-in recovery key. (Receipts only you can read are built; see
+  [above](#receipts-only-you-can-read). Opening one with a real Face ID on a
+  phone is untested, like every Face ID path here, until the app is hosted.)
 
 The hosted checkout (`/pay/[id]`) speaks polarispay-sdk's v1 postMessage
 protocol (`src/lib/checkout-return.ts`): `ready` on load (`expired` for an
