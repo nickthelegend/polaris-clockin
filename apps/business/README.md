@@ -516,9 +516,15 @@ packages/db                    the store, the record schema, key hashing, webhoo
 The store is SQLite (`node:sqlite`, nothing to install) at
 `POLARIS_DB_URL` (default `sqlite:.data/polaris.db`), and the relayer assigns
 nonces in-process. So this app runs as **one long-lived Node process with a
-persistent disk**: `next build && next start` on a VM, or on Fly.io or
-Railway with a volume mounted at `.data/`, behind one proxy
-(`POLARIS_TRUSTED_PROXIES=1`). Serverless hosting (Vercel and the like) is
+persistent disk**: `next build && next start` on a VM, or the production
+image ([`Dockerfile`](Dockerfile): a pruned workspace, Next's standalone
+server as the `node` user, the store at `/data`) on Fly.io
+([`fly.toml`](fly.toml): one Machine, a volume at `/data`) or Railway
+([`railway.json`](railway.json)), behind one proxy
+(`POLARIS_TRUSTED_PROXIES=1`). `GET /api/health/ready` is the readiness
+check (the environment parses, a chain is configured, the store opens and its
+folder is writable, the background loops run; no network call), and
+[`docs/deploy.md`](../../docs/deploy.md) has every step. Serverless hosting (Vercel and the like) is
 not supported as is: each instance would have its own nonce lanes and its
 own (lost) database. Moving there means implementing `@polaris/db`'s `Store`
 over Postgres and driving background work only through `/api/cron/tick`.

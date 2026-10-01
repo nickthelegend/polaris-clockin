@@ -128,6 +128,22 @@ chain"); the dashboard has a development-only sample session
 (`POLARIS_DEV_MOCK_SESSION=1`); and the shop uses its own labelled dev mock of
 the API. Each app's README lists its environment.
 
+### Deploy it
+
+[`docs/deploy.md`](docs/deploy.md) takes the four apps to public HTTPS, step
+by step, with every command and every environment variable: the Polaris app,
+the landing page and Halcyon on Vercel (each app's `vercel.json`; the shop's
+orders in Upstash Redis), and Polaris for Business as one Docker container
+with a volume on Fly.io ([`apps/business/fly.toml`](apps/business/fly.toml),
+[`Dockerfile`](apps/business/Dockerfile); Railway works too). Then one
+command checks the whole deployment: HTTPS, the apps wired to each other, no
+development switch in a public build, CORS, and everything on the Monad
+testnet deployment the SDK presets carry:
+
+```bash
+node scripts/deploy-check.mjs --app https://… --business https://… --landing https://… --shop https://…
+```
+
 ### Tests and builds
 
 | Package | Command | Result on this branch |
@@ -140,11 +156,12 @@ the API. Each app's README lists its environment.
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
 | CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 209 passing; all three workflows compile to WASM |
-| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 232 passing; the API auth check covers every route |
-| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 23 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, the Android app's `/.well-known/assetlinks.json`); 43 signature checks against the Solidity typehashes |
-| Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 88 passing; the build proves no dev mock ships |
+| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | @BIZ@ passing; the API auth check covers every route |
+| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | @APP@ passing (the Chainlink states, a credit line's provenance, the dollar it signs for, the Android app's `/.well-known/assetlinks.json`, what a build reports to the deploy check); 43 signature checks against the Solidity typehashes |
+| Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | @SHOP@ passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
 | Android (TWA) | `pnpm --filter @polaris/android test`, `build` | 51 passing; a signed APK (needs a JDK 17+ and an Android SDK, found on the machine: [`apps/android`](apps/android/README.md#build-it)) |
+| The deploy check | `pnpm test:scripts` | 29 passing (every check against a fake deployment, one broken setting at a time) |
 | Chainlink FX rates | `pnpm --filter @polaris/fx test`, `typecheck` (`check:live` reads every feed) | 46 passing |
 | End to end | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e` | 24 of 24 steps (Pay now, Pay in 4 with CRE underwriting, a new buyer's one-tap line, a CRE collection, Subscribe, direct wallet pay, the dashboard, a dashboard payment link paid and reopened); [`docs/demo`](docs/demo) |
 | | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e:chainlink` | 18 of 18 steps (FX in pesos, CRE underwriting with the line labelled a local run, the guardian pausing and resuming Pay in 4 from Chainlink AUSD/USD on Monad mainnet with Pay now still working, a dunned buyer collected by the log trigger 2 s after signing again, the Chainlink dashboard); [`docs/demo/chainlink`](docs/demo/chainlink/README.md) |
@@ -181,7 +198,7 @@ the API. Each app's README lists its environment.
 | `packages/brand` | The Polaris mark and wordmark |
 | `packages/keeperhub` | The dunning ladder the collections path uses |
 | [`workflows`](workflows/README.md) | The Chainlink CRE workflows: `polaris-underwrite` (HTTP trigger), `polaris-collections` (cron and an EVM log trigger), `polaris-guardian` (cron, reading Chainlink AUSD/USD on Monad mainnet); and their local runners `trigger:local`, `collections:local`, `guardian:local` |
-| `scripts` | `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), the Lottie generators |
+| `scripts` | `deploy-check.mjs` (`pnpm deploy:check`, [`docs/deploy.md`](docs/deploy.md)), `demo-local.mjs` (`pnpm demo:local`), `demo-e2e.cjs` (`pnpm demo:e2e`), `demo-chainlink.mjs` (the Chainlink scenes on a running demo), `demo-e2e-chainlink.cjs` (`pnpm demo:e2e:chainlink`), the Lottie generators |
 | `docs` | [`plan.md`](docs/plan.md), the design contract (`design/system.md`), research, [`demo`](docs/demo) |
 
 ---
@@ -615,11 +632,13 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 5. **Envio:** log in to Envio Cloud, install its GitHub app, deploy
    `packages/indexer` (see its README), and set `POLARIS_INDEXER_URL` on the
    API and `candidates.indexerUrl` in the CRE configs.
-6. **Hosting:** HTTPS for the app, the landing and the shop; Polaris for
-   Business as one long-lived Node process with a persistent disk (a VM, Fly
-   or Railway with a volume), with `POLARIS_CHECKOUT_ORIGIN`,
-   `POLARIS_PUBLIC_URL`, `POLARIS_KEY_PEPPER`, `CRON_SECRET`,
-   `POLARIS_TRUSTED_PROXIES` and `NEXT_PUBLIC_DEMO_SHOP_URL`. Never set
+6. **Hosting:** follow [`docs/deploy.md`](docs/deploy.md): the app, the
+   landing and the shop on Vercel (the shop with Upstash Redis), Polaris for
+   Business on Fly.io from its Dockerfile, one Machine with a volume (or
+   Railway), with `POLARIS_CHECKOUT_ORIGIN`, `POLARIS_PUBLIC_URL`,
+   `POLARIS_KEY_PEPPER`, `CRON_SECRET`, `POLARIS_TRUSTED_PROXIES` and
+   `NEXT_PUBLIC_DEMO_SHOP_URL`; add both origins to Privy's allowed domains;
+   then run `node scripts/deploy-check.mjs` with the four URLs. Never set
    `NEXT_PUBLIC_DEV_SIGNER` for a deployed app: `next build` blanks it (and
    `NEXT_PUBLIC_DEV_SIGNER_PERSIST`) unless `POLARIS_ALLOW_DEV_SIGNER_BUILD=1`,
    so a hosted build only offers Face ID (Mera) and email (Privy).

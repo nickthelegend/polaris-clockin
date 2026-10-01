@@ -72,6 +72,11 @@ export function startWorkers(): void {
   console.log(`[workers] started: ${loops.map((l) => l.name).join(", ")}`);
 }
 
+/** Whether `startWorkers` has started the loops in this process (the readiness check reads it). */
+export function workersRunning(): boolean {
+  return (g.__polarisWorkers?.length ?? 0) > 0;
+}
+
 export function stopWorkers(): void {
   for (const t of g.__polarisWorkers ?? []) clearInterval(t);
   g.__polarisWorkers = undefined;

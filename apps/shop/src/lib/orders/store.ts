@@ -1,11 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { createRedisStore, redisRestFromEnv } from "./redis-store";
 import type { Order } from "./types";
 
 /**
  * The order store: one JSON file under apps/shop/.data (git-ignored), with an
- * in-memory fallback when the disk can't be written (a read-only deploy).
+ * in-memory fallback when the disk can't be written (a read-only deploy), or
+ * on a serverless host one Redis record (redis-store.ts).
  * Every change goes through `update`, which runs one at a time, so a webhook
  * and a page poll never interleave a read-modify-write.
  */
@@ -96,12 +98,46 @@ export function createFileStore(file: string): OrderStore {
 
 const globalStore = globalThis as unknown as { __halcyonOrderStore?: OrderStore };
 
+export type OrderStoreKind = "memory" | "file" | "redis";
+
+/**
+ * Which store this process uses: SHOP_ORDER_STORE (memory, file or redis),
+ * else Redis when a Redis REST URL and token are set (Vercel's Upstash
+ * integration sets KV_REST_API_URL and KV_REST_API_TOKEN), else the file.
+ */
+export function orderStoreKind(env: Record<string, string | undefined> = process.env): OrderStoreKind {
+  const chosen = env.SHOP_ORDER_STORE?.trim().toLowerCase();
+  if (chosen === "memory" || chosen === "file" || chosen === "redis") return chosen;
+  return redisRestFromEnv(env) ? "redis" : "file";
+}
+
+/**
+ * The Redis record's key: one per deployment environment, so a Vercel
+ * preview never writes into production's orders. SHOP_ORDER_STORE_KEY overrides it.
+ */
+export function redisKey(env: Record<string, string | undefined> = process.env): string {
+  return env.SHOP_ORDER_STORE_KEY?.trim() || `halcyon:${env.VERCEL_ENV?.trim() || "default"}:orders:v1`;
+}
+
 /** The process-wide store. Survives hot reloads in dev. */
 export function orderStore(): OrderStore {
   if (!globalStore.__halcyonOrderStore) {
-    const dir = process.env.SHOP_DATA_DIR ?? path.join(process.cwd(), ".data");
-    globalStore.__halcyonOrderStore =
-      process.env.SHOP_ORDER_STORE === "memory" ? createMemoryStore() : createFileStore(path.join(dir, "orders.json"));
+    const kind = orderStoreKind();
+    if (kind === "memory") {
+      globalStore.__halcyonOrderStore = createMemoryStore();
+    } else if (kind === "redis") {
+      const rest = redisRestFromEnv(process.env);
+      if (!rest) throw new Error("SHOP_ORDER_STORE=redis needs KV_REST_API_URL and KV_REST_API_TOKEN (or UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN).");
+      globalStore.__halcyonOrderStore = createRedisStore({ ...rest, key: redisKey() });
+    } else {
+      if (process.env.VERCEL === "1") {
+        console.warn(
+          "[orders] The file store on Vercel keeps orders in each function's memory: a webhook can land where the order isn't. Connect Upstash Redis (KV_REST_API_URL, KV_REST_API_TOKEN).",
+        );
+      }
+      const dir = process.env.SHOP_DATA_DIR ?? path.join(process.cwd(), ".data");
+      globalStore.__halcyonOrderStore = createFileStore(path.join(dir, "orders.json"));
+    }
   }
   return globalStore.__halcyonOrderStore;
 }

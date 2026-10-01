@@ -340,7 +340,22 @@ function wrap<A, Ctx>(
   };
 }
 
-const appCors = (): CorsPolicy => ({ kind: "list", origins: getConfig().appOrigins });
+/**
+ * The configuration for the wrapper's own steps (CORS, the rate-limit key),
+ * or null while the environment doesn't parse. Those steps then allow no
+ * origin and trust no proxy, and the handler's own getConfig() answers with
+ * the error (a JSON 500, and /api/health/ready's 503 saying what is wrong)
+ * instead of the wrapper crashing after it.
+ */
+function configOrNull(): ReturnType<typeof getConfig> | null {
+  try {
+    return getConfig();
+  } catch {
+    return null;
+  }
+}
+
+const appCors = (): CorsPolicy => ({ kind: "list", origins: configOrNull()?.appOrigins ?? [] });
 
 /**
  * The per-IP rate-limit key: the client's address (http.ts `clientIp`),
@@ -349,7 +364,7 @@ const appCors = (): CorsPolicy => ({ kind: "list", origins: getConfig().appOrigi
  * doesn't happen.
  */
 function clientKey(req: Request): string {
-  const ip = clientIp(req, getConfig().trustedProxies);
+  const ip = clientIp(req, configOrNull()?.trustedProxies ?? 0);
   if (!ip) throw new HttpError(400, "client_unidentified", "We couldn't tell where this request came from.");
   return ip;
 }

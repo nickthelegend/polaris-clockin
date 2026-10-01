@@ -1,6 +1,18 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const development = process.env.NODE_ENV === "development";
+
+/** The workspace root, so a parent directory's lockfile is never mistaken for it. */
+const root = path.resolve(process.cwd(), "../..");
+
+/**
+ * POLARIS_NEXT_OUTPUT=standalone (the Dockerfile sets it) writes Next's
+ * standalone server: `.next/standalone/apps/business/server.js` and only the
+ * files it traces from the workspace, which is what the production image
+ * copies. Unset, `next build && next start` work as usual.
+ */
+const standalone = process.env.POLARIS_NEXT_OUTPUT === "standalone";
 
 /** The dashboard moved under /dashboard; old deep links keep working. */
 const MOVED = ["payments", "links", "plans", "payouts", "developers"];
@@ -15,6 +27,9 @@ const config: NextConfig = {
   // The Privy Node SDK verifies tokens with `jose` and signs wallet requests with
   // node:crypto. Keep it out of the server bundle so it loads as plain Node.
   serverExternalPackages: ["@privy-io/node"],
+  ...(standalone ? { output: "standalone" as const } : {}),
+  outputFileTracingRoot: root,
+  turbopack: { root },
   env: {
     // The screenshot-only mock session exists in `next dev` alone. Outside
     // development the variable is blanked here, and the code checks NODE_ENV
@@ -43,6 +58,8 @@ const config: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // Browsers honour it over HTTPS only. Fly and Railway don't add it for us (Vercel does, for the other apps).
+          ...(development ? [] : [{ key: "Strict-Transport-Security", value: "max-age=63072000" }]),
         ],
       },
       {

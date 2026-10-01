@@ -6,7 +6,12 @@
  * they flow. Paragraphs are plain strings; they reveal line by line wherever
  * they happen to wrap. In a two-tone paragraph `lead` is the olive lead-in and
  * `rest` is muted.
+ *
+ * Calls to action that lead to the other apps go through `linkTo`: an in-page
+ * anchor until NEXT_PUBLIC_APP_URL / NEXT_PUBLIC_BUSINESS_URL are set.
  */
+
+import { APP_URL, BUSINESS_URL, linkTo } from "./lib/links";
 
 export const site = {
   title: "Polaris: Stripe for every app on Monad",
@@ -21,8 +26,8 @@ export const nav = {
     { label: "Business", href: "#pricing" },
     { label: "Developers", href: "#faq" },
   ],
-  login: { label: "Log in", href: "#" },
-  cta: { label: "Get the app", href: "#talk" },
+  login: { label: "Log in", href: linkTo(BUSINESS_URL, "/login", "#") },
+  cta: { label: "Get the app", href: linkTo(APP_URL, "/", "#talk") },
 };
 
 export const hero = {
@@ -78,7 +83,7 @@ export const logos = {
 
 export const stripe = {
   heading: ["Stripe for every", "app on Monad"],
-  primary: { label: "Start accepting", href: "#pricing" },
+  primary: { label: "Start accepting", href: linkTo(BUSINESS_URL, "/", "#pricing") },
   secondary: { label: "Read the docs", href: "#faq" },
   paragraphs: [
     {
@@ -93,7 +98,7 @@ export const stripe = {
   mint: {
     title: ["Get paid in 0.8s", "at any size"],
     bullets: ["Payment links and QR codes, no code", "Webhooks and a ten-line SDK"],
-    cta: { label: "Create a link", href: "#pricing" },
+    cta: { label: "Create a link", href: linkTo(BUSINESS_URL, "/login", "#pricing") },
   },
   dark: {
     title: ["Pay in 4, with", "credit built in"],
@@ -131,7 +136,7 @@ export const credit = {
 export const pricing = {
   heading: ["0.5% per payment.", "No hidden fees."],
   body: "Pay 0.5% when a payment lands, against about 3% for cards. Instalments, collections and credit risk are ours, not yours.",
-  cta: { label: "Start accepting", href: "#talk" },
+  cta: { label: "Start accepting", href: linkTo(BUSINESS_URL, "/", "#talk") },
   calculator: {
     title: "Calculator",
     salesLabel: "Your monthly sales",

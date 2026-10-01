@@ -193,6 +193,16 @@ from instead of the request's `Host`); with any missing, checkout shows
 *Payments are switched off* instead of guessing. Behind a proxy that sets
 `X-Forwarded-Host`, set `TRUST_PROXY=1`; otherwise those headers are ignored.
 
+**Hosted** (Vercel, [`docs/deploy.md`](../../docs/deploy.md) step 4): orders
+live in Upstash Redis (`KV_REST_API_URL`, `KV_REST_API_TOKEN`, which the
+project's Storage tab adds), because each Vercel function has its own memory
+and a read-only disk, and a webhook landing in another function would never
+find the order (`src/lib/orders/redis-store.ts`: one record per deployment
+environment, updated under a lock). On a long-lived server the JSON file in
+`SHOP_DATA_DIR` is enough. `GET /api/health` reports how the store is wired
+(the API, checkout and relay it uses, where orders are kept; never a secret),
+and `scripts/deploy-check.mjs` checks it.
+
 The store quotes Pay in 4 at `PolarisLoanEngine.INTEREST_RATE_BPS`, 10% APR,
 the only rate the loan engine charges, so the badge, checkout and receipt
 quote exactly what the buyer pays: $349 is 4 × $87.92 ($2.68 of interest,

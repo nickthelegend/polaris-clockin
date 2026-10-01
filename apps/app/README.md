@@ -53,6 +53,14 @@ and `POLARIS_ANDROID_*`, which are read per request.
 | `POLARIS_ANDROID_SHA256_FINGERPRINTS` | unset | **Server only.** The SHA-256 fingerprints of the certificates the Android app is signed with, comma-separated (`AA:BB:…`, as `pnpm --filter @polaris/android fingerprint` prints). `/.well-known/assetlinks.json` serves them, which verifies the Android app. Unset: that route is 404 and the Android app shows an address bar |
 | `POLARIS_ANDROID_PACKAGE` | `app.polarispay.twa` | **Server only.** The Android app's package name in `/.well-known/assetlinks.json` |
 
+**Hosted** (Vercel, [`docs/deploy.md`](../../docs/deploy.md) step 2): every
+`NEXT_PUBLIC_*` is compiled in, so set them in the project before it builds:
+`NEXT_PUBLIC_POLARIS_API_URL`, `NEXT_PUBLIC_CHAIN_ID=10143`, and
+`NEXT_PUBLIC_RP_ID` (the Face ID domain, which accounts are tied to for good).
+`GET /api/health` reports what the build has (the API, chain, relying party,
+and that the dev signer and local demo switches are off), for
+`scripts/deploy-check.mjs`.
+
 ## With Polaris for Business (the real relayer)
 
 Set `NEXT_PUBLIC_POLARIS_API_URL` to the business app (`http://localhost:3100`
