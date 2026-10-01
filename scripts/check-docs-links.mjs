@@ -18,7 +18,8 @@
  * For every file under docs/submission/ (the kit), also:
  *  3. Every full transaction hash (0x + 64 hex) and address (0x + 40 hex)
  *     appears in the committed evidence (EVIDENCE below: the deployment
- *     records, the CRE runs, the workflows' configs), and every shortened
+ *     records and source verification, the live testnet runs through Privy,
+ *     the CRE runs, the workflows' configs), and every shortened
  *     one ("0x1116fbb4…292c4d", "0x4201…45CC") matches one that does.
  *  4. Every fenced ```text block (a paste-ready portal answer) is at most
  *     4,000 characters, the portal's limit.
@@ -48,7 +49,12 @@ export const EVIDENCE = [
   "packages/contracts/deployments/monad-testnet.smoke.json",
   "packages/contracts/deployments/monad-testnet.deploy.txt",
   "packages/contracts/deployments/monad-testnet.redeploy-guardian.txt",
+  "packages/contracts/deployments/monad-testnet.redeploy-vault.txt",
+  "packages/contracts/deployments/monad-testnet.grant-relayer.txt",
+  "packages/contracts/deployments/monad-testnet.transfer-registry-owner.txt",
   "packages/contracts/deployments/monad-testnet.check.txt",
+  "packages/contracts/deployments/monad-testnet.verification.json",
+  "docs/demo/testnet",
   "workflows/evidence",
   "workflows/collections",
   "workflows/underwriting",
