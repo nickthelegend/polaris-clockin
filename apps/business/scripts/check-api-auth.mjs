@@ -13,6 +13,7 @@
 //   src/app/api/health/**        withPublic
 //   src/app/api/cron/**          withCron            (CRON_SECRET)
 //   src/app/api/credit/**        withSignedRequest   (the account's own consent signature)
+//   src/app/api/receipts/**      withSignedRequest   (the account's own signature: its inbox key, a read)
 //   src/app/api/cre/**           withCreCallback     (the CRE workflows' HMAC-signed callbacks)
 //   everything else              withMerchant        (a verified Privy session)
 //
@@ -38,6 +39,7 @@ const RULES = [
   { prefix: "health/", wrappers: ["withPublic"], preflight: false },
   { prefix: "cron/", wrappers: ["withCron"], preflight: false },
   { prefix: "credit/", wrappers: ["withSignedRequest"], preflight: true },
+  { prefix: "receipts/", wrappers: ["withSignedRequest"], preflight: true },
   { prefix: "cre/", wrappers: ["withCreCallback"], preflight: false },
   { prefix: "", wrappers: ["withMerchant"], preflight: false },
 ];

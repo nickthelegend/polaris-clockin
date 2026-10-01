@@ -4,6 +4,7 @@ import type { MerchantRecord } from "@polaris/db";
 import type { Address } from "viem";
 
 import { getDb } from "./db";
+import { receiptIndex } from "./receipts";
 import { splitsOrganisedBy } from "./split";
 import { walletMoves } from "./wallet-moves";
 
@@ -30,12 +31,13 @@ function merchantView(m: MerchantRecord | undefined, fallback: string) {
 export async function buyerBook(address: Address) {
   const db = getDb();
   const who = address.toLowerCase();
-  const [plans, subscriptions, payments, moves, splits] = await Promise.all([
+  const [plans, subscriptions, payments, moves, splits, sealed] = await Promise.all([
     db.plans.find({ borrower: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
     db.subscriptions.find({ subscriber: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
     db.payments.find({ payer: who }, { orderBy: "createdAt", direction: "desc", limit: LIMIT }),
     walletMoves(address),
     splitsOrganisedBy(address),
+    receiptIndex(address),
   ]);
   const ids = [...new Set([...plans, ...subscriptions, ...payments].map((r) => r.merchantId))];
   const merchants = new Map((await Promise.all(ids.map((id) => db.merchants.get(id)))).filter((m): m is MerchantRecord => m !== null).map((m) => [m.id, m]));
@@ -113,5 +115,12 @@ export async function buyerBook(address: Address) {
      * the split's words, which travel in the link.
      */
     splits,
+    /**
+     * Whether this address registered a receipts inbox, and which rows have a
+     * sealed receipt (by transaction): never what is in one. The ciphertext
+     * itself comes only from `POST /api/receipts`, with the account's signature.
+     */
+    receiptsInbox: sealed.inbox,
+    receipts: sealed.receipts,
   };
 }
