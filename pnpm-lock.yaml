@@ -29,6 +29,9 @@ importers:
       '@polaris/fx':
         specifier: workspace:*
         version: link:../../packages/fx
+      '@polaris/receipts':
+        specifier: workspace:*
+        version: link:../../packages/receipts
       '@polaris/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -102,6 +105,9 @@ importers:
       '@polaris/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@polaris/receipts':
+        specifier: workspace:*
+        version: link:../../packages/receipts
       '@polaris/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -424,6 +430,25 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+
+  packages/receipts:
+    dependencies:
+      '@hpke/core':
+        specifier: 1.9.0
+        version: 1.9.0
+      '@hpke/dhkem-x25519':
+        specifier: 1.8.0
+        version: 1.8.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.4
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/debug@4.1.13)(@types/node@22.20.4)(jiti@2.7.0)(jsdom@26.1.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))(lightningcss@1.32.0)(tsx@4.21.0)
 
   packages/sdk:
     devDependencies:
@@ -1333,6 +1358,10 @@ packages:
 
   '@hpke/core@1.9.0':
     resolution: {integrity: sha512-pFxWl1nNJeQCSUFs7+GAblHvXBCjn9EPN65vdKlYQil2aURaRxfGMO6vBKGqm1YHTKwiAxJQNEI70PbSowMP9Q==}
+    engines: {node: '>=16.0.0'}
+
+  '@hpke/dhkem-x25519@1.8.0':
+    resolution: {integrity: sha512-S1MWWkAfu+TFxySgv5+2P3O4Mx/jk7BsoplzQaA1s3sfUJVJ2UsZsSzSsMc+FXJumLXncoJFlO6mK6mDGspfmA==}
     engines: {node: '>=16.0.0'}
 
   '@humanfs/core@0.19.2':
@@ -8726,6 +8755,10 @@ snapshots:
   '@hpke/common@1.10.1': {}
 
   '@hpke/core@1.9.0':
+    dependencies:
+      '@hpke/common': 1.10.1
+
+  '@hpke/dhkem-x25519@1.8.0':
     dependencies:
       '@hpke/common': 1.10.1
 
