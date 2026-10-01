@@ -231,7 +231,7 @@ Send by link: 0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913
 Merchant registers (its Registration signature, relayed): 0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74
 Merchant withdraws $100: 0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48
 Registry admin (server wallet jznn8nzfi7xuc2ywij67ktld) activates the merchant: 0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1
-All 19 transactions of the run: https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/README.md
+Every transaction of the run (15 by the Privy relayer, 2 by the registry admin, 2 by the labelled harness): https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/README.md
 ```
 
 **Video:** [0:55] the merchant dashboard (in the demo it runs on a local
