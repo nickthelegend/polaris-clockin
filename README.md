@@ -446,7 +446,7 @@ The receivers are deployed and wired, and the smoke test drove real
 transactions through the checkout that asks them (see
 [Monad testnet deployment](#monad-testnet-deployment)); the CRE reports that
 reached them are [below](#cre-runs-on-monad-testnet-28-sep-2026). `pnpm --filter @polarispay/contracts check:deployment:monad`
-reads all of it back (65 of 65, after the guardian's redeploy:
+reads all of it back (65 of 65, read again on 1 Oct 2026 after the redeploys and the move to Privy:
 [`monad-testnet.check.txt`](packages/contracts/deployments/monad-testnet.check.txt)).
 
 | What | Address or transaction |
