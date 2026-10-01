@@ -23,9 +23,10 @@ every hash and address is in the committed evidence.
 3. Replace `<VIDEO_URL>`, `<APP_URL>` and `<PRIVY_APP_ID>`, and turn the
    `[m:ss]` timestamps (this script's plan, from
    [`video-script.md`](video-script.md#the-timeline)) into the cut's real ones.
-4. If a "not done yet" item gets done before the deadline (the Privy relayer,
-   Envio Cloud, a live underwriting report), update its answer here and in
-   the write-up, with the new transaction hashes.
+4. If a "not done yet" item gets done before the deadline (hosting, Envio
+   Cloud, a live underwriting report, `PolarisSplit` on testnet, the Android
+   app on a real phone), update its answer here and in the write-up, with the
+   new transaction hashes.
 5. At the commit you submit, run `pnpm docs:diffstat` and paste the table it
    prints into [`writeup.md` §5](writeup.md#5-whats-new-in-metropolis) with
    the new totals (the committed figures stop at `ae2ce19`, 28 Sep 2026), then
@@ -38,7 +39,7 @@ every hash and address is in the committed evidence.
 | repository | https://github.com/nickthelegend/polaris-monad |
 | video | `<VIDEO_URL>` |
 | document | https://github.com/nickthelegend/polaris-monad/blob/main/docs/submission/writeup.md |
-| demo | `<APP_URL>` once the app is hosted (it is not yet: [README, step 6](../../README.md#what-only-you-can-do)); until then, the video |
+| demo | `<APP_URL>` once the app is hosted (it is not yet; the steps are in [`docs/deploy.md`](../deploy.md), [README, step 6](../../README.md#what-only-you-can-do)); until then, the video |
 
 ## Monad Track 02
 
@@ -46,15 +47,19 @@ The track's own fields: the project description is in
 [`profile.md`](profile.md). If the portal asks how the project uses Monad:
 
 ```text
-Polaris runs on Monad testnet (chain 10143). Twelve contracts, deployed 28 Sep 2026 and read back on chain (65 of 65 checks), carry every payment: PolarisCheckout (Pay now, Pay in 4, Subscribe, sign again), PolarisLoanEngine (the Pay in 4 pool that pays the merchant in full up front), ScoreManager (the credit score, computed on chain), PolarisSend (send by link), MerchantRegistry, PolarisPayments, CollateralVault, BatchSettlement, three Chainlink CRE receivers, and the labelled mock dollar.
+Polaris runs on Monad testnet (chain 10143). Twelve contracts, deployed 28 Sep 2026 and read back on chain (65 of 65 checks), carry every payment: PolarisCheckout (Pay now, Pay in 4, Subscribe, sign again), PolarisLoanEngine (the Pay in 4 pool that pays the merchant in full up front), ScoreManager (the credit score, computed on chain), PolarisSend (send by link), MerchantRegistry, PolarisPayments, CollateralVault (redeployed the same day with lockWithPermit, so even collateral is gasless), BatchSettlement, three Chainlink CRE receivers, and the labelled mock dollar. Every contract's source is verified on Monadscan: 14 of 14 exact matches, including the two the redeploys replaced.
 
 Why Monad: Pay in 4 is many small writes (an origination, four collections, retries), which only pays where each write is cheap and final; checkout and cross-border sends need instant finality; our Solidity deploys unchanged on an EVM chain; and dollars on Monad take signature approvals (ERC-2612, ERC-3009), so every buyer action is a signature and our relayer pays the gas. The buyer never holds MON.
 
 Monad-specific engineering: Monad charges for the gas limit, not gas used, so the relayer and every CRE write set the limit to the estimate plus 15%. Our Chainlink CRE guardian reads Chainlink's AUSD/USD feed on Monad mainnet and writes its verdict to Monad testnet in one run.
 
-On testnet, a smoke test ran Pay now, Pay in 4 and a re-signed approval through our API and relayer (the buyer only signed), and three Chainlink CRE workflow runs delivered signed reports. The dollar on testnet is a clearly labelled mock (MockAUSD), because we held no testnet AUSD.
+On testnet, our smoke test ran every buyer and merchant action through our API and a policy-locked Privy server wallet as the relayer, 14 of 14: registration, Pay now, collateral, Pay in 4, a subscription and its cancellation, an early instalment, a re-signed approval, a send by link and its claim, and a withdrawal. Five fresh accounts signed every step and ended as they began, with 0 MON and nonce 0. Three Chainlink CRE workflow runs delivered signed reports. The dollar on testnet is a clearly labelled mock (MockAUSD), because we held no testnet AUSD.
+
+Also built, on our local chain only so far: split the bill (Track 02's third example idea): one link, each friend pays exactly their share straight to whoever paid. PolarisSplit is not deployed on testnet yet.
 
 Deployment record: https://github.com/nickthelegend/polaris-monad/blob/main/packages/contracts/deployments/monad-testnet.json
+Source verification: https://github.com/nickthelegend/polaris-monad/blob/main/packages/contracts/deployments/monad-testnet.verification.json
+The gasless run, every hash: https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/README.md
 Every address and transaction: https://github.com/nickthelegend/polaris-monad/blob/main/README.md#monad-testnet-deployment
 Write-up: https://github.com/nickthelegend/polaris-monad/blob/main/docs/submission/writeup.md#monad-track-02
 ```
@@ -68,36 +73,49 @@ ScoreManager         0xB3D34eF62Cb64b985C230079D2815787619E6061
 PolarisPayments      0x7C774CF3E664B10057Cb2dDa66bA298e831292F1
 PolarisSend          0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55
 MerchantRegistry     0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4
-CollateralVault      0xD0e777f8DfA2E62F500054E85F815fC54fae3E72
+CollateralVault      0xC2F006aE9836a700CE8F1e457d11346cc42e23dc
 BatchSettlement      0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53
 CollectionsReceiver  0x4201C0837f3bB4e0E1A982C5666BF00b5EE145CC
 UnderwritingReceiver 0x523e9791d0e324525F66F91b21B478C18e284a19
 GuardianReceiver     0x4c99136634F670cd59E73fc284fED164C662e3Df
 MockAUSD (labelled mock dollar) 0x3F9554F15f58Bb5900822224f37A05be81eF9723
+Relayer (Privy server wallet)        0x8366916019bc5452e62A0D36418ABebB45396aE2
+Registry admin (Privy server wallet) 0xa089EeEA5B1625C586380596bde502aB46F3e45F
+Every contract's source is verified (the Contract tab).
 Explorer: https://testnet.monadscan.com
 ```
 
 **Transaction hashes:**
 
 ```text
-Pay now $25, relayed (buyer only signed): 0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2
-Pay in 4 $200, plan #1, relayed: 0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d
-A lost approval signed again (Reauthorized), relayed: 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002
+Sent by the Privy relayer; the user only signed:
+Merchant registers: 0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74
+Pay now $25: 0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e
+Collateral locked by permit: 0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc
+Pay in 4 $200, plan #2: 0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06
+Subscribe $5 a month: 0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224
+Instalment paid early: 0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d
+A lost approval signed again (Reauthorized): 0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19
+Send $10 by link: 0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913
+Claimed: 0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a
+Merchant withdraws $100: 0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48
+Earlier, by the dev relayer: plan #1 0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d and its re-signed approval 0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002, which fired the CRE log trigger below
 Chainlink CRE report, instant collection (EVM log trigger): 0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d
 Chainlink CRE report, scheduled collection (cron): 0xd7bcf41e8efa7841c86870689a3c9599c3a960d39f4c28b82c6980dc1f1a97e4
 Chainlink CRE report, guardian attestation (cron): 0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080
 PolarisCheckout deployed: 0x5df039074ed9a5b6e11c517955b42393a430d369a12c554096316a1d64dc020c
 ```
 
-**Video:** [2:30] the Monad testnet reports on Monadscan; [0:10]–[1:40] the
-product (on a local chain, labelled).
+**Video:** [2:30] Monad testnet on Monadscan: the CRE reports and the gasless
+run through the Privy relayer; [0:10]–[1:40] the product (on a local chain,
+labelled).
 
 ## Agora
 
 **Short description:**
 
 ```text
-Polaris lets anyone send dollars across borders by link, and pay any merchant by link, in full or in four instalments. Face ID creates the account (Mera), every step is a signature our relayer carries, and settlement is final on Monad in under a second.
+Polaris lets anyone send dollars across borders by link, pay any merchant by link (in full or in four instalments), and split a bill with friends abroad by link. Face ID creates the account (Mera), every step is a signature our relayer carries, settlement is final on Monad in under a second, and the app comes as an Android app and a phone PWA.
 ```
 
 **How AUSD and cross-border payments are used:**
@@ -107,15 +125,22 @@ Send by link: the sender types an amount and gets a link to share (WhatsApp, any
 
 Pay by link: a merchant's payment link is the same mechanism pointed at a business, with Pay now, Pay in 4 (10% APR; $200 is 4 x $50.38) and subscriptions.
 
-AUSD everywhere: balances, payments, the Pay in 4 pool, credit lines and payouts are all one dollar, and the app signs AUSD's own EIP-712 domain ("Agora Dollar", version 1) for ERC-2612 permits and ERC-3009 authorizations, checked against the Solidity typehashes (43 checks). The buyer's home screen names it once, as "USD" and "AUSD"; everywhere else it is dollars.
+Split the bill: one link, and each friend, wherever they are, pays exactly their share in dollars straight to whoever paid, with one signature (PolarisSplit, no custody); a friend with no account makes one with Face ID in the same step.
+
+AUSD everywhere: balances, payments, the Pay in 4 pool, credit lines and payouts are all one dollar, and the app signs AUSD's own EIP-712 domain ("Agora Dollar", version 1) for ERC-2612 permits and ERC-3009 authorizations, checked against the Solidity typehashes (53 checks). The buyer's home screen names it once, as "USD" and "AUSD"; everywhere else it is dollars.
 
 Local currency: under every amount, the viewer's currency at the live Chainlink rate with its age ("ARS 161.241, Chainlink rate, 7 h ago, indicative"), read server-side from Chainlink Data Feeds; no feed, no line.
 
-Honest status: on Monad testnet the dollar is a labelled mock (MockAUSD) because we held no testnet AUSD; a redeploy with AUSD_MODE=ausd switches to real AUSD. Send and claim ran end to end on our local chain (same contracts, same deploy script); the testnet smoke test covered Pay now, Pay in 4 and signing again, and a testnet send is next. The app is an installable phone PWA with a desktop layout; tell us if a store app is required.
+Mobile app: an Android app (a Trusted Web Activity built with Bubblewrap, package app.polarispay.twa, signed APK) around the same app, so Face ID is Chrome's own passkey ceremony and one account works in Chrome, the installed PWA and the Android app; plus Send and Receive shortcuts.
+
+Honest status: on Monad testnet, a $10 send by link and its claim ran through our API and a Privy server wallet relayer, with sender and recipient holding 0 MON before and after; that run was scripted, and the app itself has run send and claim end to end on our local chain (same contracts, same deploy script), because it is not hosted yet. The dollar on testnet is a labelled mock (MockAUSD) because we held no testnet AUSD; a redeploy with AUSD_MODE=ausd switches to real AUSD. Split the bill runs on our local chain only; PolarisSplit is not on testnet yet. The Android APK is built and signed but not yet tried on a real phone or published to Google Play.
 
 PolarisSend: https://github.com/nickthelegend/polaris-monad/blob/main/packages/contracts/contracts/PolarisSend.sol
 Its tests (watched claims, replays, expiry): https://github.com/nickthelegend/polaris-monad/blob/main/packages/contracts/test/metropolis/PolarisSend.test.js
 Send and claim in the app: https://github.com/nickthelegend/polaris-monad/blob/main/apps/app/src/sheets/send.tsx and https://github.com/nickthelegend/polaris-monad/blob/main/apps/app/src/sheets/claim.tsx
+Send and claim on testnet: https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/README.md
+Split the bill: https://github.com/nickthelegend/polaris-monad/blob/main/docs/design/split/README.md
+Android app: https://github.com/nickthelegend/polaris-monad/blob/main/apps/android/README.md
 Chainlink rates: https://github.com/nickthelegend/polaris-monad/blob/main/packages/fx/README.md
 Write-up: https://github.com/nickthelegend/polaris-monad/blob/main/docs/submission/writeup.md#agora
 ```
@@ -132,24 +157,30 @@ MockAUSD (labelled mock of AUSD, same EIP-712 domain) 0x3F9554F15f58Bb5900822224
 
 ```text
 PolarisSend deployed: 0x9f81549cd07cf46f018c77f175f596ab7cf535f484f87bf6079ce57fb84924b9
-Pay now by link, relayed: 0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2
-Pay in 4 by link, relayed: 0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d
-A send and a claim on testnet: not yet (see "Honest status").
+Send $10 by link (sender holds no MON; Privy relayer): 0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913
+The link claimed (recipient holds no MON; Privy relayer): 0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a
+Pay now by link, relayed: 0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e
+Pay in 4 by link, relayed: 0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06
 ```
 
 **Video:** [1:10] send by link, the amount in pesos at Chainlink's rate;
 [1:25] the claim on a phone, "Arrived."; [0:25] the account created in one
 tap.
 
-**Questions for Agora** (ask before submitting): does a PWA count as a mobile
-app, and can we get testnet AUSD for the pool?
+**Android APK:** if the portal takes a file, attach
+`apps/android/dist/polaris-1.0.0-debug.apk` from `pnpm --filter
+@polaris/android build` (git-ignored, so build it first; [`apps/android`](../../apps/android/README.md#build-it)).
+
+**Questions for Agora** (ask before submitting): does the Android app (a
+Trusted Web Activity) or the PWA meet "a mobile app", and can we get testnet
+AUSD for the pool?
 
 ## Privy
 
 **Short description:**
 
 ```text
-Polaris for Business runs on Privy beyond login: every merchant gets an embedded wallet that signs its on-chain registration and its payouts, automatic payouts run through a per-merchant policy, and the relayer that carries every payment is a Privy server wallet locked by a policy.
+Polaris for Business runs on Privy beyond login: the relayer that carries every payment on Monad testnet is a Privy server wallet locked by a policy (live, 14 of 14 actions gasless for users who never held MON), a second policy-locked server wallet administers the merchant registry, every merchant gets an embedded wallet that signs its on-chain registration and its payouts, and automatic payouts run through a per-merchant policy.
 ```
 
 **How Privy is used:**
@@ -159,12 +190,17 @@ Polaris for Business runs on Privy beyond login: every merchant gets an embedded
 
 2. Embedded wallets that do real work: every merchant gets one at sign-in (createOnLogin: all-users). It signs the merchant's MerchantRegistry registration right after the business is named, and every withdrawal (an ERC-3009 authorization); our relayer submits both, so the merchant never holds MON.
 
-3. Policy-locked server wallet: the relayer that carries every payment in the network is a Privy server wallet. Its policy is built from one allow-list: one DENY for any transaction carrying MON, then one ALLOW per Polaris function (chain, contract, function); anything else matches no rule and Privy refuses it in its enclave. The wallet and the policy are owned by an offline admin key quorum; the server's key is only an additional signer, so a stolen server key cannot change the policy. The same allow-list is enforced in our code before anything is signed.
+3. Policy-locked server wallets, live on Monad testnet: the relayer that carries every payment is a Privy server wallet (0x8366916019bc5452e62A0D36418ABebB45396aE2). Its 17-rule policy is built from one allow-list: one DENY for any transaction carrying MON, then one ALLOW per Polaris function (chain, contract, function, a $0.10 floor where an amount is signed); anything else matches no rule and Privy refuses it in its enclave. The wallet and the policy are owned by an admin key quorum; the server's key is a separate quorum held to the same policy, so a stolen server key cannot change it. A second server wallet, the registry admin (0xa089EeEA5B1625C586380596bde502aB46F3e45F), owns MerchantRegistry and may only activate a merchant and cap it at up to $1,000. The same allow-list is enforced in our code before anything is signed.
 
 4. Automatic payouts, Stripe-style: turning them on creates the merchant's own policy (only the dollar, only this chain, only from their wallet, only to their payout address, at most $10,000 a payout), and the browser adds our payout signer under it with addSigners. The daily sweep refuses to run if the wallet no longer lists our signer with that exact policy.
 
-Honest status: all of this is built and tested (232 tests in apps/business), but not yet run against a live Privy server wallet. Every run so far, including our Monad testnet smoke test, used the dev relayer adapter, a local key held to the same allow-list. Creating the server wallet, its policy and the admin key quorum is a step for the team in our Privy account (privy:setup-relayer --apply, then privy:prove-policy --run to record what Privy refused, and privy:smoke --run for one real relayed payment).
+Proof, on Monad testnet: privy:prove-policy had Privy sign the 3 allowed calls and refuse all 7 others with policy_violation (a $0 collateral lock, the vault's seize, a $0 transfer, the same call carrying 1 wei of MON, the same call to another contract, approve(attacker, max), a plain MON transfer). Our smoke test ran every buyer and merchant action through the Privy relayer, 14 of 14: 15 transactions from the relayer and 2 from the registry admin, for five fresh accounts that stayed at 0 MON and nonce 0. 264 tests in apps/business.
 
+Honest status: in those runs the merchant was a generated key signing the same typed data its embedded wallet signs; no merchant has signed in through Privy on a hosted dashboard yet, and no automatic payout has run live, because the apps are not hosted yet.
+
+Live setup (every id, address and rule): https://github.com/nickthelegend/polaris-monad/blob/main/apps/business/privy-live.md
+What Privy refused: https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/privy-prove-policy.txt
+The gasless run: https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/README.md
 Relayer policy: https://github.com/nickthelegend/polaris-monad/blob/main/apps/business/src/server/policy/relayer.ts
 Server wallet signer: https://github.com/nickthelegend/polaris-monad/blob/main/apps/business/src/server/relayer/signer.ts
 Setup script: https://github.com/nickthelegend/polaris-monad/blob/main/apps/business/scripts/privy/setup-relayer.mjs
@@ -177,20 +213,31 @@ Write-up: https://github.com/nickthelegend/polaris-monad/blob/main/docs/submissi
 `NEXT_PUBLIC_PRIVY_APP_ID` in `apps/business/.env.local`; never the app
 secret).
 
-**Server-wallet policy JSON:** run
-`pnpm --filter @polaris/business privy:setup-relayer` (a dry run: it prints
-the plan and the policy JSON, and creates nothing) and attach its output as a
-file. After `--apply`, attach `privy:prove-policy -- --run`'s output: the
-calls Privy refused.
+**Server-wallet policy JSON:** attach
+[`docs/demo/testnet/privy-live.json`](../demo/testnet/privy-live.json) (both
+live policies rule by rule, read back from Privy with `privy:show`) and
+[`privy-prove-policy.txt`](../demo/testnet/privy-prove-policy.txt) (what
+Privy signed and refused). `pnpm --filter @polaris/business
+privy:setup-relayer` (a dry run) prints the same policy as the code builds it.
 
-**Relayer transactions:** on testnet so far, the dev adapter
-[`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69)
-(standing in for the Privy server wallet). After the Privy setup, add
-`privy:smoke -- --run`'s transaction here.
+**Relayer transactions** (the Privy server wallet
+[`0x8366916019bc5452e62A0D36418ABebB45396aE2`](https://testnet.monadscan.com/address/0x8366916019bc5452e62A0D36418ABebB45396aE2)):
+
+```text
+Privy relayer (server wallet y8sa671n804anaxznbeneh2q): 0x8366916019bc5452e62A0D36418ABebB45396aE2
+privy:smoke, a $0.50 Pay now, buyer at 0 MON: 0x5ef22fced32a6c4d2192a25691caddbf604700934bd505a35830e77922c4f983
+Pay in 4 $200: 0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06
+Send by link: 0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913
+Merchant registers (its Registration signature, relayed): 0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74
+Merchant withdraws $100: 0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48
+Registry admin (server wallet jznn8nzfi7xuc2ywij67ktld) activates the merchant: 0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1
+Every transaction of the run (15 by the Privy relayer, 2 by the registry admin, 2 by the labelled harness): https://github.com/nickthelegend/polaris-monad/blob/main/docs/demo/testnet/README.md
+```
 
 **Video:** [0:55] the merchant dashboard (in the demo it runs on a local
-session with Privy off; record a Privy sign-in insert if the live setup is
-done before recording).
+session with Privy off; record a Privy sign-in insert if the dashboard is
+hosted before recording); [2:30] the Privy relayer's transactions on
+Monadscan.
 
 ## Chainlink CRE
 
@@ -315,7 +362,7 @@ Mera is the whole account layer of the Polaris consumer app: Face ID creates a n
 ```text
 The Polaris app's accounts are Mera passkeys. Continue with Face ID calls createPasskeyWithPrfOutput; the passkey's PRF output becomes the account's key in the browser (Face ID, PRF, BIP-39 entropy, m/44'/60'/0'/0/0), and createSecp256k1SigningSession gives a viem account that signs every payment. The key is zeroed after use and never stored: only public metadata (the credential id, the rpId, the address) is kept, and every sign-in recomputes the key. The same passkey gives the same account on every device it syncs to.
 
-No seed phrase, no extension: a plain web page, installable as a PWA. No custody backend: every money movement is the account's own EIP-712 or ERC-3009 signature; our relayer only pays gas and holds no user funds. Unsupported browsers get "Open Polaris on your phone" with a QR code, and in-app browsers are told to open Safari or Chrome.
+No seed phrase, no extension: a plain web page, installable as a PWA, and an Android app that is a Trusted Web Activity around the same page, so Face ID there is Chrome's own passkey ceremony and the same passkey opens the same account. No custody backend: every money movement is the account's own EIP-712 or ERC-3009 signature; our relayer only pays gas and holds no user funds. Unsupported browsers get "Open Polaris on your phone" with a QR code, and in-app browsers are told to open Safari or Chrome.
 
 A new buyer at a shop meets Face ID inside the checkout: Pay in 4, Raise your limit, Continue with Face ID, and one tap creates the account and asks for the line.
 

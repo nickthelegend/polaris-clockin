@@ -6,7 +6,8 @@ This is [`docs/plan.md` §8](../plan.md#8-demo-three-minutes) rewritten for
 what the repository does today: the Halcyon shop, the Polaris checkout, Pay in
 4 with Chainlink CRE underwriting, the merchant dashboard, send by link and
 claim with the local-currency line, the Chainlink guardian and the instant
-retry, and the CRE reports on Monad testnet.
+retry, and on Monad testnet the CRE reports and the gasless run through the
+Privy relayer.
 
 **Total: 3:00.** Nine scenes, recorded in three takes, cut together.
 
@@ -57,6 +58,12 @@ pnpm --filter @polaris/cre-workflows cre login
   browser's language: [`apps/app` README, "Local currency"](../../apps/app/README.md#local-currency)).
 - **A clock** in a screen corner for scenes 2 to 4, so the first-five-minutes
   claim is timed on camera rather than asserted.
+- **The Android app, if it can be shown live.** Only once the app is hosted
+  and the APK is on an Android phone ([README, step 8](../../README.md#what-only-you-can-do)):
+  then add a two-second insert to scene 5 of the Android app opening on the
+  phone, captioned *The Polaris Android app · Monad testnet* (the hosted app
+  is on testnet, so keep it apart from the local claim). Until then scene 5
+  stays as written.
 
 ### The three takes
 
@@ -64,7 +71,7 @@ pnpm --filter @polaris/cre-workflows cre login
 |---|---|---|---|
 | **A** | `pnpm demo:local` | 1 to 5 | Real weekly terms: Pay in 4 at 10% APR, $349 as 4 × $87.92 ([`apps/shop/README.md`](../../apps/shop/README.md#run-it-against-the-real-polaris-backend)) |
 | **B** | `DEMO_FAST_PLANS=1 pnpm demo:local` | 6 and 7 | Instalments a minute apart, so a collection, a lost approval and the instant retry happen on camera. Interest pro-rated over minutes shows as $0.00; do not show this take's checkout as the pricing |
-| **C** | Monad testnet: the committed CRE runs, or live CLI loops | 8 | The Monad testnet evidence |
+| **C** | Monad testnet: the committed CRE runs and the committed gasless run through Privy, or live CLI loops | 8 | The Monad testnet evidence |
 
 `pnpm demo:local` ([`scripts/demo-local.mjs`](../../scripts/demo-local.mjs))
 prints its URLs when every page has compiled: the shop at
@@ -83,7 +90,7 @@ Ctrl+C before starting the next; each run starts fresh.
 | 1:10–1:40 | 0:30 | 5. Send by link and claim, in pesos | A |
 | 1:40–2:10 | 0:30 | 6. The Chainlink guardian pauses and resumes Pay in 4 | B |
 | 2:10–2:30 | 0:20 | 7. Sign again: the instant retry | B |
-| 2:30–2:50 | 0:20 | 8. On Monad testnet: the CRE reports | C |
+| 2:30–2:50 | 0:20 | 8. On Monad testnet: the CRE reports, gasless through Privy | C |
 | 2:50–3:00 | 0:10 | 9. For developers, and the close | any |
 | | **3:00** | | |
 
@@ -184,18 +191,19 @@ new plans):
 | Command | Take B, after the three steps above. The log: `tail -f .demo/logs/cre-collections.log` |
 | Reference | [`14-app-home-sign-again.png`](../demo/chainlink/14-app-home-sign-again.png), [`16-app-sign-again-confirm.png`](../demo/chainlink/16-app-sign-again-confirm.png), [`17-app-plan-collected.png`](../demo/chainlink/17-app-plan-collected.png), [`19-dashboard-chainlink-runs.png`](../demo/chainlink/19-dashboard-chainlink-runs.png) |
 
-### 8. On Monad testnet: the CRE reports (2:30–2:50)
+### 8. On Monad testnet: the CRE reports, gasless through Privy (2:30–2:50)
 
 | | |
 |---|---|
-| Shots | A terminal with the CRE CLI's run of the log trigger ("Reauthorized: … re-signed", "wrote 1 tasks, gas limit 326965 (estimate 284318)", "collect #1 ok") → Monadscan: the report transaction [`0x1116fbb4…292c4d`](https://testnet.monadscan.com/tx/0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d) (to Chainlink's forwarder, `ReportProcessed` for `CollectionsReceiver`) → the guardian's run ("Chainlink AUSD / USD on monad-mainnet: 0.99982194", "GuardianReceiver accepted it: feed round 1, Pay in 4 open") → Monadscan [`0x015bd95d…3f9080`](https://testnet.monadscan.com/tx/0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080) → the PolarisCheckout contract page [`0x3874…C70B`](https://testnet.monadscan.com/address/0x3874ef1bcE222755525a96f8284631780b9bC70B) |
-| On screen | *Monad testnet, 28 Sep 2026: `cre workflow simulate --broadcast`, three reports delivered through Chainlink's forwarder.* *Gas limit = estimate + 15%: Monad charges for the limit.* *Every buyer action was a signature; the relayer paid the gas.* |
-| Voiceover | "This is the same code on Monad testnet. The CRE CLI ran our workflows and delivered three signed reports: an instant collection, a scheduled one, and the guardian's price check from Monad mainnet." |
+| Shots | A terminal with the CRE CLI's run of the log trigger ("Reauthorized: … re-signed", "wrote 1 tasks, gas limit 326965 (estimate 284318)", "collect #1 ok") → Monadscan: the report transaction [`0x1116fbb4…292c4d`](https://testnet.monadscan.com/tx/0x1116fbb4b53263776da4c5cc6d7984b66f1d31ac81f35215b5dcf246f1292c4d) (to Chainlink's forwarder, `ReportProcessed` for `CollectionsReceiver`) → the guardian's run ("Chainlink AUSD / USD on monad-mainnet: 0.99982194", "GuardianReceiver accepted it: feed round 1, Pay in 4 open") → Monadscan [`0x015bd95d…3f9080`](https://testnet.monadscan.com/tx/0x015bd95da145efb4884ea0e50730728a2023a15f890f737847ede4064e3f9080) → the Privy relayer's page on Monadscan, [`0x8366…6aE2`](https://testnet.monadscan.com/address/0x8366916019bc5452e62A0D36418ABebB45396aE2), its transactions to PolarisCheckout, PolarisSend and the rest from the 14-of-14 run → one of them, the claim of a send link [`0x30ee0025…c8119a`](https://testnet.monadscan.com/tx/0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a) → the PolarisCheckout contract page [`0x3874…C70B`](https://testnet.monadscan.com/address/0x3874ef1bcE222755525a96f8284631780b9bC70B), its **Contract** tab showing the verified source |
+| On screen | *Monad testnet, 28 Sep 2026: `cre workflow simulate --broadcast`, three reports delivered through Chainlink's forwarder.* *Gas limit = estimate + 15%: Monad charges for the limit.* *The relayer is a Privy server wallet, locked by a policy. Five test accounts signed every step and never held MON.* *Every contract's source is verified.* |
+| Voiceover | "This is the same code on Monad testnet. The CRE CLI ran our workflows and delivered three signed reports. And every payment here was carried by a Privy server wallet, locked to our contracts: the users only signed." |
 | Command | Take C: see below |
-| Reference | [`collections-retry-081620.log`](../../workflows/evidence/2026-09-28/collections-retry-081620.log), [`guardian-081657.log`](../../workflows/evidence/2026-09-28/guardian-081657.log), [`workflows/evidence/2026-09-28/README.md`](../../workflows/evidence/2026-09-28/README.md) |
+| Reference | [`collections-retry-081620.log`](../../workflows/evidence/2026-09-28/collections-retry-081620.log), [`guardian-081657.log`](../../workflows/evidence/2026-09-28/guardian-081657.log), [`workflows/evidence/2026-09-28/README.md`](../../workflows/evidence/2026-09-28/README.md), the gasless run [`docs/demo/testnet/README.md`](../demo/testnet/README.md) |
 
 **Take C, recorded (costs nothing, recommended).** Show the committed runs
-from 28 Sep 2026 and open their transactions on Monadscan:
+from 28 Sep 2026 and open their transactions on Monadscan (the gasless run's
+19 are listed in [`docs/demo/testnet/README.md`](../demo/testnet/README.md)):
 
 ```bash
 cat workflows/evidence/2026-09-28/collections-retry-081620.log
@@ -219,10 +227,11 @@ pnpm --filter @polaris/cre-workflows retry:listen --broadcast       # collection
 ```
 
 Each run is appended to `workflows/evidence/loop/`. Plan #1 on testnet was
-already collected and liquidated on 28 Sep, so a live collections run
-finds nothing due unless a new testnet plan is opened first
-(`pnpm --filter @polaris/business smoke:testnet -- --run`, which spends the
-relayer's and deployer's testnet MON); and the guardian writes only when
+already collected and liquidated on 28 Sep; plan #2, from the run through
+Privy, is the only other plan, and no CRE run in the committed evidence has
+touched it, so check what is due before filming. A new testnet plan needs
+`pnpm --filter @polaris/business smoke:testnet -- --run`, which spends the
+Privy relayer's and the deployer's testnet MON. The guardian writes only when
 something changed or its heartbeat is due. An idle run writes nothing, which
 is correct but not much to film.
 

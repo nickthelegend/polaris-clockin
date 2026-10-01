@@ -26,23 +26,24 @@ Polaris is Stripe for every app on Monad: payment links with credit built in.
 A merchant shares one link. The buyer opens it, creates an account with Face
 ID (Mera passkeys) and pays in dollars: in full, in four instalments at 10%
 APR against a credit line, or on a subscription. They never see a seed phrase
-or pay gas; every step is a signature that our relayer carries. The merchant
-is paid in full, up front, and withdraws from a Privy embedded wallet. Three
-Chainlink CRE workflows run the credit: one underwrites a buyer from Nansen
-and Zerion wallet data for an on-chain score, one collects instalments on
-schedule and the moment a buyer signs again, and one pauses new plans if
+or pay gas; every step is a signature that our relayer, a policy-locked Privy
+server wallet, carries. The merchant is paid in full, up front, and withdraws
+from a Privy embedded wallet. Three Chainlink CRE workflows run the credit:
+one underwrites a buyer from Nansen and Zerion data, one collects instalments
+on schedule and the moment a buyer signs again, and one pauses new plans if
 Chainlink's AUSD/USD depegs. People can also send dollars across borders by
-link. The contracts are live on Monad testnet, where the CRE workflows have
-delivered signed reports.
+link. The contracts are live and source-verified on Monad testnet, where CRE
+has delivered signed reports.
 
 ## Links
 
 | Field | Value |
 |---|---|
 | `repositoryUrl` | https://github.com/nickthelegend/polaris-monad |
-| `demoUrl` | `<VIDEO_URL>` (the 3-minute video: [`video-script.md`](video-script.md)); a hosted app URL once it exists (not hosted yet: [README, step 6](../../README.md#what-only-you-can-do)) |
+| `demoUrl` | `<VIDEO_URL>` (the 3-minute video: [`video-script.md`](video-script.md)); a hosted app URL once it exists (not hosted yet; the steps are ready in [`docs/deploy.md`](../deploy.md), [README, step 6](../../README.md#what-only-you-can-do)) |
 | Write-up | [`docs/submission/writeup.md`](writeup.md) (link it as a "document" evidence item) |
-| Contracts | [Monad testnet deployment](../../README.md#monad-testnet-deployment); the record is [`monad-testnet.json`](../../packages/contracts/deployments/monad-testnet.json) |
+| Contracts | [Monad testnet deployment](../../README.md#monad-testnet-deployment); the record is [`monad-testnet.json`](../../packages/contracts/deployments/monad-testnet.json), the source verification [`monad-testnet.verification.json`](../../packages/contracts/deployments/monad-testnet.verification.json) |
+| Android app | [`apps/android`](../../apps/android/README.md): a signed APK from `pnpm --filter @polaris/android build` (attach it as a "file" evidence item if the portal takes one) |
 
 ## Track
 
@@ -74,11 +75,13 @@ in [`bounty-fields.md`](bounty-fields.md)):
 | Price data | **Chainlink Data Feeds**: AUSD/USD on Monad mainnet (the guardian), FX feeds for the local-currency line | [`packages/fx`](../../packages/fx/README.md) |
 | Underwriting data | **Nansen** (Profiler: first funder, related wallets, labels), Zerion, Etherscan, public RPCs | [`packages/underwriting`](../../packages/underwriting/README.md) |
 | Consumer accounts | **Mera** (`@category-labs/mera` 0.2.0): Face ID passkeys with PRF | [`apps/app`](../../apps/app/README.md#face-id-mera) |
-| Merchant accounts and wallets | **Privy** (`@privy-io/react-auth` 3.45, `@privy-io/node` 0.35): sign-in, embedded wallets, server wallets with policies | [`apps/business`](../../apps/business/README.md#privy-sign-in-and-the-payout-wallet) |
+| Merchant accounts and wallets | **Privy** (`@privy-io/react-auth` 3.45, `@privy-io/node` 0.35): sign-in, embedded wallets, server wallets with policies (the relayer and the registry admin, live on Monad testnet) | [`apps/business`](../../apps/business/README.md#privy-sign-in-and-the-payout-wallet) |
 | Indexing | **Envio HyperIndex** (`envio` 3.12.1) on HyperSync; a typed GraphQL client | [`packages/indexer`](../../packages/indexer/README.md) |
 | Web apps | Next.js 16, React 19, Tailwind CSS 4, viem 2, TypeScript; a shared component library | [`apps/app`](../../apps/app/README.md), [`apps/business`](../../apps/business/README.md), [`apps/shop`](../../apps/shop/README.md), [`packages/ui`](../../packages/ui/README.md) |
+| Android app | A Trusted Web Activity generated with **Bubblewrap** 1.25.0 (package `app.polarispay.twa`, Android 9+), verified by the app's `/.well-known/assetlinks.json` | [`apps/android`](../../apps/android/README.md) |
 | Developer surface | `polarispay-sdk` 0.3.0: checkout sessions, signed webhooks, the checkout pop-up, React components | [`packages/sdk`](../../packages/sdk/README.md) |
 | Storage | SQLite for Polaris for Business (API keys hashed, webhooks signed) | `packages/db` |
+| Hosting (prepared, not deployed yet) | Vercel for the app, the landing page and the shop (with Upstash Redis); Fly.io or Railway for Polaris for Business, from its Dockerfile; `pnpm deploy:check` checks a deployment | [`docs/deploy.md`](../deploy.md) |
 | Workspace | pnpm 10 workspace, Node 22 | [README, "Run it"](../../README.md#run-it) |
 | AI coding tools | Claude Code, disclosed | [README, "AI coding tools"](../../README.md#ai-coding-tools) |
 
