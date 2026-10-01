@@ -14,8 +14,9 @@ deployment ([step 7](#7-run-the-deploy-check)).
 
 Everything stays on **Monad testnet** (chain 10143), against the deployment in
 [`packages/contracts/deployments/monad-testnet.json`](../packages/contracts/deployments/monad-testnet.json).
-Its dollar is the labelled `MockAUSD`, and the relayer is the dev relayer
-until the Privy server wallet exists (README, "What only you can do", step 4).
+Its dollar is the labelled `MockAUSD`, and the relayer is the policy-locked
+Privy server wallet `0x8366916019bc5452e62A0D36418ABebB45396aE2`, live since
+28 Sep 2026 ([`apps/business/privy-live.md`](../apps/business/privy-live.md)).
 
 ## Contents
 
@@ -124,24 +125,27 @@ POLARIS_KEY_PEPPER=<generated in step 0>
 CRON_SECRET=<generated in step 0>
 POLARIS_CHECKOUT_ORIGIN=https://polaris-app.vercel.app
 POLARIS_PUBLIC_URL=https://polaris-business.fly.dev
-RELAYER_MODE=local
-RELAYER_LOCAL_ALLOW_TESTNET=1
-RELAYER_PRIVATE_KEY=<the dev relayer's key>
+# The Privy relayer, registry admin and payout signer: every line of the
+# git-ignored apps/business/.env.privy the live setup wrote
+RELAYER_MODE=privy
+PRIVY_RELAYER_WALLET_ID=<from .env.privy>
+PRIVY_RELAYER_ADDRESS=0x8366916019bc5452e62A0D36418ABebB45396aE2
+PRIVY_RELAYER_AUTH_KEY=<from .env.privy>
+# ...and the PRIVY_REGISTRY_*, PRIVY_PAYOUT_SIGNER_*, PRIVY_ADMIN_QUORUM_ID,
+# PRIVY_RELAYER_POLICY_ID and REGISTRY_ACTIVATOR lines from the same file
 ```
 
 - `POLARIS_CHECKOUT_ORIGIN` is APP and `POLARIS_PUBLIC_URL` is BUSINESS, with
   no trailing slash.
-- The relayer: until the Privy server wallet exists (README, "What only you
-  can do", step 4), the testnet deployment's dev relayer
-  `0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69` carries payments; it holds the
-  operator roles. Its key is `TESTNET_RELAYER_PRIVATE_KEY` in the git-ignored
-  repo-root `.env` of the machine that deployed the contracts. If that key is
-  gone, give a new address the roles with `RELAYER_ADDRESS=0x… pnpm --filter
-  @polarispay/contracts grant-relayer:monad` (signed with the deployer's key)
-  and use that address's key instead. Once `pnpm --filter @polaris/business privy:setup-relayer
-  -- --apply` has run, replace the three `RELAYER_*` lines with
-  `RELAYER_MODE=privy`, `PRIVY_RELAYER_WALLET_ID`, `PRIVY_RELAYER_ADDRESS` and
-  `PRIVY_RELAYER_AUTH_KEY`.
+- The relayer: the Privy server wallet `0x8366…6aE2` holds the operator
+  roles on testnet (`grant-relayer:monad`), and Privy signs only what its
+  policy allows. Copy every value from `apps/business/.env.privy` on the
+  machine that ran `privy:setup-relayer -- --apply`; never the admin key
+  quorum's private key (`.privy-admin.key`), which the server never needs.
+  The earlier dev relayer `0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69` still
+  holds its roles, so `RELAYER_MODE=local` with `RELAYER_LOCAL_ALLOW_TESTNET=1`
+  and its key (`TESTNET_RELAYER_PRIVATE_KEY` in the git-ignored repo-root
+  `.env`) remains a fallback.
 
 Import only the `NAME=value` lines, in one go:
 
@@ -192,9 +196,9 @@ Keep it at **exactly one Machine** (`fly scale count 1 --app polaris-business`):
 snapshotted daily by Fly (`fly volumes snapshots list <volume id>`).
 
 A merchant who signs up registers on `MerchantRegistry` by their own signature,
-relayed (the dev relayer holds the registry's operator role on testnet). Pay in
-4 at a new merchant also needs activation, which is off until
-`REGISTRY_ACTIVATOR=privy` is set up (`apps/business/README.md`, "Merchants,
+relayed (the Privy relayer holds the registry's operator role on testnet). Pay in
+4 at a new merchant also needs activation, which the Privy registry admin does
+with `REGISTRY_ACTIVATOR=privy` (`apps/business/README.md`, "Merchants,
 onboarding and payouts"); Pay now works at once.
 
 ### 1b. Or Railway
@@ -378,8 +382,7 @@ the results as JSON; `--android-package <name>` requires the app's
 | The landing page | It renders and links to APP and BUSINESS |
 | SDK presets | `polarispay-sdk`'s `MONAD_TESTNET` preset (`packages/sdk/src/deployments.ts`) equals the deployment record, and equals what BUSINESS serves at `/api/public/network`, so a shop on the SDK and the hosted checkout sign for the same contracts |
 
-Expected warnings on the testnet setup above: the dev relayer (until the Privy
-relayer), and `NEXT_PUBLIC_RP_ID` unset if you stay on `vercel.app`.
+Expected warnings on the testnet setup above: `NEXT_PUBLIC_RP_ID` unset if you stay on `vercel.app`.
 
 ---
 
@@ -443,7 +446,7 @@ The `.env.example` in each app describes every variable in full.
 | `POLARIS_CHECKOUT_ORIGIN` | **required** | runtime | APP: payment links and sessions send buyers to `<APP>/pay/<id>`; also allowed by CORS |
 | `POLARIS_PUBLIC_URL` | **required** | runtime | BUSINESS: signed into each merchant's registry metadata |
 | `POLARIS_TRUSTED_PROXIES` | **required** | runtime | `1` on Fly and Railway (`fly.toml` sets it) |
-| `RELAYER_MODE` | **required** | runtime | `local` with `RELAYER_LOCAL_ALLOW_TESTNET=1` and `RELAYER_PRIVATE_KEY` (the dev relayer, secret) until the Privy relayer exists; then `privy` with `PRIVY_RELAYER_WALLET_ID`, `PRIVY_RELAYER_ADDRESS`, `PRIVY_RELAYER_AUTH_KEY` |
+| `RELAYER_MODE` | **required** | runtime | `privy` (live on testnet) with `PRIVY_RELAYER_WALLET_ID`, `PRIVY_RELAYER_ADDRESS`, `PRIVY_RELAYER_AUTH_KEY` |
 | `POLARIS_DB_URL` | set by the image | runtime | `sqlite:/data/polaris.db` (the volume) |
 | `POLARIS_WORKERS` | set by the image | runtime | `1`: the background loops run in the server |
 | `POLARIS_DEPLOYMENT` | set by the image | runtime | `monad-testnet` (the record in the image) |
@@ -505,5 +508,5 @@ should: nothing could be paid.
 | "Continue with Face ID" fails at once | `NEXT_PUBLIC_RP_ID` isn't the app's host or a domain above it (the deploy check says so) |
 | The checkout can't load a payment link | The app's `NEXT_PUBLIC_POLARIS_API_URL` or Business's `POLARIS_CHECKOUT_ORIGIN` names another host: CORS refuses (deploy check: `cors`) |
 | A shop order stays "awaiting payment" | The webhook endpoint or `whsec_…` doesn't match (dashboard → Developers → the delivery log), or the shop has no Redis (deploy check: `order-store`) |
-| Payments fail with "relayer unavailable" | `RELAYER_MODE` is off, or the dev relayer's key isn't the one with the testnet roles |
+| Payments fail with "relayer unavailable" | `RELAYER_MODE` is off, a `PRIVY_RELAYER_*` value is missing or wrong, or (with `RELAYER_MODE=local`) the key is not the dev relayer's |
 | Links point at `localhost:3000` | `POLARIS_CHECKOUT_ORIGIN` isn't set on Business |
