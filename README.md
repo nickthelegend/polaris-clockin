@@ -141,9 +141,10 @@ the API. Each app's README lists its environment.
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
 | CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 209 passing; all three workflows compile to WASM |
 | Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 232 passing; the API auth check covers every route |
-| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 9 passing (the Chainlink states, a credit line's provenance, the dollar it signs for); 43 signature checks against the Solidity typehashes |
+| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 23 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, the Android app's `/.well-known/assetlinks.json`); 43 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 88 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
+| Android (TWA) | `pnpm --filter @polaris/android test`, `build` | 51 passing; a signed APK (needs a JDK 17+ and an Android SDK, found on the machine: [`apps/android`](apps/android/README.md#build-it)) |
 | Chainlink FX rates | `pnpm --filter @polaris/fx test`, `typecheck` (`check:live` reads every feed) | 46 passing |
 | End to end | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e` | 24 of 24 steps (Pay now, Pay in 4 with CRE underwriting, a new buyer's one-tap line, a CRE collection, Subscribe, direct wallet pay, the dashboard, a dashboard payment link paid and reopened); [`docs/demo`](docs/demo) |
 | | `DEMO_FAST_PLANS=1 pnpm demo:local` + `pnpm demo:e2e:chainlink` | 18 of 18 steps (FX in pesos, CRE underwriting with the line labelled a local run, the guardian pausing and resuming Pay in 4 from Chainlink AUSD/USD on Monad mainnet with Pay now still working, a dunned buyer collected by the log trigger 2 s after signing again, the Chainlink dashboard); [`docs/demo/chainlink`](docs/demo/chainlink/README.md) |
@@ -166,6 +167,7 @@ the API. Each app's README lists its environment.
 | [`apps/app`](apps/app/README.md) | **The Polaris app**: the buyer's installable PWA, phone and desktop layouts. Face ID accounts (Mera), the hosted checkout `/pay/[id]` (Pay now, Pay in 4, Subscribe), send by link, plans, the credit line and score. Reads the chain and the API (`src/lib/data/live.ts`); an offline demo without the API |
 | [`apps/business`](apps/business/README.md) | **Polaris for Business**: the merchant landing, Privy sign-in, the dashboard (payments, links, Pay in 4 ledger, payouts, developers, settings), and the API: checkout sessions, the relayer (`/api/relay`), webhooks, payouts, merchant registration, CRE underwriting requests and callbacks, the buyer's book |
 | [`apps/shop`](apps/shop/README.md) | **Halcyon**, a demo store paying through `polarispay-sdk`: Pay now, Pay in 4, a subscription and direct wallet payment, with signed webhooks |
+| [`apps/android`](apps/android/README.md) | **The Polaris app for Android**: a Trusted Web Activity generated with Bubblewrap (package `app.polarispay.twa`) that opens the hosted app full screen in Chrome, so Face ID (Mera passkeys) works exactly as in the browser; Send and Receive shortcuts; one-command signed APK (`pnpm --filter @polaris/android build`); verified by the app's `/.well-known/assetlinks.json` |
 | `apps/landing` | The Polaris landing page |
 | [`apps/gateway`](apps/gateway/README.md) | The underwriting API (`/v1/underwrite`, `/v1/explain`) on port 3510 |
 | [`packages/contracts`](packages/contracts/README.md) | Solidity: `PolarisCheckout` (Pay now, Pay in 4, Subscribe), `PolarisLoanEngine`, `ScoreManager`, `PolarisPayments`, `PolarisSend`, `MerchantRegistry`, `CollateralVault`, `BatchSettlement`, the CRE receivers; deploy, local end to end, ABIs |
@@ -331,7 +333,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 | Users send AUSD across borders | `PolarisSend` escrows AUSD by ERC-3009 against a link key; the app's Send and Claim (`apps/app/src/sheets/send.tsx`, `claim.tsx`); AUSD's own EIP-712 domain (`Agora Dollar`, `1`) | contracts `e2e:local` steps 8-9; `apps/app` `check:signatures` |
 | Real balances and activity | `apps/app/src/lib/data/live.ts`: `AUSD.balanceOf`, the API's record of chain events; the offline demo is labelled on every screen and never links a made-up hash | `docs/demo/01-app-home-funded.png`, `30-app-home-after.png` |
 | Local currency | Shown next to dollars at the live **Chainlink** rate, with its age ("≈ ARS 161.241 · Chainlink rate, 3 min ago · indicative"): `packages/fx` reads Chainlink Data Feeds server-side (EUR, GBP, JPY, CHF, CAD from Monad mainnet; 18 more from Ethereum, Polygon, Base), served by the app's `/api/fx`; no line for the 10 currencies without a feed, or when the rate is older than its own feed allows (twice its heartbeat, or heartbeat plus 10 min: 14 min for Monad's feeds, 26 h at most), in which case the next feed is read | `pnpm --filter @polaris/fx test`; `pnpm --filter @polaris/fx check:live`; `docs/design/fx/` |
-| A mobile app | An installable PWA; no Android wrapper (TWA) yet | ask Agora whether a PWA qualifies |
+| A mobile app | An installable PWA, and an **Android app**: a Trusted Web Activity around it ([`apps/android`](apps/android/README.md), package `app.polarispay.twa`), in which Face ID is Chrome's own passkey ceremony, so the same account works in both; the site vouches for it with `/.well-known/assetlinks.json` | `pnpm --filter @polaris/android build` (a signed APK; [the build of 28 Sep 2026](apps/android/README.md#the-build-of-28-sep-2026)); `adb install -r apps/android/dist/polaris-1.0.0-debug.apk` |
 
 ### Mera: the entire account layer
 
@@ -621,8 +623,17 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
    `NEXT_PUBLIC_DEV_SIGNER` for a deployed app: `next build` blanks it (and
    `NEXT_PUBLIC_DEV_SIGNER_PERSIST`) unless `POLARIS_ALLOW_DEV_SIGNER_BUILD=1`,
    so a hosted build only offers Face ID (Mera) and email (Privy).
-7. **Ask the sponsors:** Agora, whether a PWA counts as a mobile app; Mera,
-   whether the app's email option (Privy) beside Face ID is acceptable.
+7. **Ask the sponsors:** Agora, whether a PWA counts as a mobile app (the
+   Android app is built either way); Mera, whether the app's email option
+   (Privy) beside Face ID is acceptable.
+8. **The Android app on a phone:** `pnpm --filter @polaris/android build`,
+   then `adb install -r apps/android/dist/polaris-1.0.0-debug.apk` (USB
+   debugging on). Once the app is hosted, set
+   `POLARIS_ANDROID_SHA256_FINGERPRINTS` on it to what
+   `pnpm --filter @polaris/android fingerprint` prints, so Chrome drops the
+   address bar, and try Face ID in it (PRF inside a TWA is still unverified on
+   a real device). For Google Play: a Play Console account, an upload key and
+   `build -- --bundle` ([Publishing](apps/android/README.md#publishing-later)).
 
 ## What's next
 

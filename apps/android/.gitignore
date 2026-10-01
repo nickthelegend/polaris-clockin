@@ -1,0 +1,17 @@
+# Never committed: signing keys and their passwords, the toolchain, build output.
+.keys/
+*.keystore
+*.jks
+.env
+.env.*
+!.env.example
+.toolchain/
+dist/
+.gradle/
+build/
+app/build/
+local.properties
+# `bubblewrap build` writes these beside the project; `pnpm build` writes to dist/.
+app-release-*.apk
+app-release-*.aab
+*.idsig

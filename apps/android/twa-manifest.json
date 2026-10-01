@@ -1,0 +1,56 @@
+{
+  "packageId": "app.polarispay.twa",
+  "host": "app.polarispay.app",
+  "name": "Polaris",
+  "launcherName": "Polaris",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#0F1011",
+  "themeColorDark": "#0F1011",
+  "navigationColor": "#0F1011",
+  "navigationColorDark": "#0F1011",
+  "navigationDividerColor": "#0F1011",
+  "navigationDividerColorDark": "#0F1011",
+  "backgroundColor": "#0F1011",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://app.polarispay.app/icons/icon-512.png",
+  "maskableIconUrl": "https://app.polarispay.app/icons/maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./.keys/polaris-debug.keystore",
+    "alias": "polaris-debug"
+  },
+  "appVersionCode": 1,
+  "appVersion": "1.0.0",
+  "shortcuts": [
+    {
+      "name": "Send money",
+      "shortName": "Send",
+      "url": "/send",
+      "chosenIconUrl": "https://app.polarispay.app/icons/shortcut-send.png",
+      "chosenMaskableIconUrl": "https://app.polarispay.app/icons/shortcut-send.png"
+    },
+    {
+      "name": "Receive money",
+      "shortName": "Receive",
+      "url": "/receive",
+      "chosenIconUrl": "https://app.polarispay.app/icons/shortcut-receive.png",
+      "chosenMaskableIconUrl": "https://app.polarispay.app/icons/shortcut-receive.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://app.polarispay.app/",
+  "minSdkVersion": 28,
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": []
+}

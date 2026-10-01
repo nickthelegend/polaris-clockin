@@ -1,0 +1,14 @@
+{
+  "name": "@polaris/android",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Polaris app for Android: a Trusted Web Activity (Bubblewrap) around the hosted customer app, so Face ID (Mera passkeys) works exactly as in Chrome.",
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "build": "node scripts/build.mjs",
+    "fingerprint": "node scripts/fingerprint.mjs",
+    "inspect": "node scripts/inspect.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}
