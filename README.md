@@ -189,12 +189,13 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 | `polarispay-sdk` | `pnpm --filter polarispay-sdk test`, `build` | 157 passing; ESM and CJS builds |
 | Underwriting | `pnpm --filter @polarispay/underwriting test`, `typecheck`, `build` | 263 passing |
 | Gateway | `pnpm --filter @polarispay/gateway test` | 7 passing |
-| `@polaris/db` | `pnpm --filter @polaris/db test` | 29 passing |
+| `@polaris/db` | `pnpm --filter @polaris/db test` | 31 passing |
+| Receipts keys | `pnpm --filter @polaris/receipts test`, `typecheck` | 16 passing (derivation pinned and deterministic, labels kept apart, seal and open, another owner or id failing, tampering) |
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
 | Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
 | CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 209 passing; all three workflows compile to WASM |
-| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 264 passing; the API auth check covers every route |
-| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 40 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, split plans and links, the Android app's `/.well-known/assetlinks.json`, what a build reports to the deploy check); 53 signature checks against the Solidity typehashes |
+| Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 275 passing (11 for sealed receipts); the API auth check covers every route |
+| The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 47 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, split plans and links, the Android app's `/.well-known/assetlinks.json`, what a build reports to the deploy check, receipt keys beside an unmoved wallet key); 53 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 101 passing; the build proves no dev mock ships |
 | Landing | `pnpm --filter @polaris/landing typecheck`, `build` | builds |
 | Android (TWA) | `pnpm --filter @polaris/android test`, `build` | 51 passing; a signed APK (needs a JDK 17+ and an Android SDK, found on the machine: [`apps/android`](apps/android/README.md#build-it)) |
@@ -232,6 +233,7 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 | [`packages/indexer`](packages/indexer/README.md) | The Envio HyperIndex indexer for every Polaris event, with a webhook outbox |
 | `packages/indexer/client` | `@polarispay/indexer-client`: typed queries the dashboard, the CRE collections workflow and webhooks use |
 | `packages/db` | Polaris for Business storage (SQLite or memory), API keys, webhook signing |
+| [`packages/receipts`](packages/receipts/README.md) | Receipts only the buyer can read: keys from the same Face ID PRF output as the wallet (HKDF, one label per key), HPKE sealing to the buyer's inbox key, the texts the account signs; shared by the app and the API |
 | [`packages/fx`](packages/fx/README.md) | Chainlink FX rates for the local-currency line: the verified feed table (Monad mainnet, Ethereum, Polygon, Base), a cached viem reader, the display formatting |
 | [`packages/ui`](packages/ui/README.md) | The shared component library both web apps are built from (`/gallery` in each) |
 | `packages/brand` | The Polaris mark and wordmark |
@@ -405,6 +407,7 @@ What each sponsor asks for, where this repository meets it, and how to check.
 |---|---|---|
 | Passkey accounts, no seed phrase, no extension, no custody | `apps/app/src/lib/account/mera.ts` (`createPasskeyWithPrfOutput`, `createSecp256k1SigningSession`), key derived in the browser and zeroed (`derive.ts`); the relayer never holds user funds | `apps/app/README.md` "Accounts" |
 | Nothing else stands in for it | The dev signer only exists in `next dev` with `NEXT_PUBLIC_DEV_SIGNER=1` (a production build blanks the flag, `apps/app/next.config.ts`) and refuses the production domain. The app also offers **Continue with email** (a Privy embedded wallet) beneath Face ID | ask Mera whether the email option is acceptable, or drop it |
+| One Passkey, Many Keys: a non-wallet use of the PRF key material | **Receipts only you can read.** The Face ID that derives the wallet key also derives, by HKDF labels of their own, an AES-256-GCM key and an X25519 inbox key pair, in the same ceremony (no extra prompt). The account registers the inbox key with its own signature; Polaris for Business seals what was bought (description, line items, order, the plan's schedule) to it with RFC 9180 HPKE when the payment settles, and drops the plaintext; the app opens it on Activity with the session's keys. AAD binds each ciphertext to its owner and id. [`packages/receipts`](packages/receipts/README.md), [`apps/app` README](apps/app/README.md#receipts-only-you-can-read), `apps/business/src/server/receipts.ts` | `pnpm --filter @polaris/receipts test`; `apps/business` `test/receipts.test.ts`; `apps/app` `test/receipts.test.ts`. Not yet opened with a real Face ID on a phone (the app isn't hosted) |
 
 ### Privy: beyond authentication
 
@@ -618,7 +621,9 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
   is secured by collateral, because no CRE underwriting report has run there
   yet.
 - **The dev signer** stands in for Face ID in the demo (a key kept in the
-  browser; badge on every screen).
+  browser; badge on every screen). Its receipt keys come from a stand-in PRF
+  output derived from that key, so sealed receipts open in the demo exactly
+  as they would after a Face ID; with a real passkey they are untested.
 - **The CRE runs** in the demo are the real workflow handlers on the SDK's test
   runtime (`trigger:local`, `collections:local`, `guardian:local`), not a DON
   or the CRE CLI; the guardian's AUSD/USD is Chainlink's real Monad mainnet
