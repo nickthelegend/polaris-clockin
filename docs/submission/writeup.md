@@ -3,7 +3,8 @@
 **Payment links with credit built in.** A merchant shares one link. The buyer
 opens it, creates an account with Face ID and pays in dollars: in full, in
 four instalments against a credit line, or on a subscription. The merchant is
-paid in full, up front. People can also send dollars across borders by link.
+paid in full, up front. People can also send dollars across borders by link,
+and split a bill with one link.
 
 | | |
 |---|---|
@@ -11,7 +12,7 @@ paid in full, up front. People can also send dollars across borders by link.
 | Sponsor bounties | Agora (AUSD, cross-border), Privy, Chainlink CRE, Nansen, Mera, Envio |
 | Repository | [github.com/nickthelegend/polaris-monad](https://github.com/nickthelegend/polaris-monad) (MIT) |
 | Demo video | `<VIDEO_URL>` (3:00; the script is [`video-script.md`](video-script.md)) |
-| Network | Monad testnet (chain 10143), deployed 28 Sep 2026: [every address and transaction](../../README.md#monad-testnet-deployment) |
+| Network | Monad testnet (chain 10143), deployed 28 Sep 2026, every contract's source verified on Monadscan: [every address and transaction](../../README.md#monad-testnet-deployment) |
 | Run it | `pnpm install && pnpm demo:local` ([README, "Run it"](../../README.md#run-it)) |
 
 This write-up follows the plan's order ([`docs/plan.md` §9](../plan.md#9-submission-kit)).
@@ -47,7 +48,7 @@ Two apps on one network, plus the pieces a merchant integrates
 
 | Side | For | Signs in with | Does |
 |---|---|---|---|
-| **The Polaris app** ([`apps/app`](../../apps/app/README.md)) | Buyers and senders | Face ID ([Mera](../../apps/app/README.md#face-id-mera) passkeys) | Opens a payment link and pays **now**, **in 4** or **on a subscription**; sends dollars **by link**; shows the credit line and why. A phone PWA, and a desktop layout from 1024px |
+| **The Polaris app** ([`apps/app`](../../apps/app/README.md)) | Buyers and senders | Face ID ([Mera](../../apps/app/README.md#face-id-mera) passkeys) | Opens a payment link and pays **now**, **in 4** or **on a subscription**; sends dollars **by link**; **splits a bill** by link (local chain only so far, [§6, Monad Track 02](#monad-track-02)); shows the credit line and why. A phone PWA, a desktop layout from 1024px, and an **Android app** ([`apps/android`](../../apps/android/README.md), a Trusted Web Activity around the same app) |
 | **Polaris for Business** ([`apps/business`](../../apps/business/README.md)) | Merchants and platforms | Privy (email) and an embedded payout wallet | Payment links, the checkout API and [`polarispay-sdk`](../../packages/sdk/README.md), a dashboard (payments, Pay in 4 ledger, payouts, developers), signed webhooks, one-tap and automatic payouts |
 | **Halcyon** ([`apps/shop`](../../apps/shop/README.md)) | A demo store | | Takes Pay now, Pay in 4, a subscription and direct wallet payment through `polarispay-sdk`, against the real API and checkout |
 
@@ -98,7 +99,9 @@ needed MON. Every step they took was a signature that the Polaris relayer carrie
 every screen says "Dev signer · not Face ID". The Face ID path is Mera
 ([`apps/app/src/lib/account/mera.ts`](../../apps/app/src/lib/account/mera.ts));
 on a phone it needs the app on an HTTPS domain inside its passkey domain,
-which is not hosted yet ([README, "What only you can do"](../../README.md#what-only-you-can-do), step 6).
+which is not hosted yet: the steps and a deploy check are ready
+([`docs/deploy.md`](../deploy.md)), the deploy itself is a team step
+([README, "What only you can do"](../../README.md#what-only-you-can-do), step 6).
 The underwriting evidence there is the underwriting package's synthesized
 fixtures, so the line is labelled "CRE workflow, local run", never "Verified
 by Chainlink CRE" ([`provenance.ts`](../../apps/business/src/server/cre/provenance.ts)).
@@ -115,7 +118,7 @@ flowchart TB
     end
 
     FX["Chainlink FX feeds"] -- "local-currency line" --> APP
-    API["Polaris API, apps/business<br/>checkout sessions, webhooks<br/>relayer: POST /api/relay"]
+    API["Polaris API, apps/business<br/>checkout sessions, webhooks<br/>relayer: POST /api/relay,<br/>a Privy server wallet"]
 
     SHOP -- "1. checkout session" --> API
     SHOP -- "2. checkout pop-up" --> APP
@@ -176,13 +179,16 @@ chain directly ([Envio](#envio)).
   `PolarisLoanEngine` pays the merchant from the pool and collects the four
   payments; `ScoreManager` computes the score **on chain** from attested
   facts; `PolarisSend` escrows a send against a one-time link key;
+  `PolarisSplit` takes each friend's share of a split bill straight to the
+  organiser (no custody; local chain only so far);
   `MerchantRegistry` registers a merchant by the merchant's own signature.
   Tests are named for the exploit they stop
   ([`test/metropolis/`](../../packages/contracts/test/metropolis),
   [`Exploits.test.js`](../../packages/contracts/test/Exploits.test.js)).
 - **The API and relayer** ([`apps/business`](../../apps/business/README.md#the-relayer-plan-53-research-55)):
-  checkout sessions with Stripe's shape, the relayer, webhooks, payouts. The
-  relayer checks every signature server-side, refuses one for another amount,
+  checkout sessions with Stripe's shape, the relayer, webhooks, payouts. On
+  Monad testnet the relayer is a policy-locked Privy server wallet
+  ([Privy](#privy)). It checks every signature server-side, refuses one for another amount,
   merchant or order, and sets each gas limit to its estimate plus 15%, because
   Monad charges for the limit
   ([`submit.ts`](../../apps/business/src/server/relayer/submit.ts)).
@@ -208,16 +214,24 @@ the allow-list in [`policy/relayer.ts`](../../apps/business/src/server/policy/re
 | Pay now | Buyer: ERC-3009 `ReceiveWithAuthorization` | `PolarisCheckout.pay` |
 | Pay in 4 | Buyer: `PlanIntent` + ERC-2612 `Permit` (one *Confirm*) | `PolarisCheckout.openPlan` |
 | Subscribe | Buyer: `SubscribeIntent` + `Permit` | `PolarisCheckout.subscribe` |
+| Secure a line with collateral | Buyer: `Permit` to the vault | `CollateralVault.lockWithPermit` |
+| Pay an instalment early | Buyer: `RepayIntent` | `PolarisLoanEngine.repayWithSig` |
+| Cancel a subscription | Subscriber: `CancelSubscription` | `PolarisPayments.cancelWithSignature` |
 | Sign again after a lost approval | Buyer: `Permit` to the loan engine | `PolarisCheckout.reauthorize` |
 | Send by link, claim | Sender: ERC-3009; the link's one-time key over the recipient's address | `PolarisSend.send`, `claim` |
+| Split a bill, pay a share (local chain only) | Organiser: `CreateSplit`; each friend: ERC-3009 for exactly their share | `PolarisSplit.createSplit`, `payShare` |
 | Register, withdraw, pay out | Merchant's embedded wallet | `MerchantRegistry.registerFor`, the dollar's `transferWithAuthorization` |
 
 `pnpm --filter @polarispay/contracts e2e:local` runs all twelve flows; the
 buyer, the sender and the freelancer end with 0 MON
 ([README, "Tests and builds"](../../README.md#tests-and-builds)). On Monad
-testnet, the smoke test's buyer signed Pay now, Pay in 4 and a re-signed
-approval, and the relayer carried all three
-([`monad-testnet.smoke.json`](../../packages/contracts/deployments/monad-testnet.smoke.json)).
+testnet, `smoke:testnet` ran every action above except the split and an
+automatic payout, 14 of 14 checks, through the **Privy server wallet**: five fresh
+accounts (a merchant, its payout address, a buyer, a send-by-link key and the
+link's recipient) signed every step, and each ended as it began, with 0 MON
+and nonce 0, read from the chain. The Privy relayer sent 15 transactions for
+them and the Privy registry admin 2
+([`docs/demo/testnet`](../demo/testnet/README.md)).
 
 ## 5. What's new in Metropolis
 
@@ -233,6 +247,9 @@ From `85b29e4` to `ae2ce19` (28 Sep 2026): **567 commits** (531 without
 merges), **1,761 files changed, 227,025 lines added, 1,387 removed**. The full
 stat, every file, is [`diffstat.txt`](diffstat.txt); regenerate it with
 `pnpm docs:diffstat` ([`scripts/submission-diffstat.mjs`](../../scripts/submission-diffstat.mjs)).
+Work merged after `ae2ce19` (the Privy relayer live on testnet, split the
+bill, the Android app, the hosting setup) is not in these figures yet; they
+are regenerated at the submitted commit.
 By folder:
 
 | Folder | Files changed | of which binary | Lines added | Lines removed |
@@ -307,14 +324,16 @@ deployment on Monad mainnet or testnet.
 |---|---|
 | A consumer payments product with no crypto words on the buyer's path | Pay by link (now, in 4, subscription) and send by link: [`apps/app`](../../apps/app/README.md), [`apps/business`](../../apps/business/README.md), [`PolarisCheckout.sol`](../../packages/contracts/contracts/PolarisCheckout.sol), [`PolarisSend.sol`](../../packages/contracts/contracts/PolarisSend.sol) |
 | The first five minutes | [§3](#3-the-first-five-minutes) |
+| Track 02's third example idea: split the bill | **Built and tested, local chain only.** `PolarisSplit`: the organiser signs the split once (equal or named shares) and shares one link; each friend pays exactly their share with one ERC-3009 signature, forwarded to the organiser in the same call (no custody, no owner); a friend with no account makes one with Face ID on the way ([`PolarisSplit.sol`](../../packages/contracts/contracts/PolarisSplit.sol), `polarispay-sdk` `splits.link()`, the app's split screens). `pnpm demo:e2e:split`, 22 of 22 steps ([`docs/design/split`](../design/split/README.md)). Not on Monad testnet: the deployment predates it, and the app hides split links where the API reports no split contract |
 | On-chain rails as a design advantage | Credit underwritten from wallet history and scored on chain ([`ScoreManager.sol`](../../packages/contracts/contracts/ScoreManager.sol)); the merchant paid in full from the pool the moment the plan opens; claim links that a watcher cannot redirect ([`PolarisSend.test.js`](../../packages/contracts/test/metropolis/PolarisSend.test.js), "a watched claim cannot be redirected") |
-| Gasless for the user | [§4, "Gasless by construction"](#gasless-by-construction) |
-| Deployed on Monad testnet | 12 contracts on chain 10143 from commit `020484b` on 28 Sep 2026 (GuardianReceiver redeployed the same day from `62aa43f`), read back 65 of 65 ([`monad-testnet.check.txt`](../../packages/contracts/deployments/monad-testnet.check.txt)); addresses below |
+| Gasless for the user | [§4, "Gasless by construction"](#gasless-by-construction); on Monad testnet, 14 of 14 through the Privy relayer with five accounts that never held MON ([`docs/demo/testnet`](../demo/testnet/README.md)) |
+| Deployed on Monad testnet | 12 contracts on chain 10143 from commit `020484b` on 28 Sep 2026 (the same day, GuardianReceiver redeployed from `62aa43f`, and CollateralVault from `20518d2` with `lockWithPermit`), read back 65 of 65 ([`monad-testnet.check.txt`](../../packages/contracts/deployments/monad-testnet.check.txt)); **every source verified on Monadscan**, 14 of 14 exact matches: the 12 and the two they replaced ([`monad-testnet.verification.json`](../../packages/contracts/deployments/monad-testnet.verification.json)); addresses below |
 | Monad-specific engineering | Gas limits at the estimate plus 15%, because Monad charges the limit: the relayer ([`submit.ts`](../../apps/business/src/server/relayer/submit.ts)) and every CRE write ("gas limit 326965 (estimate 284318)" in [the retry run's log](../../workflows/evidence/2026-09-28/collections-retry-081620.log)). The guardian reads Monad **mainnet** and writes to Monad **testnet** in one run ([Chainlink CRE](#chainlink-cre)) |
 | Licence, AI disclosure, pre-existing code | [MIT](../../LICENSE); [README, "AI coding tools"](../../README.md#ai-coding-tools); [README, "Pre-existing components"](../../README.md#pre-existing-components) |
 
 **The contracts on Monad testnet** (chain 10143, from
-[`monad-testnet.json`](../../packages/contracts/deployments/monad-testnet.json)):
+[`monad-testnet.json`](../../packages/contracts/deployments/monad-testnet.json);
+each address's **Contract** tab on Monadscan shows its verified source):
 
 | Contract | Address | Deployed in |
 |---|---|---|
@@ -323,7 +342,7 @@ deployment on Monad mainnet or testnet.
 | PolarisLoanEngine | [`0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a`](https://testnet.monadscan.com/address/0xDaf74fa6A5cF2e03DF8E12613a8c8BF3A569204a) | [`0xe8c4f3bf…a374f`](https://testnet.monadscan.com/tx/0xe8c4f3bf90429faea48931eb0b5c2da008bc691ebe0f9921b865f654d56a374f) |
 | PolarisPayments | [`0x7C774CF3E664B10057Cb2dDa66bA298e831292F1`](https://testnet.monadscan.com/address/0x7C774CF3E664B10057Cb2dDa66bA298e831292F1) | [`0x056b4738…9e18e`](https://testnet.monadscan.com/tx/0x056b47385754c208dc2d696b9ce4b8fe7c2090dc844c3bc75b8dde194609e18e) |
 | MerchantRegistry | [`0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4`](https://testnet.monadscan.com/address/0x40A351282C9843C49f5Dd788d730a3d9Fe7627B4) | [`0x50637e33…36fa`](https://testnet.monadscan.com/tx/0x50637e33dde8b8ba6401ac9c9a0dc1714d0ba0c1e649dc381d18ecabb9c636fa) |
-| CollateralVault | [`0xD0e777f8DfA2E62F500054E85F815fC54fae3E72`](https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72) | [`0xcbd8ef90…a70fb9`](https://testnet.monadscan.com/tx/0xcbd8ef906cbdc850f01c534c8610b5dbc29ac63ed84a054ab408a78423a70fb9) |
+| CollateralVault, redeployed with `lockWithPermit` (gasless collateral; it replaced [`0xD0e7…3E72`](https://testnet.monadscan.com/address/0xD0e777f8DfA2E62F500054E85F815fC54fae3E72)) | [`0xC2F006aE9836a700CE8F1e457d11346cc42e23dc`](https://testnet.monadscan.com/address/0xC2F006aE9836a700CE8F1e457d11346cc42e23dc) | [`0x4c71da11…b44453`](https://testnet.monadscan.com/tx/0x4c71da11c22e6e1d10b418c9fb0e605be1ae091367740724008aa16ff5b44453) |
 | BatchSettlement | [`0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53`](https://testnet.monadscan.com/address/0x4F9478C66a82cEb1e1F8fE0117849e3F330cfc53) | [`0x28d8c131…1d083`](https://testnet.monadscan.com/tx/0x28d8c131cc2b7bb3fe9aa5805e5e9af32274ba17fb04302752a8dbea7f81d083) |
 | PolarisSend | [`0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55`](https://testnet.monadscan.com/address/0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55) | [`0x9f81549c…924b9`](https://testnet.monadscan.com/tx/0x9f81549cd07cf46f018c77f175f596ab7cf535f484f87bf6079ce57fb84924b9) |
 | PolarisCheckout | [`0x3874ef1bcE222755525a96f8284631780b9bC70B`](https://testnet.monadscan.com/address/0x3874ef1bcE222755525a96f8284631780b9bC70B) | [`0x5df03907…dc020c`](https://testnet.monadscan.com/tx/0x5df039074ed9a5b6e11c517955b42393a430d369a12c554096316a1d64dc020c) |
@@ -331,28 +350,52 @@ deployment on Monad mainnet or testnet.
 | UnderwritingReceiver (CRE) | [`0x523e9791d0e324525F66F91b21B478C18e284a19`](https://testnet.monadscan.com/address/0x523e9791d0e324525F66F91b21B478C18e284a19) | [`0xf643b392…f64c4a`](https://testnet.monadscan.com/tx/0xf643b392792f7f2a0c07edbf8e91a469e463fd065a9ef5d40b8bc59862f64c4a) |
 | GuardianReceiver (CRE) | [`0x4c99136634F670cd59E73fc284fED164C662e3Df`](https://testnet.monadscan.com/address/0x4c99136634F670cd59E73fc284fED164C662e3Df) | [`0x2be128a3…038bf`](https://testnet.monadscan.com/tx/0x2be128a399ed2034f2fffe8caba46519bc5c6f116625b9cff364977ad27038bf) |
 
-**Transactions a judge can open** (the smoke test, `pnpm --filter
-@polaris/business smoke:testnet -- --run`, 10 of 10,
-[`monad-testnet.smoke.json`](../../packages/contracts/deployments/monad-testnet.smoke.json)):
-Pay now $25 [`0x5d533afe…e925c2`](https://testnet.monadscan.com/tx/0x5d533afe3cf9b27adcb7063226baf69925b8834eb7ac32612029212c74e925c2);
-Pay in 4 $200, plan #1 [`0x4af42348…d2522d`](https://testnet.monadscan.com/tx/0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d);
-a lost approval signed again [`0xf02c45bd…173002`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002).
-All three were sent by the relayer
+**Transactions a judge can open** (the smoke test through Privy, `pnpm
+--filter @polaris/business smoke:testnet -- --run`, 28 Sep 2026, 14 of 14;
+every hash in [`docs/demo/testnet`](../demo/testnet/README.md), read back
+independently by `smoke:testnet:verify`):
+the merchant registers [`0x576f4ead…833c74`](https://testnet.monadscan.com/tx/0x576f4ead74715bfc8038e9d9d6ea87e4f1dd8f5f934d5efa2380fa7e8e833c74);
+Pay now $25 [`0xedc91c93…c22e6e`](https://testnet.monadscan.com/tx/0xedc91c93521bec8bb5ade52c2de7f0bdb654f2176aeb685b6ac73d2b28c22e6e);
+$202 of collateral locked by a relayed permit [`0x2efc674a…04d5fc`](https://testnet.monadscan.com/tx/0x2efc674a32e4c3403288aa83f99ea5913a80ab10a796dfbe4a510d6f2d04d5fc);
+Pay in 4 $200, plan #2 [`0x70cd0468…abdf06`](https://testnet.monadscan.com/tx/0x70cd0468cb0eeeb95fe5c9854e50dd6810f87c8412399b72955858a68dabdf06);
+Subscribe $5 a month [`0xda41c41f…3f9224`](https://testnet.monadscan.com/tx/0xda41c41fc87de25b27c9c9413ecd612f4ad7645ddc3790b9a77bb2634a3f9224);
+an instalment paid early [`0x557e6f99…f9504d`](https://testnet.monadscan.com/tx/0x557e6f997e8aa028e85860cb7073d6fa84c98fc2477ad7ee799c251654f9504d);
+a lost approval signed again [`0xc34da0c3…b7fd19`](https://testnet.monadscan.com/tx/0xc34da0c3d6f2744e04f1ffb46e3cc73694947be4c20ccf9bd86604cc17b7fd19);
+send $10 by link [`0xc262b283…9f5913`](https://testnet.monadscan.com/tx/0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913)
+and its claim [`0x30ee0025…c8119a`](https://testnet.monadscan.com/tx/0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a);
+the merchant's one-tap withdraw [`0x5ab0ecc0…0b7f48`](https://testnet.monadscan.com/tx/0x5ab0ecc02861ca4354f74d7d9dfac42792d72207de3c15158136cf8d540b7f48).
+Each was sent by the Privy relayer
+[`0x8366916019bc5452e62A0D36418ABebB45396aE2`](https://testnet.monadscan.com/address/0x8366916019bc5452e62A0D36418ABebB45396aE2)
+for an account that only signed. The registry admin, a second Privy server
+wallet ([`0xa089EeEA5B1625C586380596bde502aB46F3e45F`](https://testnet.monadscan.com/address/0xa089EeEA5B1625C586380596bde502aB46F3e45F)),
+activated the merchant ([`0x0b9e45ff…bb1cb1`](https://testnet.monadscan.com/tx/0x0b9e45ffe03c3bea14d1b4866473f7dfb9f62dbd1cfac95628de3e5884bb1cb1)).
+The only other sender was the harness (the deployer minting the mock dollar,
+and submitting the buyer's own signed `permit(0)` to play a lost approval),
+labelled as such. The buyer's Pay in 4 line is secured by that collateral,
+because an unsecured line needs a CRE underwriting report, and none has run
+on testnet yet ([Chainlink CRE](#chainlink-cre)).
+
+An earlier run the same day, before the Privy relayer existed, used the
+dev relayer
 [`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69)
-for the buyer, who only signed them. That buyer's Pay in 4 line is secured:
-it locked $202 in `CollateralVault` with its own two transactions, because
-an unsecured line needs a CRE underwriting report, and none has run on
-testnet yet ([Chainlink CRE](#chainlink-cre)).
+(10 of 10, [`monad-testnet.smoke.json`](../../packages/contracts/deployments/monad-testnet.smoke.json)):
+its Pay in 4 plan #1 [`0x4af42348…d2522d`](https://testnet.monadscan.com/tx/0x4af4234818aec669b3974c5c44f0f5cbe900858aa6e1e76bb413720374d2522d)
+and its re-signed approval [`0xf02c45bd…173002`](https://testnet.monadscan.com/tx/0xf02c45bd4ec1102d8ee4a55ea54e9980c28ddff5e7a4dffd222ca0bbba173002)
+are what the CRE collections runs below acted on.
 
 **Not done yet, and why:**
 
 - **No mainnet deployment.** `deploy:monad` refuses mainnet on purpose: the
   credit contracts are unaudited ([`docs/plan.md` §6](../plan.md#6-scope), WON'T).
-- **The contracts show no verified source on Monadscan yet.** That needs an
-  Etherscan API key; `VERIFY_DRY_RUN=1` already reproduces all 12 from source
-  ([README, "Tests and builds"](../../README.md#tests-and-builds)).
-- **No public URL yet.** The apps run with one command on a local chain;
-  hosting is a team step ([README, step 6](../../README.md#what-only-you-can-do)).
+- **No public URL yet.** The apps run with one command on a local chain.
+  Hosting is prepared, not done: [`docs/deploy.md`](../deploy.md) takes the
+  app, the landing page and the shop to Vercel and Polaris for Business to
+  Fly.io (or Railway), and `pnpm deploy:check` checks the result; running it
+  needs the team's accounts ([README, step 6](../../README.md#what-only-you-can-do)).
+- **Split the bill is not on Monad testnet.** `PolarisSplit` came after the
+  deployment; `deploy-split:monad` adds it in one transaction without moving
+  anything else, and has not been run
+  ([README](../../README.md#monad-testnet-deployment)).
 - **PolarisCheckout on testnet predates two `reauthorize` fixes** that are in
   the code and its tests. Redeploying it would move every address the apps,
   indexer and workflows use, so it waits until after the freeze
@@ -371,30 +414,42 @@ testnet yet ([Chainlink CRE](#chainlink-cre)).
 |---|---|
 | Send dollars across borders | **Send by link.** The sender types an amount and gets a link; the link carries a one-time key in its URL fragment, which never reaches our server. `PolarisSend.send` escrows the dollars against that key by the sender's ERC-3009 signature; `claim` needs the key's signature over the recipient's address, so a watcher cannot redirect it, and a link pays out once. The sender can cancel; after expiry the dollars go back only to the sender. [`PolarisSend.sol`](../../packages/contracts/contracts/PolarisSend.sol), its tests [`PolarisSend.test.js`](../../packages/contracts/test/metropolis/PolarisSend.test.js); the app's [`send.tsx`](../../apps/app/src/sheets/send.tsx) and [`claim.tsx`](../../apps/app/src/sheets/claim.tsx). Captures: [Link ready](../demo/x-1440-send-link-ready.png), [the claim](../demo/x-390-claim-open.png), [Arrived](../demo/x-390-claim-arrived.png), ["Your link was claimed"](../demo/x-1440-notifications.png) |
 | Pay across borders | A merchant's payment link is the same mechanism pointed at a business ([dashboard link](../demo/45-dashboard-share-link.png), [paid](../demo/46-link-3-app-receipt.png)) |
-| AUSD | Balances, payments, the Pay in 4 pool, credit lines and payouts are all in one dollar. The app signs AUSD's own EIP-712 domain (`Agora Dollar`, version `1`, recorded in [`monad-testnet.json`](../../packages/contracts/deployments/monad-testnet.json) `eip712.Stablecoin`), checked by `pnpm --filter @polaris/app check:signatures` (43 checks against the Solidity typehashes) |
+| AUSD | Balances, payments, the Pay in 4 pool, credit lines and payouts are all in one dollar. The app signs AUSD's own EIP-712 domain (`Agora Dollar`, version `1`, recorded in [`monad-testnet.json`](../../packages/contracts/deployments/monad-testnet.json) `eip712.Stablecoin`), checked by `pnpm --filter @polaris/app check:signatures` (53 checks against the Solidity typehashes) |
 | Mera passkey onboarding | [Mera](#mera) |
 | Instant settlement | Monad blocks every 400 ms and finality in about 800 ms ([`docs/plan.md` §2, "Why Monad"](../plan.md#why-monad-its-20-of-every-score-so-be-concrete)); a claim is one relayed transaction |
 | Local currency next to dollars | The amount in the viewer's currency at the live **Chainlink** rate, with its age: "≈ ARS 161.241 · Chainlink rate, 7 h ago · indicative" ([capture](../demo/chainlink/01-fx-send-ars.png)). [`packages/fx`](../../packages/fx/README.md) reads Chainlink Data Feeds server-side (EUR, GBP, JPY, CHF and CAD from Monad mainnet; 18 more from Ethereum, Polygon or Base), served by the app's [`/api/fx`](../../apps/app/src/app/api/fx/route.ts). No feed, no line |
-| A mobile app | An installable phone PWA with a desktop layout from 1024px ([`apps/app`](../../apps/app/README.md#screens)) |
+| Split a bill across borders | **Split the bill** (local chain only so far): one link, and each friend, wherever they are, pays exactly their share in dollars straight to whoever paid, with one signature; a friend with no account makes one with Face ID in the same step ([`PolarisSplit.sol`](../../packages/contracts/contracts/PolarisSplit.sol), captures in [`docs/design/split`](../design/split/README.md), `pnpm demo:e2e:split` 22 of 22). Not on Monad testnet yet ([Monad Track 02](#monad-track-02)) |
+| A mobile app | An **Android app**: [`apps/android`](../../apps/android/README.md), package `app.polarispay.twa`, a Trusted Web Activity generated with Bubblewrap around the hosted app, so Face ID is Chrome's own passkey ceremony and one account works in Chrome, the PWA and the app; Send and Receive shortcuts; the site vouches for it with `/.well-known/assetlinks.json`. `pnpm --filter @polaris/android build` makes a signed APK ([the build of 28 Sep 2026](../../apps/android/README.md#the-build-of-28-sep-2026)). Also an installable phone PWA, with a desktop layout from 1024px ([`apps/app`](../../apps/app/README.md#screens)) |
 
 **On Monad testnet:** `PolarisSend` is deployed at
 [`0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55`](https://testnet.monadscan.com/address/0x67D336c69881A4f3Fa4aaa2909cfcD95178DfC55)
 ([`0x9f81549c…924b9`](https://testnet.monadscan.com/tx/0x9f81549cd07cf46f018c77f175f596ab7cf535f484f87bf6079ce57fb84924b9)).
+In the smoke test through Privy, a sender with no MON sent $10 by link
+([`0xc262b283…9f5913`](https://testnet.monadscan.com/tx/0xc262b2838ea22630eff5873d0907ec88eb4240a333f07be77122262d619f5913)),
+and a fresh recipient address with no MON claimed it
+([`0x30ee0025…c8119a`](https://testnet.monadscan.com/tx/0x30ee00250e065a8081da4360c5c18ed9a123d2bc57d65413d8ae8e6030c8119a));
+the Privy relayer sent both, and the sender, the link's key and the
+recipient each ended at 0 MON and nonce 0
+([`docs/demo/testnet`](../demo/testnet/README.md)). That run was scripted,
+not tapped through the app, which is not hosted yet.
 
 **Not done yet, and why:**
 
-- **No send and claim on Monad testnet yet.** Send and claim ran end to end
-  on the local chain (the captures above, and the last two flows of
-  [`packages/contracts`](../../packages/contracts/README.md)' `e2e:local`); the testnet smoke
-  test covered Pay now, Pay in 4 and signing again. A testnet send needs the
-  app hosted or a scripted send, which is next.
+- **The send and claim on Monad testnet were scripted.** In the app, send
+  and claim ran end to end on the local chain (the captures above, and the
+  last two flows of [`packages/contracts`](../../packages/contracts/README.md)' `e2e:local`);
+  the app on testnet needs hosting ([README, step 6](../../README.md#what-only-you-can-do)).
 - **The dollar on testnet is a labelled mock** (`MockAUSD`, "Mock AUSD"),
   because the deployer held no testnet AUSD for the pool (decision 24 in the
   [README](../../README.md#monad-testnet-deployment)). A redeploy with
   `AUSD_MODE=ausd` uses real AUSD once we hold some.
-- **The mobile app is a PWA, not a store app.** Whether a PWA qualifies is a
-  question for Agora; an Android Trusted Web Activity is the fallback
-  ([`docs/plan.md` §3.1](../plan.md#31-agora-ausd-the-consumer-app-and-the-money)).
+- **The Android app is built, not yet on a phone or in a store.** The APK is
+  signed with a local debug key; nobody has installed it on a real phone yet,
+  and whether Mera's PRF works inside a Trusted Web Activity is unverified
+  there (it should: a TWA is Chrome). It opens with an address bar until the
+  app is hosted with the APK's fingerprint, and Google Play needs the team's
+  Play Console account ([`apps/android`, "Status"](../../apps/android/README.md#status)).
+- **Split the bill has only run on the local chain** (above).
 
 ### Privy
 
@@ -402,30 +457,42 @@ testnet yet ([Chainlink CRE](#chainlink-cre)).
 
 > Use Privy beyond authentication; login-only doesn't qualify.
 
-**Where it is met** (in code and tests; see "Not done yet" for what has not
-run against a live Privy app):
+**Where it is met** (live on Monad testnet since 28 Sep 2026, with the
+Privy app behind Polaris for Business; every id, address and rule is in
+[`apps/business/privy-live.md`](../../apps/business/privy-live.md), read
+back from Privy into [`privy-live.json`](../demo/testnet/privy-live.json)):
 
 | Requirement | Where |
 |---|---|
+| Policy-controlled server wallets | **The relayer is a Privy server wallet**, [`0x8366916019bc5452e62A0D36418ABebB45396aE2`](https://testnet.monadscan.com/address/0x8366916019bc5452e62A0D36418ABebB45396aE2) ([`signer.ts`](../../apps/business/src/server/relayer/signer.ts)), held to a 17-rule policy built from one allow-list ([`policy/relayer.ts`](../../apps/business/src/server/policy/relayer.ts)): one `DENY` for any transaction carrying MON, then one `ALLOW` per Polaris function (chain, contract, function, and a $0.10 floor where an amount is signed); anything else matches no rule and Privy refuses it. The wallet and its policy are owned by an admin key quorum, and the server's own key is a separate quorum held to the same policy, so a stolen server key cannot change the policy ([`scripts/privy/setup-relayer.mjs`](../../apps/business/scripts/privy/setup-relayer.mjs)). **A second Privy server wallet, the registry admin**, [`0xa089EeEA5B1625C586380596bde502aB46F3e45F`](https://testnet.monadscan.com/address/0xa089EeEA5B1625C586380596bde502aB46F3e45F), owns `MerchantRegistry` ([`0x34f00f29…bef710`](https://testnet.monadscan.com/tx/0x34f00f294ef9da35f43c08bb1606e6dc10a9119cd8ab92632922cf1a60bef710)) under a policy that allows only activating a merchant and capping it at up to $1,000 |
+| The policy, proven by Privy | `privy:prove-policy -- --run`: Privy signed the 3 allowed calls and refused all 7 others with `policy_violation`: a $0 collateral lock, the vault's `seize`, a $0 transfer, the same call carrying 1 wei of MON, the same call to another contract, `approve(attacker, max)`, and a plain MON transfer ([output](../demo/testnet/privy-prove-policy.txt)) |
+| Gasless, through Privy, on chain | `smoke:testnet`, 14 of 14: every buyer and merchant action, sent by the Privy relayer (15 transactions) and the Privy registry admin (2), for five fresh accounts that stayed at 0 MON and nonce 0 ([`docs/demo/testnet`](../demo/testnet/README.md); [§6, Monad Track 02](#monad-track-02) lists the hashes). `privy:smoke`: a $0.50 Pay now, [`0x5ef22fce…c4f983`](https://testnet.monadscan.com/tx/0x5ef22fced32a6c4d2192a25691caddbf604700934bd505a35830e77922c4f983), session paid, the buyer at 0 MON ([output](../demo/testnet/privy-smoke.txt)) |
 | Embedded wallets doing real work | Every merchant gets an embedded wallet on sign-in ([`privy-auth.tsx`](../../apps/business/src/components/auth/privy-auth.tsx), `createOnLogin: "all-users"`). It signs the merchant's `MerchantRegistry` registration right after the business is named (`useRegisterMerchant` in [`payouts.ts`](../../apps/business/src/lib/payouts.ts), [`registration.tsx`](../../apps/business/src/components/dashboard/registration.tsx)) and every withdrawal (`POST /api/payouts`, [`route.ts`](../../apps/business/src/app/api/payouts/route.ts)), gas-free through the relayer |
-| Policy-controlled server wallets | The relayer is a Privy server wallet ([`signer.ts`](../../apps/business/src/server/relayer/signer.ts)) held to a policy built from one allow-list ([`policy/relayer.ts`](../../apps/business/src/server/policy/relayer.ts)): one `DENY` for any transaction carrying MON, then one `ALLOW` per Polaris function; anything else matches no rule and Privy refuses it. The wallet and its policy are owned by an offline admin key quorum, so a stolen server key cannot change the policy ([`scripts/privy/setup-relayer.mjs`](../../apps/business/scripts/privy/setup-relayer.mjs)) |
-| Automatic payouts | `POST /api/payouts/automatic` creates the merchant's own policy (only the dollar, only this chain, only from their wallet, only to their payout address, at most $10,000 a payout), and the browser adds our payout signer under it with `addSigners` ([`policy/payout.ts`](../../apps/business/src/server/policy/payout.ts), [`route.ts`](../../apps/business/src/app/api/payouts/automatic/route.ts)) |
+| Automatic payouts | `POST /api/payouts/automatic` creates the merchant's own policy (only the dollar, only this chain, only from their wallet, only to their payout address, at most $10,000 a payout), and the browser adds our payout signer under it with `addSigners` ([`policy/payout.ts`](../../apps/business/src/server/policy/payout.ts), [`route.ts`](../../apps/business/src/app/api/payouts/automatic/route.ts)). The payout signer's key quorum exists in the Privy app |
 | Server-side authentication | Every dashboard route verifies the Privy access token with `@privy-io/node`; nothing the client sends can name the merchant or their wallet ([`apps/business` README](../../apps/business/README.md#merchants-onboarding-and-payouts)) |
-| The same policy, enforced locally | `checkRelayerCall` applies the allow-list before anything is signed, so the local dev adapter is held to exactly the production policy; `pnpm --filter @polaris/business test` (232 passing) covers it |
+| The same policy, enforced in our code | `checkRelayerCall` applies the allow-list before anything is signed, so the local dev adapter used by `pnpm demo:local` is held to exactly the production policy; `pnpm --filter @polaris/business test` (264 passing) covers it |
 
-**Not done yet, and why:** **not shown live.** Every run so far, including
-the Monad testnet smoke test, used `RELAYER_MODE=local`: the relayer on
-testnet ([`0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69`](https://testnet.monadscan.com/address/0x5e6934725eBCdfcA2d95D991045Fa813B51E2c69))
-is the dev adapter's generated key standing in for the Privy server wallet.
-Creating the server wallet, its policy and the admin key quorum happens in
-the team's Privy account, and the quorum key has to be taken offline by a
-person, so these are team steps: `privy:setup-relayer -- --apply`,
-`grant-relayer:monad`, `privy:setup-payouts -- --apply`, then
-`privy:prove-policy -- --run` (what Privy refused) and `privy:smoke -- --run`
-(one real relayed Pay now)
-([README, step 4](../../README.md#what-only-you-can-do)). The consumer app
-also uses Privy for **Continue with email** (an embedded wallet), beneath
-Face ID ([Mera](#mera)).
+Gas sponsorship: Polaris does not use Privy's native sponsorship and does not
+need it, because no user or merchant wallet ever sends a transaction; they
+sign, and the relayer pays the gas from its own MON
+([`privy-live.md`](../../apps/business/privy-live.md#gas-sponsorship-what-privy-offers-and-why-polaris-doesnt-need-it)).
+
+**Not done yet, and why:**
+
+- **The merchant in the live runs was a generated key**, signing the same
+  typed data (registration, withdrawal) an embedded wallet signs; no merchant
+  has signed in through Privy on a hosted dashboard yet, because it is not
+  hosted ([README, step 6](../../README.md#what-only-you-can-do)). The
+  recorded demo's dashboard runs on `pnpm demo:local`'s local session with
+  Privy off.
+- **No automatic payout has run live yet.** The code and its policy are
+  tested; a merchant has to turn it on in a hosted dashboard.
+- **Dashboard steps for the team** ([README, step 4](../../README.md#what-only-you-can-do)):
+  the login methods, the hosted origins as allowed domains, and moving the
+  admin key quorum's key offline.
+
+The consumer app also uses Privy for **Continue with email** (an embedded
+wallet), beneath Face ID ([Mera](#mera)).
 
 ### Chainlink CRE
 
@@ -599,10 +666,16 @@ In one place ([README, "What is simulated or sample"](../../README.md#what-is-si
 
 - **The captures in [`docs/demo`](../demo)** ran on a local Hardhat chain,
   deployed by the same script as testnet. Receipts there link nowhere.
-- **On Monad testnet** the contracts and every transaction linked here are
-  real; the dollar is `MockAUSD`, the relayer is the dev adapter, and the CRE
+- **On Monad testnet** the contracts (every source verified) and every
+  transaction linked here are real, and the relayer is the policy-locked
+  Privy server wallet; the dollar is `MockAUSD`, the smoke test's accounts are
+  generated keys driven by a script (the apps are not hosted yet), and the CRE
   reports are CLI simulations delivered through Chainlink's simulation
   forwarder.
+- **Split the bill** has run only on the local chain; `PolarisSplit` is not
+  on Monad testnet.
+- **The Android app** is a signed APK built from the repository; it has not
+  been installed on a real phone yet.
 - **Face ID** is the dev signer in the demo; the badge says so.
 - **Underwriting evidence** is synthesized fixtures, labelled; no live Nansen,
   Zerion or Etherscan call has been made.
@@ -616,10 +689,11 @@ In one place ([README, "What is simulated or sample"](../../README.md#what-is-si
 From the [README, "What's next"](../../README.md#whats-next) and the
 [plan](../plan.md#6-scope):
 
-1. **Live sponsor services before the freeze:** the Privy server-wallet
-   relayer and its policy proof, Envio Cloud, provider keys for a real
-   underwriting report and the first live Confidential HTTP call, a hosted
-   app so Face ID runs on a phone, and a send and claim on testnet.
+1. **Live sponsor services before the freeze:** Envio Cloud, provider keys
+   for a real underwriting report and the first live Confidential HTTP call,
+   the hosted apps ([`docs/deploy.md`](../deploy.md)) so Face ID runs on a
+   phone and in the Android app, and `PolarisSplit` on testnet
+   (`deploy-split:monad`).
 2. **The CRE workflows on a DON** once deploy access comes through, with the
    receivers locked to them; credit lines then read "Verified by Chainlink CRE".
 3. **One owner key is a single point of failure.** After the freeze,
