@@ -235,6 +235,10 @@ async function dump(url) {
 async function main() {
   const url = `http://127.0.0.1:${PORT}`;
   if (await rpcReady(url)) throw new Error(`Something already answers on port ${PORT}; set POLARIS_FIXTURE_PORT (3540-3549).`);
+  // Compile before the node starts: a node started without artifacts cannot
+  // name custom errors ("unrecognized custom error"), and the end-to-end
+  // flows check reverts by name. A fresh checkout has no artifacts yet.
+  await hardhat(["compile", "--quiet"]);
   const node = spawn(process.execPath, [HARDHAT, "node", "--hostname", "127.0.0.1", "--port", String(PORT)], {
     cwd: CONTRACTS,
     stdio: ["ignore", "ignore", "inherit"],
@@ -248,7 +252,6 @@ async function main() {
       if (Date.now() - started > 120_000) throw new Error("hardhat node did not start within 2 minutes");
       await new Promise((r) => setTimeout(r, 500));
     }
-    await hardhat(["compile", "--quiet"]);
     await hardhat(["run", "scripts/deploy-monad.js", "--network", "monadLocal"]);
     await hardhat(["run", "scripts/e2e-monad-local.js", "--network", "monadLocal"]);
     await hardhat(["run", join(ROOT, "scripts", "fixture-scenarios.cjs"), "--network", "monadLocal"], { POLARIS_CONTRACTS_DIR: CONTRACTS });
