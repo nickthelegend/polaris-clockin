@@ -43,6 +43,15 @@ describe("local runner configs", () => {
     expect(own.callback).toEqual({ url: collectionsOpts.callbackUrl, secretId: "POLARIS_CALLBACK_SECRET" });
   });
 
+  test("candidates from a local indexer when one is given (pnpm indexer:local), with the workflow's own DueCandidates", () => {
+    const url = "http://127.0.0.1:18080/v1/graphql";
+    const withIndexer = localCollectionsConfig(deployment(), templates(), { ...collectionsOpts, indexerUrl: url });
+    expect(withIndexer.candidates.indexerUrl).toBe(url);
+    expect(withIndexer.candidates.indexerQuery).toBeNull(); // DUE_CANDIDATES_QUERY, the client's document
+    expect(localCollectionsConfig(deployment(), templates(), { ...collectionsOpts, indexerUrl: null }).candidates.indexerUrl).toBeNull();
+    expect(() => localCollectionsConfig(deployment(), templates(), { ...collectionsOpts, indexerUrl: "not a url" })).toThrow();
+  });
+
   test("the guardian reads Chainlink AUSD/USD on Monad mainnet, or the labelled local mock, never a mock called Chainlink", () => {
     expect(localGuardianConfig(deployment(), templates(), guardianOpts).priceFeed).toEqual(MAINNET_AUSD_USD);
     const mock = localGuardianConfig(deployment(), templates(), { ...guardianOpts, price: "mock" }).priceFeed;

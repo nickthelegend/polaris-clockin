@@ -37,6 +37,10 @@
  *   POLARIS_LOCAL_RETRY                0 to run on the cron alone
  *   POLARIS_CALLBACK_URL               where callbacks go (e.g. http://localhost:3100/api/cre/callback)
  *   POLARIS_CALLBACK_SECRET            their HMAC secret (= the API's POLARIS_CRE_CALLBACK_SECRET)
+ *   POLARIS_LOCAL_INDEXER_URL          the Envio indexer for this chain (`pnpm indexer:local`, e.g.
+ *                                      http://127.0.0.1:18080/v1/graphql): candidates come from its
+ *                                      DueCandidates, as on a DON with candidates.indexerUrl, instead
+ *                                      of the chain; an indexer that fails falls back to the chain
  *
  * Local chains only: it refuses an RPC that isn't on loopback. Before each
  * run it mines an empty block, so the chain's clock (the DON's clock here)
@@ -58,6 +62,7 @@ const EVERY_MS = Math.max(10_000, Number(process.env.POLARIS_LOCAL_COLLECTIONS_E
 const RETRY = process.env.POLARIS_LOCAL_RETRY !== "0";
 const CALLBACK_URL = process.env.POLARIS_CALLBACK_URL || "";
 const CALLBACK_SECRET = process.env.POLARIS_CALLBACK_SECRET || "";
+const INDEXER_URL = process.env.POLARIS_LOCAL_INDEXER_URL || "";
 
 /** PolarisCheckout's Reauthorized(address indexed buyer, uint256 value, uint256 deadline): the log trigger's topic0. */
 const REAUTHORIZED_TOPIC = toEventSelector("Reauthorized(address,uint256,uint256)");
@@ -82,6 +87,7 @@ function runOnce(trigger) {
       rpc: RPC,
       deploymentFile: DEPLOYMENT,
       callback: CALLBACK_URL ? { url: CALLBACK_URL, secret: CALLBACK_SECRET } : null,
+      indexerUrl: INDEXER_URL || null,
       everySeconds: Math.round(EVERY_MS / 1000),
       trigger,
     }),
@@ -135,7 +141,7 @@ function enqueue(label, trigger) {
       await rpc("evm_mine");
       const { result: r, callbacks } = runOnce(trigger);
       const moved = r.tasks.length ? ` ${r.tasks.map((t) => `${t.action} #${t.id}`).join(", ")}` : "";
-      log(`${label} ${r.status}: ${r.checked} checked, ${r.executed} collected, ${r.skipped} skipped${moved}${r.txHash ? ` tx ${r.txHash}` : ""}`);
+      log(`${label} ${r.status} (candidates from the ${r.source}): ${r.checked} checked, ${r.executed} collected, ${r.skipped} skipped${moved}${r.txHash ? ` tx ${r.txHash}` : ""}`);
       await deliver(callbacks);
     } catch (error) {
       log(`${label} run failed: ${error.message}`);
@@ -182,7 +188,7 @@ if (!["127.0.0.1", "localhost", "[::1]", "::1"].includes(host)) {
   process.exit(1);
 }
 const deployment = JSON.parse(readFileSync(DEPLOYMENT, "utf8"));
-log(`cron every ${EVERY_MS / 1000} s on ${RPC} (candidates from the chain, reports through the deployment's MockKeystoneForwarder)`);
+log(`cron every ${EVERY_MS / 1000} s on ${RPC} (candidates from ${INDEXER_URL ? `the indexer at ${INDEXER_URL}` : "the chain"}, reports through the deployment's MockKeystoneForwarder)`);
 if (!CALLBACK_URL) log("POLARIS_CALLBACK_URL is not set: collections reach the chain, but the API won't hear about the runs");
 if (RETRY) {
   const checkout = deployment.contracts?.PolarisCheckout?.address;

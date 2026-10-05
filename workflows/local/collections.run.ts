@@ -18,7 +18,8 @@
  * - config: the staging template filled from the deployment record
  *   (./config.ts), with the deployment's own MockKeystoneForwarder;
  * - candidates from the chain (`loanCount`, `subscriptionCount` and a window
- *   of ids): no indexer locally;
+ *   of ids), or, when the job names a local indexer, from its `DueCandidates`
+ *   (the workflow's GraphQL POST, sent to it for real);
  * - EVM: the local node (e2e/helpers/local-evm.ts), the report delivered
  *   through the MockKeystoneForwarder by the deployer, the local simulation
  *   transmitter; CollectionsReceiver collects what is due;
@@ -42,13 +43,15 @@ import { REAUTHORIZED_TOPIC } from "../src/collections/retry.ts";
 import { configSchema, onCron, onReauthorized } from "../src/collections/workflow.ts";
 import { signCallback } from "../src/shared/callback.ts";
 import { type CreRequestLike, type SentRequest, toSent } from "../test/helpers/fixtures-http.ts";
-import { fs } from "../test/helpers/host.ts";
+import { childProcess, fs } from "../test/helpers/host.ts";
 import { CALLBACK_SECRET_ID, type LocalDeployment, localCollectionsConfig } from "./config.ts";
 
 export type CollectionsJob = {
   rpc: string;
   deploymentFile: string;
   callback: { url: string; secret: string } | null;
+  /** The local indexer's GraphQL endpoint, or null: candidates from the chain. */
+  indexerUrl?: string | null;
   /** Seconds between cron runs (sets the dunning ladder's window). */
   everySeconds: number;
   trigger: { kind: "cron" } | { kind: "log"; txHash: Hex };
@@ -68,7 +71,9 @@ test("local collections run", async () => {
     underwriting: readJson(join(ROOT, "underwriting", "config.staging.json")),
     guardian: readJson(join(ROOT, "guardian", "config.staging.json")),
   };
-  const config = configSchema.parse(localCollectionsConfig(d, templates, { everySeconds: job.everySeconds, callbackUrl: job.callback?.url ?? null }));
+  const config = configSchema.parse(
+    localCollectionsConfig(d, templates, { everySeconds: job.everySeconds, callbackUrl: job.callback?.url ?? null, indexerUrl: job.indexerUrl ?? null }),
+  );
 
   const selector = cre.capabilities.EVMClient.SUPPORTED_CHAIN_SELECTORS[config.chainSelectorName as keyof typeof cre.capabilities.EVMClient.SUPPORTED_CHAIN_SELECTORS];
   const record = bridgeEvm(EvmMock.testInstance(selector), { url: job.rpc, forwarder: config.forwarder, transmitter: d.deployer });
@@ -80,13 +85,23 @@ test("local collections run", async () => {
       callbacks.push(sent);
       return { statusCode: 204 };
     }
+    if (job.indexerUrl && sent.url === job.indexerUrl) {
+      // The capability is synchronous here, so the POST is too (curl, as the EVM bridge does).
+      const out = childProcess.execFileSync(
+        "curl",
+        ["-s", "-S", "-m", "10", "-X", "POST", "-H", "content-type: application/json", "--data-binary", "@-", "-w", "\\n%{http_code}", sent.url],
+        { input: sent.body ?? "", encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+      );
+      const cut = out.lastIndexOf("\n");
+      return { statusCode: Number(out.slice(cut + 1)), body: Buffer.from(out.slice(0, cut), "utf8").toString("base64") };
+    }
     return { statusCode: 404 };
   };
 
   const secrets = new Map([["main", new Map([[CALLBACK_SECRET_ID, job.callback?.secret ?? "unused"]])]]);
   // The DON's clock is the chain's (the runner mines a block first, so it is now).
   const runtime = () => newTestRuntime(secrets, { timeProvider: () => chainNowMs(job.rpc) }, config);
-  let result: { status: string; checked: number; tasks: unknown[]; executed: number; skipped: number; txHash: string | null };
+  let result: { status: string; source: string; checked: number; tasks: unknown[]; executed: number; skipped: number; txHash: string | null };
   if (job.trigger.kind === "log") {
     const receipt = rpcSync<RpcReceipt | null>(job.rpc, "eth_getTransactionReceipt", [job.trigger.txHash]);
     if (!receipt) throw new Error(`no receipt for ${job.trigger.txHash}`);
