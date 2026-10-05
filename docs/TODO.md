@@ -4,6 +4,12 @@ Updated 6 Oct 2026. **Deadline: Tue 13 Oct 2026, 11:59 PM ET** (portal:
 hackathon.monad.xyz). Feature freeze Fri 9 Oct, 18:00. Submit Mon 12 Oct;
 Tue 13 is buffer only.
 
+> **First: register.** Registration and team formation reportedly close
+> **Tue 6 Oct, 23:59 UTC** (from a participant's capture of the portal's
+> timeline, not confirmed). Register, create the team and the project on
+> hackathon.monad.xyz today. Polaris needs its own submitter: the rules
+> allow one project per participant.
+
 Legend: ✅ done · 🟡 built, a step left · ⬜ not started · 🔑 needs a team
 account or key (Claude can't do it) · 🤖 Claude can do it once unblocked.
 
@@ -33,9 +39,14 @@ receipts 16).
 - ✅ **Receipts only you can read** (Mera *One Passkey, Many Keys*).
 - 🟡 **Split the bill:** built and tested on a local chain; **not deployed
   on testnet**.
-- 🟡 **Hosting:** fully prepared ([`deploy.md`](deploy.md),
-  `pnpm deploy:check`), **not hosted yet**. No public URL.
-- ⬜ **Demo video:** not recorded.
+- 🟡 **Hosting:** live since 6 Oct on platform domains: Polaris for Business
+  on Railway (https://business-production-c0b6.up.railway.app), the app
+  (https://polaris-monad-app.vercel.app) and the landing page
+  (https://polaris-monad-landing.vercel.app) on Vercel; `pnpm deploy:check`
+  passes for all three. Left: the shop (needs merchant keys and Upstash
+  Redis), then the move to `polarispay.app` (the Face ID domain).
+- ⬜ **Demo video** (≤ 3 min; and a ≤ 2 min pitch video, if the portal asks
+  for one): not recorded.
 
 ---
 
@@ -69,6 +80,33 @@ Community Team Project ($5,000).
 
 ### Now → Thu 8 Oct (everything that needs an account)
 
+- [ ] 🔑 **Register today** (see the top): team, project, one submitter
+- [ ] 🔑 **Finish hosting:** add both hosted origins to Privy's allowed
+      domains; sign in to the hosted dashboard and make the shop's API keys
+      and webhook (deploy.md §4.1); connect Upstash Redis to the shop; move
+      `polarispay.app` onto the Vercel team that hosts the apps
+- [ ] 🔑 **Decide: real AUSD on testnet?** Agora's faucet
+      (`0xd236c18D274E54FAccC3dd9DDA4b27965a73ee6C`, `requestFunds`, 10,000
+      AUSD a call, 60 s global cooldown, 100k per address) was refilled
+      (~997M AUSD on 5 Oct), and testnet AUSD
+      (`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`) has the same EIP-712
+      domain as our mock ("Agora Dollar", v1). Switching is a full
+      `AUSD_MODE=ausd` redeploy: every address moves, and the testnet runs,
+      CRE reports and verification would be redone and the docs updated.
+      Rehearsed on a local fork (branch `metropolis/ausd-fork`, `deploy:fork`
+      and `fork:smoke` in `packages/contracts`): real AUSD supports
+      everything the contracts use, 14 of 14 money paths pass
+- [ ] 🤖 **Check CRE report gas on testnet (read-only):** on the fork,
+      `eth_estimateGas` for a forwarder report undershot what the receiver
+      needs (the mock forwarder catches the receiver's out-of-gas cheaply), so
+      a report can land "not processed". The workflows size writes from the
+      same kind of estimate (`estimateDelivery` in `workflows/src/shared/evm.ts`,
+      150,000 minimum); the committed evidence shows ~327k succeeding. Compare
+      Monad's estimate before the next CRE run
+- [ ] 🔑 **Judge access:** sponsor research of 5 Oct says the portal asks
+      for a live link plus test logins for judges (a merchant login for the
+      dashboard). Not in the rules v3 we read on 28 Sep: confirm on the portal
+
 - [ ] 🔑 **Host the apps** with [`deploy.md`](deploy.md): the app, landing
       and shop on Vercel (the shop needs Upstash Redis), Polaris for Business
       on Fly.io or Railway (one machine, a volume). Then `pnpm deploy:check`.
@@ -76,12 +114,19 @@ Community Team Project ($5,000).
 - [ ] 🔑 **Envio Cloud:** log in, install its GitHub app, deploy
       `packages/indexer` (see its README)
 - [ ] 🔑 **API keys** into `workflows/.env` (git-ignored): Nansen, Zerion;
-      plus a consenting history wallet for underwriting
+      plus a consenting history wallet for underwriting. Zerion gives
+      participants a free month of Builder (dashboard.zerion.io → My plan →
+      Builder, promo `METROPOLIS100`); Nansen's free tier is 100 credits
+- [ ] 🔑 **Envio API token** (envio.dev/app/api-tokens) as `ENVIO_API_TOKEN`
+      in `packages/indexer/.env`: HyperSync now refuses requests without
+      one. Envio Cloud's free plan deletes a deployment after 30 days
 - [ ] 🔑 **Privy dashboard:** Google login on; allowed domains = the hosted
       URLs
 - [ ] 🔑 **Chainlink:** `cre account access` (deploy access)
 - [ ] 🔑 **Ask on discord.gg/monaddev:** Agora (PWA / Android app counts as
-      mobile?), Mera (Privy email option OK?), Best Community Team eligibility
+      mobile?), Mera (Privy email option OK? The Mera UX card asks for one
+      passkey ceremony with no email/OTP), Best Community Team eligibility
+      (a team from an onboarded community supporter)
 - [ ] 🔑 **Real phones:** Face ID sign-up, pay, Pay in 4, send and claim on
       an iPhone (iOS 18+) and an Android phone; install the APK
 - [ ] 🔑 **Security housekeeping:** keep the Privy admin key in a password manager
@@ -102,6 +147,9 @@ Community Team Project ($5,000).
 
 ### Sat 10 – Sun 11 Oct: the story
 
+- [ ] 🔑 **Record the pitch video** (≤ 2:00) from
+      [`submission/pitch-script.md`](submission/pitch-script.md), if the
+      portal asks for one (sponsor research says so; the rules v3 don't)
 - [ ] 🔑 **Record the video** (≤ 3:00, public link) from
       [`submission/video-script.md`](submission/video-script.md): nine
       scenes; show the Privy relayer's transactions, the CRE runs, the
