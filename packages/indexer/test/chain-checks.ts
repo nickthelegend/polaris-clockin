@@ -136,21 +136,27 @@ export function chainChecks(get: () => TestIndexer, fixture: Fixture): void {
     }
   });
 
-  it("explains every collection: executed, short on funds, or stale", async () => {
+  it("explains every collection: executed, lost allowance, short on funds, or stale", async () => {
+    const count = (contract: string, event: string, where: (e: Recorded) => boolean = () => true) =>
+      fixture.events.filter((e) => e.contract === contract && e.event === event && where(e)).length;
     const tasks = await get().CollectionTask.getAll();
-    expect(tasks.filter((t) => t.executed)).toHaveLength(3);
+    expect(tasks.filter((t) => t.executed)).toHaveLength(count("CollectionsReceiver", "TaskExecuted"));
     const skipped = tasks.filter((t) => !t.executed).map((t) => [t.targetId, t.reason, t.reasonAction]);
+    expect(skipped).toHaveLength(count("CollectionsReceiver", "TaskSkipped"));
     expect(skipped).toEqual(
       expect.arrayContaining([
-        [2n, "InsufficientBalance", "insufficient_funds"],
+        [2n, "InsufficientAllowance", "allowance_lost"], // the e2e's lost approval, signed again (Reauthorized)
+        [3n, "InsufficientBalance", "insufficient_funds"], // buyer2's one-minute plan, then liquidated
         [1n, "LoanNotActive", "stale"],
       ]),
     );
     expect((await get().Installment.getOrThrow("2-0")).failedAttempts).toBe(1);
-    expect(await get().CollectionRun.getAll()).toHaveLength(4);
+    expect((await get().Installment.getOrThrow("3-0")).failedAttempts).toBe(1);
+    expect(await get().CollectionRun.getAll()).toHaveLength(count("CollectionsReceiver", "CollectionsRun"));
     const reports = await get().CreReport.getAll();
     expect(reports.every((r) => r.result)).toBe(true);
-    expect(reports.filter((r) => r.workflow === "collections")).toHaveLength(4);
+    const toCollections = (e: Recorded) => String(e.params.receiver).toLowerCase() === fixture.contracts.CollectionsReceiver;
+    expect(reports.filter((r) => r.workflow === "collections")).toHaveLength(count("MockKeystoneForwarder", "ReportProcessed", toCollections));
   });
 
   it("recognises the gasless payouts, the quoted order and the refused underwriting", async () => {
