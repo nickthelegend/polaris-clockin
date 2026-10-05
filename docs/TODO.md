@@ -92,7 +92,17 @@ Community Team Project ($5,000).
       (`0xa9012a055bd4e0eDfF8Ce09f960291C09D5322dC`) has the same EIP-712
       domain as our mock ("Agora Dollar", v1). Switching is a full
       `AUSD_MODE=ausd` redeploy: every address moves, and the testnet runs,
-      CRE reports and verification would be redone and the docs updated
+      CRE reports and verification would be redone and the docs updated.
+      Rehearsed on a local fork (branch `metropolis/ausd-fork`, `deploy:fork`
+      and `fork:smoke` in `packages/contracts`): real AUSD supports
+      everything the contracts use, 14 of 14 money paths pass
+- [ ] 🤖 **Check CRE report gas on testnet (read-only):** on the fork,
+      `eth_estimateGas` for a forwarder report undershot what the receiver
+      needs (the mock forwarder catches the receiver's out-of-gas cheaply), so
+      a report can land "not processed". The workflows size writes from the
+      same kind of estimate (`estimateDelivery` in `workflows/src/shared/evm.ts`,
+      150,000 minimum); the committed evidence shows ~327k succeeding. Compare
+      Monad's estimate before the next CRE run
 - [ ] 🔑 **Judge access:** sponsor research of 5 Oct says the portal asks
       for a live link plus test logins for judges (a merchant login for the
       dashboard). Not in the rules v3 we read on 28 Sep: confirm on the portal
