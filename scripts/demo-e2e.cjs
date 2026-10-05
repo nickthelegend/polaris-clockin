@@ -4,7 +4,8 @@
 //   PLAYWRIGHT_MODULE=<path to an installed playwright> node scripts/demo-e2e.cjs
 //
 // A buyer account (dev signer) with test dollars from the local faucet; Halcyon's
-// bag -> Polaris checkout popup -> Pay now; Halcyon -> popup -> Raise your limit (the
+// bag -> Polaris checkout popup -> Pay now; that purchase's receipt sealed to the buyer's
+// Face ID key (the server holds only ciphertext) and opened in the app; Halcyon -> popup -> Raise your limit (the
 // CRE underwriting workflow, local trigger) -> Pay in 4; both shop orders marked paid
 // by Polaris webhooks; the merchant's dashboard showing the payments, the plan and its
 // on-chain registration; then split the bill (scripts/demo-e2e-split.cjs: one link, four
@@ -162,8 +163,11 @@ async function receiptInPopup(popup, name) {
   step("the app reads the buyer's balance from the chain ($1,000 test dollars from the faucet)", balanceText > 0);
 
   // ── Pay now ──────────────────────────────────────────────────────────
+  // The Pay now checkout session, for the sealed receipt it leaves behind (below).
+  let payNowSession = null;
   {
     const { page, popup } = await shopCheckout(context, { product: "halcyon-one", mode: "Pay now", prefix: "10-paynow" });
+    payNowSession = (popup.url().match(/\/pay\/(cs_[A-Za-z0-9_]+)/) ?? [])[1] ?? null;
     const pay = (await buttons(popup)).find((t) => /^Pay now/.test(t));
     await popup.getByRole("button", { name: pay }).first().click();
     await confirmInPopup(popup, "10-paynow-5");
@@ -180,6 +184,64 @@ async function receiptInPopup(popup, name) {
     await shot(page, "10-paynow-7-shop-order-paid");
     step("Pay now: the shop's order is paid", true, page.url().replace(SHOP, ""));
     await page.close();
+  }
+
+  // ── Receipts only you can read: what Pay now bought, sealed to the buyer's key ──
+  {
+    const { privateKeyToAccount } = require(require.resolve("viem/accounts", { paths: [path.join(__dirname, "..", "apps", "business")] }));
+    const { receiptsReadMessage } = await import(require("url").pathToFileURL(path.join(__dirname, "..", "packages", "receipts", "src", "messages.ts")).href);
+    const key = await app.evaluate(() => JSON.parse(localStorage.getItem("polaris.dev-signer.v1") || "null")?.privateKey ?? null);
+    const account = key ? privateKeyToAccount(key) : null;
+    // What the shop put in the bag (apps/shop: "<product>, <option>" line items); none of it may be on the server in the clear.
+    const ITEM = /Halcyon One/;
+    // The buyer book (what the app reads): which payment has a sealed receipt, never what is in it.
+    const book = account
+      ? await until("the Pay now receipt in the buyer book", async () => {
+          const body = (await (await fetch(`${BUSINESS}/api/public/buyers/${account.address}`)).json()).data;
+          return body?.receiptsInbox && body.receipts.some((r) => r.kind === "payment") ? body : null;
+        }, 60000, 2000).catch(() => null)
+      : null;
+    const entry = book?.receipts.find((r) => r.kind === "payment") ?? null;
+    step("Receipts: the buyer's Face ID inbox key is registered and the Pay now payment has a sealed receipt", Boolean(entry), entry?.id ?? "");
+    // The checkout session the server kept: its description and line items are dropped once the receipt is sealed.
+    const session = payNowSession ? (await (await fetch(`${BUSINESS}/api/public/sessions/${payNowSession}`)).json()).data : null;
+    step(
+      "Receipts: the server dropped the checkout's description and line items once the receipt was sealed",
+      Boolean(session) && session.description === "Sealed for the buyer" && session.lineItems.length === 0 && !ITEM.test(JSON.stringify(session)),
+      session ? `${payNowSession}: "${session.description}", ${session.lineItems.length} line items` : String(payNowSession),
+    );
+    // The receipts themselves, as the app fetches them: signed by the account, and only ciphertext comes back.
+    let row = null;
+    let raw = "";
+    if (account && entry) {
+      const issuedAt = Math.floor(Date.now() / 1000);
+      const signature = await account.signMessage({ message: receiptsReadMessage(account.address, issuedAt) });
+      const res = await fetch(`${BUSINESS}/api/receipts`, { method: "POST", headers: { "content-type": "application/json", origin: APP }, body: JSON.stringify({ address: account.address, issuedAt, signature }) });
+      raw = await res.text();
+      row = (JSON.parse(raw).data?.receipts ?? []).find((r) => r.id === entry.id) ?? null;
+    }
+    step(
+      "Receipts: the server holds the receipt only as ciphertext (no item names in what it returns)",
+      Boolean(row) && /^0x[0-9a-f]{64}$/i.test(row.enc) && /^0x[0-9a-f]+$/i.test(row.ct) && row.ct.length > 200 && !ITEM.test(raw) && !/Halcyon order/.test(raw),
+      row ? `${(row.ct.length - 2) / 2} bytes of ciphertext` : "",
+    );
+    // The app: the payment's details show the receipt locked, and Face ID (the dev signer here) opens it.
+    if (entry) {
+      await app.goto(`${APP}/activity/pay-${encodeURIComponent(entry.id)}`, { waitUntil: "networkidle", timeout: 120000 });
+      await settle(app, 2500);
+      const openButton = app.getByRole("button", { name: "Open with Face ID" });
+      const locked = await until("the locked receipt", async () => (await openButton.count()) > 0 || (await app.getByText(ITEM).count()) > 0, 60000, 500).catch(() => false);
+      const wasLocked = Boolean(locked) && (await openButton.count()) > 0;
+      if (wasLocked) {
+        await shot(app, "15-receipt-1-app-locked");
+        await openButton.first().click();
+      }
+      const opened = await until("the opened receipt's line items", async () => (await app.getByText(ITEM).count()) > 0, 60000, 500).catch(() => false);
+      await sleep(800);
+      await shot(app, "15-receipt-2-app-opened");
+      const sealedLine = (await app.getByText("Sealed to your Face ID. Only you can read it.").count()) > 0;
+      step("Receipts: the app shows the receipt locked, and Face ID opens it to the line items only the buyer can read", wasLocked && Boolean(opened) && sealedLine);
+    }
   }
 
   // ── Pay in 4, with a credit line from the CRE workflow ────────────────
