@@ -109,6 +109,22 @@ function focusables(root: HTMLElement): HTMLElement[] {
 }
 
 /**
+ * Whether the last input was the keyboard. A layer opened by a tap or a click
+ * (or in a fresh window, like a checkout popup) takes focus itself, so no
+ * focus ring lands on its first button; one opened from the keyboard focuses
+ * its first control.
+ */
+let keyboardLast = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("keydown", (e) => {
+    if (!e.metaKey && !e.altKey && !e.ctrlKey) keyboardLast = true;
+  }, true);
+  window.addEventListener("pointerdown", () => {
+    keyboardLast = false;
+  }, true);
+}
+
+/**
  * Keep Tab inside `ref` while `active`, focus the first field (or the
  * container) on open, close on Escape, and hand focus back to whatever had
  * it when the layer closes.
@@ -131,12 +147,13 @@ export function useFocusTrap(
 
     const frame = requestAnimationFrame(() => {
       // On touch screens focusing a field would throw the keyboard up over the
-      // sheet, so the layer itself takes focus (its title is read out).
-      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      // sheet, and after a click a ring on the first button is noise, so the
+      // layer itself takes focus (its title is read out).
+      const self = window.matchMedia("(pointer: coarse)").matches || !keyboardLast;
       const target =
         initialFocus?.current ??
         node.querySelector<HTMLElement>("[data-autofocus]") ??
-        (coarse
+        (self
           ? node
           : // The first real control; not the close button or a scroll area
             // (focusable only so a keyboard can scroll it).

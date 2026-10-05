@@ -1,6 +1,8 @@
 import { Avatar, type AvatarProps, LogoMark } from "@polaris/ui";
 import {
   ArrowDownLeft,
+  ArrowUpRight,
+  CalendarCheck2,
   AudioLines,
   BookOpen,
   CarTaxiFront,
@@ -68,7 +70,19 @@ export function PersonAvatar({ name, size = "md", className, decorative }: { nam
 /** Polaris itself: money added, links, refunds. */
 function PolarisAvatar({ item, size }: { item: ActivityItem; size: Size }) {
   const icon =
-    item.kind === "added" ? <Plus /> : item.kind === "refund" ? <Undo2 /> : item.kind === "sent-link" ? <Link2 /> : <ArrowDownLeft />;
+    item.kind === "added" ? (
+      <Plus />
+    ) : item.kind === "refund" ? (
+      <Undo2 />
+    ) : item.kind === "sent-link" ? (
+      <Link2 />
+    ) : item.kind === "instalment" ? (
+      <CalendarCheck2 />
+    ) : item.direction === "out" ? (
+      <ArrowUpRight />
+    ) : (
+      <ArrowDownLeft />
+    );
   return <Avatar name={item.title} color="var(--ui-lime)" fg="#0f1011" icon={icon} size={size} />;
 }
 

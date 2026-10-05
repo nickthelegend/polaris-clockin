@@ -140,10 +140,12 @@ export function ReceiptWhat({ item, fallback }: { item: ActivityItem; fallback: 
   if (r.status === "none") return <>{fallback}</>;
   const what = r.status === "open" ? receiptWhat(r.receipt) : null;
   if (what) return <>{what}</>;
+  // Inline text, not an inline-flex box: a row's ellipsis then cuts the words,
+  // where an atomic box would be swapped for "…" whole.
   return (
-    <span className="inline-flex max-w-full items-center gap-1 align-bottom">
-      <LockKeyhole aria-label="Sealed receipt" size={12} strokeWidth={2} className="shrink-0" />
-      <span className="truncate">{fallback}</span>
-    </span>
+    <>
+      <LockKeyhole aria-label="Sealed receipt" size={12} strokeWidth={2} className="mr-1 inline align-[-1px]" />
+      {fallback}
+    </>
   );
 }
