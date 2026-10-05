@@ -45,7 +45,8 @@ receipts 16).
   (https://polaris-monad-landing.vercel.app) on Vercel; `pnpm deploy:check`
   passes for all three. Left: the shop (needs merchant keys and Upstash
   Redis), then the move to `polarispay.app` (the Face ID domain).
-- ⬜ **Demo video** (≤ 3 min) and **pitch video** (≤ 2 min): not recorded.
+- ⬜ **Demo video** (≤ 3 min; and a ≤ 2 min pitch video, if the portal asks
+  for one): not recorded.
 
 ---
 
@@ -92,8 +93,9 @@ Community Team Project ($5,000).
       domain as our mock ("Agora Dollar", v1). Switching is a full
       `AUSD_MODE=ausd` redeploy: every address moves, and the testnet runs,
       CRE reports and verification would be redone and the docs updated
-- [ ] 🔑 **Judge access:** the rules ask for a live link plus test logins
-      for judges (a merchant login for the dashboard)
+- [ ] 🔑 **Judge access:** sponsor research of 5 Oct says the portal asks
+      for a live link plus test logins for judges (a merchant login for the
+      dashboard). Not in the rules v3 we read on 28 Sep: confirm on the portal
 
 - [ ] 🔑 **Host the apps** with [`deploy.md`](deploy.md): the app, landing
       and shop on Vercel (the shop needs Upstash Redis), Polaris for Business
@@ -135,7 +137,9 @@ Community Team Project ($5,000).
 
 ### Sat 10 – Sun 11 Oct: the story
 
-- [ ] 🔑 **Record the pitch video** (≤ 2:00), separate from the demo
+- [ ] 🔑 **Record the pitch video** (≤ 2:00) from
+      [`submission/pitch-script.md`](submission/pitch-script.md), if the
+      portal asks for one (sponsor research says so; the rules v3 don't)
 - [ ] 🔑 **Record the video** (≤ 3:00, public link) from
       [`submission/video-script.md`](submission/video-script.md): nine
       scenes; show the Privy relayer's transactions, the CRE runs, the
