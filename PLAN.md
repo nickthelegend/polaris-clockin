@@ -108,7 +108,8 @@ Each task: objective · acceptance · verify · status.
   `metropolis/receipts-e2e`): run green. · BLOCKED on the shared checkout
   (another session's demo run), then on P2.
 - **P4.2 `docs/TEST-PLAN-ZERO-MOCK.md`**: every page, endpoint, contract
-  interaction and integration with its expected result. · NOT STARTED
+  interaction and integration with its expected result. · DONE (written;
+  the runs fill it in)
 - **P4.3 Browser pass** via Claude in Chrome, console and network clean,
   375 px. · NOT STARTED
 
@@ -140,6 +141,7 @@ evidence: 730 lines. The product-path gaps:
 | G11 | `scripts/demo-local.mjs:426–431` `POLARIS_LOCAL_SESSION_*` | Merchant sign-in bypasses Privy locally | P2 | Real Privy on localhost (team) | P2.3 |
 | G12 | Testnet stablecoin is MockAUSD (`deployments/monad-testnet.json`) | Agora bounty on a labelled mock | P1 | Redeploy on go | P7 |
 | G13 | `README.md` Attribution was "TBD" | Rules require attribution | P1 | Done 6 Oct | P6 |
+| G15 | `apps/app/src/app/gallery`, `apps/business/src/app/gallery` public in production | Shared components with sample values reachable by judges | P3 | Development only | P1.1, P1.2 |
 | G14 | `workflows` CRE report gas estimate undershoots on the fork | A report can land "not processed" | P2 | Measure on testnet (read-only) | P7 |
 
 The other hits are tooling and tests: deploy and e2e scripts, the contracts'
