@@ -17,6 +17,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
 
     "lib": ["es2023"],
     "types": ["node"]
