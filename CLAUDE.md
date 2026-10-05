@@ -16,8 +16,9 @@ sponsor bounties (Agora, Privy, Chainlink CRE, Nansen, Mera, Envio).
 **Deadline: Tue 13 Oct 2026, 11:59 PM ET.** Feature freeze Fri 9 Oct, 18:00.
 
 - Repo: https://github.com/nickthelegend/polaris-monad (**public**)
-- Working copy: `F:\Projects\polaris`. `D:\Project\polaris` is a different,
-  older product (the Solana port, remote `polaris-solana`), not this one.
+- Working copy: `/Volumes/Extreme SSD/Projects/polaris` on a Mac (moved from
+  a Windows PC on 6 Oct). The Solana port (remote `polaris-solana`) is a
+  different, older product, not this one.
 - Network: Monad testnet, chain 10143. The deployment record is
   `packages/contracts/deployments/monad-testnet.json`.
 
@@ -41,7 +42,7 @@ sponsor bounties (Agora, Privy, Chainlink CRE, Nansen, Mera, Envio).
 ## Commands
 
 ```bash
-CI=true pnpm install --prefer-offline        # ~20 min on this machine: run in the background with a log
+CI=true pnpm install --prefer-offline        # under a minute on the Mac
 pnpm --filter @polarispay/contracts test     # Hardhat, ~600 tests
 pnpm --filter @polaris/business test         # vitest; also typecheck, lint
 pnpm --filter @polaris/app test              # node:test; also typecheck, lint, check:signatures
@@ -81,10 +82,13 @@ Before calling work done: the touched packages' `test`, `typecheck` and
   `metropolis/<topic>` branches in worktrees under `.claude/worktrees/`,
   merged into `main` with `--no-ff`.
 
-## Environment gotchas (Windows)
+## Environment (Mac)
 
-- The repo's drive letter has moved before (E: → F:). If it moves again:
-  `git worktree repair <new paths>` and reinstall in each worktree.
-- `node_modules` is per worktree; a new worktree needs its own install.
+- The repo is on an external SSD (`/Volumes/Extreme SSD`); the path has a
+  space, so quote it in shell commands.
 - Node 22.6+ and pnpm 10. Some packages run TypeScript directly.
-- Local Envio needs Docker (WSL).
+- `node_modules` is per worktree; a new worktree needs its own install. If
+  the repo moves, `git worktree repair <new paths>`.
+- The Android build reads the JDK from `apps/android/.env`
+  (`POLARIS_ANDROID_JDK`, Homebrew's OpenJDK 17 here).
+- Local Envio needs Docker.

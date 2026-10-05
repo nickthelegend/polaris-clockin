@@ -84,8 +84,8 @@ Community Team Project ($5,000).
       mobile?), Mera (Privy email option OK?), Best Community Team eligibility
 - [ ] 🔑 **Real phones:** Face ID sign-up, pay, Pay in 4, send and claim on
       an iPhone (iOS 18+) and an Android phone; install the APK
-- [ ] 🔑 **Security housekeeping:** move `.privy-admin.key` (in the `live` worktree's `apps/business/`)
-      offline and delete it; **rotate the Alchemy key** that is hardcoded in
+- [ ] 🔑 **Security housekeeping:** keep the Privy admin key in a password manager
+      only, and delete `.privy-admin.key` and the move file from the old PC; **rotate the Alchemy key** that is hardcoded in
       the public `polaris-solana` repo (`merchant-web/lib/constants.ts`,
       `merchant-web/components/sdk/PayWithPolaris.tsx`,
       `shopping/components/providers.tsx`). It is in git history, so rotate
@@ -132,7 +132,6 @@ Ready now, no accounts needed:
 - Add the receipts step to `pnpm demo:e2e` (after
   `pnpm exec playwright install chromium`), and run the full e2e suites
 - Polish passes on the demo path with screenshots against the references
-- Clean up the ~50 stale worktrees under `.claude/worktrees/`
 
 Once the team unblocks it:
 
