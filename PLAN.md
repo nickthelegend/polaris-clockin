@@ -34,7 +34,7 @@ send / split → receipt), (2) every sponsor requirement met with real calls,
 |---|---|---|---|
 | P1 ★ | **Zero-mock product path**: remove offline demo data, the dev mock session, the shop's dev mock API, fixture evidence and the mock dollar from what runs | — | IN PROGRESS |
 | P2 ★ | **Real local stack**: `demo:local` on an anvil fork of Monad testnet with Agora's real AUSD, Chainlink's forwarder, real WebAuthn (virtual authenticator with PRF in automation) | P1 | NOT STARTED |
-| P3 | **Indexer live**: Envio HyperIndex on the local chain feeding the dashboard, webhooks and CRE candidates | P2 for the fork variant | IN PROGRESS |
+| P3 | **Indexer live**: Envio HyperIndex on the local chain feeding the dashboard, webhooks and CRE candidates | P2 for the fork variant | DONE (local) |
 | P4 ★ | **Verification**: `demo:e2e` (incl. receipts, split) green on the real stack; every item of the zero-mock test plan PASS or UNTESTED with its dependency, via Claude in Chrome with console and network clean | P1, P2 | NOT STARTED |
 | P5 | **Quality loop**: tests, typecheck, lint, contracts, Slither, secret scan, 375 px, a11y basics, failure states; gap grep re-run | P4 | IN PROGRESS (first pass green) |
 | P6 | **Judge package**: README, SUBMISSION.md, DEPLOY-LATER.md, kit | — | DONE (refresh at the end) |
@@ -98,7 +98,16 @@ Each task: objective · acceptance · verify · status.
 ### P3 Indexer
 
 - **P3.1 Envio on the local chain** (RPC source, no token): entities,
-  Activity outbox, DueCandidates, consumers read it. · IN PROGRESS (agent)
+  Activity outbox, DueCandidates, consumers read it. · DONE (6 Oct,
+  `pnpm indexer:local`): synced to head, all 26 entities populated, 27/27
+  values equal the contracts, all nine webhook kinds in the outbox,
+  DueCandidates listed a due loan and subscription; the dashboard path
+  (`insights.live.test.ts`), the SDK's webhook validator and a real
+  `polaris-collections` run read it. Left: the API's own webhook dispatcher
+  still sends from its chain sync, not the indexer outbox (P3.3)
+- **P3.3 Dispatcher from the indexer** (optional): when
+  `POLARIS_INDEXER_URL` is set, read the `Activity` outbox by cursor. ·
+  NOT STARTED (P3)
 - **P3.2 Envio on testnet** needs `ENVIO_API_TOKEN` and the testnet go. ·
   BLOCKED
 
