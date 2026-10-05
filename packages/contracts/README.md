@@ -83,6 +83,64 @@ first time; 436k for a later one), a collections report 162k, subscribe 335k,
 send 167k, claim 63k, an underwriting report 142k, a guardian attestation 140k
 (254k for the first; it reads the pool to check the report against it), `reauthorize` 77k; PolarisSplit (Hardhat, one run): open a split of 3 shares 161k, pay a share 138k, close 38k.
 
+## Rehearse real AUSD on a fork
+
+Testnet runs on a labelled MockAUSD (decision 24), so the real-AUSD path
+(`AUSD_MODE=ausd`) has not run there. It can be rehearsed on a local anvil
+fork of Monad testnet, where Agora's AUSD, Agora's faucet and Chainlink's
+simulation forwarder are as they stand on testnet, without sending anything
+to testnet itself:
+
+```bash
+anvil --port 18555 --fork-url https://testnet-rpc.monad.xyz --chain-id 10143 --fork-block-number <a recent block> --prune-history 300
+pnpm --filter @polarispay/contracts deploy:fork             # real AUSD by default; writes deployments/monad-fork.json (git-ignored)
+pnpm --filter @polarispay/contracts fund-pool:fork          # real AUSD from Agora's faucet into the credit pool (POOL_FUND_AUSD, default 10,000)
+pnpm --filter @polarispay/contracts check:deployment:fork   # the read-back check:deployment:monad does, against the fork record
+pnpm --filter @polarispay/contracts fork:smoke              # the money paths on real AUSD, one PASS or FAIL line each
+```
+
+The `monadFork` network (`MONAD_FORK_RPC_URL`, default `http://127.0.0.1:18555`,
+chain 10143) signs with the node's own unlocked accounts and reads no key from
+`.env`: account 0 deploys, account 1 is the CRE simulation transmitter, account
+2 relays. Every fork script first checks that the RPC is a local anvil or
+Hardhat node forking another chain, with chain id 10143 (`lib/fork.js`), and
+`deploy:monad` refuses a `monadTestnet` RPC that is a local node, so a fork
+never writes `monad-testnet.json`. `deploy:local` still refuses
+`AUSD_MODE=ausd`. The faucet pays 10,000 AUSD a drip, one drip a minute for
+everyone; the fork scripts move the fork's clock past that wait.
+
+Run on 6 Oct 2026, on a fork of testnet block 68,489,346: `check:deployment:fork`
+passed 63 of 63 and `fork:smoke` 14 of 14. On the fork, that shows: the deploy
+script's AUSD domain check passes against the real token; the pool takes real
+AUSD from the faucet; Pay now (an AUSD `ReceiveWithAuthorization` signed under
+the domain AUSD reports, "Agora Dollar" v1 on chain 10143) pays the merchant
+less the 0.5% fee, and the same authorization signed under version "2" is
+refused; Pay in 4 opens with an ERC-2612 `permit` on AUSD and pays the merchant
+from the pool; a collections report through Chainlink's MockKeystoneForwarder
+collects instalment 1 by `transferFrom`; Subscribe charges period 1 under an
+AUSD permit; a link is sent and claimed; a split share paid by
+`ReceiveWithAuthorization` goes straight to the organiser; no user wallet held
+MON or sent a transaction. The underwriting and collections reports are
+hand-built, as in `e2e:local`: no CRE workflow, DON or Nansen call runs. The
+fork bills gas used, not the gas limit as Monad does, and has none of Monad's
+block timing.
+
+No gap turned up in AUSD: `receiveWithAuthorization`, `permit`, `nonces`,
+`allowance`, `transferFrom` and `eip712Domain` behave as the contracts and
+MockAUSD assume. One gas finding: Chainlink's mock forwarder catches a
+receiver's revert cheaply, so `eth_estimateGas` on `forwarder.report(...)`
+can settle on a limit where the receiver runs out of gas inside the catch and
+the delivery still succeeds, with `ReportProcessed` result false. In one run a
+one-instalment collections report estimated 151,547 gas and used about 193,000;
+sent at the estimate plus 15% it was refused that way. The local
+MockKeystoneForwarder writes `lastRevertData` in its catch, which makes failing
+dearer than succeeding and hides this in `e2e:local`. `fork:smoke` sizes each
+report from a traced delivery on the path where the receiver succeeds. Behind
+a simulation transmitter the workflows size a write from the same
+forwarder-level estimate (`estimateDelivery` in `workflows/src/shared/evm.ts`;
+the staging configs' floor is 150,000). Whether Monad testnet's own
+`eth_estimateGas` undershoots the same way is not established.
+
 ## Contracts
 
 | Contract | Role |
@@ -109,7 +167,7 @@ send 167k, claim 63k, an underwriting report 142k, a guardian attestation 140k
 the `.d.ts` gives viem full inference). Regenerate with `pnpm --filter @polarispay/contracts abi`; a test fails if they drift.
 **Deployment**: `deployments/monad-testnet.json` (written by `deploy:monad`, deployed 28 Sep 2026; read it back with
 `check:deployment:monad`, which checks every address and role on chain; `monad-testnet.transactions.json` decodes all 34 of its transactions),
-`deployments/monad-local.json` (each local run; git-ignored). Each holds every address with its block and
+`deployments/monad-local.json` (each local run; git-ignored), `deployments/monad-fork.json` (`deploy:fork`; git-ignored). Each holds every address with its block and
 transaction, ABI paths, `eip712` (domain and struct types per contract), `roles`, `cre` and `demo`.
 **Signing types**: `lib/eip712.js`. **CRE encoders**: `lib/cre.js`.
 
