@@ -51,7 +51,7 @@ differs, the portal wins.**
 | Bounty | Prize | What they want | What we built | Status | What's left |
 |---|---|---|---|---|---|
 | **Monad Track 02**: Consumer Products & Payments | $10,000 track · $25,000 overall | Consumer finance using on-chain rails as a design advantage, for non-crypto people. Public repo, licence, ≤ 3 min video, Monad integration with addresses, testnet or mainnet deployment | The whole product; credit scored on chain; merchants paid up front from the pool; claim links no one can redirect; gas never paid by users; Monad-specific gas handling | 🟡 | 🔑 Video. 🔑 Hosting (a judge needs a URL). 🔑 One uncut run on a real phone |
-| **Agora**: Cross-Border Payments | $10,000 (Track 02 only) | A **mobile app** sending **AUSD across borders**, **Mera passkey onboarding**, **instant settlement** | AUSD everywhere (a labelled `MockAUSD` on testnet); send by link and claim; local currency from Chainlink FX feeds; Face ID only; installable PWA **and** Android APK; split the bill (local only) | 🟡 | 🔑 Ask Agora: does the PWA/Android app count as "mobile"? 🔑 Ask Agora for testnet AUSD (then a redeploy with `AUSD_MODE=ausd`, optional). 🔑 Install the APK on a real phone. 🤖 Deploy PolarisSplit on testnet once the deployer key is provided (optional) |
+| **Agora**: Cross-Border Payments | $10,000 (Track 02 only) | A **mobile app** sending **AUSD across borders**, **Mera passkey onboarding**, **instant settlement** | AUSD everywhere (a labelled `MockAUSD` on testnet); send by link and claim; local currency from Chainlink FX feeds; Face ID only; installable PWA **and** Android APK; split the bill (local only) | 🟡 | 🔑 Ask Agora: does the PWA/Android app count as "mobile"? 🔑 Ask Agora for testnet AUSD (then a redeploy with `AUSD_MODE=ausd`, optional). 🔑 Install the APK on a real phone. 🤖 Deploy PolarisSplit on testnet when the team says go (optional; the deployer key is in the git-ignored root `.env`, about 0.30 MON left) |
 | **Privy** | $5,000 | Privy **beyond authentication** | Policy-locked server wallet relays every payment (proof: 3 allowed, 7 refused); a second server wallet administers the merchant registry; embedded merchant payout wallets; automatic payouts through a payout signer | ✅ live | 🔑 Turn on Google login and set allowed domains (after hosting). 🔑 Move `.privy-admin.key` offline and delete the file. Show Privy in the video |
 | **Chainlink CRE** | $3,000 | A CRE workflow (build, simulate or deploy) used as an **orchestration layer** | `polaris-collections` (cron + EVM log trigger), `polaris-underwrite` (HTTP, Confidential HTTP), `polaris-guardian` (reads AUSD/USD on Monad mainnet, guards testnet); 3 reports delivered | 🟡 | 🔑 Request deploy access: `cre account access`. 🔑 For a real underwriting report: a Zerion key (Etherscan's is set) and a consenting wallet with ≥ 90 days and ≥ 10 txs on Ethereum or Base as `POLARIS_UNDERWRITE_WALLET_KEY` in `workflows/.env`; then 🤖 `pnpm --filter @polaris/cre-workflows evidence --only underwriting` and docs |
 | **Nansen** | $5,000 pool | A product powered by Nansen data that goes **beyond exposing raw data** | Nansen facts (first funder, counterparties, related wallets) become an on-chain credit score with plain-language reasons ("Funded from a major exchange · +10") | 🟡 | 🔑 Nansen API key (ask Nansen for hackathon credits). Then 🤖 `pnpm --filter @polarispay/underwriting record --linked <wallet>` to replace the synthesized fixtures, and rerun underwriting |
@@ -90,8 +90,8 @@ Community Team Project ($5,000).
       `merchant-web/components/sdk/PayWithPolaris.tsx`,
       `shopping/components/providers.tsx`). It is in git history, so rotate
       it in the Alchemy dashboard; deleting the code isn't enough
-- [ ] 🔑 Optional: hand Claude the deployer key **as an env var for one run**
-      (never in a file) to deploy PolarisSplit on testnet
+- [ ] Optional: say go, and Claude deploys PolarisSplit on testnet with the
+      deployer key in the git-ignored root `.env` (spends testnet MON)
 - [ ] 🔑 Optional: claim participant perks (QuickNode, Dwellir RPCs;
       Tenderly; Zerion Builder)
 
@@ -141,7 +141,7 @@ Once the team unblocks it:
 | hosted the apps | run `pnpm deploy:check` against the URLs, smoke-test the hosted flows, fill `<APP_URL>`, recapture screenshots |
 | added the Nansen/Zerion keys and a history wallet | record real fixtures, run the CRE underwriting evidence on testnet, update the README and the kit |
 | deployed Envio | wire the indexer URL into the API and CRE configs, verify webhooks and candidates come from it, fill `<ENVIO_GRAPHQL_URL>` |
-| provided the deployer key for one run | `deploy-split:monad`, `verify:monad`, `check:deployment:monad`, update the record and docs |
+| said go on the PolarisSplit deploy | `deploy-split:monad`, `verify:monad`, `check:deployment:monad`, update the record and docs |
 | recorded the video | fill `<VIDEO_URL>` and the timestamps, regenerate the diffstat, final `docs:check` |
 
 Not recommended before the freeze (each needs contract changes and a
