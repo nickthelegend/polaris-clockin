@@ -12,15 +12,18 @@ Polaris contract into the rows these read:
 | **The Polaris app** | The buyer's credit line and why, open plans and the next payment, receipts, send links | The credit screen and "Arrived" on a claimed link |
 
 HyperIndex V3 with `envio` **3.12.1** pinned; HyperSync is the data source
-(`monad-testnet.hypersync.xyz`). Typed handlers, a GraphQL schema, 46 handler
-tests including a replay of a real chain, an end-to-end run of Envio's own
-runtime against a live local chain, and a typed client ([`client/`](client/))
-for everything above.
+(`monad-testnet.hypersync.xyz`). Typed handlers, a GraphQL schema, 54 tests
+including a replay of a real chain, an end-to-end run of Envio's own runtime
+against a live local chain, a typed client ([`client/`](client/)) for
+everything above, and one command that serves the GraphQL endpoint for a
+local chain ([below](#graphql-for-a-local-chain-docker-for-postgres-and-hasura)).
 
 ## One command
 
-The `envio` CLI has no Windows build, so everything runs on Linux: WSL on
-Windows, or any Linux or macOS machine and CI.
+The `envio` CLI has no Windows build, so everything runs on Linux or macOS:
+WSL on Windows, a Linux or macOS machine, and CI. On 6 Oct `test` and `live`
+(also with `POLARIS_LIVE_RUNS=5`) passed on macOS (Apple silicon, Node 26)
+with the same script; nothing in it needed changing for macOS.
 
 ```bash
 # from Windows, at the repo root (WSL distro with Node 22+ and pnpm inside it):
@@ -67,7 +70,125 @@ registration, the wildcard transfer filter, every handler) and the indexed
 state must equal what the contracts report. It works in a scratch copy, so
 `config.yaml` is untouched. `POLARIS_LIVE_RUNS=5` indexes the same chain five
 times (CI does): Envio's queries answer in a different order every run, and
-an ordering bug shows up only now and then.
+an ordering bug shows up only now and then. `POLARIS_FIXTURE_PORT` moves the
+node off 3541.
+
+This is Envio's runtime in-process (`createTestIndexer`): no database and no
+GraphQL endpoint. For those, see the next section.
+
+### GraphQL for a local chain (Docker for Postgres and Hasura)
+
+```bash
+pnpm indexer:local      # = bash packages/indexer/scripts/wsl.sh local (scripts/local.sh)
+```
+
+For a chain that is already running with the contracts deployed by
+`scripts/deploy-monad.js` (`pnpm demo:local`'s on 8545, or any other):
+
+1. Postgres and Hasura in Docker, the images and settings `envio dev` uses,
+   but named `polaris-envio-postgres` and `polaris-envio-hasura` on their
+   own network and ports, so they never meet another project's `envio dev`
+   (which always names its containers `envio-postgres` and `envio-hasura`,
+   on 5433 and 8080);
+2. `config.yaml` regenerated for that chain with an RPC source, in a scratch
+   copy (`generate.mjs --deployment <record> --rpc <url>`);
+3. `envio start` in the foreground. Ctrl+C stops it and removes the
+   containers, their network and the scratch copy; nothing is kept.
+
+| Variable | Default | |
+|---|---|---|
+| `POLARIS_LOCAL_RPC` | `http://127.0.0.1:8545` | the chain |
+| `POLARIS_LOCAL_DEPLOYMENT` | `packages/contracts/deployments/monad-local.json` | its deployment record |
+| `POLARIS_INDEXER_GRAPHQL_PORT` | `18080` | Hasura: `http://127.0.0.1:18080/v1/graphql`, admin secret `testing` |
+| `POLARIS_INDEXER_PG_PORT` | `15432` | Postgres |
+| `POLARIS_INDEXER_METRICS_PORT` | `19898` | the indexer's own HTTP port (`/metrics`) |
+| `POLARIS_INDEXER_DOCKER_PREFIX` | `polaris-envio` | container and network names |
+| `ENVIO_BLOCK_LAG` | `0` | a local node mines only when sent something, so the usual 2 would hold back the last two blocks |
+
+Then each reader points at the endpoint:
+
+| Reader | Setting |
+|---|---|
+| Polaris for Business (the Overview's "Indexed by Envio" feed) | `POLARIS_INDEXER_URL=http://127.0.0.1:18080/v1/graphql` |
+| The webhook outbox | `createIndexerClient({ url }).activityAfter(cursor)`, as under [The GraphQL client](#the-graphql-client) |
+| The CRE collections workflow, run locally | `POLARIS_LOCAL_INDEXER_URL=http://127.0.0.1:18080/v1/graphql pnpm --filter @polaris/cre-workflows collections:local`: the real `onCron` takes its candidates from `DueCandidates` instead of scanning the chain, as a deployed workflow does with `candidates.indexerUrl` |
+
+#### What ran on 6 Oct (macOS, Docker Desktop)
+
+A Hardhat node on 18565; `node scripts/record-fixture.mjs --keep-node`
+(`POLARIS_FIXTURE_PORT=18565`) deployed the contracts with
+`deploy-monad.js` (MockAUSD, the demo merchant, the credit pool) and ran the
+contracts' twelve end-to-end flows (underwriting, Pay now, two Pay in 4
+plans, collection, early repayment, the guardian's pause and resume, a lost
+approval signed again, a subscription and its renewal, a send and its claim)
+and `fixture-scenarios.cjs` (a liquidation, payouts, a quoted order,
+cancellations, a refund, a batch). Then
+`POLARIS_LOCAL_RPC=http://127.0.0.1:18565 pnpm indexer:local` indexed it over
+RPC: 119 events processed, synced to the head (block 90),
+`_meta.isReady: true`.
+
+Rows per entity, from GraphQL:
+
+| Entity | Rows | Entity | Rows | Entity | Rows |
+|---|---|---|---|---|---|
+| Protocol | 1 | Subscription | 2 | ProtocolDay | 3 |
+| Merchant | 2 | Send | 3 | BuyerDay | 5 |
+| Buyer | 6 | Payout | 2 | ScoreEvent | 5 |
+| Payment | 9 | Batch | 1 | Underwriting | 3 |
+| Order | 8 | BatchLeg | 3 | LinkedWallet | 1 |
+| Plan | 3 | Customer | 4 | CollectionRun | 6 |
+| Installment | 12 | MerchantDay | 4 | CollectionTask | 7 |
+| Repayment | 3 | SubscriptionPlan | 2 | CreReport | 9 |
+| Activity | 21 | ConfigChange | 26 | | |
+
+- **Equal to the chain.** Every loan's instalments paid, repaid and
+  outstanding amounts and status, every subscription's periods and misses,
+  each merchant's balance and each buyer's score, credit line and debt
+  (27 values) equal what the contracts return over `eth_call`; the sends
+  read `CLAIMED`, `CANCELLED`, `REFUNDED`.
+- **The outbox.** 21 `Activity` rows, all nine webhook kinds:
+  `payment.succeeded` 3, `plan.opened` 3, `installment.collected` 5,
+  `plan.completed` 1, `installment.failed` 2 (one lost approval, one short
+  balance), `subscription.charged` 3, `plan.liquidated` 1, `payout.paid` 2,
+  `subscription.canceled` 1. Read the way the dispatcher reads them
+  (`activityAfter`, five at a time, the cursor moved on with `nextCursor`),
+  each turned into polarispay-sdk's event by `toWebhookEvent` and checked by
+  the SDK's own `validateWebhookEvent` (`packages/sdk/src/event-shape.ts`):
+  21 events, 21 distinct ids, none rejected.
+- **`DueCandidates`.** At the chain's time, subscription #1 (a 60-second plan)
+  was due and plan #2's next instalment a week away. With the node's clock
+  set 30 seconds past that due time (inside the 2-minute grace), the
+  workflow's query returned `Loan: [{ loanId: "2" }]` and
+  `Subscription: [{ subId: "1" }]`. `collections:local` with
+  `POLARIS_LOCAL_INDEXER_URL` then ran the real `polaris-collections` cron:
+  "candidates from the indexer", 2 collected through `CollectionsReceiver`
+  (instalment 2 of plan #2, a charge of subscription #1). The indexer picked
+  up the result: plan #2 at 2 of 4 paid with its next due date a week on, a
+  `Repayment` with `source: CRE` on time, a `CollectionRun` with 2 tasks
+  executed, and two new outbox rows (`installment.collected`,
+  `subscription.charged`) that the dispatcher loop, resuming from its cursor,
+  read and validated.
+- **Polaris for Business.** `apps/business/test/insights.live.test.ts`, the
+  production path (`POLARIS_INDEXER_URL` through `getConfig()` to
+  `merchantActivity` and `status`), passed against the endpoint for the demo
+  merchant. It is skipped unless `POLARIS_INDEXER_LIVE_URL` and
+  `POLARIS_INDEXER_LIVE_MERCHANT` are set:
+
+  ```bash
+  POLARIS_INDEXER_LIVE_URL=http://127.0.0.1:18080/v1/graphql \
+  POLARIS_INDEXER_LIVE_MERCHANT=$(node -p 'require("./packages/contracts/deployments/monad-local.json").demo.merchant') \
+    pnpm --filter @polaris/business test test/insights.live.test.ts
+  ```
+- **Every client document against a live Hasura.** All 22 of
+  `@polarispay/indexer-client`'s calls (the dashboard's, the outbox's, the
+  CRE's, the app's) answered without a GraphQL error and decoded, including
+  `_meta` and the BigInt columns Hasura sends as strings.
+
+The session ran twice with the same results (the second after the handlers
+described under [Tests](#tests) were added). Not run: `next dev` for the
+dashboard (the test above exercises its server code instead), and the API's
+own webhook dispatcher, which sends what the API's chain sync records and
+does not read the indexer yet (`apps/business/src/server/webhooks/dispatcher.ts`).
 
 ## Running it locally against Monad testnet (needs Docker)
 
@@ -75,6 +196,13 @@ an ordering bug shows up only now and then.
 cp packages/indexer/.env.example packages/indexer/.env   # add ENVIO_API_TOKEN from https://envio.dev/app/api-tokens
 bash packages/indexer/scripts/wsl.sh dev                 # envio dev: Postgres + Hasura in Docker, hot reload
 ```
+
+HyperSync for Monad testnet needs that token; we have none, so this has not
+been run. Without one, the source can be an RPC instead, as the local runs
+use: `node scripts/generate.mjs --rpc https://testnet-rpc.monad.xyz`
+rewrites `config.yaml` with an `rpc:` source (do it in a copy, or restore
+the file: the committed one uses HyperSync). Indexing testnet from the first
+deploy block over a public RPC is slow and has not been tried.
 
 GraphQL is then at `http://localhost:8080/v1/graphql` (Hasura console on
 the same port, admin secret `testing`). On Windows, `envio dev` needs Docker
@@ -288,14 +416,23 @@ package ships TypeScript source).
 
 | Suite | What it proves |
 |---|---|
-| `test/lib.test.ts` | The schedule mirror gives the contract's numbers ($200 x 4 weekly = 201534246 owed, 50383562 first instalment); the credit line mirrors `ScoreManager`; every revert selector recomputed with viem; `config.yaml` is current and indexes every event in every ABI; the client's SHA-256, Keccak-256 and checksums equal viem's |
+| `test/lib.test.ts` | The schedule mirror gives the contract's numbers ($200 x 4 weekly = 201534246 owed, 50383562 first instalment); the credit line mirrors `ScoreManager`; every revert selector recomputed with viem; `config.yaml` is current, indexes every event in every ABI, and every event it indexes has a handler; the client's SHA-256, Keccak-256 and checksums equal viem's |
 | `test/paynow`, `plans`, `subscriptions`, `accounts` | Simulated flows through Envio's own test indexer: Pay now, Pay in 4 with dunning (a repeated skip is one miss), CRE collection, prepayment and liquidation, subscriptions with backoff, missed windows, lapses and cancellations, sends, payouts, batches, credit, CRE reports, roles; only registered merchants are followed |
 | `test/live.test.ts` (`wsl.sh live`) | The same checks, but Envio's runtime fetches the chain itself over RPC: the config, the dynamic registration and the source-side filters are exercised too |
-| `test/replay.test.ts` | A real chain: `scripts/record-fixture.mjs` runs the deploy script, the contracts' end-to-end flows and `scripts/fixture-scenarios.cjs` on a Hardhat node (port 3540) and records 142 logs of 62 kinds; replayed through the handlers, every plan, subscription, credit line, merchant balance and link equals what the contracts report, every webhook kind appears once per SDK event, every row passes polarispay-sdk's `validateWebhookEvent`, and totals equal a recount |
+| `test/replay.test.ts` | A real chain: `scripts/record-fixture.mjs` runs the deploy script, the contracts' end-to-end flows and `scripts/fixture-scenarios.cjs` on a Hardhat node (port 3540) and records 170 logs of 65 kinds; replayed through the handlers, every plan, subscription, credit line, merchant balance and link equals what the contracts report, every webhook kind appears once per SDK event, every row passes polarispay-sdk's `validateWebhookEvent`, and totals equal a recount |
 | `client/test` | Every document is valid against the schema; BigInt decoding is complete; the client's requests, errors and paging; CRE task building; every webhook kind equals polarispay-sdk's types (compile time) and passes its runtime check, with the API's amounts, addresses and event ids; SHA-256 and Keccak-256 against published vectors; money; the credit and loan mirrors equal the indexer's |
 
-Re-record the fixture after a contract change (Windows or Linux, with the
-workspace installed): `node packages/indexer/scripts/record-fixture.mjs`.
+Re-record the fixture after a contract change (with the workspace
+installed): `node packages/indexer/scripts/record-fixture.mjs`. It was
+re-recorded on 6 Oct: the contracts had gained the CRE guardian and the
+re-sign flow since the last recording, and three of their events
+(`PolarisCheckout.Reauthorized` and `CreditGuardianSet`, the receivers'
+`SimulationTransmitterSet`) were indexed with no handler, which Envio's
+runtime passes over without a word. They are now `ConfigChange` rows. The
+collection checks count from the fixture instead of fixed numbers, and the
+recorder compiles before starting its node: a node started without artifacts
+cannot name custom errors, and the contracts' end-to-end flows check reverts
+by name.
 
 ## Layout
 
@@ -314,22 +451,23 @@ src/lib/               the mirrors (loans, credit, revert reasons) and the unit 
 scripts/generate.mjs   config + settings from the ABIs and a deployment record
 scripts/wsl.sh         the one command
 scripts/record-fixture.mjs, fixture-scenarios.cjs   the real-chain fixture
-scripts/live.sh        the live end-to-end run
+scripts/live.sh        the live end-to-end run (in-process, no database)
+scripts/local.sh       GraphQL for a running local chain (Postgres + Hasura in Docker, envio start)
 test/                  vitest + Envio's createTestIndexer
 client/                @polarispay/indexer-client
 ```
 
 ## Not verified here
 
-- **No Docker on this machine,** so `envio dev` (Postgres + Hasura) was not
-  run. Everything up to the database was (`wsl.sh live`), but the client's
-  documents were validated against a Hasura-shaped schema built from
-  `schema.graphql`, not a live Hasura. Run
-  `wsl.sh dev` and open the Hasura console once to confirm (docs/research/envio.md
-  section 11 lists the open questions: `_meta` shape on Cloud, numeric as
-  strings).
-- **No deployment yet:** the Polaris addresses are placeholders until
-  `deploy:monad` runs.
+- **`envio dev` itself** was not run (on this machine it would collide with
+  other projects' Envio containers); `pnpm indexer:local` runs the same
+  Postgres and Hasura images under `envio start`, and every client document
+  was checked against that live Hasura, `_meta` and numeric strings included.
+  `_meta` on Envio Cloud is still unchecked (docs/research/envio.md
+  section 11).
+- **Nothing has indexed Monad testnet yet:** the deployment record exists
+  and `config.yaml` is generated from it, but HyperSync needs an
+  `ENVIO_API_TOKEN` we don't have, and there is no Envio Cloud deployment.
 - The wildcard `Transfer` matches any token's transfers touching a merchant
   account; only the stablecoin's are used. An ERC-721 `Transfer` (same topic,
   three indexed arguments) to a merchant account would not decode as an
