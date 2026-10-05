@@ -40,6 +40,15 @@ module.exports = {
       chainId: 10143,
       accounts,
     },
+    // A local fork of Monad testnet (anvil, README "Rehearse real AUSD on a
+    // fork"): real AUSD and Agora's faucet as they stand on testnet. No key
+    // from .env: the node's own unlocked test accounts sign, so this network
+    // can send nothing to a public RPC. The fork scripts also refuse any node
+    // that is not a local fork (lib/fork.js).
+    monadFork: {
+      url: process.env.MONAD_FORK_RPC_URL || "http://127.0.0.1:18555",
+      chainId: 10143,
+    },
     monad: {
       url: process.env.MONAD_RPC_URL || "https://rpc.monad.xyz",
       chainId: 143,

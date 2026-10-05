@@ -4,6 +4,7 @@
  *
  *   pnpm --filter @polarispay/contracts check:deployment:monad            # Monad testnet
  *   pnpm --filter @polarispay/contracts check:deployment:monad -- --json  # rows as JSON
+ *   pnpm --filter @polarispay/contracts check:deployment:fork             # a local fork (deploy:fork)
  *
  * Checks (lib/check.js): code at every contract and at Chainlink's forwarder;
  * the deployer owns what it should; PolarisCheckout is the loan engine's only

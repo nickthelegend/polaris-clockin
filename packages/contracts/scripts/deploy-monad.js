@@ -4,8 +4,11 @@
  *
  *   pnpm --filter @polarispay/contracts deploy:monad     # Monad testnet
  *   pnpm --filter @polarispay/contracts deploy:local     # node on :8600 (see e2e:local)
+ *   pnpm --filter @polarispay/contracts deploy:fork      # a local anvil fork of testnet, real AUSD
  *
- * Writes deployments/monad-testnet.json (or monad-local.json): every address
+ * Writes deployments/monad-testnet.json (or monad-local.json, or the
+ * git-ignored monad-fork.json for a fork; a fork never writes the testnet
+ * record, and testnet refuses an RPC that is a local node): every address
  * with its block number and transaction, the ABI path for each, the EIP-712
  * domains and struct types clients sign, the roles granted, the CRE wiring and
  * the demo merchant.
@@ -23,8 +26,8 @@
  *
  * Environment (all optional; the repo-root .env is read by hardhat.config.js):
  *   DEPLOYER_PRIVATE_KEY        testnet deployer (scripts/deployer.js creates one)
- *   AUSD_MODE                   "ausd" (testnet default: Agora AUSD, domain checked
- *                               on deploy) or "mock" (local default: a MockAUSD)
+ *   AUSD_MODE                   "ausd" (testnet and fork default: Agora AUSD, domain
+ *                               checked on deploy) or "mock" (local default: a MockAUSD)
  *   TREASURY                    fee and interest recipient (default: deployer)
  *   GRACE_SECONDS               LoanEngine grace (testnet 3600, local 120)
  *   MIN_INTERVAL_SECONDS        shortest instalment interval (default 60: a whole
@@ -40,8 +43,9 @@
  *                               the mock forwarder. Required for "simulation"
  *                               (read from CRE_ETH_PRIVATE_KEY in the environment
  *                               or .env when unset) and never the deployer. A
- *                               local node defaults to the deployer. Ignored for
- *                               "production".
+ *                               local node defaults to the deployer, a fork to
+ *                               the node's second account (no .env key is read on
+ *                               a fork). Ignored for "production".
  *   CRE_WORKFLOW_OWNER          production only: the receivers then accept only
  *                               this workflow owner and the Polaris workflow names
  *   RELAYER_ADDRESS             the Privy server wallet that relays; gets operator
@@ -71,13 +75,17 @@ const { Wallet, ZeroAddress, getAddress, formatEther, parseUnits } = require("et
 const { GUARDIAN_DEFAULTS, GUARDIAN_PRICE_DECIMALS } = require("../lib/cre");
 
 const { deployPolaris, MONAD_TESTNET } = require("../lib/deploy");
+const { devNodeInfo, requireForkNode } = require("../lib/fork");
 const { ensureEnvKey, readEnvValue } = require("./lib/env");
 
 const LOCAL_NETWORKS = new Set(["hardhat", "localhost", "monadLocal"]);
+/** Local forks of Monad testnet: real AUSD, the node's own test accounts, a git-ignored record. */
+const FORK_NETWORKS = new Set(["monadFork"]);
 
 function deploymentFile(networkName) {
   if (networkName === "monadTestnet") return "monad-testnet.json";
   if (LOCAL_NETWORKS.has(networkName)) return "monad-local.json";
+  if (FORK_NETWORKS.has(networkName)) return "monad-fork.json";
   return `${networkName}.json`;
 }
 
@@ -144,9 +152,27 @@ function refuseDeployerAsTransmitter(transmitter, deployer) {
   }
 }
 
-async function buildConfig(networkName, deployer) {
+/**
+ * The fork's simulation transmitter when none is given: the node's second
+ * unlocked account (the deployer is the first), so no .env key is read.
+ */
+function forkTransmitter(accounts, deployer) {
+  const second = accounts[1]?.address;
+  if (!second) throw new Error("The fork node has one account; set CRE_SIMULATION_TRANSMITTER to an address other than the deployer.");
+  const transmitter = getAddress(second);
+  refuseDeployerAsTransmitter(transmitter, deployer);
+  return transmitter;
+}
+
+/**
+ * @param {string} networkName
+ * @param {{address: string}} deployer
+ * @param {{env?: object, accounts?: {address: string}[]}} [opts]  the environment
+ *        (process.env), and the node's signers (a fork's transmitter default)
+ */
+async function buildConfig(networkName, deployer, { env = process.env, accounts = [] } = {}) {
   const local = LOCAL_NETWORKS.has(networkName);
-  const env = process.env;
+  const fork = FORK_NETWORKS.has(networkName);
   const num = (v, d) => (v === undefined || v === "" ? d : Number(v));
 
   const tokenMode = env.AUSD_MODE || (local ? "mock" : "ausd");
@@ -164,10 +190,13 @@ async function buildConfig(networkName, deployer) {
         ? MONAD_TESTNET.CRE_KEYSTONE_FORWARDER
         : undefined;
 
-  const simulationTransmitter = simulationTransmitterFor(forwarderKind, deployer, env);
+  const simulationTransmitter =
+    fork && forwarderKind === "simulation" && !env.CRE_SIMULATION_TRANSMITTER
+      ? forkTransmitter(accounts, deployer)
+      : simulationTransmitterFor(forwarderKind, deployer, env, fork ? () => undefined : readEnvValue);
 
   let demoMerchant;
-  if (local) {
+  if (local || fork) {
     demoMerchant = Wallet.createRandom();
   } else {
     const key = ensureEnvKey("DEMO_MERCHANT_PRIVATE_KEY", "Polaris demo merchant (testnet only)");
@@ -225,6 +254,7 @@ async function main() {
   if (chainId === 143n) {
     throw new Error("Refusing Monad mainnet: credit stays on testnet (plan section 6, WON'T).");
   }
+  await refuseWrongNode(networkName, hre.ethers.provider);
   const signers = await hre.ethers.getSigners();
   if (signers.length === 0) {
     throw new Error("No deployer key. Run `pnpm --filter @polarispay/contracts deployer` first.");
@@ -232,6 +262,7 @@ async function main() {
   const [deployer] = signers;
   const balance = await hre.ethers.provider.getBalance(deployer.address);
   const local = LOCAL_NETWORKS.has(networkName);
+  const fork = FORK_NETWORKS.has(networkName);
 
   console.log(`Network   ${networkName} (chain ${chainId})`);
   console.log(`Deployer  ${deployer.address}`);
@@ -252,7 +283,7 @@ async function main() {
     }
   }
 
-  const cfg = await buildConfig(networkName, deployer);
+  const cfg = await buildConfig(networkName, deployer, { accounts: signers });
   console.log(`Token     ${cfg.tokenMode === "ausd" ? `AUSD ${cfg.tokenAddress}` : "MockAUSD (new)"}`);
   console.log(`CRE       ${cfg.forwarderKind} forwarder ${cfg.forwarderAddress ?? "(deployed locally)"}`);
   if (cfg.simulationTransmitter !== ZeroAddress) console.log(`CRE sim   transmitter ${cfg.simulationTransmitter}`);
@@ -260,7 +291,7 @@ async function main() {
 
   const record = await deployPolaris(hre, cfg, (line) => console.log(line));
   record.abiDir = "packages/contracts/abi";
-  record.explorer = local ? null : MONAD_TESTNET.EXPLORER;
+  record.explorer = local || fork ? null : MONAD_TESTNET.EXPLORER;
   if (local) record.demo.merchantPrivateKey = cfg.demoMerchant.privateKey; // local test key only
 
   const dir = join(__dirname, "..", "deployments");
@@ -273,9 +304,31 @@ async function main() {
   console.log(`Wrote     ${file}`);
   if (BigInt(record.demo.poolSeeded) === 0n) {
     console.log(
-      "\nThe credit pool is empty. Send AUSD to the deployer and run " +
-        "`pnpm --filter @polarispay/contracts fund-pool:monad`, or redeploy with AUSD_MODE=mock."
+      fork
+        ? "\nThe credit pool is empty. Fill it with real AUSD from Agora's faucet on the fork: " +
+            "`pnpm --filter @polarispay/contracts fund-pool:fork`."
+        : "\nThe credit pool is empty. Send AUSD to the deployer and run " +
+            "`pnpm --filter @polarispay/contracts fund-pool:monad`, or redeploy with AUSD_MODE=mock."
     );
+  }
+}
+
+/**
+ * A fork network must be a local fork of Monad testnet (lib/fork.js), and
+ * Monad testnet must not be a local node: pointing MONAD_TESTNET_RPC_URL at
+ * a fork would otherwise overwrite the testnet record with the fork's.
+ */
+async function refuseWrongNode(networkName, provider) {
+  if (FORK_NETWORKS.has(networkName)) {
+    await requireForkNode(provider);
+  } else if (networkName === "monadTestnet") {
+    const dev = await devNodeInfo(provider);
+    if (dev) {
+      throw new Error(
+        `monadTestnet points at a local ${dev.kind} node, not Monad testnet. Use --network monadFork ` +
+          "(deploy:fork) for a fork; it writes deployments/monad-fork.json."
+      );
+    }
   }
 }
 
@@ -286,4 +339,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { buildConfig, deploymentFile, simulationTransmitterFor, guardianConfig, LOCAL_NETWORKS };
+module.exports = { buildConfig, deploymentFile, simulationTransmitterFor, guardianConfig, refuseWrongNode, LOCAL_NETWORKS, FORK_NETWORKS };
