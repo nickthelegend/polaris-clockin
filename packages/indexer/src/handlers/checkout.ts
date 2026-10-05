@@ -155,6 +155,22 @@ indexer.onEvent({ contract: "PolarisCheckout", event: "NonceInvalidated" }, asyn
   }),
 );
 
+// A buyer's fresh permit to the loan engine after a lost approval. The CRE
+// collections workflow's log trigger collects what fell due at once; that
+// collection (a Repayment) is what takes the plan out of dunning.
+indexer.onEvent({ contract: "PolarisCheckout", event: "Reauthorized" }, async ({ event, context }) =>
+  withStore(context, event, async (st) => {
+    configChange(st, "PolarisCheckout", "Reauthorized", { subject: event.params.buyer, value: event.params.value.toString() });
+  }),
+);
+
+// The GuardianReceiver asked before every new Pay in 4 plan.
+indexer.onEvent({ contract: "PolarisCheckout", event: "CreditGuardianSet" }, async ({ event, context }) =>
+  withStore(context, event, async (st) => {
+    configChange(st, "PolarisCheckout", "CreditGuardianSet", { subject: event.params.guardian });
+  }),
+);
+
 indexer.onEvent({ contract: "PolarisCheckout", event: "OwnershipTransferred" }, async ({ event, context }) =>
   withStore(context, event, async (st) => {
     configChange(st, "PolarisCheckout", "OwnershipTransferred", { subject: event.params.newOwner, value: event.params.previousOwner });

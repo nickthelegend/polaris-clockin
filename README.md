@@ -246,8 +246,8 @@ node scripts/deploy-check.mjs --app https://… --business https://… --landing
 | `@polaris/db` | `pnpm --filter @polaris/db test` | 31 passing |
 | Receipts keys | `pnpm --filter @polaris/receipts test`, `typecheck` | 16 passing (derivation pinned and deterministic, labels kept apart, seal and open, another owner or id failing, tampering) |
 | Indexer client | `pnpm --filter @polarispay/indexer-client test` | 56 passing |
-| Envio indexer (the Windows-runnable part) | `node packages/indexer/scripts/generate.mjs --check`; `bun test test/lib.test.ts` in `packages/indexer` | config and schema in sync; 22 passing (codegen and the handler tests run in WSL or CI: `packages/indexer/scripts/wsl.sh test`) |
-| CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 209 passing; all three workflows compile to WASM |
+| Envio indexer | `bash packages/indexer/scripts/wsl.sh test` (macOS, Linux, WSL); `... live` (Envio's runtime against a local chain) | config and schema in sync, codegen, typecheck; 54 passing; `live` 10 passing (also five runs in a row) |
+| CRE workflows | `pnpm --filter @polaris/cre-workflows test`, `typecheck`, `build` (WASM; needs the CRE CLI: `cre:install`, or `CRE_BIN`) | 212 passing; all three workflows compile to WASM |
 | Polaris for Business | `pnpm --filter @polaris/business test`, `typecheck`, `lint`, `build` | 276 passing (12 for sealed receipts); the API auth check covers every route |
 | The Polaris app | `pnpm --filter @polaris/app test`, `typecheck`, `lint`, `check:signatures`, `build` | 47 passing (the Chainlink states, a credit line's provenance, the dollar it signs for, split plans and links, the Android app's `/.well-known/assetlinks.json`, what a build reports to the deploy check, receipt keys beside an unmoved wallet key); 53 signature checks against the Solidity typehashes |
 | Halcyon | `pnpm --filter @polaris/shop test`, `typecheck`, `lint`, `build` | 101 passing; the build proves no dev mock ships |
@@ -661,8 +661,8 @@ compiles) on the CRE SDK's test runtime: `trigger:local`,
 
 | Requirement | Where | Verify |
 |---|---|---|
-| An indexer of the product's events | `packages/indexer` (HyperIndex 3.12, 26 entities, a webhook outbox that emits exactly `polarispay-sdk`'s events) | `packages/indexer/scripts/wsl.sh test` (WSL or CI) |
-| Consumed by the product | The dashboard's "Indexed by Envio" feed reads it through `@polarispay/indexer-client` when `POLARIS_INDEXER_URL` is set (`apps/business/src/server/insights.ts`); the CRE collections workflow's candidate list is the client's `DUE_CANDIDATES` query; the chain sync can read logs from Envio's HyperRPC (`POLARIS_LOGS_RPC_URL`) | `pnpm --filter @polaris/business test` (`test/insights.test.ts`); without an indexer the feed shows the server's own chain sync with a "Chain sync" pill (`docs/demo/41-dashboard-panels.png`) |
+| An indexer of the product's events | `packages/indexer` (HyperIndex 3.12, 26 entities, a webhook outbox that emits exactly `polarispay-sdk`'s events) | `bash packages/indexer/scripts/wsl.sh test` and `live` (macOS, Linux, WSL, CI); `pnpm indexer:local` serves its GraphQL for a local chain (Postgres and Hasura in Docker) |
+| Consumed by the product | The dashboard's "Indexed by Envio" feed reads it through `@polarispay/indexer-client` when `POLARIS_INDEXER_URL` is set (`apps/business/src/server/insights.ts`); the CRE collections workflow's candidate list is the client's `DUE_CANDIDATES` query; the chain sync can read logs from Envio's HyperRPC (`POLARIS_LOGS_RPC_URL`) | `pnpm --filter @polaris/business test` (`test/insights.test.ts`); without an indexer the feed shows the server's own chain sync with a "Chain sync" pill (`docs/demo/41-dashboard-panels.png`). On a local chain (6 Oct, [what ran](packages/indexer/README.md#what-ran-on-6-oct-macos-docker-desktop)): the dashboard's code path (`test/insights.live.test.ts`), the outbox read by cursor into events the SDK validates, and the real `polaris-collections` cron taking its candidates from `DueCandidates` and collecting a due instalment, all against the live endpoint |
 | Deployed | *Not yet* | [What only you can do](#what-only-you-can-do), step 5 |
 
 ### What is simulated or sample

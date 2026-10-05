@@ -5,7 +5,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -204,6 +204,20 @@ describe("generated config", () => {
         expect(config, `${name}.${e.name}`).toContain(`"${e.name}(`);
       }
     }
+  });
+
+  it("has a handler for every event config.yaml indexes", () => {
+    // Envio's runtime passes over an indexed event nobody handles without a
+    // word; only a replayed log of that kind would notice. Handlers name their
+    // events as `event: "Name"` (some in a loop over contracts).
+    const config = readFileSync(join(ROOT, "config.yaml"), "utf8");
+    const indexed = new Set([...config.matchAll(/- event: "(\w+)\(/g)].map((m) => m[1]!));
+    const handlers = readdirSync(join(ROOT, "src", "handlers"))
+      .map((f) => readFileSync(join(ROOT, "src", "handlers", f), "utf8"))
+      .join("\n");
+    const handled = new Set([...handlers.matchAll(/event: "(\w+)"/g)].map((m) => m[1]!));
+    expect(indexed.size).toBeGreaterThan(50);
+    expect([...indexed].filter((e) => !handled.has(e))).toEqual([]);
   });
 });
 

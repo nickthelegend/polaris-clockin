@@ -201,4 +201,11 @@ for (const contract of ["CollectionsReceiver", "UnderwritingReceiver"] as const)
       configChange(st, contract, "OwnershipTransferred", { subject: event.params.newOwner, value: event.params.previousOwner });
     }),
   );
+  // PolarisReceiver: while set, the only transaction origin that may deliver
+  // reports (`cre workflow simulate --broadcast`); zero again for a DON.
+  indexer.onEvent({ contract, event: "SimulationTransmitterSet" }, async ({ event, context }) =>
+    withStore(context, event, async (st) => {
+      configChange(st, contract, "SimulationTransmitterSet", { subject: event.params.transmitter });
+    }),
+  );
 }
