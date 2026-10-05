@@ -3,6 +3,14 @@
 **Polaris: payment links with credit built in. Stripe for every app on Monad.**
 Track 02 (Consumer Products & Payments). Deadline Tue 13 Oct 2026, 11:59 PM ET.
 
+**The pitch.** Every app that sells something needs Stripe, but on Monad a buyer
+still needs a wallet, gas and the full price up front. Polaris is one link: the
+buyer signs up with Face ID and pays in full, in four instalments against an
+on-chain credit line, or on a subscription; sends dollars across borders by
+link; and splits a bill. The merchant is paid in full, up front, in under a
+second. Live on Monad testnet; the whole product also runs on a local chain
+with `pnpm demo:local`.
+
 | What | Where |
 |---|---|
 | Portal fields (name, one-liner, description, URLs) | [`docs/submission/profile.md`](docs/submission/profile.md) |
@@ -13,6 +21,7 @@ Track 02 (Consumer Products & Payments). Deadline Tue 13 Oct 2026, 11:59 PM ET.
 | Pitch video script (≤ 2 min, if the portal asks) | [`docs/submission/pitch-script.md`](docs/submission/pitch-script.md) |
 | Rules and sources | [`docs/submission/sources.md`](docs/submission/sources.md) |
 | The team's checklist to the deadline | [`docs/TODO.md`](docs/TODO.md) |
+| The runbook for deploys still to come (PolarisSplit, real AUSD, Envio, the Face ID domain, the shop) | [`docs/DEPLOY-LATER.md`](docs/DEPLOY-LATER.md) |
 | Testnet deployment and evidence | [README](README.md#monad-testnet-deployment), [`docs/demo/testnet`](docs/demo/testnet/README.md), [`workflows/evidence`](workflows/evidence/2026-09-28/README.md) |
 
 Before submitting: fill the kit's placeholders (`<VIDEO_URL>`, `<APP_URL>`,

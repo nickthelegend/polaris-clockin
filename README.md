@@ -46,6 +46,58 @@ Track 02: Consumer Products & Payments. The plan is in
 
 ---
 
+## How it fits together
+
+```text
+  Buyer's phone                         Merchant                      Any app / shop
+  ┌──────────────────────┐   ┌──────────────────────────┐   ┌──────────────────────┐
+  │ The Polaris app (PWA, │   │ Polaris for Business      │   │ polarispay-sdk       │
+  │ Android TWA)          │   │ dashboard · API · keys    │◀──│ (Halcyon demo shop)  │
+  │ Face ID → Mera PRF →  │   │ webhooks · payouts        │   └──────────────────────┘
+  │ account key + receipt │   │ sign-in: Privy             │
+  │ inbox key (no server  │   │                            │
+  │ ever holds either)    │──▶│ POST /api/relay: the       │
+  └──────────────────────┘   │ relayer, a policy-locked   │
+     signatures only,         │ Privy server wallet        │
+     never gas                └─────────────┬──────────────┘
+                                            │ transactions (pays the MON)
+                                            ▼
+  ┌────────────────────────────── Monad (testnet 10143) ───────────────────────────┐
+  │ PolarisCheckout · PolarisPayments · PolarisLoanEngine (Pay in 4 pool)          │
+  │ PolarisSend · PolarisSplit · ScoreManager · MerchantRegistry · CollateralVault  │
+  │ BatchSettlement · AUSD (MockAUSD on testnet; real AUSD rehearsed on a fork)    │
+  │ CRE receivers: Underwriting · Collections · Guardian                           │
+  └───────────▲───────────────────────────────────────────────┬────────────────────┘
+              │ signed reports                                │ events
+  ┌───────────┴──────────────────────────┐        ┌───────────▼─────────────────────┐
+  │ Chainlink CRE workflows              │◀───────│ Envio HyperIndex                 │
+  │ underwrite (Nansen + Zerion facts →  │ due    │ payments, plans, instalments,   │
+  │ score) · collections · guardian      │ items  │ subscriptions, sends, scores;   │
+  │ (Chainlink AUSD/USD on mainnet)      │        │ the webhook outbox; dashboard   │
+  └──────────────────────────────────────┘        └─────────────────────────────────┘
+```
+
+## Why Monad
+
+- **Pay in 4 is many small writes.** One plan is an origination, four
+  collections and their retries. That only works where each write is cheap
+  and final: Monad makes a block every 400 ms and finalises in about 800 ms.
+- **Checkout and remittance need instant finality.** "Paid" and "Arrived"
+  show before the popup closes; there is no pending state for the buyer.
+- **EVM-equivalent.** The hardened Solidity from our earlier work runs unchanged, so the
+  window went into product, not porting.
+- **Dollars with signature approvals.** AUSD supports ERC-2612 and ERC-3009,
+  so every buyer action is a signature and the relayer pays the gas: no
+  account abstraction, no MON for users.
+- **Monad-specific gas handling.** Monad bills the gas *limit*, so the
+  relayer sets each limit to `eth_estimateGas` plus 15%
+  ([`submit.ts`](apps/business/src/server/relayer/submit.ts)) instead of a
+  padded default.
+- **Passkey accounts are Monad-native.** Monad's docs ship Mera, which turns
+  Face ID into a normal account with nothing to deploy.
+
+---
+
 ## Submission
 
 The Metropolis submission kit is in [`docs/submission`](docs/submission):
@@ -58,6 +110,8 @@ The Metropolis submission kit is in [`docs/submission`](docs/submission):
 | [`profile.md`](docs/submission/profile.md) | Name, one-liner, 50- and 150-word descriptions, track, bounties, tech stack, team |
 | [`diffstat.txt`](docs/submission/diffstat.txt) | `git diff --stat` from the foundation import (`85b29e4`), by folder and in full (`pnpm docs:diffstat` regenerates it) |
 | [`sources.md`](docs/submission/sources.md) | Where each requirement comes from, and what needs the logged-in portal to confirm |
+
+Also: [`SUBMISSION.md`](SUBMISSION.md) (the index), [`docs/SPONSOR-GAP.md`](docs/SPONSOR-GAP.md) (each bounty's requirement and what's left) and [`docs/DEPLOY-LATER.md`](docs/DEPLOY-LATER.md) (the runbook for the deploys still to come).
 
 `pnpm docs:check` ([`scripts/check-docs-links.mjs`](scripts/check-docs-links.mjs))
 checks every link in this README and the kit, and every hash and address in
@@ -864,16 +918,29 @@ in `packages/brand` are the team's own artwork.
 
 ## Attribution
 
-*TBD: the full list of external libraries by package.* So far:
+External code and assets this project uses, by package (runtime
+dependencies; licences as declared by each package):
 
-- [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) (MIT)
-- [Hardhat](https://hardhat.org) (MIT)
-- [ethers](https://github.com/ethers-io/ethers.js) (MIT)
-- [Chainlink CRE SDK](https://www.npmjs.com/package/@chainlink/cre-sdk) (BUSL-1.1, a dependency of `workflows/`), the CRE CLI and `ReceiverTemplate.sol` (MIT)
-- [Envio HyperIndex](https://envio.dev) (the `envio` CLI, in `packages/indexer`)
-- [Privy](https://privy.io) (`@privy-io/react-auth`, `@privy-io/node`), [Mera](https://mera.category.xyz) (`@category-labs/mera`)
-- [Next.js](https://nextjs.org), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com) (MIT)
-- [viem](https://viem.sh), [zod](https://zod.dev), [@noble/curves and @noble/hashes](https://paulmillr.com/noble/) (MIT)
+| Library or asset | Licence | Used in |
+|---|---|---|
+| [OpenZeppelin Contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) | MIT | `packages/contracts` |
+| [Hardhat](https://hardhat.org), [ethers](https://github.com/ethers-io/ethers.js), [dotenv](https://github.com/motdotla/dotenv) | MIT, MIT, BSD-2-Clause | `packages/contracts`, `apps/shop` |
+| Chainlink `ReceiverTemplate.sol`, `IReceiver.sol`, `AggregatorV3Interface` (verbatim) | MIT | `packages/contracts/contracts/cre` |
+| [Chainlink CRE SDK](https://www.npmjs.com/package/@chainlink/cre-sdk) and the CRE CLI | BUSL-1.1 | `workflows` |
+| [Envio HyperIndex](https://envio.dev) (`envio` 3.12.1) | Envio's licence (its `licenses/README.md`) | `packages/indexer` |
+| [Privy](https://privy.io) (`@privy-io/react-auth`, `@privy-io/node`) | Apache-2.0 | `apps/business`, `apps/app` |
+| [Mera](https://mera.category.xyz) (`@category-labs/mera`) | MIT or Apache-2.0 | `apps/app` |
+| [viem](https://viem.sh), [zod](https://zod.dev) | MIT | apps, `packages/fx`, `packages/underwriting`, `workflows` |
+| [@noble/curves, @noble/hashes](https://paulmillr.com/noble/), [@scure/bip32, @scure/bip39](https://paulmillr.com/noble/#scure) | MIT | `workflows`, `apps/app` |
+| [@hpke/core, @hpke/dhkem-x25519](https://github.com/dajiaji/hpke-js) | MIT | `packages/receipts` |
+| [Next.js](https://nextjs.org), [React](https://react.dev), [Tailwind CSS](https://tailwindcss.com), [Motion](https://motion.dev), [Lenis](https://lenis.darkroom.engineering) | MIT | the web apps |
+| [lucide-react](https://lucide.dev) | ISC | `packages/ui`, the web apps |
+| [clsx](https://github.com/lukeed/clsx), [tailwind-merge](https://github.com/dcastil/tailwind-merge), [qrcode](https://github.com/soldair/node-qrcode), [lottie-react](https://github.com/Gamote/lottie-react), `server-only` | MIT | `packages/ui`, the web apps |
+| Fonts: Inter, Inter Tight, JetBrains Mono, Hedvig Letters Serif, Schibsted Grotesk ([Fontsource](https://fontsource.org)) | OFL-1.1 | the web apps |
+| Font: [Satoshi](https://www.fontshare.com/fonts/satoshi) (Indian Type Foundry, via Fontshare) | ITF Free Font License | `packages/ui/fonts` |
+
+Dev-only tools (TypeScript, Vitest, ESLint, Playwright, Bubblewrap) are listed
+in each `package.json`.
 
 ## License
 
