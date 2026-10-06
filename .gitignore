@@ -57,3 +57,7 @@ workflows/**/.cre_build_tmp.js
 # written into each app by `next dev`
 apps/*/AGENTS.md
 apps/*/CLAUDE.md
+
+# CLOCK IN: the release APK is published outside git
+clockin/apk/
+*.apk

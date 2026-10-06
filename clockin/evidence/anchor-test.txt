@@ -1,0 +1,21 @@
+  polaris
+    ✔ initializes the config and its three vaults (653ms)
+    ✔ only the admin can change parameters
+    ✔ the faucet mints stand-in dollars and SKR, within its cap (3668ms)
+    ✔ funds the credit pool and the SKR rewards vault (4523ms)
+    ✔ registers a merchant and a buyer profile at 520 (1629ms)
+    ✔ Pay now moves dollars to the merchant and adds 2 points (541ms)
+    ✔ refuses Pay in 4 above the $50 starter line
+    ✔ locking 4,000 SKR adds $100 to the limit, so a $120 plan opens (1078ms)
+    ✔ the SKR that backs the debt cannot be unlocked
+    ✔ the crank cannot collect before an instalment is due
+    ✔ an early repayment is on time: +12 (628ms)
+    ✔ the daily check-in pays SKR, adds a point, and only once a day (528ms)
+    ✔ an instalment can be paid in SKR, which refills the rewards vault (1071ms)
+    ✔ the crank collects a late instalment through the delegate: -30 (10272ms)
+    ✔ the last instalment closes the plan, clears the debt and frees the SKR (1406ms)
+    ✔ send by link: the link key pays the claim, the recipient holds no SOL (1291ms)
+    ✔ the sender can cancel an unclaimed link (1230ms)
+    ✔ pausing credit blocks new plans; the faucet can be switched off (1780ms)
+    ✔ a stranger cannot repay against someone else's plan account (1646ms)
+  19 passing (34s)

@@ -72,11 +72,41 @@ reason to come back before every due date.
 
 ## Devnet deployment
 
-DEVNET_SECTION
+| | |
+|---|---|
+| Program | `HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA` |
+| Config PDA | `AtSE7XdrabsoYkCXZqpvNWiYy9gJsF3LX2ygFTRUeRS1` |
+| pUSD (test dollars) | `Fw86jGwJvygP52pPceqi9WQbK96EfBPhXrJgf7b6nih4` |
+| SKR (devnet stand-in) | `HxZRpQH9nUDr97icD5XooCa7FuacdnWLodiSBPFaDfn4` |
+| Deployer / admin | `BKaeJqmmgMTFAkTwUwBceLpGwpSRKfjc9TC8kvb6ieRP` |
+
+**Status: not deployed yet.** The devnet faucet refused every airdrop to this
+machine on 6 Oct, so the deployer has no SOL. These addresses are fixed in
+advance (`packages/solana/deployments/devnet.json`) and the APK is built
+against them; after `packages/solana/scripts/deploy-devnet.sh` runs, add the
+explorer links here:
+
+- Program: https://explorer.solana.com/address/HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA?cluster=devnet
+- Transactions: from `packages/solana/deployments/devnet.json` (`txs`) and
+  `devnet-smoke.json`, as `https://explorer.solana.com/tx/<sig>?cluster=devnet`.
+
+What has run: 9 unit tests and 19 end-to-end tests on a local validator
+(`clockin/evidence/`), the smoke script against a running validator, and the
+app on the iOS simulator against that validator (`clockin/screens/ios/`).
 
 ## Install the APK
 
-APK_SECTION
+- File: `polaris-clockin.apk` (release, signed with the project's own key,
+  arm64-v8a + x86_64, 65.8 MB, package `app.polarispay.clockin`, min SDK 24)
+- SHA-256: `d2b4e1abbee9fed14373430f3be55bfc077c93b5cd65f14e8c4bd62a5c3abd98`
+- Signing certificate SHA-256: `8370bf40d44f186682e9884972b3e637b3347c8e883ccdaa0b7576fa622b376f`
+- Download: `<APK_URL>` (a GitHub Release asset on this repo)
+- Install: `adb install polaris-clockin.apk`, or open the file on the phone
+  and allow the install. Connect a devnet wallet (Seed Vault, Solflare or
+  Phantom on devnet) or tap "Try with a guest wallet". You need a little
+  devnet SOL for fees (Me → Fee balance, or https://faucet.solana.com); then
+  Home → Add gives test dollars and SKR.
+- The APK has not been run on a device yet (see HANDOFF.md).
 
 ## Porting note (for the portal's "porting" question)
 
