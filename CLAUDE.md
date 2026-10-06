@@ -1,5 +1,18 @@
 # CLAUDE.md
 
+## This repository: Polaris on Solana Mobile (CLOCK IN)
+
+This clone is the Solana Mobile port built for the CLOCK IN hackathon. The
+live product is `apps/mobile` (Expo, Mobile Wallet Adapter) and
+`packages/solana` (one Anchor program on devnet); `apps/coach` is an optional
+AI server. Status, commands and what is left: `HANDOFF.md`; the mapping from
+the Monad contracts: `clockin/PORT-PLAN.md`. Devnet only. Keypairs live in
+`packages/solana/keys/` (git-ignored); the Android release keystore lives
+outside the repo. Everything below describes the Monad-era code that is kept
+for reference.
+
+---
+
 Context for Claude Code sessions in this repository. The team's checklist is
 [`docs/TODO.md`](docs/TODO.md); the plan is [`docs/plan.md`](docs/plan.md);
 the README is the reference for everything that runs.

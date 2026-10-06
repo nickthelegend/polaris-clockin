@@ -1,3 +1,5 @@
+> **Archived.** This is the Monad Metropolis-era document, moved here from the repo root on 6 Oct 2026 when Polaris was ported to Solana Mobile for CLOCK IN. Its links are relative to the repo root. The current README is [../../README.md](../../README.md).
+
 # Polaris: the plan to done
 
 Started 6 Oct 2026 (the master pipeline in the team's orchestration notes).

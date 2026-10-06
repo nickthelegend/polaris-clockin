@@ -1,3 +1,5 @@
+> **Archived.** This is the Monad Metropolis-era document, moved here from the repo root on 6 Oct 2026 when Polaris was ported to Solana Mobile for CLOCK IN. Its links are relative to the repo root. The current README is [../../README.md](../../README.md).
+
 # Submission: Polaris at Monad Metropolis
 
 **Polaris: payment links with credit built in. Stripe for every app on Monad.**
