@@ -59,9 +59,14 @@ export function project(
     max?: number;
   },
 ): { points: Pt[]; y: (v: number) => number; min: number; max: number } {
-  const lo = min ?? Math.min(...values);
-  const hi = max ?? Math.max(...values);
-  const span = hi - lo || 1;
+  let lo = min ?? Math.min(...values);
+  let hi = max ?? Math.max(...values);
+  // A flat series (one score, an unchanged balance) runs through the middle, not along the floor.
+  if (hi === lo) {
+    lo -= 1;
+    hi += 1;
+  }
+  const span = hi - lo;
   const innerW = width - left - right;
   const innerH = height - top - bottom;
   const y = (v: number) => top + innerH - ((v - lo) / span) * innerH;

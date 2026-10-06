@@ -208,7 +208,7 @@ function PhotoCard({ assets }: { assets: Assets }) {
         />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(20,18,12,0.32)_0%,rgba(20,18,12,0)_32%,rgba(20,18,12,0)_52%,rgba(20,18,12,0.5)_100%)]"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(20,18,12,0.62)_0%,rgba(20,18,12,0.28)_26%,rgba(20,18,12,0)_44%,rgba(20,18,12,0)_52%,rgba(20,18,12,0.55)_100%)]"
         />
         <BlurWords
           as="h3"

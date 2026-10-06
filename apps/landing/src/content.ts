@@ -119,7 +119,7 @@ export const credit = {
   line: {
     title: ["Intuitive", "credit."],
     label: "Credit line",
-    amount: 153.23,
+    amount: 630,
     of: "Available of $1,000",
     legend: [
       { label: "Paid", value: 22, tone: "olive" },
@@ -182,37 +182,37 @@ export const faq = {
 };
 
 /**
- * Placeholder quotes: replace them with real ones from design partners before
- * launch.
+ * What the demo itself shows, in the voice of its two sides: the demo shop
+ * (Halcyon), a buyer and the merchant dashboard. No invented customers.
  */
 export const testimonials = {
   intervalMs: 6000,
   items: [
     {
-      name: "Ana Ribeiro, founder at Tidepool Goods",
+      name: "Halcyon, the demo shop on Monad testnet",
       quote:
-        "“We shared one link and were paid in dollars before the buyer closed the tab. Pay-in-4 lifted our basket size, and the credit risk was never ours to carry.”",
+        "“One link, and the order was paid in dollars before the buyer closed the tab. Pay in 4 at checkout, with the credit risk never ours to carry.”",
     },
     {
-      name: "Dev Malhotra, CTO at Kitebase",
+      name: "The buyer, on their phone",
       quote:
-        "“Ten lines of SDK and one webhook. Our users pay with Face ID and never see a wallet, gas or a seed phrase. Checkout stopped being a support ticket.”",
+        "“I looked at my phone and it was paid. No wallet to install, no gas to hold, no seed phrase to write down.”",
     },
     {
-      name: "Lena Hoffmann, head of growth at Northwind",
+      name: "Polaris for Business, the merchant dashboard",
       quote:
-        "“Subscriptions that skip a missed month instead of stacking it. Payouts land the same minute, and the dashboard tells us what happened without a spreadsheet.”",
+        "“Ten lines of SDK and one webhook. Payouts land the same minute, and every payment, plan and collection is on the dashboard.”",
     },
   ],
 };
 
 export const blog = {
   heading: "From the blog",
-  showAll: { label: "Show all", href: "#" },
+  showAll: { label: "Show all", href: "https://github.com/nickthelegend/polaris-monad#readme" },
   articles: [
-    { title: "Checkout on Monad, without a wallet", href: "#" },
-    { title: "Pay in 4, paid in full: credit at checkout", href: "#" },
-    { title: "Subscriptions that skip a month, not stack it", href: "#" },
+    { title: "Checkout on Monad, without a wallet", href: "https://github.com/nickthelegend/polaris-monad#mera-the-entire-account-layer" },
+    { title: "Pay in 4, paid in full: credit at checkout", href: "https://github.com/nickthelegend/polaris-monad#pay-in-4-end-to-end" },
+    { title: "Subscriptions that skip a month, not stack it", href: "https://github.com/nickthelegend/polaris-monad#monad-track-02-consumer-products-and-payments" },
   ],
 };
 
@@ -242,9 +242,7 @@ export const footer = {
     lines: ["Remote-first, on Monad.", "Built for Monad Metropolis 2026"],
   },
   socials: [
-    { label: "X", icon: "x", href: "#" },
-    { label: "GitHub", icon: "github", href: "https://github.com/nickthelegend" },
-    { label: "Telegram", icon: "telegram", href: "#" },
+    { label: "GitHub", icon: "github", href: "https://github.com/nickthelegend/polaris-monad" },
   ] as const,
   copyright: ["© 2026 — Polaris", "All rights reserved"],
   languagesLabel: "Languages",

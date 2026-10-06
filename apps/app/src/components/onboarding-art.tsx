@@ -119,7 +119,12 @@ export function OnboardingArt({ page, active = true, className }: { page: 1 | 2 
           active={active}
           startFrame={START_FRAME[page]}
           onReady={() => setReady(true)}
-          className={cn("absolute inset-0 size-full transition-opacity duration-300 ease-out", ready ? "opacity-100" : "opacity-0")}
+          // The comps are portrait (390x520); on a wider stage their own clip would cut the
+          // coins off at the comp's edges, so they spill over into the stage instead.
+          className={cn(
+            "absolute inset-0 size-full transition-opacity duration-300 ease-out [&_svg]:!overflow-visible [&_svg>g]:![clip-path:none]",
+            ready ? "opacity-100" : "opacity-0",
+          )}
         />
       ) : null}
       {stillsGone ? null : (
