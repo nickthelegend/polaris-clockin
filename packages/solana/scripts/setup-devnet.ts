@@ -72,14 +72,12 @@ async function main() {
   console.log(`network ${NETWORK} (${URL}), admin ${admin.publicKey.toBase58()}, program ${record.programId}`);
 
   // 1. mints (stand-ins on devnet: the config PDA is their mint authority)
-  if (!record.usdMint) {
-    const m = await createMint(conn, admin, config, null, 6, loadOrCreate(`${NETWORK}-pusd-mint.json`));
-    record.usdMint = m.toBase58();
-    save();
-  }
-  if (!record.skrMint) {
-    const m = await createMint(conn, admin, config, null, 6, loadOrCreate(`${NETWORK}-skr-mint.json`));
-    record.skrMint = m.toBase58();
+  // Created from git-ignored keypairs, so the addresses are known before the
+  // deploy (scripts/plan-devnet.ts) and re-runs are idempotent.
+  for (const [field, file] of [["usdMint", `${NETWORK}-pusd-mint.json`], ["skrMint", `${NETWORK}-skr-mint.json`]] as const) {
+    const kp = loadOrCreate(file);
+    if (!(await conn.getAccountInfo(kp.publicKey))) await createMint(conn, admin, config, null, 6, kp);
+    record[field] = kp.publicKey.toBase58();
     save();
   }
   const usdMint = new PublicKey(record.usdMint);
@@ -164,6 +162,8 @@ async function main() {
     record.merchants[m.slug] = { name: m.name, authority: k.publicKey.toBase58(), pda: merchantPda.toBase58() };
     save();
   }
+  record.deployed = true;
+  save();
   console.log(`wrote ${OUT}`);
 }
 
