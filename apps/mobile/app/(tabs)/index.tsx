@@ -128,6 +128,15 @@ export default function Home() {
           </View>
         </View>
 
+        {a.error ? (
+          <Card style={[s.notice, { marginTop: 12, borderColor: color.down + "55" }]}>
+            <Ionicons name="cloud-offline" size={18} color={color.down} />
+            <Text size={13} style={{ flex: 1 }}>
+              Can't read the Polaris program on {CLUSTER} right now. Pull to retry.
+            </Text>
+          </Card>
+        ) : null}
+
         {lowSol ? (
           <Card style={[s.notice, { marginTop: 12 }]}>
             <Ionicons name="flash" size={18} color={color.warn} />

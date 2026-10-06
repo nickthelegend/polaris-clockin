@@ -9,7 +9,7 @@ fs.copyFileSync(path.join(sol, "target/idl/polaris.json"), path.join(out, "polar
 fs.copyFileSync(path.join(sol, "target/types/polaris.ts"), path.join(out, "polaris-types.ts"));
 const deployments = {};
 for (const f of fs.readdirSync(path.join(sol, "deployments"))) {
-  if (f.endsWith(".json")) {
+  if (f.endsWith(".json") && !f.includes("smoke")) {
     const d = JSON.parse(fs.readFileSync(path.join(sol, "deployments", f), "utf8"));
     delete d.txs;
     deployments[d.network] = d;
