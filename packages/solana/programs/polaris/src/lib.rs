@@ -419,6 +419,21 @@ pub mod polaris {
             &ctx.accounts.sender.to_account_info(),
             amount,
         )?;
+        // Sweep what the sender pre-paid for fees back to them, so the link
+        // key is left empty (an account below rent-exemption would fail).
+        let rest = ctx.accounts.link_key.lamports();
+        if rest > 0 {
+            anchor_lang::system_program::transfer(
+                CpiContext::new(
+                    ctx.accounts.system_program.to_account_info(),
+                    anchor_lang::system_program::Transfer {
+                        from: ctx.accounts.link_key.to_account_info(),
+                        to: ctx.accounts.sender.to_account_info(),
+                    },
+                ),
+                rest,
+            )?;
+        }
         emit!(LinkClaimed {
             sender: ctx.accounts.link.sender,
             link_key: ctx.accounts.link.link_key,

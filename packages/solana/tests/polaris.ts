@@ -370,7 +370,7 @@ describe("polaris", () => {
       .accountsPartial({ sender: buyer.publicKey, linkKey: linkKey.publicKey, usdMint, senderUsd: buyerUsd })
       .instruction();
     const tx = new Transaction()
-      .add(SystemProgram.transfer({ fromPubkey: buyer.publicKey, toPubkey: linkKey.publicKey, lamports: 5_000_000 }))
+      .add(SystemProgram.transfer({ fromPubkey: buyer.publicKey, toPubkey: linkKey.publicKey, lamports: 2_100_000 }))
       .add(ix);
     await provider.sendAndConfirm(tx, [buyer]);
 
@@ -392,6 +392,7 @@ describe("polaris", () => {
     const recipientUsd = getAssociatedTokenAddressSync(usdMint, recipient.publicKey);
     expect(await bal(recipientUsd)).to.eq(40 * USD);
     expect(await conn.getBalance(recipient.publicKey)).to.eq(0);
+    expect(await conn.getBalance(linkKey.publicKey)).to.eq(0); // the fee top-up's change went back to the sender
     expect(await conn.getAccountInfo(pda(Buffer.from("link"), linkKey.publicKey.toBuffer()))).to.eq(null);
   });
 

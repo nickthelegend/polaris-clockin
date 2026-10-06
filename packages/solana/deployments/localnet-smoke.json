@@ -1,0 +1,28 @@
+{
+  "ranAt": "2026-10-06T10:28:34.400Z",
+  "url": "localnet",
+  "summary": {
+    "buyer": "69UbNs55Js6xLMvAz8K7gzZznArhL2uEmjZmqZe6egJC",
+    "score": 547,
+    "streak": 1,
+    "onTime": 2,
+    "activeDebt": 30230137,
+    "skrLocked": 1000000000,
+    "recipientUsd": "20",
+    "recipientSol": 0
+  },
+  "txs": {
+    "fundBuyer": "5hFJaR9qW3cgykhp6bSmY4zjSzBtVWkgUQcCUx3vdNgDkiWyfGYS6TtCLFct9VE2BLKfh3XjCmetGgH24yQmLhkR",
+    "initProfile": "5KTT7sZ8rX1TGXaHxuJ3HwkxmCR9QDH2KcUpMxkqTk5kgTkJY19BduKYU3b2Ld9Jd7NYU2emyuPqJMYWQQf8nqyb",
+    "faucetUsd": "3Cikvx88n2oPjhU587LgFSPZNCK3rGpsiAVGYpqw1oK8yyZRLX2iLCyaZ39Km7S3GHd1rPxW5V67jT2by9i79WyA",
+    "faucetSkr": "avwJDSqF1nzFGScGf7AVpk2FQAxLTMVsbsyVyvc7xG6Ph3kh4x2M8wPZYW4wWzczFtsNyRfX6wbaRNCDCza2QF4",
+    "checkIn": "4H86WS3EmY67ZCBosNwixrHfFYsSfidij9xyAzrCr8EUcx8AfC1SNEKuXCiVpT5qaS6JHJGvRmR6xQLVE9ccYAZM",
+    "payNow": "2jdczkCCFd9zvq36Q4FeMWJKkymAnxiXUfjpdi5rZUc1fcgASmoLUtQcNkkboj6tyTwrPNyxCM9E5rq39YjeJKeb",
+    "lockSkr": "fgmNhHodRXmFS6bgnNXawot47Vvu5quwLtS9H3oReD4aVWp2Fac4e5jdoBJabvXiVboTZbA2mjdBCmVrzHdA9sm",
+    "openPlan": "3oqmaTLc4YoXiWpAokhqnNAp1jCjv3XiEVyHgfmQqNemEHPWHkY6L6UjiZqZ7nNAuweNzmjBnSBR2huQawv8EnvN",
+    "repay": "5pJvnrPs3yGmAm7u4gBP9nCwjXsopeVuiQrG2ZJnRrnvhL6QcSMisJX1Y4JPXtxovcFrVbVgmUTHJgvadGDhs4vJ",
+    "repayWithSkr": "4cTL8XRSDtbNzfYR6RvBBPiMG5HdAucRqCe3HVQwPfFYRfVy7UNjRMTsRQFEPrbddEdNnuyGFNXenbXdkW6wgsWN",
+    "createLink": "42Ybe5dtKSwmkb4wHWQdmpcojYKPwU1B2sGuLEFWzXC8K5o7or8BepoBgSS36N9prryGpmowBeYsQQtHCoktGv1s",
+    "claimLink": "2QUjKJ56SMc8QCJ8UkUzLf91QYrGuMkkaasGYSER6fzasHftJ1eNAebUf93fbhykuzJQHuCegewMMb6vJk5EBv36"
+  }
+}
