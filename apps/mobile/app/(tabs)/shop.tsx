@@ -6,7 +6,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Card, Tag, Text } from "../../src/ui/kit";
 import { color, gutter, radius } from "../../src/ui/theme";
 import { SHOPS } from "../../src/lib/catalog";
-import { MERCHANTS } from "../../src/lib/config";
+import { CLUSTER, MERCHANTS } from "../../src/lib/config";
 import { useAccount } from "../../src/state/AccountProvider";
 import { fmtUsd, ONE } from "../../src/lib/credit";
 
@@ -20,7 +20,7 @@ export default function Shop() {
           Shop
         </Text>
         <Text size={14} color={color.muted} style={{ marginTop: 4 }}>
-          Merchants on Solana {""}devnet. Pay now, or Pay in 4 with {fmtUsd(available, 0)} available.
+          Merchants on Solana {CLUSTER}. Pay now, or Pay in 4 with {fmtUsd(available, 0)} available.
         </Text>
         {SHOPS.filter((sh) => MERCHANTS[sh.slug]).map((sh) => (
           <Card key={sh.slug} style={{ marginTop: 14, padding: 0, overflow: "hidden" }}>

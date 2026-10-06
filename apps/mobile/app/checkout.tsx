@@ -40,7 +40,7 @@ export default function Checkout() {
   const total = planTotal(price, interval);
   const per = Math.floor(total / 4);
   const fits = price <= a.available && price >= ONE;
-  const [mode, setMode] = useState<Mode>(fits && price >= 20 * ONE ? "four" : "now");
+  const [mode, setMode] = useState<Mode>(price >= 20 * ONE ? "four" : "now");
   const [done, setDone] = useState<{ sig: string; mode: Mode } | null>(null);
   const [coach, setCoach] = useState<{ text: string[]; ai: boolean } | null>(null);
   const [coachBusy, setCoachBusy] = useState(false);

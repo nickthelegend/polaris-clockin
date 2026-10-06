@@ -3,6 +3,7 @@
 // no push server.
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { AUTOPILOT } from "../dev/autopilot";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -14,7 +15,9 @@ Notifications.setNotificationHandler({
 });
 
 let granted: boolean | null = null;
-export async function ensurePermission(): Promise<boolean> {
+/** Asks only when `ask` is true (a moment the user chose, e.g. after clocking in). */
+export async function ensurePermission(ask = true): Promise<boolean> {
+  if (AUTOPILOT) return false; // never block the scripted screenshots with a system prompt
   if (granted !== null) return granted;
   try {
     if (Platform.OS === "android") {
@@ -25,6 +28,7 @@ export async function ensurePermission(): Promise<boolean> {
       });
     }
     const current = await Notifications.getPermissionsAsync();
+    if (!current.granted && !ask) return false;
     granted = current.granted || (await Notifications.requestPermissionsAsync()).granted;
   } catch {
     granted = false;
@@ -49,7 +53,7 @@ export async function scheduleClockInReminder(streak: number, nextRewardSkr: num
 }
 
 export async function scheduleDueReminder(merchant: string, amount: string, dueAtSecs: number) {
-  if (!(await ensurePermission())) return;
+  if (!(await ensurePermission(false))) return; // no prompt in the middle of a checkout
   const at = new Date(dueAtSecs * 1000 - 86_400_000);
   if (at.getTime() < Date.now() + 60_000) return;
   await Notifications.scheduleNotificationAsync({

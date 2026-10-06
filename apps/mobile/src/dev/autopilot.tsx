@@ -10,7 +10,7 @@ import { File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import { useWallet } from "../wallet/WalletProvider";
 import { useAccount } from "../state/AccountProvider";
-import { ix } from "../chain/polaris";
+import { connection, fetchConfig, fetchPlans, fetchProfile, ix, skrAta, tokenBalance, usdAta } from "../chain/polaris";
 import { SKR_MINT, USD_MINT } from "../lib/config";
 import { ONE } from "../lib/credit";
 
@@ -60,6 +60,27 @@ export function Autopilot() {
       const refresh = async () => {
         await ref.current.a.refresh();
         await sleep(1500);
+        const a = ref.current.a;
+        if (a.error) {
+          const me = ref.current.w.publicKey!;
+          const probes: [string, () => Promise<unknown>][] = [
+            ["getBalance", () => connection.getBalance(me)],
+            ["tokenBalance", () => tokenBalance(usdAta(me))],
+            ["fetchProfile", () => fetchProfile(me)],
+            ["fetchConfig", () => fetchConfig()],
+            ["fetchPlans", () => fetchPlans(me)],
+            ["skrAta", async () => skrAta(me).toBase58()],
+          ];
+          for (const [name, f] of probes) {
+            try {
+              await f();
+              mark(`PROBE ${name} ok`);
+            } catch (e: any) {
+              mark(`PROBE ${name} ${e?.message} | ${String(e?.stack ?? "").split("\n").slice(0, 6).join(" <- ")}`);
+            }
+          }
+        }
+        mark(`STATE usd=${a.usd} skr=${a.skr} sol=${a.sol} score=${a.score} plans=${a.plans.length} error=${a.error ?? "none"}`);
       };
       try {
         if (ref.current.w.publicKey) await ref.current.w.disconnect();

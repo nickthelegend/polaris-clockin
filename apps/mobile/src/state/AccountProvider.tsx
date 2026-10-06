@@ -149,7 +149,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         .then((activity) => setState((s) => ({ ...s, activity })))
         .catch(() => {});
     } catch (e: any) {
-      setState((s) => ({ ...s, loading: false, error: e?.message ?? String(e) }));
+      console.warn("refresh failed", e);
+      setState((s) => ({ ...s, loading: false, error: `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`.slice(0, 300) }));
     } finally {
       busy.current = false;
     }

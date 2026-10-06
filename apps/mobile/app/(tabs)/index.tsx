@@ -103,7 +103,7 @@ export default function Home() {
               </Text>
             </View>
             <Text size={12} weight="medium" color="rgba(15,16,17,0.6)">
-              pUSD · devnet test dollars
+              pUSD · test dollars
             </Text>
           </View>
           <View style={{ marginTop: 18 }}>
