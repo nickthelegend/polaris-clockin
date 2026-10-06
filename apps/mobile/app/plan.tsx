@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,14 +11,22 @@ import { useWallet } from "../src/wallet/WalletProvider";
 import { ix, merchantName } from "../src/chain/polaris";
 import { dueAt, fmtSkr, fmtUsd, installmentAmount, ONE, skrForUsd } from "../src/lib/credit";
 import { PARAMS } from "../src/lib/config";
+import { AUTOPILOT } from "../src/dev/autopilot";
 
 export default function PlanScreen() {
-  const { index } = useLocalSearchParams<{ index: string }>();
+  const { index, auto } = useLocalSearchParams<{ index: string; auto?: string }>();
   const router = useRouter();
   const a = useAccount();
   const { publicKey } = useWallet();
   const { run, busy } = useAction();
   const pl = a.plans.find((x) => x.index === Number(index));
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (AUTOPILOT && auto === "repay" && pl && !autoRan.current) {
+      autoRan.current = true;
+      run("repay", async () => [await ix.repay(publicKey!, pl.index)], `Instalment ${pl.paid + 1} of 4 paid`);
+    }
+  });
 
   if (!pl) {
     return (

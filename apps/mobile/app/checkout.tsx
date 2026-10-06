@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -16,11 +16,12 @@ import { ix } from "../src/chain/polaris";
 import { askCoach, coachMode, Facts, rulesSummary } from "../src/lib/coach";
 import { buildFacts } from "../src/lib/facts";
 import { scheduleDueReminder } from "../src/lib/notify";
+import { AUTOPILOT } from "../src/dev/autopilot";
 
 type Mode = "now" | "four";
 
 export default function Checkout() {
-  const params = useLocalSearchParams<{ shop?: string; item?: string; m?: string; amount?: string; title?: string }>();
+  const params = useLocalSearchParams<{ shop?: string; item?: string; m?: string; amount?: string; title?: string; auto?: string }>();
   const router = useRouter();
   const a = useAccount();
   const { publicKey } = useWallet();
@@ -51,6 +52,14 @@ export default function Checkout() {
       amount: i === 3 ? total - per * 3 : per,
     }));
   }, [interval, total, per]);
+
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (AUTOPILOT && params.auto === "confirm" && !autoRan.current) {
+      autoRan.current = true;
+      confirm();
+    }
+  });
 
   if (!merchantKey || !price) {
     return (

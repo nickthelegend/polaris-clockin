@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Card, Tag, Text } from "../../src/ui/kit";
@@ -21,6 +21,14 @@ export default function Coach() {
   const [busy, setBusy] = useState(false);
   const [showFacts, setShowFacts] = useState(false);
   const scroll = useRef<ScrollView>(null);
+  const { q } = useLocalSearchParams<{ q?: string }>();
+  const asked = useRef<string | null>(null);
+  useEffect(() => {
+    if (q && asked.current !== q) {
+      asked.current = q;
+      ask(q);
+    }
+  }, [q]);
 
   useFocusEffect(
     useCallback(() => {

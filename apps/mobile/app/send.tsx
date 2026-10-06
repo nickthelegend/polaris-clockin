@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Share, StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -16,6 +16,7 @@ import { useWallet } from "../src/wallet/WalletProvider";
 import { ix } from "../src/chain/polaris";
 import { fmtUsd, ONE } from "../src/lib/credit";
 import { useToast } from "../src/ui/Toast";
+import { AUTOPILOT, bus } from "../src/dev/autopilot";
 
 // Covers the claim's fee and the recipient's token-account rent, so the
 // person who opens the link needs no SOL.
@@ -30,7 +31,21 @@ export default function Send() {
   const toast = useToast();
   const [text, setText] = useState("");
   const [link, setLink] = useState<{ url: string; amount: number } | null>(null);
+  const params = useLocalSearchParams<{ amount?: string; auto?: string }>();
   const amount = Math.round(Number(text || "0") * ONE);
+  const autoRan = useRef(false);
+  useEffect(() => {
+    if (AUTOPILOT && params.amount && !autoRan.current) {
+      autoRan.current = true;
+      setText(params.amount);
+    }
+  }, [params.amount]);
+  useEffect(() => {
+    if (AUTOPILOT && params.auto === "1" && text && amount > 0 && !link && busy !== "link" && autoRan.current && !(bus as any).sent) {
+      (bus as any).sent = true;
+      create();
+    }
+  });
   const over = amount > a.usd;
 
   function press(k: string) {
@@ -52,7 +67,11 @@ export default function Send() {
       ],
       `Link ready: ${fmtUsd(amount)}`,
     );
-    if (sig) setLink({ url: `polaris://claim?k=${bs58.encode(key.secretKey)}`, amount });
+    if (sig) {
+      const url = `polaris://claim?k=${bs58.encode(key.secretKey)}`;
+      bus.lastLink = url;
+      setLink({ url, amount });
+    }
   }
 
   if (link) {

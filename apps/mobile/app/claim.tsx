@@ -14,9 +14,10 @@ import { useAccount } from "../src/state/AccountProvider";
 import { explorerTx } from "../src/lib/config";
 import { ONE } from "../src/lib/credit";
 import { useToast } from "../src/ui/Toast";
+import { AUTOPILOT } from "../src/dev/autopilot";
 
 export default function Claim() {
-  const { k } = useLocalSearchParams<{ k: string }>();
+  const { k, auto } = useLocalSearchParams<{ k: string; auto?: string }>();
   const router = useRouter();
   const { publicKey, useGuest } = useWallet();
   const { refresh } = useAccount();
@@ -38,6 +39,14 @@ export default function Claim() {
       .then((l) => setLink(l ? { amount: l.amount.toNumber(), sender: l.sender.toBase58() } : null))
       .catch(() => setLink(null));
   }, [key]);
+
+  const [autoRan, setAutoRan] = useState(false);
+  useEffect(() => {
+    if (AUTOPILOT && auto === "1" && link && !autoRan && !done) {
+      setAutoRan(true);
+      claim();
+    }
+  });
 
   async function claim() {
     if (!key) return;

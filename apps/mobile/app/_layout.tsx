@@ -9,6 +9,7 @@ import { WalletProvider } from "../src/wallet/WalletProvider";
 import { AccountProvider } from "../src/state/AccountProvider";
 import { ToastProvider } from "../src/ui/Toast";
 import { color } from "../src/ui/theme";
+import { Autopilot, AUTOPILOT } from "../src/dev/autopilot";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -30,6 +31,7 @@ export default function RootLayout() {
         <AccountProvider>
           <ToastProvider>
             <StatusBar style="light" />
+            {AUTOPILOT ? <Autopilot /> : null}
             <Stack
               screenOptions={{
                 headerShown: false,

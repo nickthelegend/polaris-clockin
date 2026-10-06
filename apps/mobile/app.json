@@ -22,7 +22,10 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": ["android.permission.POST_NOTIFICATIONS", "android.permission.VIBRATE"]
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
+      ]
     },
     "plugins": [
       "expo-router",
@@ -40,13 +43,23 @@
       ],
       [
         "expo-splash-screen",
-        { "image": "./assets/splash-icon.png", "imageWidth": 160, "backgroundColor": "#0f1011" }
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 160,
+          "backgroundColor": "#0f1011"
+        }
       ],
       [
         "expo-notifications",
-        { "color": "#9cef5e" }
-      ]
+        {
+          "color": "#9cef5e"
+        }
+      ],
+      "./plugins/with-space-safe-paths",
+      "./plugins/with-release-signing"
     ],
-    "experiments": { "typedRoutes": false }
+    "experiments": {
+      "typedRoutes": false
+    }
   }
 }
