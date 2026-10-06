@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Polaris",
+    "slug": "polaris-clockin",
+    "scheme": "polaris",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0f1011",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.polarispay.clockin"
+    },
+    "android": {
+      "package": "app.polarispay.clockin",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0f1011",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["android.permission.POST_NOTIFICATIONS", "android.permission.VIBRATE"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Satoshi-Regular.ttf",
+            "./assets/fonts/Satoshi-Medium.ttf",
+            "./assets/fonts/Satoshi-Bold.ttf",
+            "./assets/fonts/Satoshi-Black.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-splash-screen",
+        { "image": "./assets/splash-icon.png", "imageWidth": 160, "backgroundColor": "#0f1011" }
+      ],
+      [
+        "expo-notifications",
+        { "color": "#9cef5e" }
+      ]
+    ],
+    "experiments": { "typedRoutes": false }
+  }
+}

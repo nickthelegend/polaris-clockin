@@ -1,0 +1,39 @@
+{
+  "localnet": {
+    "network": "localnet",
+    "programId": "HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA",
+    "config": "AtSE7XdrabsoYkCXZqpvNWiYy9gJsF3LX2ygFTRUeRS1",
+    "admin": "BKaeJqmmgMTFAkTwUwBceLpGwpSRKfjc9TC8kvb6ieRP",
+    "usdMint": "4oLtKJF1px6UuWd6UUNKUwy1KdweEAG189xZLPDNXbpo",
+    "skrMint": "AcLpnwaBavPcjsDHVVy8dZjZ6NY8mHuhsVsPmQrJzxEJ",
+    "params": {
+      "intervalSecs": 604800,
+      "graceSecs": 259200,
+      "skrPriceMicros": 50000,
+      "skrCollateralBps": 5000,
+      "checkinReward": 25000000
+    },
+    "merchants": {
+      "studio-sol": {
+        "name": "Studio Sol",
+        "authority": "42QzYqMYbwcCdyGWiSA2VBcPH9oZpUMguNfnJGAhAJtq",
+        "pda": "3grnXMxsuVH7xCqD2aQotEDw2dA1FxhqKcvLKY1RbQGE"
+      },
+      "kora-rail": {
+        "name": "Kora Rail",
+        "authority": "EGxQNRPuARLxZq2T3aPfd4SS9YmHMzZZEbfAqixczfRv",
+        "pda": "BBrhQzummxBYXLEsXu36GZxtAVAQ8b4WiKdhKq6jPhWr"
+      },
+      "nomada-coffee": {
+        "name": "Nomada Coffee",
+        "authority": "2DWK2TcmcHUYyXia4Jrq2dA74me5BFp3U9DQgKQ4Py2P",
+        "pda": "FUKA49zqfBrrZ8sci9kiqf37MhJC5LNCAfZmGRQiFYw4"
+      },
+      "lumen-audio": {
+        "name": "Lumen Audio",
+        "authority": "6MYVWCiz8vrXR2KJLCvWjnv1knzFEVvzWbNUMwY7d6YS",
+        "pda": "2r3HQKyY7bCiK5Ake1xxtcFXWaj4b79xjU16xqeHHhc9"
+      }
+    }
+  }
+}
