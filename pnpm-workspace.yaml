@@ -7,6 +7,11 @@ packages:
   - "!packages/indexer"
   - "packages/indexer/client"
   - "apps/*"
+  # The Solana port installs on its own with npm (Anchor tests, the Expo app,
+  # the coach server): see clockin/PORT-PLAN.md and HANDOFF.md.
+  - "!packages/solana"
+  - "!apps/mobile"
+  - "!apps/coach"
   - "services/*"
   - "workflows"
 

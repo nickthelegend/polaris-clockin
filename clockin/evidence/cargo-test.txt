@@ -1,0 +1,10 @@
+test math::tests::score_is_clamped ... ok
+test math::tests::streaks ... ok
+test math::tests::skr_for_usd_rounds_up ... ok
+test test_id ... ok
+test math::tests::skr_boost_uses_price_and_factor ... ok
+test math::tests::limits_step_with_score ... ok
+test math::tests::due_dates ... ok
+test math::tests::plan_total_is_ten_percent_apr_prorated ... ok
+test math::tests::installments_sum_to_total ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
