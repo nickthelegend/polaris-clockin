@@ -7,3 +7,4 @@ dist/
 /android
 *.jks
 *.keystore
+.expo-run-*.log
