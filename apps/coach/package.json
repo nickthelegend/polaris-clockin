@@ -1,0 +1,8 @@
+{
+  "name": "@polaris/coach",
+  "private": true,
+  "type": "module",
+  "description": "Polaris Coach: a tiny server that holds the Anthropic API key so the APK never does",
+  "scripts": { "start": "node server.mjs", "test": "node --test server.test.mjs" },
+  "dependencies": { "@anthropic-ai/sdk": "^0.131.0" }
+}
