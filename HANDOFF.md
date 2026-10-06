@@ -136,3 +136,14 @@ bash scripts/ios-shots.sh <udid> ../../clockin/screens/ios
   updated for the move.
 - `apps/mobile`, `apps/coach` and `packages/solana` are outside the pnpm
   workspace and install with npm.
+
+## Housekeeping
+
+- A built iOS simulator app (release, local validator, autopilot on) is kept
+  at `/Volumes/Extreme SSD/Projects/clockin/.cache/polaris-sim/Polaris.app`;
+  Xcode derived data, Rust `target/debug|release`, Gradle intermediates and
+  the local validator ledger were deleted to save disk. To run the simulator
+  flow again, start a fresh validator and rerun `setup-devnet.ts` with
+  `NETWORK=localnet` (README → Run it).
+- The devnet airdrop retry loop was stopped; nothing of this session is left
+  running (no Metro, validator, emulator or Gradle daemon).
