@@ -37,7 +37,9 @@ Everything below was run on this Mac unless it says otherwise.
    $64 → repay an instalment (score 521 → 533) → create a $25 link → claim it,
    with every transaction confirmed and the account state logged after each
    step (`clockin/screens/ios/autopilot-log.txt`, 18 screenshots in
-   `clockin/screens/ios/`). This run found and fixed a Hermes bug
+   `clockin/screens/ios/`). Re-run green on 7 Oct with the 1.0.1 source
+   (same results: score 521 → 533, link created and claimed, no read errors).
+   This run found and fixed a Hermes bug
    (Buffer#subarray) that broke all account decoding.
 5. `npx tsc --noEmit` clean in `apps/mobile`; `node --test` green in `apps/coach`.
 
