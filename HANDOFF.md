@@ -1,6 +1,6 @@
 # HANDOFF: Polaris on Solana Mobile (CLOCK IN)
 
-Status as of Tue 6 Oct 2026, 22:30 IST. Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
+Status as of Wed 7 Oct 2026, 12:00 IST (Round 2: Android audit, APK 1.0.1). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
 Everything below was run on this Mac unless it says otherwise.
 
 ## What exists
@@ -9,7 +9,7 @@ Everything below was run on this Mac unless it says otherwise.
 |---|---|---|
 | Anchor program `polaris` | `packages/solana` | Built, unit-tested and end-to-end tested on a local validator. **Not on devnet yet** (see below) |
 | Mobile app | `apps/mobile` (Expo 57, RN 0.86) | Runs on the iOS simulator (release build) against the local validator, full flow verified |
-| Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | Built and signed (release key, arm64-v8a + x86_64, 65.8 MB, sha256 `d2b4e1abbee9fed14373430f3be55bfc077c93b5cd65f14e8c4bd62a5c3abd98`); **never run on a device or emulator** |
+| Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | 1.0.1 (versionCode 2), built and signed with the release key (cert SHA-256 `8370bf40…376f`, same key as 1.0.0), arm64-v8a + x86_64, sha256 `0d99915d03f14e273bb44f8f7e3ae1d2a8ab5b3cba884aaae32a7575366a80dc`; uploaded to the `clockin-v1` release and the re-downloaded file matches. **Never run on a device or emulator** |
 | Coach server | `apps/coach` | Handler tested with a stub client; never called Claude with a real key; not deployed |
 | Hackathon kit | `clockin/` | PORT-PLAN, SUBMISSION, PITCH, DEMO-SCRIPT, screenshots |
 
@@ -40,6 +40,39 @@ Everything below was run on this Mac unless it says otherwise.
    `clockin/screens/ios/`). This run found and fixed a Hermes bug
    (Buffer#subarray) that broke all account decoding.
 5. `npx tsc --noEmit` clean in `apps/mobile`; `node --test` green in `apps/coach`.
+
+## Android audit (Round 2, 7 Oct, by inspection: no emulator allowed)
+
+Checked on the built APK with `aapt2 dump badging`, `apksigner`, `unzip`,
+`strings`, and in the source. Fixes are in commit 2bb4fc2; the APK below is
+1.0.1.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Package / version | `app.polarispay.clockin`, versionCode 1 → **2**, versionName **1.0.1**. PASS |
+| 1 | min / target SDK | minSdk 24, targetSdk 36. PASS |
+| 1 | Permissions | INTERNET, POST_NOTIFICATIONS, VIBRATE present. **Fixed:** removed SYSTEM_ALERT_WINDOW (dev tooling), READ/WRITE_EXTERNAL_STORAGE, USE_BIOMETRIC, USE_FINGERPRINT (`blockedPermissions`); verified absent in the 1.0.1 badging. Left: expo-notifications' boot-completed, wake-lock, FCM and launcher-badge permissions (library defaults, harmless) |
+| 1 | Cleartext traffic | Not enabled; the release talks only to https devnet RPC. PASS |
+| 1 | `<queries>` for wallets | **Fixed:** added an intent query for the `solana-wallet` scheme (plugin `with-mwa-queries`). PASS |
+| 1 | Backups | **Fixed:** `allowBackup=false` (the guest key and Coach key are in SecureStore) |
+| 2 | MWA native module in the APK | `com.solanamobile.mobilewalletadapter` classes present in classes3.dex. PASS |
+| 2 | MWA call | dynamic import on Android only; `authorize({ chain: "solana:devnet", identity: { name, uri, icon }, auth_token })`; `signAndSendTransactions` with `minContextSlot`. PASS |
+| 2 | Auth token / reauthorize | Cached in SecureStore. **Fixed:** if the wallet rejects the cached token, the app authorizes afresh in the same session; a silently switched account is refused |
+| 2 | No wallet installed | **Fixed:** `ERROR_WALLET_NOT_FOUND` / "no installed wallet" now map to "No Solana wallet app found… use the guest wallet"; the guest wallet is offered on the same screen |
+| 3 | JS bundle | `assets/index.android.bundle` present, Hermes bytecode (magic `c61fbc03`), no Metro. PASS |
+| 3 | Local URLs in the bundle | **Fixed:** the app's own `10.0.2.2` / `127.0.0.1` fallbacks are gone (a localnet build must set `EXPO_PUBLIC_LOCAL_HOST`). Remaining strings come from libraries and are never used: `127.0.0.1` ×2 and `localhost:8899` (web3.js/Anchor local defaults), `localhost:8081/unpause` (React Native dev tooling). Devnet RPC `https://api.devnet.solana.com` present |
+| 4 | Polyfills | `index.js`: `react-native-get-random-values`, then `Buffer` (plus the Hermes `subarray` fix) before expo-router and any Solana code. TextEncoder is native on Hermes. PASS |
+| 5 | Back button | expo-router / react-navigation handles hardware back (sheets close, onboarding exits); predictive back disabled in app.json. PASS (not run) |
+| 5 | Notifications | Channel `daily` created before scheduling; Android 13 permission is requested only after the first clock-in or from Me; due-date reminders never prompt. PASS (not run) |
+| 5 | Deep links | `polaris://claim?k=…` and `polaris://checkout?…` intent filter present. PASS (not run) |
+| 5 | WebView | None used. N/A |
+| 5 | Keyboard / edge-to-edge / fonts | `adjustResize`; Coach input sits above the floating tab bar; safe-area insets used for the tab bar and screens (edge-to-edge default in Expo 57); Satoshi embedded by the expo-font plugin. PASS (not run) |
+| 6 | Signing | `apksigner`: CN=Polaris, OU=CLOCK IN; cert SHA-256 `8370bf40d44f186682e9884972b3e637b3347c8e883ccdaa0b7576fa622b376f`, the same keystore as 1.0.0. PASS |
+| 7 | ABIs / size | arm64-v8a + x86_64. PASS |
+| — | Coach key field | Optional and labelled so; autofill off; stored only via SecureStore; never logged (grep: no console calls touch it); sent only to api.anthropic.com |
+
+Not possible without a device: launching the APK, a real MWA wallet round
+trip, notification delivery.
 
 ## Not verified / not done (honest list)
 
@@ -82,9 +115,7 @@ Everything below was run on this Mac unless it says otherwise.
    The APK does not need rebuilding: the addresses it uses are the ones the
    setup creates. Put the program/tx links from `deployments/devnet*.json`
    into `clockin/SUBMISSION.md`.
-2. **Host the APK** as a direct download, e.g. a GitHub Release asset:
-   `gh release create v1.0.0 "/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk" -R nickthelegend/polaris-clockin`
-   and paste the asset URL into the portal and SUBMISSION.md.
+2. **The APK is hosted**: https://github.com/nickthelegend/polaris-clockin/releases/download/clockin-v1/polaris-clockin.apk (paste it into the portal).
 3. **Try the APK on a phone** (or an emulator on another machine) before
    recording: install, connect a devnet wallet (Solflare/Phantom on devnet,
    or the guest wallet), Add, Clock in, Pay in 4. Guest wallets need devnet
