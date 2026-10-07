@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, TextInput, View } from "react-native";
+import React, { useEffect, useRef, useState } from "react";
+import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
@@ -31,8 +31,12 @@ export default function Me() {
   const [prefs, setP] = useState<ReminderPrefs | null>(null);
   const addr = publicKey?.toBase58() ?? "";
   const params = useLocalSearchParams<{ advanced?: string }>();
+  const scrollRef = useRef<ScrollView>(null);
   useEffect(() => {
-    if (params.advanced === "1") setAdvanced(true);
+    if (params.advanced === "1") {
+      setAdvanced(true);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 300);
+    }
   }, [params.advanced]);
 
   useEffect(() => {
@@ -59,7 +63,7 @@ export default function Me() {
   }
 
   return (
-    <Screen title="Me">
+    <Screen title="Me" scrollProps={{ ref: scrollRef }}>
       {/* Wallet */}
       <Card style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
         <View style={s.qr} accessible accessibilityLabel="QR code of your address">

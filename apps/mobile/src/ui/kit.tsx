@@ -216,7 +216,7 @@ export function Screen({
   subtitle?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
-  scrollProps?: ScrollViewProps;
+  scrollProps?: ScrollViewProps & { ref?: React.Ref<ScrollView> };
 }) {
   const bottom = useTabBarSpace();
   return (

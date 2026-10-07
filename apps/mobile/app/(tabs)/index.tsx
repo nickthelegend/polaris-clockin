@@ -113,7 +113,7 @@ export default function Home() {
             accessibilityLabel={`Wallet ${publicKey?.toBase58().slice(0, 4)}, ${kind === "guest" ? "guest wallet" : "connected wallet"}, ${CLUSTER}`}
           >
             <View style={[s.dot, { backgroundColor: kind === "guest" ? color.warn : color.lime }]} />
-            <Text size={13} weight="medium" color={color.muted}>
+            <Text size={13} weight="medium" color={color.muted} maxFontSizeMultiplier={1.4} numberOfLines={1}>
               {publicKey?.toBase58().slice(0, 4)}…{publicKey?.toBase58().slice(-4)} · {CLUSTER}
             </Text>
           </Pressable>
@@ -134,13 +134,13 @@ export default function Home() {
 
         {/* Dollar account */}
         <View style={s.lime}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <View style={s.inkPill}>
-              <Text size={13} weight="medium">
+              <Text size={13} weight="medium" maxFontSizeMultiplier={1.4}>
                 Dollar account
               </Text>
             </View>
-            <Text size={13} weight="medium" color="rgba(15,16,17,0.65)">
+            <Text size={13} weight="medium" color="rgba(15,16,17,0.65)" maxFontSizeMultiplier={1.4}>
               pUSD · test dollars
             </Text>
           </View>
@@ -346,7 +346,7 @@ const s = StyleSheet.create({
   chip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: color.surface1, paddingHorizontal: 12, minHeight: 36, borderRadius: 18 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   lime: { backgroundColor: color.lime, borderRadius: radius.card, padding: 18 },
-  inkPill: { backgroundColor: "#111", borderRadius: 999, paddingHorizontal: 12, height: 32, justifyContent: "center" },
+  inkPill: { backgroundColor: "#111", borderRadius: 999, paddingHorizontal: 12, minHeight: 32, justifyContent: "center" },
   actions: { flexDirection: "row", justifyContent: "space-between", marginTop: 20 },
   action: { alignItems: "center", gap: 6, flex: 1, minHeight: 72 },
   actionIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: "#111", alignItems: "center", justifyContent: "center" },

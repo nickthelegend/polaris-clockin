@@ -18,6 +18,7 @@ if [ -z "${SKIP_IOS:-}" ]; then
     ARCHS=arm64 ONLY_ACTIVE_ARCH=YES build > "$APP/.expo-run-xcb.log" 2>&1 )
   echo "$(date +%T) ios: $(grep -E '\*\* BUILD' "$APP/.expo-run-xcb.log")"
 fi
+[ -n "${SKIP_ANDROID:-}" ] && exit 0
 export TMPDIR=/private/tmp/  # shared Gradle home is safe: the lock serialises builds
 export JAVA_HOME="/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
 ( cd "$APP/android" && EXPO_PUBLIC_CLUSTER=devnet NODE_ENV=production \
