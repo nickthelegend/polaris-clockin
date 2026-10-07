@@ -10,7 +10,7 @@ import { useAction } from "../src/state/useAction";
 import { useWallet } from "../src/wallet/WalletProvider";
 import { ix } from "../src/chain/polaris";
 import { creditLimit, fmtSkr, fmtUsd, ONE, skrBoost } from "../src/lib/credit";
-import { PARAMS, SKR_MAINNET_MINT, SKR_MINT } from "../src/lib/config";
+import { PARAMS, SKR_MAINNET_MINT } from "../src/lib/config";
 
 export default function SkrScreen() {
   const router = useRouter();
@@ -41,21 +41,21 @@ export default function SkrScreen() {
         </Text>
         <View style={{ width: 24 }} />
       </View>
-      <ScrollView contentContainerStyle={{ padding: gutter }}>
+      <ScrollView contentContainerStyle={{ padding: gutter, paddingBottom: 24 }}>
         <View style={s.hero}>
-          <Text size={13} color={color.onLime} weight="medium">
+          <Text size={14} color={color.onLime} weight="medium">
             Locked
           </Text>
           <Text weight="bold" size={36} color={color.onLime}>
             {fmtSkr(locked)}
           </Text>
-          <Text size={13} color="rgba(15,16,17,0.7)">
+          <Text size={14} color="rgba(15,16,17,0.75)">
             adds {fmtUsd(skrBoost(locked, price, bps))} to your Pay in 4 limit
           </Text>
         </View>
         <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
           <Card style={{ flex: 1 }}>
-            <Text size={12} color={color.muted}>
+            <Text size={13} color={color.muted}>
               In your wallet
             </Text>
             <Text weight="bold" size={17}>
@@ -63,7 +63,7 @@ export default function SkrScreen() {
             </Text>
           </Card>
           <Card style={{ flex: 1 }}>
-            <Text size={12} color={color.muted}>
+            <Text size={13} color={color.muted}>
               Limit now
             </Text>
             <Text weight="bold" size={17}>
@@ -97,27 +97,52 @@ export default function SkrScreen() {
           </Card>
         ) : null}
 
-        <Card style={{ marginTop: 16, gap: 8 }}>
-          <Text weight="bold">How SKR works in Polaris</Text>
-          <Text size={13} color={color.muted} style={{ lineHeight: 19 }}>
-            Earn it by clocking in every day. Lock it and half its dollar value is added to your Pay in 4 limit; it unlocks
-            whenever what's left still covers what you owe. Or spend it: any instalment can be paid in SKR.
-          </Text>
-          <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
-            <Tag label="SKR (devnet stand-in)" tone="warn" />
-            <Tag label={`priced at ${fmtUsd(price, 3)} (stand-in)`} />
-          </View>
-          <Text size={11} color={color.dim}>
-            Devnet mint {SKR_MINT.toBase58().slice(0, 8)}…; on mainnet this is Seeker's SKR ({SKR_MAINNET_MINT.slice(0, 8)}…) and the price would come
-            from an oracle.
-          </Text>
+        <Text weight="bold" size={17} style={{ marginTop: 22, marginBottom: 8 }}>
+          How SKR works in Polaris
+        </Text>
+        <Card style={{ paddingVertical: 6 }}>
+          {[
+            ["time", "Earn", "Clock in daily. The reward grows with your streak, up to 7×."],
+            ["lock-closed", "Lock", "Half its dollar value joins your Pay in 4 limit. It unlocks once it no longer backs what you owe."],
+            ["card", "Spend", "Pay any instalment in SKR. It refills the rewards everyone earns tomorrow."],
+          ].map(([icon, t, body], i) => (
+            <View key={t} style={[s.how, i > 0 && s.divider]}>
+              <View style={s.howIcon}>
+                <Ionicons name={icon as any} size={18} color={color.lime} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text weight="bold" size={15}>
+                  {t}
+                </Text>
+                <Text size={14} color={color.muted} style={{ marginTop: 2, lineHeight: 20 }}>
+                  {body}
+                </Text>
+              </View>
+            </View>
+          ))}
         </Card>
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap", marginTop: 12 }}>
+          <Tag label="SKR (devnet stand-in)" tone="warn" />
+          <Tag label={`priced at ${fmtUsd(price, 3)} (stand-in)`} />
+        </View>
+        <Text size={13} color={color.muted} style={{ marginTop: 8, lineHeight: 18 }}>
+          On mainnet this is Seeker's SKR ({SKR_MAINNET_MINT.slice(0, 6)}…) and the price comes from an oracle.
+        </Text>
       </ScrollView>
       <View style={{ padding: gutter }}>
         <Button
           testID="skr-confirm"
-          title={amt > 0 ? `${mode === "lock" ? "Lock" : "Unlock"} ${fmtSkr(amt)}` : "Choose an amount"}
+          title={amt > 0 ? `${mode === "lock" ? "Lock" : "Unlock"} ${fmtSkr(amt)}` : mode === "lock" ? "Lock SKR" : "Unlock SKR"}
           disabled={amt <= 0 || blocked}
+          hint={
+            blocked
+              ? `That SKR backs what you owe (${fmtUsd(debt)}). Pay down a plan first.`
+              : max <= 0
+                ? mode === "lock"
+                  ? "You have no free SKR yet. Clock in daily, or tap Add on Home."
+                  : "Nothing is locked yet."
+                : "Pick an amount above."
+          }
           loading={busy === "skr"}
           onPress={async () => {
             const sig = await run(
@@ -142,5 +167,8 @@ const s = StyleSheet.create({
   top: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: gutter, paddingVertical: 10 },
   hero: { backgroundColor: color.lime, borderRadius: radius.card, padding: 20 },
   seg: { flexDirection: "row", backgroundColor: color.surface1, borderRadius: radius.pill, padding: 4, marginTop: 16 },
+  how: { flexDirection: "row", gap: 12, paddingVertical: 12, alignItems: "flex-start" },
+  howIcon: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#1f2a12", alignItems: "center", justifyContent: "center" },
+  divider: { borderTopWidth: 1, borderTopColor: color.hairline },
   segBtn: { flex: 1, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
 });

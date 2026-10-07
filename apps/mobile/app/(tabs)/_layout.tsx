@@ -4,9 +4,11 @@ import { Tabs, Redirect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import { color } from "../../src/ui/theme";
 import { useWallet } from "../../src/wallet/WalletProvider";
 
+const LABELS: Record<string, string> = { index: "Home", shop: "Shop", credit: "Credit", coach: "Coach", me: "Me" };
 const ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Ionicons.glyphMap]> = {
   index: ["home", "home-outline"],
   shop: ["bag-handle", "bag-handle-outline"],
@@ -17,8 +19,17 @@ const ICONS: Record<string, [keyof typeof Ionicons.glyphMap, keyof typeof Ionico
 
 function TabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
+  const bottom = Math.max(insets.bottom, 12) + 4;
   return (
-    <View pointerEvents="box-none" style={[s.wrap, { bottom: Math.max(insets.bottom, 12) + 4 }]}>
+    <>
+    {/* Content scrolling under the floating bar fades out instead of colliding with it. */}
+    <LinearGradient
+      pointerEvents="none"
+      colors={["rgba(15,16,17,0)", "rgba(15,16,17,0.92)", "#0f1011"]}
+      locations={[0, 0.55, 1]}
+      style={[s.fade, { height: bottom + 90 }]}
+    />
+    <View pointerEvents="box-none" style={[s.wrap, { bottom }]}>
       <View style={s.bar}>
         {state.routes.map((route: any, i: number) => {
           const focused = state.index === i;
@@ -28,7 +39,8 @@ function TabBar({ state, navigation }: any) {
               key={route.key}
               testID={`tab-${route.name}`}
               accessibilityRole="tab"
-              accessibilityLabel={route.name}
+              accessibilityLabel={LABELS[route.name] ?? route.name}
+              accessibilityState={{ selected: focused }}
               onPress={() => {
                 Haptics.selectionAsync().catch(() => {});
                 if (!focused) navigation.navigate(route.name);
@@ -41,6 +53,7 @@ function TabBar({ state, navigation }: any) {
         })}
       </View>
     </View>
+    </>
   );
 }
 
@@ -60,6 +73,7 @@ export default function TabsLayout() {
 
 const s = StyleSheet.create({
   wrap: { position: "absolute", left: 0, right: 0, alignItems: "center" },
+  fade: { position: "absolute", left: 0, right: 0, bottom: 0 },
   bar: {
     flexDirection: "row",
     gap: 6,

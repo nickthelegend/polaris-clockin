@@ -8,15 +8,26 @@ TMP=$(mktemp -d /private/tmp/polaris-shots.XXXX)
 mkdir -p "$OUT"
 xcrun simctl terminate "$UDID" "$BUNDLE" 2>/dev/null || true
 DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
-rm -f "$DATA/Documents/autopilot.txt"
+rm -f "$DATA/Documents/autopilot.txt" "$DATA/Documents"/ack-*.txt
 xcrun simctl launch "$UDID" "$BUNDLE" >/dev/null
 seen=""
-for i in $(seq 1 600); do
+for i in $(seq 1 1200); do
   sleep 0.5
   F="$DATA/Documents/autopilot.txt"
   [ -f "$F" ] || continue
   while read -r line; do
     case "$line" in
+      *" CMD "*)
+        id=$(echo "$line" | awk '{print $3}')
+        if ! grep -qx "cmd-$id" <<<"$seen"; then
+          seen="$seen"$'\n'"cmd-$id"
+          verb=$(echo "$line" | awk '{print $4}'); arg=$(echo "$line" | awk '{print $5}')
+          case "$verb" in
+            textsize) xcrun simctl ui "$UDID" content_size "$arg" ;;
+          esac
+          echo ok > "$DATA/Documents/ack-$id.txt"
+          echo "cmd $id $verb $arg"
+        fi;;
       *" SHOT "*)
         tag=$(echo "$line" | awk '{print $3"-"$4}')
         if ! grep -qx "$tag" <<<"$seen"; then
