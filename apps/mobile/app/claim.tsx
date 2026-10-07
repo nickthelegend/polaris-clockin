@@ -7,11 +7,12 @@ import { Keypair } from "@solana/web3.js";
 import bs58 from "bs58";
 import { Button, Card, Money, Text } from "../src/ui/kit";
 import { Coins } from "../src/ui/Art";
+import { Receipt } from "../src/ui/Receipt";
 import { color, gutter, radius } from "../src/ui/theme";
 import { claimWithLinkKey, fetchLink } from "../src/chain/polaris";
 import { explainError, useWallet } from "../src/wallet/WalletProvider";
 import { useAccount } from "../src/state/AccountProvider";
-import { explorerTx } from "../src/lib/config";
+import { CLUSTER } from "../src/lib/config";
 import { ONE } from "../src/lib/credit";
 import { useToast } from "../src/ui/Toast";
 import { AUTOPILOT } from "../src/dev/autopilot";
@@ -79,7 +80,23 @@ export default function Claim() {
         </Text>
         <View style={{ width: 24 }} />
       </View>
-      <View style={{ padding: gutter, flex: 1 }}>
+      {done && link ? (
+        <View style={{ flex: 1 }}>
+          <Receipt
+            headline="It's yours."
+            amount={`$${(link.amount / ONE).toFixed(2)}`}
+            body="The dollars are in your Polaris dollar account. The link paid its own network fee."
+            rows={[
+              { k: "From", v: `${link.sender.slice(0, 4)}…${link.sender.slice(-4)}` },
+              { k: "To", v: publicKey ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}` : "you" },
+              { k: "Fee you paid", v: "$0.00", tone: color.lime },
+              { k: "Network", v: `Solana ${CLUSTER}` },
+            ]}
+            sig={done}
+          />
+        </View>
+      ) : (
+        <View style={{ padding: gutter, flex: 1 }}>
         <View style={s.hero}>
           <View style={{ flex: 1 }}>
             <Text size={14} weight="medium" color={color.onLime}>
@@ -112,7 +129,7 @@ export default function Claim() {
                 <Text weight="medium" size={14}>
                   {t}
                 </Text>
-                <Text size={12} color={color.muted}>
+                <Text size={13} color={color.muted}>
                   {m}
                 </Text>
               </View>
@@ -120,12 +137,10 @@ export default function Claim() {
           ))}
         </Card>
       </View>
+      )}
       <View style={{ padding: gutter }}>
         {done ? (
-          <View style={{ flexDirection: "row", gap: 10 }}>
-            <Button title="View receipt" kind="ink" style={{ flex: 1 }} onPress={() => Linking.openURL(explorerTx(done))} />
-            <Button title="Done" style={{ flex: 1 }} onPress={() => router.replace("/")} />
-          </View>
+          <Button testID="claim-done" title="Done" onPress={() => router.replace("/")} />
         ) : (
           <Button
             testID="claim"

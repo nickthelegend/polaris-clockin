@@ -8,14 +8,15 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "expo-router";
 import { File, Paths } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useWallet } from "../wallet/WalletProvider";
 import { useAccount } from "../state/AccountProvider";
 import { connection, fetchConfig, fetchPlans, fetchProfile, ix, skrAta, tokenBalance, usdAta } from "../chain/polaris";
 import { SKR_MINT, USD_MINT } from "../lib/config";
 import { ONE } from "../lib/credit";
 
-export const AUTOPILOT = process.env.EXPO_PUBLIC_AUTOPILOT === "1";
-export const bus: { lastLink?: string } = {};
+import { AUTOPILOT, bus } from "./bus";
+export { AUTOPILOT, bus };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const log: string[] = [];
@@ -82,29 +83,51 @@ export function Autopilot() {
         }
         mark(`STATE usd=${a.usd} skr=${a.skr} sol=${a.sol} score=${a.score} plans=${a.plans.length} error=${a.error ?? "none"}`);
       };
+      // Ask the host script (scripts/ios-shots.sh) to do something outside the
+      // app, e.g. change the simulator's text size, and wait for its ack.
+      let cmdN = 0;
+      const host = async (cmd: string) => {
+        const id = ++cmdN;
+        mark(`CMD ${id} ${cmd}`);
+        const ack = new File(Paths.document, `ack-${id}.txt`);
+        for (let i = 0; i < 60 && !ack.exists; i++) await sleep(500);
+        await sleep(1500);
+      };
       try {
         if (ref.current.w.publicKey) await ref.current.w.disconnect();
         await SecureStore.deleteItemAsync("polaris.guest.secret.v1"); // a fresh buyer every run
+        await AsyncStorage.removeItem("polaris.hint.payin4.v1");
         router.replace("/onboarding");
-        await shot("onboarding", 3000);
+        await shot("onboarding-1", 3000);
+        router.setParams({ page: "1" });
+        await shot("onboarding-2");
+        router.setParams({ page: "2" });
+        await shot("onboarding-3-connect");
         await step("guest", () => ref.current.w.useGuest());
         router.replace("/(tabs)");
-        await sleep(1500);
-        await step("airdrop", () => ref.current.w.requestAirdrop());
+        await sleep(2500);
         await refresh();
-        await shot("home-new");
+        await shot("home-new-no-sol");
+        await step("airdrop", () => ref.current.w.requestAirdrop());
         await step("faucet", async () => {
           const me = ref.current.w.publicKey!;
           return send([await ix.initProfile(me), await ix.faucet(me, USD_MINT, 250 * ONE), await ix.faucet(me, SKR_MINT, 1_000 * ONE)]);
         });
         await refresh();
+        await shot("home-funded");
         await step("checkin", async () => send([await ix.checkIn(ref.current.w.publicKey!)]));
         await refresh();
         await shot("home-clocked-in");
         router.push("/(tabs)/shop");
         await shot("shop");
         router.push({ pathname: "/checkout", params: { shop: "kora-rail", item: "porto" } });
-        await shot("checkout-over-limit");
+        await shot("checkout-payin4-first-run-over-limit");
+        router.setParams({ mode: "now" });
+        await shot("checkout-pay-now");
+        router.back();
+        await sleep(800);
+        router.push("/skr");
+        await shot("skr-before-lock");
         router.back();
         await step("faucet-skr", async () => {
           const me = ref.current.w.publicKey!;
@@ -117,10 +140,10 @@ export function Autopilot() {
         router.back();
         await sleep(800);
         router.push({ pathname: "/checkout", params: { shop: "kora-rail", item: "porto" } });
-        await shot("checkout-pay-in-4");
+        await shot("checkout-payin4-fits");
         router.setParams({ auto: "confirm" });
         await sleep(9000);
-        await shot("checkout-done", 1000);
+        await shot("checkout-done-receipt", 1000);
         router.back();
         await refresh();
         router.push("/(tabs)/credit");
@@ -133,9 +156,13 @@ export function Autopilot() {
         await shot("plan-after-repay", 1000);
         router.back();
         await shot("credit-after-repay");
+        router.push("/send");
+        await shot("send-keypad-empty");
+        router.back();
+        await sleep(800);
         router.push({ pathname: "/send", params: { amount: "25", auto: "1" } });
         await sleep(9000);
-        await shot("send-link", 1000);
+        await shot("send-link-ready", 1000);
         const link = bus.lastLink;
         mark(`OK link ${link ? "created" : "missing"}`);
         router.back();
@@ -146,17 +173,33 @@ export function Autopilot() {
           await shot("claim");
           router.setParams({ auto: "1" });
           await sleep(9000);
-          await shot("claim-done", 1000);
+          await shot("claim-done-receipt", 1000);
           router.replace("/(tabs)");
         }
         await refresh();
         await shot("home-after");
         router.push("/(tabs)/coach");
-        await sleep(1500);
+        await shot("coach-ai-off");
         router.setParams({ q: "How do I reach the next tier fastest?" });
-        await shot("coach", 4000);
+        await shot("coach-answer", 4000);
         router.push("/(tabs)/me");
         await shot("me");
+        router.setParams({ advanced: "1" });
+        await shot("me-advanced");
+        router.push("/(tabs)");
+        bus.simulateOffline = true;
+        await refresh();
+        await shot("home-offline-simulated");
+        bus.simulateOffline = false;
+        await refresh();
+        await host("textsize accessibility-extra-large");
+        await shot("home-large-text", 3000);
+        router.push("/(tabs)/credit");
+        await shot("credit-large-text");
+        router.push({ pathname: "/checkout", params: { shop: "kora-rail", item: "porto" } });
+        await shot("checkout-large-text");
+        router.back();
+        await host("textsize large");
         mark("DONE");
       } catch (e: any) {
         mark(`ABORT ${e?.message ?? e}`);

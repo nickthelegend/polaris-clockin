@@ -98,7 +98,7 @@ export default function Send() {
             <QRCode value={link.url} size={200} color="#0f1011" backgroundColor="#ffffff" />
           </View>
           <Card style={{ alignSelf: "stretch", flexDirection: "row", alignItems: "center", gap: 10 }}>
-            <Text size={12} color={color.muted} numberOfLines={1} style={{ flex: 1 }}>
+            <Text size={13} color={color.muted} numberOfLines={1} style={{ flex: 1 }}>
               {link.url}
             </Text>
             <Pressable
@@ -111,7 +111,7 @@ export default function Send() {
               <Ionicons name="copy" size={16} color={color.onLime} />
             </Pressable>
           </Card>
-          <Text size={11} color={color.dim} style={{ textAlign: "center", marginTop: 8 }}>
+          <Text size={13} color={color.muted} style={{ textAlign: "center", marginTop: 8 }}>
             The link holds the key to the money. Share it only with the person it's for.
           </Text>
         </View>
@@ -147,7 +147,7 @@ export default function Send() {
           </View>
           <View style={{ flex: 1 }}>
             <Text weight="medium">Anyone with the link</Text>
-            <Text size={12} color={color.muted}>
+            <Text size={13} color={color.muted}>
               They claim it in Polaris, no SOL needed
             </Text>
           </View>
@@ -162,12 +162,21 @@ export default function Send() {
         </Text>
       </View>
       <View style={{ paddingHorizontal: gutter }}>
-        <Button testID="create-link" title="Create link" disabled={!amount || over} loading={busy === "link"} onPress={create} />
+        <Button
+          testID="create-link"
+          title={amount ? `Create a ${fmtUsd(amount)} link` : "Create link"}
+          disabled={!amount || over}
+          hint={over ? `That's more than your ${fmtUsd(a.usd)}.` : "Type an amount on the keypad."}
+          loading={busy === "link"}
+          onPress={create}
+        />
         <View style={s.pad}>
           {KEYS.map((k) => (
             <Pressable
               key={k}
               testID={`key-${k}`}
+              accessibilityRole="button"
+              accessibilityLabel={k === "del" ? "Delete" : k === "." ? "Decimal point" : k}
               onPress={() => press(k)}
               style={({ pressed }) => [s.key, k === "del" && { backgroundColor: color.purple }, pressed && { opacity: 0.6 }]}
             >

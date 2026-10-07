@@ -7,7 +7,9 @@ import { PublicKey } from "@solana/web3.js";
 import { Button, Card, Money, Text } from "../src/ui/kit";
 import { color, gutter, radius } from "../src/ui/theme";
 import { shopOf } from "../src/lib/catalog";
-import { explorerTx, MERCHANTS, PARAMS } from "../src/lib/config";
+import { CLUSTER, MERCHANTS, PARAMS } from "../src/lib/config";
+import { Receipt } from "../src/ui/Receipt";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { fmtUsd, ONE, planTotal } from "../src/lib/credit";
 import { useAccount } from "../src/state/AccountProvider";
 import { useAction } from "../src/state/useAction";
@@ -19,9 +21,10 @@ import { scheduleDueReminder } from "../src/lib/notify";
 import { AUTOPILOT } from "../src/dev/autopilot";
 
 type Mode = "now" | "four";
+const INTRO_KEY = "polaris.hint.payin4.v1";
 
 export default function Checkout() {
-  const params = useLocalSearchParams<{ shop?: string; item?: string; m?: string; amount?: string; title?: string; auto?: string }>();
+  const params = useLocalSearchParams<{ shop?: string; item?: string; m?: string; amount?: string; title?: string; auto?: string; mode?: string }>();
   const router = useRouter();
   const a = useAccount();
   const { publicKey } = useWallet();
@@ -44,6 +47,17 @@ export default function Checkout() {
   const [done, setDone] = useState<{ sig: string; mode: Mode } | null>(null);
   const [coach, setCoach] = useState<{ text: string[]; ai: boolean } | null>(null);
   const [coachBusy, setCoachBusy] = useState(false);
+  // First-run explainer for Pay in 4, shown until dismissed once.
+  const [showIntro, setShowIntro] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(INTRO_KEY)
+      .then((v) => setShowIntro(!v))
+      .catch(() => {});
+  }, []);
+  const dismissIntro = () => {
+    setShowIntro(false);
+    AsyncStorage.setItem(INTRO_KEY, "1").catch(() => {});
+  };
 
   const schedule = useMemo(() => {
     const start = Date.now() / 1000;
@@ -54,6 +68,9 @@ export default function Checkout() {
   }, [interval, total, per]);
 
   const autoRan = useRef(false);
+  useEffect(() => {
+    if (params.mode === "now" || params.mode === "four") setMode(params.mode);
+  }, [params.mode]);
   useEffect(() => {
     if (AUTOPILOT && params.auto === "confirm" && !autoRan.current) {
       autoRan.current = true;
@@ -103,29 +120,32 @@ export default function Checkout() {
   }
 
   if (done) {
+    const fmtDate = (t: number) => new Date(t * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
     return (
       <SafeAreaView style={s.root}>
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", padding: 24 }}>
-          <View style={s.check}>
-            <Ionicons name="checkmark" size={40} color={color.onLime} />
-          </View>
-          <Text weight="bold" size={34} style={{ marginTop: 18 }}>
-            Done.
-          </Text>
-          <Text size={15} color={color.muted} style={{ textAlign: "center", marginTop: 8, lineHeight: 21 }}>
-            {done.mode === "now"
-              ? `${merchantName} is paid ${fmtUsd(price)}.`
-              : `${merchantName} is paid in full. Your first payment of ${fmtUsd(per)} is due ${new Date(schedule[0].at * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Pay early: it counts as on time.`}
-          </Text>
-          <Card style={{ alignSelf: "stretch", marginTop: 24 }}>
-            <KV k="For" v={title} />
-            <KV k={done.mode === "now" ? "Paid" : "Plan"} v={done.mode === "now" ? fmtUsd(price) : `4 × ${fmtUsd(per)}`} />
-            <KV k="Transaction" v={`${done.sig.slice(0, 10)}…`} />
-          </Card>
-        </View>
-        <View style={{ flexDirection: "row", gap: 10, padding: gutter }}>
-          <Button title="View receipt" kind="ink" style={{ flex: 1 }} onPress={() => Linking.openURL(explorerTx(done.sig))} />
-          <Button testID="checkout-done" title="Done" style={{ flex: 1 }} onPress={() => router.back()} />
+        <Receipt
+          headline="Done."
+          amount={done.mode === "now" ? fmtUsd(price) : `4 × ${fmtUsd(per)}`}
+          body={
+            done.mode === "now"
+              ? `${merchantName} is paid. Pay now of $5 or more adds 2 points to your score (first 10).`
+              : `${merchantName} is paid in full today. Nothing is due now; pay early and it counts as on time (+12).`
+          }
+          rows={[
+            { k: "Merchant", v: merchantName },
+            { k: "For", v: title },
+            { k: done.mode === "now" ? "Paid" : "Plan", v: done.mode === "now" ? fmtUsd(price) : `${fmtUsd(price)} + ${fmtUsd(total - price)} interest` },
+            { k: "Network", v: `Solana ${CLUSTER}` },
+          ]}
+          sig={done.sig}
+          next={
+            done.mode === "four"
+              ? { title: "Your schedule", rows: schedule.map((x, i) => ({ k: fmtDate(x.at), v: fmtUsd(x.amount), tone: i === 0 ? color.lime : undefined })) }
+              : undefined
+          }
+        />
+        <View style={{ padding: gutter }}>
+          <Button testID="checkout-done" title="Done" onPress={() => router.back()} />
         </View>
       </SafeAreaView>
     );
@@ -175,6 +195,33 @@ export default function Checkout() {
             </Pressable>
           ))}
         </View>
+
+        {mode === "four" && showIntro ? (
+          <View style={s.intro} testID="payin4-intro">
+            <Text weight="bold" size={16}>
+              How Pay in 4 works
+            </Text>
+            {[
+              ["storefront", `${merchantName} is paid in full today, from the Polaris credit pool.`],
+              ["calendar", "You pay four times, a week apart. Nothing is due today."],
+              ["trending-up", "Pay early and it counts as on time: +12 on your score each time."],
+            ].map(([icon, text]) => (
+              <View key={icon} style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                <View style={s.introIcon}>
+                  <Ionicons name={icon as any} size={16} color="#fff" />
+                </View>
+                <Text size={14} style={{ flex: 1, lineHeight: 20 }}>
+                  {text}
+                </Text>
+              </View>
+            ))}
+            <Pressable onPress={dismissIntro} style={s.introBtn} accessibilityRole="button" hitSlop={6}>
+              <Text weight="bold" size={14} color={color.purpleText}>
+                Got it
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {mode === "four" ? (
           <>
@@ -226,11 +273,11 @@ export default function Checkout() {
         {coach ? (
           <Card style={{ marginTop: 8, gap: 6 }}>
             {coach.text.map((t, i) => (
-              <Text key={i} size={13} style={{ lineHeight: 19 }}>
+              <Text key={i} size={14} style={{ lineHeight: 20 }}>
                 {t}
               </Text>
             ))}
-            <Text size={11} color={color.dim}>
+            <Text size={12} color={color.muted}>
               {coach.ai ? "Claude, from your on-chain profile" : "Rules-based summary (AI off)"}
             </Text>
           </Card>
@@ -242,6 +289,7 @@ export default function Checkout() {
             testID="confirm"
             title={`Pay ${fmtUsd(price)}`}
             disabled={a.usd < price}
+            hint={`You have ${fmtUsd(a.usd)}. Tap Add on Home for test dollars, or switch to Pay in 4.`}
             loading={busy === "pay"}
             onPress={confirm}
           />
@@ -251,15 +299,15 @@ export default function Checkout() {
             title="Start Pay in 4"
             kind="purple"
             disabled={!fits}
+            hint={
+              price < ONE
+                ? "Pay in 4 starts at $1."
+                : `Over your ${fmtUsd(a.available)} available. Lock SKR to raise your limit, or pay now.`
+            }
             loading={busy === "plan"}
             onPress={confirm}
           />
         )}
-        {a.usd < price && mode === "now" ? (
-          <Text size={12} color={color.muted} style={{ textAlign: "center", marginTop: 8 }}>
-            Not enough pUSD. Tap Add on Home for test dollars, or use Pay in 4.
-          </Text>
-        ) : null}
       </View>
     </SafeAreaView>
   );
@@ -268,10 +316,10 @@ export default function Checkout() {
 function KV({ k, v }: { k: string; v: string }) {
   return (
     <View style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 8 }}>
-      <Text size={13} color={color.muted}>
+      <Text size={14} color={color.muted}>
         {k}
       </Text>
-      <Text size={13} weight="medium">
+      <Text size={14} weight="medium">
         {v}
       </Text>
     </View>
@@ -281,7 +329,7 @@ function KV({ k, v }: { k: string; v: string }) {
 function Mini({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <View style={s.mini}>
-      <Text size={11} color={color.muted}>
+      <Text size={13} color={color.muted}>
         {label}
       </Text>
       <Text weight="bold" size={17} color={tone ?? color.text} style={{ marginTop: 4 }}>
@@ -298,6 +346,9 @@ const s = StyleSheet.create({
   logo: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },
   seg: { flexDirection: "row", backgroundColor: color.surface1, borderRadius: radius.pill, padding: 4, marginTop: 12 },
   segBtn: { flex: 1, height: 40, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+  intro: { backgroundColor: "#211a33", borderRadius: radius.surface, padding: 16, gap: 12, marginTop: 12, borderWidth: 1, borderColor: color.purple + "55" },
+  introIcon: { width: 32, height: 32, borderRadius: 16, backgroundColor: color.purple, alignItems: "center", justifyContent: "center" },
+  introBtn: { alignSelf: "flex-end", minHeight: 40, justifyContent: "center", paddingHorizontal: 8 },
   mini: { flex: 1, backgroundColor: color.surface1, borderRadius: radius.surface, padding: 14 },
   warn: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 10, borderWidth: 1, borderColor: color.warn + "44" },
   coach: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, borderWidth: 1, borderColor: color.purple + "44" },

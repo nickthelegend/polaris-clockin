@@ -1,6 +1,6 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FlatList, Image, Platform, StyleSheet, useWindowDimensions, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { Button, Text } from "../src/ui/kit";
@@ -25,6 +25,15 @@ export default function Onboarding() {
   const toast = useToast();
   const [busy, setBusy] = useState<"mwa" | "guest" | null>(null);
   const last = page === PAGES.length - 1;
+  // Lets the screenshot script turn pages (polaris://onboarding?page=2 works too).
+  const params = useLocalSearchParams<{ page?: string }>();
+  useEffect(() => {
+    const p = Number(params.page);
+    if (p >= 0 && p < PAGES.length) {
+      list.current?.scrollToIndex({ index: p, animated: false });
+      setPage(p);
+    }
+  }, [params.page]);
 
   async function go(kind: "mwa" | "guest") {
     setBusy(kind);
@@ -45,7 +54,7 @@ export default function Onboarding() {
         <Image source={require("../assets/wordmark.png")} style={{ width: 92, height: 28 }} resizeMode="contain" />
         <View style={s.net}>
           <View style={s.dot} />
-          <Text size={12} weight="medium" color={color.muted}>
+          <Text size={13} weight="medium" color={color.muted}>
             Solana {CLUSTER}
           </Text>
         </View>
@@ -106,7 +115,7 @@ export default function Onboarding() {
               loading={busy === "guest"}
               onPress={() => go("guest")}
             />
-            <Text size={12} color={color.dim} style={{ textAlign: "center", marginTop: 2 }}>
+            <Text size={13} color={color.muted} style={{ textAlign: "center", marginTop: 2 }}>
               {mwaAvailable
                 ? "Seed Vault, Phantom or Solflare via Mobile Wallet Adapter. Guest wallets live on this phone, devnet only."
                 : Platform.OS === "ios"

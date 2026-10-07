@@ -65,7 +65,7 @@ export default function PlanScreen() {
             Left to pay
           </Text>
           <Money value={(total - repaid) / ONE} size={38} />
-          <Text size={12} color={color.muted} style={{ marginTop: 4 }}>
+          <Text size={13} color={color.muted} style={{ marginTop: 4 }}>
             {fmtUsd(pl.principal.toNumber())} + {fmtUsd(total - pl.principal.toNumber())} interest · {name} was paid in full
           </Text>
         </Card>
@@ -83,7 +83,7 @@ export default function PlanScreen() {
                 />
                 <View style={{ flex: 1 }}>
                   <Text weight="medium">{["First", "Second", "Third", "Fourth"][i]} payment</Text>
-                  <Text size={12} color={color.muted}>
+                  <Text size={13} color={color.muted}>
                     {new Date(d * 1000).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                     {paid ? " · paid" : i === pl.paid ? " · next" : ""}
                   </Text>
@@ -118,6 +118,7 @@ export default function PlanScreen() {
             testID="repay"
             title={`Pay ${fmtUsd(next)}`}
             disabled={a.usd < next}
+            hint={`You have ${fmtUsd(a.usd)} pUSD. Tap Add on Home, or pay this one in SKR.`}
             loading={busy === "repay"}
             onPress={() => run("repay", async () => [await ix.repay(publicKey!, pl.index)], `Instalment ${pl.paid + 1} of 4 paid`)}
           />
@@ -126,12 +127,13 @@ export default function PlanScreen() {
             title={`Pay with ${fmtSkr(nextSkr)}`}
             kind="ink"
             disabled={a.skr < nextSkr}
+            hint={`You have ${fmtSkr(a.skr)} free. Clock in daily to earn more.`}
             loading={busy === "repay-skr"}
             onPress={() =>
               run("repay-skr", async () => [await ix.repayWithSkr(publicKey!, pl.index)], `Paid in SKR: instalment ${pl.paid + 1} of 4`)
             }
           />
-          <Text size={11} color={color.dim} style={{ textAlign: "center" }}>
+          <Text size={13} color={color.muted} style={{ textAlign: "center" }}>
             SKR is valued at {fmtUsd(price, 3)} (devnet stand-in price); what you pay in SKR funds tomorrow's clock-in rewards.
           </Text>
         </View>
