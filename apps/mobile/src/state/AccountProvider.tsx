@@ -20,7 +20,8 @@ import {
 } from "../chain/polaris";
 import { useWallet } from "../wallet/WalletProvider";
 import { creditLimit, STARTING_SCORE, today } from "../lib/credit";
-import { PARAMS } from "../lib/config";
+import { CLUSTER, PARAMS } from "../lib/config";
+import { bus } from "../dev/bus";
 
 export type Activity = {
   sig: string;
@@ -36,7 +37,11 @@ type Config = Awaited<ReturnType<typeof fetchConfig>>;
 
 type Ctx = {
   loading: boolean;
+  /** True once the first read finished (successfully or not). */
+  loaded: boolean;
   error: string | null;
+  /** The RPC could not be reached (as opposed to a program/account problem). */
+  offline: boolean;
   sol: number;
   usd: number;
   skr: number;
@@ -120,7 +125,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const { publicKey } = useWallet();
   const [state, setState] = useState<Omit<Ctx, "refresh" | "withSetup" | "score" | "limit" | "available" | "checkedInToday">>({
     loading: false,
+    loaded: false,
     error: null,
+    offline: false,
     sol: 0,
     usd: 0,
     skr: 0,
@@ -136,6 +143,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     busy.current = true;
     setState((s) => ({ ...s, loading: true }));
     try {
+      if (bus.simulateOffline) throw new TypeError("Network request failed");
       const [sol, usd, skr, profile, config, plans] = await Promise.all([
         connection.getBalance(publicKey),
         tokenBalance(usdAta(publicKey)),
@@ -144,13 +152,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         fetchConfig(),
         fetchPlans(publicKey).catch(() => [] as Plan[]),
       ]);
-      setState((s) => ({ ...s, sol, usd, skr, profile, config, plans, loading: false, error: null }));
+      setState((s) => ({ ...s, sol, usd, skr, profile, config, plans, loading: false, loaded: true, error: null, offline: false }));
       loadActivity(publicKey)
         .then((activity) => setState((s) => ({ ...s, activity })))
         .catch(() => {});
     } catch (e: any) {
       console.warn("refresh failed", e);
-      setState((s) => ({ ...s, loading: false, error: `${e?.name ?? "Error"}: ${e?.message ?? String(e)}`.slice(0, 300) }));
+      const msg = `${e?.message ?? String(e)}`;
+      const offline = /network request failed|failed to fetch|timeout|ECONNREFUSED|503|502/i.test(msg);
+      setState((s) => ({
+        ...s,
+        loading: false,
+        loaded: true,
+        offline,
+        error: offline ? `Can't reach Solana ${CLUSTER}.` : `${e?.name ?? "Error"}: ${msg}`.slice(0, 300),
+      }));
     } finally {
       busy.current = false;
     }
