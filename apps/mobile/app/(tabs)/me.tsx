@@ -108,12 +108,12 @@ export default function Me() {
           </Pressable>
         </Card>
 
-        <SectionTitle title="Coach (AI)" />
+        <SectionTitle title="Coach (AI) · optional" />
         <Card style={{ gap: 10 }}>
           <Text size={13} color={color.muted} style={{ lineHeight: 19 }}>
             {COACH_URL
               ? `This build talks to a Polaris coach server (${COACH_URL}).`
-              : "Coach uses Claude through your own Anthropic API key, kept in this phone's secure storage and sent only to api.anthropic.com. Without one, Coach answers from fixed rules."}
+              : "Optional. Coach can use Claude with your own Anthropic API key. The key is kept only in this phone's secure storage (Keychain / Android Keystore), is never logged or shown again, and is sent only to api.anthropic.com. Without a key, Coach answers from fixed rules and everything else works the same."}
           </Text>
           {!COACH_URL ? (
             hasKey ? (
@@ -133,6 +133,9 @@ export default function Me() {
                   placeholder="sk-ant-…"
                   placeholderTextColor={color.dim}
                   secureTextEntry
+                  autoComplete="off"
+                  textContentType="none"
+                  importantForAutofill="no"
                   autoCapitalize="none"
                   autoCorrect={false}
                   style={s.input}

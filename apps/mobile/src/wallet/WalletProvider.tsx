@@ -125,7 +125,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         signature = await connection.sendTransaction(tx, { maxRetries: 5 });
       } else {
         signature = await mwaTransact(async (w) => {
-          const r = await authorize(w, stored.authToken);
+          // Reuse the cached token; if the wallet rejects it (expired or
+          // revoked), authorize afresh in the same session.
+          const r = await authorize(w, stored.authToken).catch(() => authorize(w));
+          if (r.address !== stored.address) throw new Error("The wallet switched accounts. Reconnect in Me.");
           if (r.authToken !== stored.authToken) await persist({ ...stored, authToken: r.authToken });
           const [sig] = await w.signAndSendTransactions({ transactions: [tx], minContextSlot });
           return sig as string;
@@ -176,7 +179,7 @@ export function explainError(e: any): string {
   const logs: string[] = e?.logs ?? [];
   const anchorMsg = [msg, ...logs].join("\n").match(/Error Message: ([^.\n]+)/);
   if (anchorMsg) return anchorMsg[1];
-  if (/no wallet|ActivityNotFound|not found.*wallet|ERROR_WALLET_NOT_FOUND/i.test(msg))
+  if (e?.code === "ERROR_WALLET_NOT_FOUND" || /no (installed )?wallet|ActivityNotFound|not found.*wallet|ERROR_WALLET_NOT_FOUND/i.test(msg))
     return "No Solana wallet app found on this phone. Install one (Phantom, Solflare) or use the guest wallet.";
   if (/declined|rejected|CancellationException|cancel/i.test(msg)) return "You cancelled in the wallet.";
   if (/insufficient lamports|0x1\b|debit an account but found no record/i.test(msg))
