@@ -1,6 +1,6 @@
 # HANDOFF: Polaris on Solana Mobile (CLOCK IN)
 
-Status as of Wed 7 Oct 2026, 18:30 IST (polish round: APK 1.1.0). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
+Status as of Wed 7 Oct 2026, 19:30 IST (APK 1.1.1: Coach rules fix). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
 Everything below was run on this Mac unless it says otherwise.
 
 ## What exists
@@ -9,7 +9,7 @@ Everything below was run on this Mac unless it says otherwise.
 |---|---|---|
 | Anchor program `polaris` | `packages/solana` | Built, unit-tested and end-to-end tested on a local validator. **Not on devnet yet** (see below) |
 | Mobile app | `apps/mobile` (Expo 57, RN 0.86) | Runs on the iOS simulator (release build) against the local validator, full flow verified |
-| Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | 1.1.0 (versionCode 3), built and signed with the release key (cert SHA-256 `8370bf40…376f`, same key as 1.0.0 and 1.0.1), arm64-v8a + x86_64, sha256 `d371f69ed942ededcde44e83f6cf3fc40087e7784899b02323ed404eaf2c741e`; uploaded to the `clockin-v1` release and the re-downloaded file matches. **Never run on a device or emulator** |
+| Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | 1.1.1 (versionCode 4), built and signed with the release key (cert SHA-256 `8370bf40…376f`, same key as every earlier build), arm64-v8a + x86_64, sha256 `3d631819f9e49101515e813b051afcbd260796bf1596d9fbbbeb28400da618ae`; uploaded to the `clockin-v1` release and the re-downloaded file matches. **Never run on a device or emulator** |
 | Coach server | `apps/coach` | Handler tested with a stub client; never called Claude with a real key; not deployed |
 | Hackathon kit | `clockin/` | PORT-PLAN, SUBMISSION, PITCH, DEMO-SCRIPT, screenshots |
 
@@ -42,6 +42,17 @@ Everything below was run on this Mac unless it says otherwise.
    This run found and fixed a Hermes bug
    (Buffer#subarray) that broke all account decoding.
 5. `npx tsc --noEmit` clean in `apps/mobile`; `node --test` green in `apps/coach`.
+
+## 1.1.1 (7 Oct): Coach rules fix
+
+Without an AI key, every Coach question fell back to one summary, so "Why is
+my limit what it is?" repeated the "points to Fair" answer. `coachRules.ts`
+now routes each question to its own intent (afford, late, SKR, next tier,
+limit, streak, score) and answers it; the limit answer explains the base
+line from the score tier, plus SKR collateral, minus what's in use, and what
+would raise it. `npm test` in apps/mobile: 9 tests (every suggested question,
+keyword collisions, edge cases). Verified on the iPhone Air
+(`clockin/screens/all/24-coach-answer.png`, `24b-coach-answer-limit.png`).
 
 ## Polish round (1.1.0, 7 Oct)
 

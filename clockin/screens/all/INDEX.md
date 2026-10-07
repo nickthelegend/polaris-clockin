@@ -34,6 +34,7 @@ the same React Native code.
 | 22 | Home | After: balance, due next, SKR locked, activity | Back to Home | — |
 | 23 | `/(tabs)/coach` | Profile summary, suggested questions, "Works without AI" (no key) | Coach tab | Claude path not exercised (no key) |
 | 24 | Coach | A rules-based answer to "How do I reach the next tier fastest?" | Tap a suggestion | — |
+| 24b | Coach | The limit question gets its own answer (1.1.1): base line, plus SKR collateral, minus what's in use, and what would raise it | Tap "Why is my limit what it is?" | — |
 | 25 | `/(tabs)/me` | Address QR, reminder switches, fees, optional Coach key | Me tab | — |
 | 26 | Me | "Network & programs" expanded (RPC, program, mints) | Me → Network & programs | — |
 | 27 | Home | Offline state with Retry (RPC unreachable, simulated in the script) | Lose connection | Simulated, not a real network cut |

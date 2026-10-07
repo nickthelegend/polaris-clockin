@@ -16,7 +16,7 @@ Solana **devnet**.
 | The app | [`apps/mobile`](apps/mobile): Expo 57 / React Native 0.86, Android first |
 | The program | [`packages/solana`](packages/solana): Anchor 0.32, program `HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA` |
 | Coach server (optional) | [`apps/coach`](apps/coach): holds the Anthropic key for the AI coach |
-| Android APK | [1.1.0 on the `clockin-v1` release](https://github.com/nickthelegend/polaris-clockin/releases/download/clockin-v1/polaris-clockin.apk), sha256 `d371f69ed942ededcde44e83f6cf3fc40087e7784899b02323ed404eaf2c741e` |
+| Android APK | [1.1.1 on the `clockin-v1` release](https://github.com/nickthelegend/polaris-clockin/releases/download/clockin-v1/polaris-clockin.apk), sha256 `3d631819f9e49101515e813b051afcbd260796bf1596d9fbbbeb28400da618ae` |
 | Hackathon kit | [`clockin/`](clockin): submission, pitch, demo script, screenshots (every screen: [`clockin/screens/all`](clockin/screens/all/INDEX.md)), the port plan |
 | Status and what's left | [`HANDOFF.md`](HANDOFF.md) |
 
