@@ -1,6 +1,6 @@
 # HANDOFF: Polaris on Solana Mobile (CLOCK IN)
 
-Status as of Wed 7 Oct 2026, 12:00 IST (Round 2: Android audit, APK 1.0.1). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
+Status as of Wed 7 Oct 2026, 18:30 IST (polish round: APK 1.1.0). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
 Everything below was run on this Mac unless it says otherwise.
 
 ## What exists
@@ -9,7 +9,7 @@ Everything below was run on this Mac unless it says otherwise.
 |---|---|---|
 | Anchor program `polaris` | `packages/solana` | Built, unit-tested and end-to-end tested on a local validator. **Not on devnet yet** (see below) |
 | Mobile app | `apps/mobile` (Expo 57, RN 0.86) | Runs on the iOS simulator (release build) against the local validator, full flow verified |
-| Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | 1.0.1 (versionCode 2), built and signed with the release key (cert SHA-256 `8370bf40…376f`, same key as 1.0.0), arm64-v8a + x86_64, sha256 `0d99915d03f14e273bb44f8f7e3ae1d2a8ab5b3cba884aaae32a7575366a80dc`; uploaded to the `clockin-v1` release and the re-downloaded file matches. **Never run on a device or emulator** |
+| Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | 1.1.0 (versionCode 3), built and signed with the release key (cert SHA-256 `8370bf40…376f`, same key as 1.0.0 and 1.0.1), arm64-v8a + x86_64, sha256 `d371f69ed942ededcde44e83f6cf3fc40087e7784899b02323ed404eaf2c741e`; uploaded to the `clockin-v1` release and the re-downloaded file matches. **Never run on a device or emulator** |
 | Coach server | `apps/coach` | Handler tested with a stub client; never called Claude with a real key; not deployed |
 | Hackathon kit | `clockin/` | PORT-PLAN, SUBMISSION, PITCH, DEMO-SCRIPT, screenshots |
 
@@ -43,7 +43,30 @@ Everything below was run on this Mac unless it says otherwise.
    (Buffer#subarray) that broke all account decoding.
 5. `npx tsc --noEmit` clean in `apps/mobile`; `node --test` green in `apps/coach`.
 
-## Android audit (Round 2, 7 Oct, by inspection: no emulator allowed)
+## Polish round (1.1.0, 7 Oct)
+
+Driven by the review in `review/POLARIS-POLISH.md`; branch `polish`, merged to main.
+- P0: content scrolls under a fade behind the floating tab bar with bottom room
+  on every tab screen; a 12 pt floor for all text (13-15 pt body), Dynamic
+  Type allowed with caps on display numbers; disabled buttons have a distinct
+  style and a line saying why ("Over your $50.00 available…").
+- P1: SKR explainer as three rows (earn, lock, spend) with bigger chips;
+  Coach with a profile summary, suggested questions and a friendly "works
+  without AI" state; Me with a smaller QR, reminder switches, the optional
+  Coach key and the raw RPC/program IDs folded into "Network & programs";
+  receipts on the checkout and claim success screens; bigger clock-in day
+  markers with each day's reward.
+- Basics: first-run "How Pay in 4 works" card; count-ups on balance and
+  score (off with Reduce Motion); haptics on presses, chips, switches and
+  results; loading, empty, low-SOL, error and offline states with Retry;
+  accessibility roles/labels and 44 pt targets; a streak-at-risk reminder at
+  20:00 (only on days you haven't clocked in) plus switches for each reminder.
+- Evidence: `clockin/screens/all/` (30 screens and states with INDEX.md and
+  the run log), `clockin/screens/polish/` (before/after pairs).
+  cargo test 9/9, anchor test 19/19, `tsc --noEmit` clean.
+- The offline screenshot is simulated by the autopilot (a test hook that only
+  exists in autopilot builds), not a real network cut.
+, 7 Oct, by inspection: no emulator allowed)
 
 Checked on the built APK with `aapt2 dump badging`, `apksigner`, `unzip`,
 `strings`, and in the source. Fixes are in commit 2bb4fc2; the APK below is
