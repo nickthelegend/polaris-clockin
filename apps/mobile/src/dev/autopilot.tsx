@@ -182,6 +182,8 @@ export function Autopilot() {
         await shot("coach-ai-off");
         router.setParams({ q: "How do I reach the next tier fastest?" });
         await shot("coach-answer", 4000);
+        router.setParams({ q: "Why is my limit what it is?" });
+        await shot("coach-answer-limit", 4000);
         router.push("/(tabs)/me");
         await shot("me");
         router.setParams({ advanced: "1" });

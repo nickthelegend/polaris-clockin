@@ -1,6 +1,6 @@
 {
   "name": "@polaris/mobile",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "main": "index.js",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.131.0",
@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -47,7 +48,8 @@
     "android": "expo run:android",
     "sync-chain": "node scripts/sync-chain.mjs",
     "typecheck": "tsc --noEmit",
-    "postinstall": "node scripts/patch-space-paths.mjs"
+    "postinstall": "node scripts/patch-space-paths.mjs",
+    "test": "tsx --test src/lib/*.test.ts"
   },
   "private": true
 }

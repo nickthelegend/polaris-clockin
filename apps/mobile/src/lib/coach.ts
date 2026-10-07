@@ -20,27 +20,9 @@ export async function coachMode(): Promise<"server" | "key" | "off"> {
   return (await getCoachKey()) ? "key" : "off";
 }
 
-export type Facts = {
-  score: number;
-  limit: number;
-  available: number;
-  activeDebt: number;
-  onTime: number;
-  late: number;
-  plansOpened: number;
-  plansRepaid: number;
-  payments: number;
-  streak: number;
-  bestStreak: number;
-  checkIns: number;
-  checkinPoints: number;
-  skrLocked: number;
-  skrBalance: number;
-  usdBalance: number;
-  skrPrice: number; // micro-dollars
-  upcoming: { merchant: string; amount: number; due: string }[];
-  question?: { merchant: string; item: string; price: number; perInstallment: number }; // base units
-};
+export type { Facts } from "./coachRules";
+export { rulesSummary, rulesAnswer } from "./coachRules";
+import type { Facts } from "./coachRules";
 
 export function factsText(f: Facts) {
   const lines = [
@@ -99,30 +81,3 @@ export async function askCoach(question: string, facts: Facts): Promise<string> 
     .trim();
 }
 
-/** The no-AI fallback: the same facts, turned into sentences by fixed rules. */
-export function rulesSummary(f: Facts): string[] {
-  const out: string[] = [];
-  const next = nextTier(f.score);
-  if (next) {
-    const gap = next.min - f.score;
-    const instalments = Math.ceil(gap / 12);
-    out.push(
-      `You're ${gap} points from ${next.band} (a $${next.limit} line). That's about ${instalments} on-time instalment${instalments === 1 ? "" : "s"}, or ${gap} daily check-ins.`,
-    );
-  } else out.push("You're in the top band. Keep paying on time to stay there.");
-  if (f.late > 0) out.push(`${f.late} late instalment${f.late === 1 ? "" : "s"} cost you ${f.late * 30} points. Paying early always counts as on time.`);
-  if (f.skrLocked === 0 && f.skrBalance > 0) {
-    const boost = Math.floor(((f.skrBalance * f.skrPrice) / 1e6) * 0.5);
-    out.push(`Locking your ${fmtSkr(f.skrBalance)} would add ${fmtUsd(boost)} to your limit today.`);
-  }
-  if (f.question) {
-    const fits = f.question.price <= f.available;
-    out.push(
-      fits
-        ? `${f.question.item} fits: 4 × ${fmtUsd(f.question.perInstallment)}, nothing due today, ${fmtUsd(f.available - f.question.price)} of your line left after.`
-        : `${f.question.item} is over your available ${fmtUsd(f.available)}. Lock SKR or pay part now.`,
-    );
-  }
-  if (f.checkinPoints < 60) out.push(`Clock in daily: +1 point a day (${60 - f.checkinPoints} left) and an SKR reward that grows with your streak.`);
-  return out.slice(0, 4);
-}

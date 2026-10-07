@@ -7,7 +7,7 @@ import * as Haptics from "expo-haptics";
 import { Card, ScreenHeader, StateBlock, Tag, Text, TAB_BAR_HEIGHT, useTabBarSpace } from "../../src/ui/kit";
 import { color, font, gutter, radius } from "../../src/ui/theme";
 import { useAccount } from "../../src/state/AccountProvider";
-import { askCoach, coachMode, factsText, rulesSummary } from "../../src/lib/coach";
+import { askCoach, coachMode, factsText, rulesAnswer } from "../../src/lib/coach";
 import { buildFacts } from "../../src/lib/facts";
 import { fmtUsd, nextTier, ONE, tierOf } from "../../src/lib/credit";
 
@@ -59,7 +59,7 @@ export default function Coach() {
     setBusy(true);
     try {
       if (mode === "off") {
-        setMsgs((m) => [...m, { role: "coach", text: rulesSummary(facts).join("\n\n"), ai: false }]);
+        setMsgs((m) => [...m, { role: "coach", text: rulesAnswer(question, facts), ai: false }]);
       } else {
         const text = await askCoach(question, facts);
         setMsgs((m) => [...m, { role: "coach", text, ai: true }]);
@@ -67,7 +67,7 @@ export default function Coach() {
     } catch (e: any) {
       setMsgs((m) => [
         ...m,
-        { role: "coach", text: `${rulesSummary(facts).join("\n\n")}\n\n(Claude was unavailable, so this answer uses the rules.)`, ai: false },
+        { role: "coach", text: `${rulesAnswer(question, facts)}\n\n(Claude was unavailable, so this answer uses the rules.)`, ai: false },
       ]);
     } finally {
       setBusy(false);

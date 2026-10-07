@@ -15,7 +15,7 @@ import { useAccount } from "../src/state/AccountProvider";
 import { useAction } from "../src/state/useAction";
 import { useWallet } from "../src/wallet/WalletProvider";
 import { ix } from "../src/chain/polaris";
-import { askCoach, coachMode, Facts, rulesSummary } from "../src/lib/coach";
+import { askCoach, coachMode, Facts, rulesAnswer } from "../src/lib/coach";
 import { buildFacts } from "../src/lib/facts";
 import { scheduleDueReminder } from "../src/lib/notify";
 import { AUTOPILOT } from "../src/dev/autopilot";
@@ -110,10 +110,10 @@ export default function Checkout() {
       question: { merchant: merchantName, item: title, price, perInstallment: per },
     };
     try {
-      if ((await coachMode()) === "off") setCoach({ text: rulesSummary(facts), ai: false });
+      if ((await coachMode()) === "off") setCoach({ text: [rulesAnswer("Can I afford this on Pay in 4?", facts)], ai: false });
       else setCoach({ text: [await askCoach("Can I afford this on Pay in 4, and what does it do to my limit?", facts)], ai: true });
     } catch (e: any) {
-      setCoach({ text: [...rulesSummary(facts), `(AI unavailable: ${e?.message ?? e})`], ai: false });
+      setCoach({ text: [rulesAnswer("Can I afford this on Pay in 4?", facts), "(Claude was unavailable, so this answer uses the rules.)"], ai: false });
     } finally {
       setCoachBusy(false);
     }
