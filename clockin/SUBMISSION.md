@@ -96,10 +96,10 @@ app on the iOS simulator against that validator (`clockin/screens/ios/`).
 
 ## Install the APK
 
-- File: `polaris-clockin.apk`, version 1.1.1 (versionCode 4), release build
+- File: `polaris-clockin.apk`, version 1.1.3 (versionCode 6), release build
   signed with the project's own key, arm64-v8a + x86_64, package
   `app.polarispay.clockin`, min SDK 24, target SDK 36
-- SHA-256: `3d631819f9e49101515e813b051afcbd260796bf1596d9fbbbeb28400da618ae`
+- SHA-256: `25afd272802eb7af86e9613d45c23006b5a753512935e445b73d2e67580c8b84`
 - Signing certificate SHA-256: `8370bf40d44f186682e9884972b3e637b3347c8e883ccdaa0b7576fa622b376f`
 - Download: https://github.com/nickthelegend/polaris-clockin/releases/download/clockin-v1/polaris-clockin.apk
 - Install: `adb install polaris-clockin.apk`, or open the file on the phone

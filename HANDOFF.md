@@ -214,3 +214,22 @@ bash scripts/ios-shots.sh <udid> ../../clockin/screens/ios
   `NETWORK=localnet` (README → Run it).
 - The devnet airdrop retry loop was stopped; nothing of this session is left
   running (no Metro, validator, emulator or Gradle daemon).
+
+## 2026-10-12 polish round, 1.1.3 (versionCode 6)
+
+Release build (`xcodebuild -configuration Release`, default cluster devnet) on the iPhone Air simulator, fresh install:
+onboarding → guest wallet → Home, Shop, Credit, Coach, Me. The Polaris program is **not deployed on devnet**
+(`deployments.json` says `deployed: false`; `getMultipleAccounts` for the program id and config returns null), and Home
+used to show a red "Couldn't read your account / The Polaris program didn't answer as expected" card. Now:
+
+- `DEPLOYED` and `PREVIEW_NOTE` in `src/lib/config.ts`. Home shows a neutral **Preview mode** card instead of the error,
+  and every action's error text (`explainError`) is the same plain preview note instead of a program error.
+- Home's wallet chip says "Guest wallet · devnet" instead of a truncated address (the address stays on Me, as the
+  "code for getting paid").
+
+No crash or red box on any tab. Screenshots: `clockin/screens/polish-*.png`. APK: prebuild + Gradle under the shared
+lock with `EXPO_PUBLIC_CLUSTER=devnet`, same keystore (signer `8370bf40…2b376f`), `aapt2`: `app.polarispay.clockin`
+1.1.3 (6), arm64-v8a + x86_64, sha256 `25afd272802eb7af86e9613d45c23006b5a753512935e445b73d2e67580c8b84`, uploaded to
+`clockin-v1` with `--clobber`; the download re-hashes the same. The APK includes the uncommitted Oct 8–9 work in
+`apps/mobile/src` that was already in the tree (left uncommitted; not this round's work). Not run on an Android device.
+When the program is deployed, set `deployed: true` in `apps/mobile/src/chain/deployments.json` and rebuild.

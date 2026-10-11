@@ -17,7 +17,7 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 import { connection } from "../chain/polaris";
-import { APP_IDENTITY, CLUSTER, MWA_CHAIN } from "../lib/config";
+import { APP_IDENTITY, CLUSTER, DEPLOYED, MWA_CHAIN, PREVIEW_NOTE } from "../lib/config";
 
 export type WalletKind = "mwa" | "guest";
 type Stored = { kind: WalletKind; address: string; authToken?: string; label?: string };
@@ -175,6 +175,7 @@ export function useWallet() {
 
 /** Plain-language message for a failed transaction or wallet action. */
 export function explainError(e: any): string {
+  if (!DEPLOYED) return PREVIEW_NOTE;
   const msg: string = e?.message ?? String(e);
   const logs: string[] = e?.logs ?? [];
   const anchorMsg = [msg, ...logs].join("\n").match(/Error Message: ([^.\n]+)/);

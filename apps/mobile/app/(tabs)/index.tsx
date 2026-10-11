@@ -11,7 +11,7 @@ import { useAccount } from "../../src/state/AccountProvider";
 import { useAction } from "../../src/state/useAction";
 import { useWallet, explainError } from "../../src/wallet/WalletProvider";
 import { ix, merchantName } from "../../src/chain/polaris";
-import { CLUSTER, PARAMS, SKR_MINT, USD_MINT, explorerTx } from "../../src/lib/config";
+import { CLUSTER, DEPLOYED, PARAMS, PREVIEW_NOTE, SKR_MINT, USD_MINT, explorerTx } from "../../src/lib/config";
 import { checkinReward, dueAt, fmtDue, fmtSkr, fmtUsd, installmentAmount, ONE, today } from "../../src/lib/credit";
 import { scheduleClockInReminder, syncDailyReminders } from "../../src/lib/notify";
 import { useToast } from "../../src/ui/Toast";
@@ -114,12 +114,20 @@ export default function Home() {
           >
             <View style={[s.dot, { backgroundColor: kind === "guest" ? color.warn : color.lime }]} />
             <Text size={13} weight="medium" color={color.muted} maxFontSizeMultiplier={1.4} numberOfLines={1}>
-              {publicKey?.toBase58().slice(0, 4)}…{publicKey?.toBase58().slice(-4)} · {CLUSTER}
+              {kind === "guest" ? "Guest wallet" : "Your wallet"} · {CLUSTER}
             </Text>
           </Pressable>
         </View>
 
-        {a.error ? (
+        {!DEPLOYED ? (
+          <View style={{ marginBottom: 12 }}>
+            <StateBlock
+              icon={<Ionicons name="sparkles" size={20} color={color.lime} />}
+              title="Preview mode"
+              body={PREVIEW_NOTE}
+            />
+          </View>
+        ) : a.error ? (
           <View style={{ marginBottom: 12 }}>
             <StateBlock
               tone="down"
