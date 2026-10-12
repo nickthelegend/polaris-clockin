@@ -1,3 +1,5 @@
+import { receiptJournal } from '../lib/nativeReceipt';
+import { requireSuccessfulConfirmation } from "../lib/chainResult";
 // Two ways to sign:
 //  - Mobile Wallet Adapter (Android): Seed Vault on Seeker, or any MWA wallet
 //    (Phantom, Solflare, Mock MWA Wallet). The primary path.
@@ -19,6 +21,7 @@ import bs58 from "bs58";
 import { connection } from "../chain/polaris";
 import { APP_IDENTITY, CLUSTER, DEPLOYED, MWA_CHAIN, PREVIEW_NOTE } from "../lib/config";
 
+export type SubmissionObserver = { onSignature?: (signature: string) => Promise<void>; onNoBroadcast?: () => Promise<void> };
 export type WalletKind = "mwa" | "guest";
 type Stored = { kind: WalletKind; address: string; authToken?: string; label?: string };
 
@@ -32,13 +35,14 @@ type Ctx = {
   useGuest: () => Promise<void>;
   disconnect: () => Promise<void>;
   /** Build, sign and send one transaction; resolves with its confirmed signature. */
-  send: (ixs: TransactionInstruction[], extraSigners?: Keypair[]) => Promise<string>;
+  send: (ixs: TransactionInstruction[], extraSigners?: Keypair[], observer?: SubmissionObserver) => Promise<string>;
   requestAirdrop: () => Promise<string>;
 };
 
 const WalletContext = createContext<Ctx | null>(null);
 const STORE = "polaris.wallet.v1";
 const GUEST_SECRET = "polaris.guest.secret.v1";
+
 
 async function loadGuest(): Promise<Keypair> {
   const existing = await SecureStore.getItemAsync(GUEST_SECRET);
@@ -106,8 +110,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   }, [stored, persist]);
 
   const send = useCallback(
-    async (ixs: TransactionInstruction[], extraSigners: Keypair[] = []) => {
-      if (!stored) throw new Error("Connect a wallet first.");
+    async (ixs: TransactionInstruction[], extraSigners: Keypair[] = [], observer: SubmissionObserver = {}) => {
+      if (!stored) { await observer.onNoBroadcast?.(); throw new Error("Connect a wallet first."); }
+      let callbackStarted = false;
+      return receiptJournal.run(connection.rpcEndpoint, stored.address, async (signature) => {
+        const { value } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+        return value[0];
+      }, async (saveReceipt, submission) => {
+      callbackStarted = true;
+      const saveSubmission = async (signature: string) => { await saveReceipt(signature); await observer.onSignature?.(signature); };
+      try {
       const payer = new PublicKey(stored.address);
       const {
         context: { slot: minContextSlot },
@@ -122,21 +134,35 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (stored.kind === "guest") {
         const k = guest ?? (await loadGuest());
         tx.sign([k]);
+        // The fee-payer signature is known before transmission, including ambiguous transport errors.
+        await saveSubmission(bs58.encode(tx.signatures[0]));
+        submission.beginBroadcast();
         signature = await connection.sendTransaction(tx, { maxRetries: 5 });
       } else {
         signature = await mwaTransact(async (w) => {
           // Reuse the cached token; if the wallet rejects it (expired or
           // revoked), authorize afresh in the same session.
-          const r = await authorize(w, stored.authToken).catch(() => authorize(w));
+          const r = await authorize(w, stored.authToken).catch((error) => {
+            if (/declin|reject|cancel/i.test(String(error?.message ?? error))) throw error;
+            return authorize(w);
+          });
           if (r.address !== stored.address) throw new Error("The wallet switched accounts. Reconnect in Me.");
           if (r.authToken !== stored.authToken) await persist({ ...stored, authToken: r.authToken });
+          submission.beginBroadcast();
           const [sig] = await w.signAndSendTransactions({ transactions: [tx], minContextSlot });
           return sig as string;
         });
       }
+      if (!/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(signature)) signature = bs58.encode(Buffer.from(signature, 'base64'));
+      await saveSubmission(signature);
       const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
       if (res.value.err) throw new Error(`Transaction failed: ${JSON.stringify(res.value.err)}`);
       return signature;
+      } catch (error) {
+        if (await submission.abortBeforeBroadcast()) await observer.onNoBroadcast?.();
+        throw error;
+      }
+      }).catch(async error => { if (!callbackStarted) await observer.onNoBroadcast?.(); throw error; });
     },
     [stored, guest, authorize, persist],
   );
@@ -145,7 +171,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     if (!stored) throw new Error("Connect a wallet first.");
     const amount = CLUSTER === "localnet" ? 5 : 1;
     const sig = await connection.requestAirdrop(new PublicKey(stored.address), amount * LAMPORTS_PER_SOL);
-    await connection.confirmTransaction(sig, "confirmed");
+    const result = await connection.confirmTransaction(sig, "confirmed");
+    requireSuccessfulConfirmation(result, sig);
     return sig;
   }, [stored]);
 

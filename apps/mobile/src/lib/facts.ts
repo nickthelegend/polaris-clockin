@@ -34,6 +34,7 @@ export function buildFacts(a: {
     skrBalance: a.skr,
     usdBalance: a.usd,
     skrPrice: n(a.config?.skrPriceMicros) || PARAMS.skrPriceMicros,
+    skrCollateralBps: n(a.config?.skrCollateralBps ?? PARAMS.skrCollateralBps),
     upcoming: a.plans
       .filter((pl) => pl.paid < pl.installments)
       .slice(0, 3)

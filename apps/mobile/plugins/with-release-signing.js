@@ -2,7 +2,7 @@
 // POLARIS_SIGNING_PROPERTIES at a properties file with storeFile,
 // storePassword, keyAlias and keyPassword (default:
 // /Volumes/Extreme SSD/Projects/clockin/.keys/polaris-clockin-signing.properties).
-// Without the file, release builds fall back to the debug key (Expo's default).
+// Release packaging refuses missing or incomplete credentials.
 const { withAppBuildGradle } = require("expo/config-plugins");
 
 const MARK = "// polaris: release signing";
@@ -30,9 +30,15 @@ android {
 }
 `;
 
+const PACKAGER_LIMIT = "\n// clockin-release-packager-single-worker\nreact { extraPackagerArgs = [\"--max-workers\", \"1\"] }\n";
+
+const RELEASE_GUARD = "\n// clockin-release-requires-existing-identity\ngradle.taskGraph.whenReady { graph ->\n    if (graph.allTasks.any { it.name in ['assembleRelease', 'bundleRelease', 'packageRelease'] } && !(polarisSigningFile.exists() && ['storeFile','storePassword','keyAlias','keyPassword'].every { polarisSigning[it] } && new File(polarisSigning['storeFile']).exists())) {\n        throw new GradleException('Release signing credentials are missing or incomplete; refusing a debug-signed release')\n    }\n}\n";
+
 module.exports = function withReleaseSigning(config) {
   return withAppBuildGradle(config, (cfg) => {
     if (!cfg.modResults.contents.includes(MARK)) cfg.modResults.contents += SNIPPET;
+    if (!cfg.modResults.contents.includes('clockin-release-requires-existing-identity')) cfg.modResults.contents += RELEASE_GUARD;
+    if (!cfg.modResults.contents.includes('// clockin-release-packager-single-worker')) cfg.modResults.contents += PACKAGER_LIMIT;
     return cfg;
   });
 };

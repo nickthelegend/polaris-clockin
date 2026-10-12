@@ -150,7 +150,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         tokenBalance(skrAta(publicKey)),
         fetchProfile(publicKey),
         fetchConfig(),
-        fetchPlans(publicKey).catch(() => [] as Plan[]),
+        fetchPlans(publicKey),
       ]);
       setState((s) => ({ ...s, sol, usd, skr, profile, config, plans, loading: false, loaded: true, error: null, offline: false }));
       loadActivity(publicKey)

@@ -50,11 +50,13 @@ export const fmtUsd = (base: number, digits = 2) =>
 export const fmtSkr = (base: number) =>
   (base / ONE).toLocaleString("en-US", { maximumFractionDigits: 2 }) + " SKR";
 
-export function fmtDue(ts: number) {
+export function fmtDue(ts: number, now = new Date()) {
   const d = new Date(ts * 1000);
-  const days = Math.round((ts * 1000 - Date.now()) / 86_400_000);
+  // Calendar-day labels follow the phone; overdue follows the exact due time.
+  const localDay = (at: Date) => Date.UTC(at.getFullYear(), at.getMonth(), at.getDate());
+  const days = Math.round((localDay(d) - localDay(now)) / 86_400_000);
   const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  if (days < 0) return `${date} · overdue`;
+  if (d.getTime() < now.getTime()) return `${date} · overdue`;
   if (days === 0) return `${date} · today`;
   return `${date} · in ${days} day${days === 1 ? "" : "s"}`;
 }

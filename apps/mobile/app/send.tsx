@@ -6,14 +6,15 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import * as Haptics from "expo-haptics";
 import QRCode from "react-native-qrcode-svg";
-import { Keypair } from "@solana/web3.js";
-import bs58 from "bs58";
+
+
 import { Button, Card, Text } from "../src/ui/kit";
 import { color, font, gutter, radius } from "../src/ui/theme";
 import { useAccount } from "../src/state/AccountProvider";
 import { useAction } from "../src/state/useAction";
 import { useWallet } from "../src/wallet/WalletProvider";
 import { ix } from "../src/chain/polaris";
+import { preparePendingLink, recoverPendingLink, savePendingLinkSignature, discardUnbroadcastLink } from '../src/lib/nativePendingLink';
 import { fmtUsd, ONE } from "../src/lib/credit";
 import { useToast } from "../src/ui/Toast";
 import { AUTOPILOT, bus } from "../src/dev/autopilot";
@@ -30,7 +31,36 @@ export default function Send() {
   const { run, busy } = useAction();
   const toast = useToast();
   const [text, setText] = useState("");
-  const [link, setLink] = useState<{ url: string; amount: number } | null>(null);
+  const [link, setLink] = useState<{ url: string; amount: number; expiresAt: number } | null>(null);
+  const [recovery, setRecovery] = useState<'checking' | 'none' | 'retained'>('checking');
+  const [recoveryMessage, setRecoveryMessage] = useState('Checking this device’s saved link…');
+  const creating = useRef(false);
+  const activeOwner = useRef(publicKey?.toBase58());
+  activeOwner.current = publicKey?.toBase58();
+  async function checkOriginal() {
+    const owner = publicKey;
+    if (!owner) { setLink(null); setRecovery('retained'); setRecoveryMessage('Connect the original wallet to review a saved link.'); return; }
+    setRecovery('checking');
+    try {
+      const result = await recoverPendingLink(owner);
+      if (activeOwner.current !== owner.toBase58()) return;
+      if (result.kind === 'ready') { setLink(result); setRecovery('retained'); setRecoveryMessage('Matching link and original receipt verified finalized.'); }
+      else { setLink(null); setRecovery(result.kind === 'none' ? 'none' : 'retained'); setRecoveryMessage(result.message); }
+    } catch (error) {
+      if (activeOwner.current !== owner.toBase58()) return;
+      setLink(null); setRecovery('retained'); setRecoveryMessage('Saved link outcome is unavailable. ' + String((error as Error)?.message ?? 'Review the original receipt.'));
+    }
+  }
+  useEffect(() => { setLink(null); void checkOriginal(); }, [publicKey?.toBase58()]);
+  async function shareVerified(copy: boolean) {
+    if (!publicKey) return;
+    try {
+      const result = await recoverPendingLink(publicKey);
+      if (result.kind !== 'ready') { setLink(null); setRecovery('retained'); setRecoveryMessage(result.message); return; }
+      if (copy) { await Clipboard.setStringAsync(result.url); toast({kind:'ok',text:'Link copied'}); }
+      else await Share.share({message:`I sent you ${fmtUsd(result.amount)} with Polaris. Open to claim: ${result.url}`});
+    } catch { toast({kind:'error',text:'Current finalized link state is unavailable. Nothing was shared.'}); }
+  }
   const params = useLocalSearchParams<{ amount?: string; auto?: string }>();
   const amount = Math.round(Number(text || "0") * ONE);
   const autoRan = useRef(false);
@@ -58,20 +88,24 @@ export default function Send() {
   }
 
   async function create() {
-    const key = Keypair.generate();
-    const sig = await run(
-      "link",
-      async () => [
-        ix.fundLinkKey(publicKey!, key.publicKey, LINK_KEY_LAMPORTS),
-        await ix.createLink(publicKey!, key.publicKey, amount, 14 * 86_400),
-      ],
-      `Link ready: ${fmtUsd(amount)}`,
-    );
-    if (sig) {
-      const url = `polaris://claim?k=${bs58.encode(key.secretKey)}`;
-      bus.lastLink = url;
-      setLink({ url, amount });
-    }
+    if (!publicKey || creating.current || recovery !== 'none' || a.error || !amount || over) return;
+    creating.current = true;
+    const owner = publicKey;
+    try {
+      const key = await preparePendingLink(owner,amount);
+      setRecovery('retained');
+      setRecoveryMessage('Link secret retained securely. Waiting for the original transaction receipt.');
+      if (activeOwner.current !== owner.toBase58()) { await discardUnbroadcastLink(owner,key); return; }
+      await run('link', async () => [
+        ix.fundLinkKey(owner,key,LINK_KEY_LAMPORTS),
+        await ix.createLink(owner,key,amount,14*86400),
+      ], 'Link transaction submitted', {
+        quiet:true,
+        onSignature:signature=>savePendingLinkSignature(owner,signature),
+        onNoBroadcast:()=>discardUnbroadcastLink(owner,key),
+      });
+    } catch (error) { toast({kind:'error',text:String((error as Error)?.message ?? 'Link preparation failed.')}); }
+    finally { creating.current=false; await checkOriginal(); }
   }
 
   if (link) {
@@ -92,7 +126,7 @@ export default function Send() {
             {fmtUsd(link.amount)}
           </Text>
           <Text size={13} color={color.muted} style={{ textAlign: "center", marginTop: 6 }}>
-            Whoever opens this link gets the dollars, with no fees. Valid 14 days; you can take it back until it's claimed.
+            Whoever holds this link can claim its dollars. Finalized expiry: {new Date(link.expiresAt * 1000).toLocaleString()}.
           </Text>
           <View style={s.qr}>
             <QRCode value={link.url} size={200} color="#0f1011" backgroundColor="#ffffff" />
@@ -102,10 +136,7 @@ export default function Send() {
               {link.url}
             </Text>
             <Pressable
-              onPress={async () => {
-                await Clipboard.setStringAsync(link.url);
-                toast({ kind: "ok", text: "Link copied" });
-              }}
+              onPress={() => shareVerified(true)}
               style={s.copy}
             >
               <Ionicons name="copy" size={16} color={color.onLime} />
@@ -121,7 +152,7 @@ export default function Send() {
             title="Share"
             kind="white"
             icon={<Ionicons name="share-outline" size={18} color={color.onLime} />}
-            onPress={() => Share.share({ message: `I sent you ${fmtUsd(link.amount)} with Polaris. Open to claim: ${link.url}` })}
+            onPress={() => shareVerified(false)}
           />
         </View>
       </SafeAreaView>
@@ -158,14 +189,18 @@ export default function Send() {
           ${text || "0"}
         </Text>
         <Text size={13} color={color.muted}>
-          Available {fmtUsd(a.usd)}
+          {a.error ? 'Current balance unavailable' : `Available ${fmtUsd(a.usd)}`}
         </Text>
       </View>
       <View style={{ paddingHorizontal: gutter }}>
+        {recovery !== 'none' ? <Card style={{gap:8,marginBottom:12}}>
+          <Text size={13} color={color.muted}>{recoveryMessage}</Text>
+          <Button title="Check original receipt" kind="white" loading={recovery === 'checking'} onPress={checkOriginal} />
+        </Card> : null}
         <Button
           testID="create-link"
           title={amount ? `Create a ${fmtUsd(amount)} link` : "Create link"}
-          disabled={!amount || over}
+          disabled={!publicKey || !amount || over || !!a.error || recovery !== 'none'}
           hint={over ? `That's more than your ${fmtUsd(a.usd)}.` : "Type an amount on the keypad."}
           loading={busy === "link"}
           onPress={create}

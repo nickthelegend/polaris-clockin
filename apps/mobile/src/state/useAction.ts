@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Keypair, TransactionInstruction } from "@solana/web3.js";
-import { explainError, useWallet } from "../wallet/WalletProvider";
+import { explainError, useWallet, type SubmissionObserver } from "../wallet/WalletProvider";
 import { useAccount } from "./AccountProvider";
 import { useToast } from "../ui/Toast";
 
@@ -16,17 +16,20 @@ export function useAction() {
       id: string,
       build: () => Promise<TransactionInstruction[]>,
       okText: string,
-      opts: { signers?: Keypair[]; quiet?: boolean } = {},
+      opts: { signers?: Keypair[]; quiet?: boolean } & SubmissionObserver = {},
     ): Promise<string | null> => {
-      if (!publicKey) return null;
+      if (!publicKey) { await opts.onNoBroadcast?.(); return null; }
       setBusy(id);
+      let sendInvoked = false;
       try {
         const ixs = await withSetup(publicKey, await build());
-        const sig = await send(ixs, opts.signers);
+        sendInvoked = true;
+        const sig = await send(ixs, opts.signers, opts);
         if (!opts.quiet) toast({ kind: "ok", text: okText, sig });
         refresh();
         return sig;
       } catch (e) {
+        if (!sendInvoked) await opts.onNoBroadcast?.();
         console.warn(id, e);
         toast({ kind: "error", text: explainError(e) });
         return null;

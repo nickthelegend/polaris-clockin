@@ -11,7 +11,7 @@ PROGRAM=keys/polaris-program.json
 echo "deployer $(solana-keygen pubkey $DEPLOYER): $(solana balance -u "$URL" -k $DEPLOYER)"
 [ -f target/deploy/polaris.so ] || anchor build
 cp "$PROGRAM" target/deploy/polaris-keypair.json
-solana program deploy target/deploy/polaris.so \
+solana program deploy target/deploy/polaris.so --max-len 540000 \
   --program-id "$PROGRAM" -k "$DEPLOYER" -u "$URL" \
   --max-sign-attempts 50 --use-rpc 2>&1 | tee .anchor/deploy-devnet.log
 # reclaim any buffer a failed attempt left behind

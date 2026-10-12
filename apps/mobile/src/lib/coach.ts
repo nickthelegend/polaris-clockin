@@ -28,7 +28,7 @@ export function factsText(f: Facts) {
   const lines = [
     `Score ${f.score} (band ${tierOf(f.score).band}); unsecured line ${fmtUsd(tierOf(f.score).limit * 1e6, 0)}.`,
     `Pay in 4 limit ${fmtUsd(f.limit)} (includes SKR collateral), owed now ${fmtUsd(f.activeDebt)}, available ${fmtUsd(f.available)}.`,
-    `Wallet: ${fmtUsd(f.usdBalance)} pUSD, ${fmtSkr(f.skrBalance)} free, ${fmtSkr(f.skrLocked)} locked as collateral (SKR priced at ${fmtUsd(f.skrPrice, 3)}; counts at 50%).`,
+    `Wallet: ${fmtUsd(f.usdBalance)} pUSD, ${fmtSkr(f.skrBalance)} free, ${fmtSkr(f.skrLocked)} locked as collateral (SKR priced at ${fmtUsd(f.skrPrice, 3)}; counts at ${(f.skrCollateralBps ?? 5_000) / 100}%).`,
     `Record: ${f.onTime} on-time instalments, ${f.late} late, ${f.plansRepaid}/${f.plansOpened} plans repaid, ${f.payments} Pay now payments.`,
     `Daily check-ins: streak ${f.streak} (best ${f.bestStreak}), ${f.checkIns} total, ${f.checkinPoints}/60 score points used.`,
     ...f.upcoming.map((u) => `Upcoming: ${u.merchant} ${fmtUsd(u.amount)} due ${u.due}.`),
@@ -43,7 +43,7 @@ export function factsText(f: Facts) {
 const RULES = `Polaris scoring rules (enforced by the Solana program, do not invent others):
 - Everyone starts at 520. On-time instalment +12 (plans of $20+), late instalment -30, plan repaid in full +10, Pay now of $5+ +2 (first 10), daily check-in +1 (first 60). Range 300-850.
 - Unsecured line by score: ${TIERS.map((t) => `${t.min}+ → $${t.limit}`).join(", ")}.
-- Locked SKR adds 50% of its dollar value to the limit; it cannot be unlocked while it backs debt.
+- Locked SKR adds the collateral percentage stated in the profile to the limit; it cannot be unlocked while it backs debt.
 - Paying early always counts as on time. Instalments are weekly; 10% APR pro-rated. Instalments can be paid in pUSD or in SKR.
 - This is Solana devnet with test money (pUSD and a stand-in SKR).`;
 

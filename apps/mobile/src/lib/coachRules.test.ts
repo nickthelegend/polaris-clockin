@@ -109,3 +109,15 @@ test("top band and no-SKR edge cases", () => {
   assert.match(rulesAnswer("Should I lock SKR or keep it?", { ...facts, skrLocked: 0, skrBalance: 0 }), /no SKR yet/);
   assert.match(rulesAnswer("Why is my limit what it is?", { ...facts, skrLocked: 0, activeDebt: 0, limit: 50 * ONE, available: 50 * ONE }), /no SKR locked/);
 });
+
+test("Coach explains the configured SKR collateral percentage instead of assuming 50%", () => {
+  const configured = { ...facts, skrCollateralBps: 2500, limit: 87.5 * ONE };
+  const answer = rulesAnswer("Why is my limit what it is?", configured);
+  assert.match(answer, /adds 25% its value, \$37\.50/);
+  assert.match(answer, /locking your free 1,025 SKR adds \$12\.81/);
+  assert.doesNotMatch(answer, /half its value/);
+});
+test("a zero collateral percentage produces no promised limit increase", () => {
+  const answer = rulesAnswer("Should I lock SKR?", { ...facts, skrCollateralBps: 0 });
+  assert.match(answer, /would add \$0\.00/);
+});

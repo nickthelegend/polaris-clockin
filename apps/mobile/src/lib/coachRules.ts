@@ -21,9 +21,13 @@ export type Facts = {
   skrBalance: number;
   usdBalance: number;
   skrPrice: number; // micro-dollars
+  skrCollateralBps?: number; // current program config; defaults to 50% for old facts
   upcoming: { merchant: string; amount: number; due: string }[];
   question?: { merchant: string; item: string; price: number; perInstallment: number }; // base units
 };
+
+const collateralBps = (f: Facts) => f.skrCollateralBps ?? 5_000;
+const collateralShare = (f: Facts) => collateralBps(f) === 5_000 ? 'half' : `${collateralBps(f) / 100}%`;
 
 /** The no-AI fallback: the same facts, turned into sentences by fixed rules. */
 export function rulesSummary(f: Facts): string[] {
@@ -38,7 +42,7 @@ export function rulesSummary(f: Facts): string[] {
   } else out.push("You're in the top band. Keep paying on time to stay there.");
   if (f.late > 0) out.push(`${f.late} late instalment${f.late === 1 ? "" : "s"} cost you ${f.late * 30} points. Paying early always counts as on time.`);
   if (f.skrLocked === 0 && f.skrBalance > 0) {
-    const boost = Math.floor(((f.skrBalance * f.skrPrice) / 1e6) * 0.5);
+    const boost = skrBoost(f.skrBalance, f.skrPrice, collateralBps(f));
     out.push(`Locking your ${fmtSkr(f.skrBalance)} would add ${fmtUsd(boost)} to your limit today.`);
   }
   if (f.question) {
@@ -74,14 +78,14 @@ export function rulesAnswer(question: string, f: Facts): string {
   const tier = tierOf(f.score);
   const next = nextTier(f.score);
   const base = tier.limit * 1_000_000;
-  const boost = skrBoost(f.skrLocked, f.skrPrice, 5_000);
-  const freeBoost = skrBoost(f.skrBalance, f.skrPrice, 5_000);
+  const boost = skrBoost(f.skrLocked, f.skrPrice, collateralBps(f));
+  const freeBoost = skrBoost(f.skrBalance, f.skrPrice, collateralBps(f));
   switch (intentOf(question)) {
     case "limit": {
       const parts = [
         `Your score of ${f.score} puts you in ${tier.band}, which is a ${fmtUsd(base, 0)} line.`,
         f.skrLocked > 0
-          ? `Your ${fmtSkr(f.skrLocked)} locked adds half its value, ${fmtUsd(boost)}, so your limit is ${fmtUsd(f.limit)}.`
+          ? `Your ${fmtSkr(f.skrLocked)} locked adds ${collateralShare(f)} its value, ${fmtUsd(boost)}, so your limit is ${fmtUsd(f.limit)}.`
           : `You have no SKR locked, so your limit is the line: ${fmtUsd(f.limit)}.`,
         f.activeDebt > 0
           ? `${fmtUsd(f.activeDebt)} of it is in use by open plans, leaving ${fmtUsd(f.available)} to spend.`
@@ -106,7 +110,7 @@ export function rulesAnswer(question: string, f: Facts): string {
     }
     case "skr": {
       if (f.skrLocked === 0 && f.skrBalance === 0)
-        return "You have no SKR yet. Clock in daily to earn it; once you have some, locking it adds half its dollar value to your Pay in 4 limit.";
+        return `You have no SKR yet. Clock in daily to earn it; once you have some, locking it adds ${collateralShare(f)} its dollar value to your Pay in 4 limit.`;
       const lockLine =
         f.skrBalance > 0
           ? `Locking your free ${fmtSkr(f.skrBalance)} would add ${fmtUsd(freeBoost)} to your limit.`

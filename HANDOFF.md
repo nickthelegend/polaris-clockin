@@ -215,6 +215,18 @@ bash scripts/ios-shots.sh <udid> ../../clockin/screens/ios
 - The devnet airdrop retry loop was stopped; nothing of this session is left
   running (no Metro, validator, emulator or Gradle daemon).
 
+## Codex continuation — Oct 8 (source changes, unreleased)
+
+Instalment due labels now mark even a recently missed deadline overdue immediately. Future day labels use the phone's calendar day, so a deadline just after midnight says tomorrow rather than today. The time argument can be supplied for deterministic checks.
+
+Validation: mobile tests 11/11 (2 new due-label checks), mobile TypeScript passes. No APK build, deployment or chain writes were performed. Existing devnet deployment and real Android signing gaps remain.
+
+## Codex development phase 2 — Oct 8
+
+Coach facts and explanations now use the current program's SKR collateral percentage. A configuration of 25% produces the same 25% limit boost the chain enforces, instead of promising a hardcoded 50%; 0% does not promise a limit increase. The AI context follows the same configured value.
+
+Checks: 13 mobile tests, mobile TypeScript, Android Hermes JS production export. No paid model call, signed APK build, public deployment or chain transaction was performed.
+
 ## 2026-10-12 polish round, 1.1.3 (versionCode 6)
 
 Release build (`xcodebuild -configuration Release`, default cluster devnet) on the iPhone Air simulator, fresh install:

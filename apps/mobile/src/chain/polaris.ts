@@ -1,3 +1,5 @@
+import { receiptJournal } from '../lib/nativeReceipt';
+import bs58 from 'bs58';
 // The app's view of the polaris program: PDAs, instruction builders (Anchor's
 // coder; signing is the wallet's job), and reads.
 import { AnchorProvider, BN, Program } from "@coral-xyz/anchor";
@@ -15,6 +17,7 @@ import {
   getAssociatedTokenAddressSync,
 } from "@solana/spl-token";
 import idl from "./polaris.json";
+import { readTokenBalance, requireSuccessfulConfirmation } from "../lib/chainResult";
 import type { Polaris } from "./polaris-types";
 import { MERCHANTS, PROGRAM_ID, RPC_URL, SKR_MINT, USD_MINT } from "../lib/config";
 
@@ -141,12 +144,7 @@ export const ix = {
 // ───────────── reads ─────────────
 
 export async function tokenBalance(ata: PublicKey): Promise<number> {
-  try {
-    const b = await connection.getTokenAccountBalance(ata);
-    return Number(b.value.amount);
-  } catch {
-    return 0; // no account yet
-  }
+  return readTokenBalance(connection, ata);
 }
 
 export async function fetchProfile(owner: PublicKey): Promise<Profile | null> {
@@ -177,13 +175,25 @@ export function merchantName(authority: PublicKey) {
 
 /** Claim a send link: the link key alone signs and pays, so no wallet is needed. */
 export async function claimWithLinkKey(linkKey: Keypair, recipient: PublicKey) {
+  return receiptJournal.run(connection.rpcEndpoint, linkKey.publicKey.toBase58(), async (signature) => {
+    const { value } = await connection.getSignatureStatuses([signature], { searchTransactionHistory: true });
+    return value[0];
+  }, async (saveReceipt, submission) => {
+      try {
   const link = await fetchLink(linkKey.publicKey);
   if (!link) throw new Error("This link was already claimed or cancelled.");
   const instruction: TransactionInstruction = await ix.claimLink(linkKey.publicKey, recipient, link.sender);
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash();
   const tx = new Transaction({ feePayer: linkKey.publicKey, blockhash, lastValidBlockHeight }).add(instruction);
   tx.sign(linkKey);
+  if (!tx.signature) throw new Error('Signed link transaction has no signature.');
+  await saveReceipt(bs58.encode(tx.signature));
+  submission.beginBroadcast();
   const sig = await connection.sendRawTransaction(tx.serialize());
-  await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+  await saveReceipt(sig);
+  const result = await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+  requireSuccessfulConfirmation(result, sig);
   return { sig, amount: link.amount.toNumber(), sender: link.sender };
+  } catch (error) { await submission.abortBeforeBroadcast(); throw error; }
+  });
 }
