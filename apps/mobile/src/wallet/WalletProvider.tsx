@@ -1,4 +1,5 @@
 import { receiptJournal } from '../lib/nativeReceipt';
+import { buildSignInInput, createSignInMessageText, fromB64, proofOf, recheckProof, signInLocally, utf8, verifySignIn, type SiwsProof } from '../lib/siws';
 import { requireSuccessfulConfirmation } from "../lib/chainResult";
 // Two ways to sign:
 //  - Mobile Wallet Adapter (Android): Seed Vault on Seeker, or any MWA wallet
@@ -19,17 +20,19 @@ import {
 } from "@solana/web3.js";
 import bs58 from "bs58";
 import { connection } from "../chain/polaris";
-import { APP_IDENTITY, CLUSTER, DEPLOYED, MWA_CHAIN, PREVIEW_NOTE } from "../lib/config";
+import { APP_IDENTITY, CLUSTER, MWA_CHAIN } from "../lib/config";
 
 export type SubmissionObserver = { onSignature?: (signature: string) => Promise<void>; onNoBroadcast?: () => Promise<void> };
 export type WalletKind = "mwa" | "guest";
-type Stored = { kind: WalletKind; address: string; authToken?: string; label?: string };
+type Stored = { kind: WalletKind; address: string; authToken?: string; label?: string; siws?: SiwsProof | null };
 
 type Ctx = {
   ready: boolean;
   kind: WalletKind | null;
   publicKey: PublicKey | null;
   walletLabel: string | null;
+  /** A verified Sign In With Solana proof for the connected account, or null. */
+  signIn: SiwsProof | null;
   mwaAvailable: boolean;
   connectMwa: () => Promise<void>;
   useGuest: () => Promise<void>;
@@ -68,8 +71,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       try {
         const raw = await SecureStore.getItemAsync(STORE);
         if (raw) {
-          const s: Stored = JSON.parse(raw);
-          if (s.kind === "guest") setGuest(await loadGuest());
+          let s: Stored = JSON.parse(raw);
+          if (s.kind === "guest") {
+            const k = await loadGuest();
+            setGuest(k);
+            if (!s.siws) {
+              const input = buildSignInInput();
+              const out = signInLocally(input, k.secretKey);
+              const v = verifySignIn(input, out);
+              if (v.ok) {
+                s = { ...s, siws: proofOf("dev-local", "Guest wallet", input, v, out.signature) };
+                await SecureStore.setItemAsync(STORE, JSON.stringify(s));
+              }
+            }
+          }
           setStored(s);
         }
       } finally {
@@ -90,16 +105,53 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     return { address, authToken: auth.auth_token as string, label: auth.accounts[0].label as string | undefined };
   }, []);
 
+  /**
+   * One wallet sheet: authorize + Sign In With Solana (sign_in_payload). Seed
+   * Vault, Phantom and Solflare return sign_in_result, verified on the phone
+   * (ed25519 signature + our domain, nonce, chain, fresh time). A wallet that
+   * ignores the payload is asked to signMessages the same SIWS text; if that
+   * is declined the account is connected without a proof and the UI says so.
+   */
   const connectMwa = useCallback(async () => {
     if (Platform.OS !== "android") throw new Error("Mobile Wallet Adapter needs Android.");
-    const r = await mwaTransact((w) => authorize(w));
+    const input = buildSignInInput();
+    const r = await mwaTransact(async (w) => {
+      const auth = await w.authorize({ chain: MWA_CHAIN, identity: APP_IDENTITY, sign_in_payload: input });
+      const first = auth.accounts[0];
+      const label = (first.label as string | undefined)?.trim() || undefined;
+      const signer = label ?? "your wallet";
+      const sir = auth.sign_in_result;
+      if (sir) {
+        const address = new PublicKey(fromB64(sir.address)).toBase58();
+        const signature = fromB64(sir.signature);
+        const v = verifySignIn(input, { address, signedMessage: fromB64(sir.signed_message), signature });
+        if (!v.ok) throw new Error(`The wallet's sign-in did not verify (${v.reason}).`);
+        return { address, authToken: auth.auth_token as string, label, siws: proofOf("siws", signer, input, v, signature) };
+      }
+      const address = new PublicKey(fromB64(first.address)).toBase58();
+      let siws: SiwsProof | null = null;
+      try {
+        const msg = utf8(createSignInMessageText({ ...input, address }));
+        const [signed] = await w.signMessages({ addresses: [first.address], payloads: [msg] });
+        for (const signature of [signed.slice(-64), signed.slice(0, 64)]) {
+          const v = verifySignIn(input, { address, signedMessage: msg, signature });
+          if (v.ok) { siws = proofOf("signMessage", signer, input, v, signature); break; }
+        }
+      } catch { /* declined: connected without a sign-in proof */ }
+      return { address, authToken: auth.auth_token as string, label, siws };
+    });
     await persist({ kind: "mwa", ...r });
-  }, [authorize, persist]);
+  }, [persist]);
 
   const useGuest = useCallback(async () => {
     const k = await loadGuest();
     setGuest(k);
-    await persist({ kind: "guest", address: k.publicKey.toBase58() });
+    // The guest key signs the same SIWS message a wallet would, verified the same way.
+    const input = buildSignInInput();
+    const out = signInLocally(input, k.secretKey);
+    const v = verifySignIn(input, out);
+    const siws = v.ok ? proofOf("dev-local", "Guest wallet", input, v, out.signature) : null;
+    await persist({ kind: "guest", address: k.publicKey.toBase58(), siws });
   }, [persist]);
 
   const disconnect = useCallback(async () => {
@@ -156,7 +208,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       if (!/^[1-9A-HJ-NP-Za-km-z]{64,90}$/.test(signature)) signature = bs58.encode(Buffer.from(signature, 'base64'));
       await saveSubmission(signature);
       const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed");
-      if (res.value.err) throw new Error(`Transaction failed: ${JSON.stringify(res.value.err)}`);
+      if (res.value.err) throw Object.assign(new Error("The network rejected this transaction. Nothing was charged except the fee."), { signature, chainError: res.value.err });
       return signature;
       } catch (error) {
         if (await submission.abortBeforeBroadcast()) await observer.onNoBroadcast?.();
@@ -182,6 +234,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       kind: stored?.kind ?? null,
       publicKey: stored ? new PublicKey(stored.address) : null,
       walletLabel: stored ? (stored.kind === "guest" ? "Guest wallet (devnet only)" : stored.label ?? "Mobile wallet") : null,
+      signIn: stored?.siws && stored.siws.address === stored.address && recheckProof(stored.siws) ? stored.siws : null,
       mwaAvailable: Platform.OS === "android",
       connectMwa,
       useGuest,
@@ -202,7 +255,6 @@ export function useWallet() {
 
 /** Plain-language message for a failed transaction or wallet action. */
 export function explainError(e: any): string {
-  if (!DEPLOYED) return PREVIEW_NOTE;
   const msg: string = e?.message ?? String(e);
   const logs: string[] = e?.logs ?? [];
   const anchorMsg = [msg, ...logs].join("\n").match(/Error Message: ([^.\n]+)/);

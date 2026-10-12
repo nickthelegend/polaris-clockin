@@ -23,7 +23,7 @@ test('offline SDK decode: an initialized SPL account retains its actual encoded 
   assert.equal(await readTokenBalance(connection(async () => ({ data, owner: TOKEN_PROGRAM_ID })), address), 123);
 });
 test('offline confirmation: failed landed instruction cannot return success and preserves signature', () => {
-  assert.throws(() => requireSuccessfulConfirmation({ value: { err: { InstructionError: [0, 'InsufficientFunds'] } } }, 'observed-signature'), /observed-signature.*InsufficientFunds/);
+  assert.throws(() => requireSuccessfulConfirmation({ value: { err: { InstructionError: [0, 'InsufficientFunds'] } } }, 'observed-signature'), (e: any) => e.signature === 'observed-signature' && JSON.stringify(e.chainError).includes('InsufficientFunds') && /rejected/.test(e.message));
 });
 test('offline confirmation: a null chain error permits receipt construction', () => {
   assert.doesNotThrow(() => requireSuccessfulConfirmation({ value: { err: null } }, 'observed-signature'));

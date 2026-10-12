@@ -126,7 +126,7 @@ export default function Send() {
             {fmtUsd(link.amount)}
           </Text>
           <Text size={13} color={color.muted} style={{ textAlign: "center", marginTop: 6 }}>
-            Whoever holds this link can claim its dollars. Finalized expiry: {new Date(link.expiresAt * 1000).toLocaleString()}.
+            Whoever holds this link can claim its dollars until {new Date(link.expiresAt * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.
           </Text>
           <View style={s.qr}>
             <QRCode value={link.url} size={200} color="#0f1011" backgroundColor="#ffffff" />

@@ -72,9 +72,7 @@ export function Receipt({
           <Text size={14} weight="bold" color={color.lime} style={{ flex: 1 }}>
             View on Solana Explorer
           </Text>
-          <Text size={13} color={color.muted}>
-            {sig.slice(0, 6)}…{sig.slice(-4)}
-          </Text>
+          <Ionicons name="chevron-forward" size={16} color={color.muted} />
         </Pressable>
       </View>
       {next ? (

@@ -1,5 +1,5 @@
 {
-  "deployed": false,
+  "deployed": true,
   "network": "devnet",
   "programId": "HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA",
   "config": "AtSE7XdrabsoYkCXZqpvNWiYy9gJsF3LX2ygFTRUeRS1",
@@ -34,5 +34,14 @@
       "authority": "8vXbFUXsFc3xiZRneghbWNyQ2TNe3obA48UNHwkuzmTV",
       "pda": "3VKhvKFWcVz8AXL5TjbaMvaEYKRzhCepygnfiXTX4zJ8"
     }
+  },
+  "txs": {
+    "initialize": "3nPs7QNjTJK3q9eSUChdxiyQLjuL1mKd719GUWZkqZvkex7Uz8Q86vaxs785ErrkgYnerQmTcg3FjMCBYA8ko1zP",
+    "fundPool": "3MuQ2s9s4dqjzEbqEfz2XZDSXPoavKRqZG5pdqNjciuRMAiVPQAYRxzraEZECgprR1YyGJVUSy5ZWhUC14tPtW5H",
+    "fundRewards": "2hfRUqjBtTdXhHJRTx6k3vR75YtE4MVLdnbCwB5fDYH1YMUdwYNkuryhEtsvwSm7UMrbBFXE7dv5a5wRT3fYzPC",
+    "registerMerchant:studio-sol": "4NHy91EKRzjyPJnwb4Gucs269NnRAbjnUV1kwwHeMtH3SBuZ6MVHGuqAq5WbbLQ581tSWyqfcsSMYDx7uPxvp8Vh",
+    "registerMerchant:kora-rail": "tqQL651C8ix92fnhwN4NPeX1veDJQnh915YKqtyzXjJ2tDVdjgKCpGYcY8QM17XfFtTS1xBQThY3xnUUy4h4xTQ",
+    "registerMerchant:nomada-coffee": "yqcBt8Gv6rTiL3rAvB5uGrXmnZXYUGkZhAbr1xfJswZXzoajVDe4was5V16jnK5gTc8J9CQgcXwNUYmbPGSyYsp",
+    "registerMerchant:lumen-audio": "Fn85zJYUTGHkvKQ8eiRVmHp3nmCCk4YVW7XeDVaWQ7SArjLc9CMvN8KJBDhAHscD5ABW4EtQxFS1TWTrU5hPkde"
   }
 }

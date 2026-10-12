@@ -3,11 +3,31 @@
 Status as of Wed 7 Oct 2026, 19:30 IST (APK 1.1.1: Coach rules fix). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
 Everything below was run on this Mac unless it says otherwise.
 
+## 2026-10-12: no-mocks pass, live on devnet, 1.2.0 (versionCode 7)
+
+- **Deployed to devnet.** Program `HL4FgsM5…tFVaA` (max-len 540000) and initialised: config, pUSD/SKR stand-in
+  mints, 5,000 pUSD pool, 10,000 SKR rewards, 4 merchants. The stale 2.74 SOL buffer of the failed Oct 11 attempt was
+  closed first, so no hub SOL was needed; 2.1 spare SOL went back to hub1. No buffers are left open.
+- **Preview mode removed** (it was a mock): `deployments.json` says `deployed: true` and the code branch is gone.
+- **Every button tapped** in a Release build on the iPhone Air simulator, every on-chain flow run on devnet from
+  the app: [`clockin/BUTTON-AUDIT.md`](clockin/BUTTON-AUDIT.md) (20 signatures, all Finalized).
+- **Fixed:** a receipt journal that blocked every transaction forever after one dropped transaction; plans read by
+  `getProgramAccounts` (empty on public devnet) now derived as PDAs; activity list empty because public devnet
+  refuses JSON-RPC batches; pull-to-refresh spinner stuck; raw hashes, RPC URL and mint addresses removed from the UI.
+- **Added Sign In With Solana** (MWA `sign_in_payload` with a `signMessages` fallback; the guest key signs the same
+  message), verified on the phone, badge on Me.
+- The Oct 8–9 work (pending receipts, link proofs, release-signing guard) was already in APK 1.1.3; it is now committed.
+- APK 1.2.0 (7): sha256 `1663f712c95d3a7f96bdef6e393834149d8a0c47256795764234aab5fad0f5ef`, signer `8370bf40…376f`
+  (same key), arm64-v8a + x86_64. Not run on an Android device (no emulator by rule); MWA and SIWS on Android are
+  untested on hardware.
+- Still not real: Coach answers with Claude need the user's own key (no hosted coach server); without it the app
+  labels its rules-based answers "AI off". The in-app airdrop is usually rate-limited and falls back to the faucet site.
+
 ## What exists
 
 | Part | Where | State |
 |---|---|---|
-| Anchor program `polaris` | `packages/solana` | Built, unit-tested and end-to-end tested on a local validator. **Not on devnet yet** (see below) |
+| Anchor program `polaris` | `packages/solana` | Built, unit-tested, end-to-end tested on a local validator, and **live on devnet** since 2026-10-12 |
 | Mobile app | `apps/mobile` (Expo 57, RN 0.86) | Runs on the iOS simulator (release build) against the local validator, full flow verified |
 | Release APK | `/Volumes/Extreme SSD/Projects/clockin/apks/polaris-clockin.apk` | 1.1.1 (versionCode 4), built and signed with the release key (cert SHA-256 `8370bf40…376f`, same key as every earlier build), arm64-v8a + x86_64, sha256 `3d631819f9e49101515e813b051afcbd260796bf1596d9fbbbeb28400da618ae`; uploaded to the `clockin-v1` release and the re-downloaded file matches. **Never run on a device or emulator** |
 | Coach server | `apps/coach` | Handler tested with a stub client; never called Claude with a real key; not deployed |

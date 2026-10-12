@@ -7,11 +7,12 @@ import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { Button, Card, Money, Row, SectionTitle, StateBlock, Tag, Text, useTabBarSpace } from "../../src/ui/kit";
 import { StreakRing } from "../../src/ui/Art";
 import { color, gutter, radius } from "../../src/ui/theme";
+import { usePullRefresh } from "../../src/state/usePullRefresh";
 import { useAccount } from "../../src/state/AccountProvider";
 import { useAction } from "../../src/state/useAction";
 import { useWallet, explainError } from "../../src/wallet/WalletProvider";
 import { ix, merchantName } from "../../src/chain/polaris";
-import { CLUSTER, DEPLOYED, PARAMS, PREVIEW_NOTE, SKR_MINT, USD_MINT, explorerTx } from "../../src/lib/config";
+import { CLUSTER, PARAMS, SKR_MINT, USD_MINT, explorerTx } from "../../src/lib/config";
 import { checkinReward, dueAt, fmtDue, fmtSkr, fmtUsd, installmentAmount, ONE, today } from "../../src/lib/credit";
 import { scheduleClockInReminder, syncDailyReminders } from "../../src/lib/notify";
 import { useToast } from "../../src/ui/Toast";
@@ -27,6 +28,7 @@ function untilTomorrowUtc() {
 export default function Home() {
   const router = useRouter();
   const a = useAccount();
+  const pull = usePullRefresh(a.refresh);
   const { publicKey, kind, requestAirdrop } = useWallet();
   const { run, busy } = useAction();
   const toast = useToast();
@@ -96,7 +98,7 @@ export default function Home() {
     <SafeAreaView style={{ flex: 1, backgroundColor: color.canvas }} edges={["top"]}>
       <ScrollView
         contentContainerStyle={{ padding: gutter, paddingBottom: bottom }}
-        refreshControl={<RefreshControl refreshing={a.loading && a.loaded} onRefresh={a.refresh} tintColor={color.muted} />}
+        refreshControl={<RefreshControl {...pull} tintColor={color.muted} />}
       >
         <View style={s.header}>
           <Image
@@ -119,15 +121,7 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {!DEPLOYED ? (
-          <View style={{ marginBottom: 12 }}>
-            <StateBlock
-              icon={<Ionicons name="sparkles" size={20} color={color.lime} />}
-              title="Preview mode"
-              body={PREVIEW_NOTE}
-            />
-          </View>
-        ) : a.error ? (
+        {a.error ? (
           <View style={{ marginBottom: 12 }}>
             <StateBlock
               tone="down"

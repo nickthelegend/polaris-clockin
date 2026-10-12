@@ -58,7 +58,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               </Text>
               {toast.sig ? (
                 <Text size={12} color={color.muted}>
-                  {toast.sig.slice(0, 8)}… · view on Explorer
+                  Tap to view on Solana Explorer
                 </Text>
               ) : null}
             </View>

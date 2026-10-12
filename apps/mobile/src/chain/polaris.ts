@@ -155,11 +155,22 @@ export async function fetchConfig() {
   return program.account.config.fetch(pdas.config);
 }
 
-export async function fetchPlans(buyer: PublicKey): Promise<Plan[]> {
-  const all = await program.account.plan.all([{ memcmp: { offset: 8, bytes: buyer.toBase58() } }]);
-  return all
-    .map((p) => ({ ...p.account, address: p.publicKey }))
-    .sort((a, b) => b.index - a.index);
+/**
+ * Plans are PDAs (buyer, index) with index < profile.plansOpened, so they are
+ * derived and read with one getMultipleAccounts call: no getProgramAccounts
+ * scan, which public devnet RPCs rate-limit.
+ */
+export async function fetchPlans(buyer: PublicKey, opened?: number): Promise<Plan[]> {
+  const count = opened ?? (await fetchProfile(buyer))?.plansOpened ?? 0;
+  if (!count) return [];
+  const addresses = Array.from({ length: count }, (_, i) => pdas.plan(buyer, i));
+  const out: Plan[] = [];
+  for (let k = 0; k < addresses.length; k += 100) {
+    const batch = addresses.slice(k, k + 100);
+    const accounts = await program.account.plan.fetchMultiple(batch);
+    accounts.forEach((a, i) => { if (a) out.push({ ...(a as any), address: batch[i] }); });
+  }
+  return out.sort((a, b) => b.index - a.index);
 }
 
 export async function fetchLink(linkKey: PublicKey) {

@@ -49,7 +49,11 @@ reason to come back before every due date.
   that escrows the dollars and pays the claim's fee itself.
 - **Mobile Wallet Adapter:** the primary wallet path on Android (Seed Vault
   on Seeker; Phantom, Solflare or Mock MWA Wallet elsewhere), with a cached
-  authorization token. A guest wallet (a devnet-only key in SecureStore,
+  authorization token.
+- **Sign In With Solana:** connecting asks the wallet to sign a SIWS message in
+  the same MWA sheet (`sign_in_payload`, falling back to `signMessages`); the
+  phone verifies the ed25519 signature, domain, nonce, chain and time and shows
+  "Signed in with Solana". The guest wallet signs the same message. A guest wallet (a devnet-only key in SecureStore,
   labelled as such) exists for the iOS simulator and for trying the app
   without a wallet. A read-only Seeker Genesis Token check shows a "Seeker
   verified" badge.
@@ -80,31 +84,31 @@ reason to come back before every due date.
 | SKR (devnet stand-in) | `HxZRpQH9nUDr97icD5XooCa7FuacdnWLodiSBPFaDfn4` |
 | Deployer / admin | `BKaeJqmmgMTFAkTwUwBceLpGwpSRKfjc9TC8kvb6ieRP` |
 
-**Status: not deployed yet.** The devnet faucet refused every airdrop to this
-machine on 6 Oct, so the deployer has no SOL. These addresses are fixed in
-advance (`packages/solana/deployments/devnet.json`) and the APK is built
-against them; after `packages/solana/scripts/deploy-devnet.sh` runs, add the
-explorer links here:
+**Status: live on Solana devnet since 2026-10-12** (deploy
+`35ovkmMiPrFYiFQwkiA5V6iEaniw682CnS4PigE7zCMH9yiaepas1smY5BjeLq7eWCHizpCEUegWv8g5fWsmWaRs`,
+initialize `3nPs7QNjTJK3q9eSUChdxiyQLjuL1mKd719GUWZkqZvkex7Uz8Q86vaxs785ErrkgYnerQmTcg3FjMCBYA8ko1zP`),
+with a 5,000 pUSD credit pool, a 10,000 SKR rewards vault and four registered merchants.
 
 - Program: https://explorer.solana.com/address/HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA?cluster=devnet
-- Transactions: from `packages/solana/deployments/devnet.json` (`txs`) and
-  `devnet-smoke.json`, as `https://explorer.solana.com/tx/<sig>?cluster=devnet`.
+- Every button and its devnet transaction, run from the app on the iOS simulator
+  (add money, clock in, pay now, Pay in 4, four repayments incl. one in SKR,
+  credit line $50 → $150, SKR lock/unlock, send link, claim link):
+  [`BUTTON-AUDIT.md`](BUTTON-AUDIT.md). All signatures confirm as Finalized.
 
-What has run: 9 unit tests and 19 end-to-end tests on a local validator
-(`clockin/evidence/`), the smoke script against a running validator, and the
-app on the iOS simulator against that validator (`clockin/screens/ios/`).
+Also run: unit tests (63) and 19 end-to-end tests on a local validator
+(`clockin/evidence/`).
 
 ## Install the APK
 
-- File: `polaris-clockin.apk`, version 1.1.3 (versionCode 6), release build
+- File: `polaris-clockin.apk`, version 1.2.0 (versionCode 7), release build
   signed with the project's own key, arm64-v8a + x86_64, package
   `app.polarispay.clockin`, min SDK 24, target SDK 36
-- SHA-256: `25afd272802eb7af86e9613d45c23006b5a753512935e445b73d2e67580c8b84`
+- SHA-256: `1663f712c95d3a7f96bdef6e393834149d8a0c47256795764234aab5fad0f5ef`
 - Signing certificate SHA-256: `8370bf40d44f186682e9884972b3e637b3347c8e883ccdaa0b7576fa622b376f`
 - Download: https://github.com/nickthelegend/polaris-clockin/releases/download/clockin-v1/polaris-clockin.apk
 - Install: `adb install polaris-clockin.apk`, or open the file on the phone
   and allow the install. Connect a devnet wallet (Seed Vault, Solflare or
-  Phantom on devnet) or tap "Try with a guest wallet". You need a little
+  Phantom on devnet) or tap "Continue with a guest wallet". You need a little
   devnet SOL for fees (Me → Fee balance, or https://faucet.solana.com); then
   Home → Add gives test dollars and SKR.
 - The APK has not been run on a device yet (see HANDOFF.md).

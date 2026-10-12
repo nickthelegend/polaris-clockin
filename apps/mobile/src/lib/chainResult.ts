@@ -13,5 +13,5 @@ export async function readTokenBalance(connection: Connection, address: PublicKe
 
 /** A landed transaction with a chain error must never produce a success receipt. */
 export function requireSuccessfulConfirmation(result: { value: { err: unknown } }, signature: string): void {
-  if (result.value.err) throw new Error(`Transaction failed (${signature}): ${JSON.stringify(result.value.err)}`);
+  if (result.value.err) throw Object.assign(new Error('The network rejected this transaction. Nothing was charged except the fee.'), { signature, chainError: result.value.err });
 }

@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Card, Money, Screen, SectionTitle, Stat, StateBlock, Text, useCountUp } from "../../src/ui/kit";
 import { color, radius } from "../../src/ui/theme";
+import { usePullRefresh } from "../../src/state/usePullRefresh";
 import { useAccount } from "../../src/state/AccountProvider";
 import { merchantName } from "../../src/chain/polaris";
 import { dueAt, fmtDue, fmtUsd, installmentAmount, nextTier, ONE, tierOf, TIERS } from "../../src/lib/credit";
@@ -12,6 +13,7 @@ import { dueAt, fmtDue, fmtUsd, installmentAmount, nextTier, ONE, tierOf, TIERS 
 export default function Credit() {
   const router = useRouter();
   const a = useAccount();
+  const pull = usePullRefresh(a.refresh);
   const p = a.profile;
   const tier = tierOf(a.score);
   const next = nextTier(a.score);
@@ -27,7 +29,7 @@ export default function Credit() {
     <Screen
       title="Credit"
       subtitle="Your score lives on chain and moves with every action."
-      scrollProps={{ refreshControl: <RefreshControl refreshing={a.loading && a.loaded} onRefresh={a.refresh} tintColor={color.muted} /> }}
+      scrollProps={{ refreshControl: <RefreshControl {...pull} tintColor={color.muted} /> }}
     >
 
         {/* Score card */}
@@ -95,7 +97,7 @@ export default function Credit() {
         {open.length === 0 ? (
           <StateBlock
             icon={<Ionicons name="calendar-outline" size={20} color={color.purpleText} />}
-            title="No plans yet"
+            title="No active plans"
             body="Choose Pay in 4 at checkout: the shop is paid in full today, you pay in four weeks."
             action="Shop"
             onAction={() => router.push("/(tabs)/shop")}

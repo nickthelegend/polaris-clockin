@@ -9,7 +9,7 @@ import { Button, Card, Row, Screen, SectionTitle, Tag, Text, ToggleRow } from ".
 import { color, font, radius } from "../../src/ui/theme";
 import { explainError, useWallet } from "../../src/wallet/WalletProvider";
 import { useAccount } from "../../src/state/AccountProvider";
-import { CLUSTER, PROGRAM_ID, RPC_URL, SKR_MINT, USD_MINT } from "../../src/lib/config";
+import { CLUSTER, PROGRAM_ID } from "../../src/lib/config";
 import { COACH_URL, getCoachKey, setCoachKey } from "../../src/lib/coach";
 import { useToast } from "../../src/ui/Toast";
 import { cancelDueReminders, getPrefs, ReminderPrefs, setPrefs, syncDailyReminders } from "../../src/lib/notify";
@@ -20,7 +20,7 @@ const short = (k: string) => `${k.slice(0, 4)}…${k.slice(-4)}`;
 
 export default function Me() {
   const router = useRouter();
-  const { publicKey, walletLabel, kind, disconnect, requestAirdrop } = useWallet();
+  const { publicKey, walletLabel, kind, disconnect, requestAirdrop, signIn } = useWallet();
   const a = useAccount();
   const toast = useToast();
   const seeker = useSeeker(kind === "mwa" ? publicKey : null);
@@ -82,6 +82,7 @@ export default function Me() {
           <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
             <Tag label={walletLabel ?? ""} tone={kind === "guest" ? "warn" : "lime"} />
             {seeker.verified ? <Tag label="Seeker verified" tone="lime" /> : seeker.device ? <Tag label="Seeker" tone="lime" /> : null}
+            {signIn ? <Tag label="Signed in with Solana" tone="lime" /> : null}
           </View>
         </View>
       </Card>
@@ -221,17 +222,15 @@ export default function Me() {
       </Pressable>
       {advanced ? (
         <Card style={{ paddingVertical: 4 }}>
-          <Row title="Network" meta={`Solana ${CLUSTER}`} right={CLUSTER === "devnet" ? "devnet" : "local"} />
-          <Row title="RPC" meta={RPC_URL} onPress={() => copy(RPC_URL, "RPC URL")} />
+          <Row title="Network" meta="Solana devnet · test money only" />
           <Row
             title="Polaris program"
-            meta={short(PROGRAM_ID.toBase58())}
+            meta="Every payment, plan and clock-in is public"
             right="Explorer"
             rightColor={color.lime}
             onPress={() => Linking.openURL(`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`)}
           />
-          <Row title="pUSD (test dollars)" meta={short(USD_MINT.toBase58())} onPress={() => copy(USD_MINT.toBase58(), "pUSD mint")} />
-          <Row title="SKR (devnet stand-in)" meta={short(SKR_MINT.toBase58())} onPress={() => copy(SKR_MINT.toBase58(), "SKR mint")} />
+          <Row title="pUSD and SKR" meta="Test dollars and a stand-in for Seeker's SKR" />
         </Card>
       ) : null}
 

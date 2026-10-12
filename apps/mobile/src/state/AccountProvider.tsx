@@ -2,7 +2,7 @@
 // balances, the credit profile, plans, the program config and recent activity.
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { ParsedTransactionWithMeta, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import {
   connection,
   fetchConfig,
@@ -77,12 +77,21 @@ const LABELS: Record<string, string> = {
 };
 
 async function loadActivity(owner: PublicKey): Promise<Activity[]> {
-  const sigs = await connection.getSignaturesForAddress(owner, { limit: 20 });
+  const sigs = await connection.getSignaturesForAddress(owner, { limit: 12 });
   if (!sigs.length) return [];
-  const txs = await connection.getParsedTransactions(
-    sigs.map((s) => s.signature),
-    { maxSupportedTransactionVersion: 0, commitment: "confirmed" },
-  );
+  // One request per transaction, three at a time: public devnet RPCs refuse
+  // or rate-limit JSON-RPC batches, which left the activity list empty.
+  const txs: (ParsedTransactionWithMeta | null)[] = [];
+  for (let k = 0; k < sigs.length; k += 3) {
+    const part = await Promise.all(
+      sigs.slice(k, k + 3).map((s) =>
+        connection
+          .getParsedTransaction(s.signature, { maxSupportedTransactionVersion: 0, commitment: "confirmed" })
+          .catch(() => null),
+      ),
+    );
+    txs.push(...part);
+  }
   const usdA = usdAta(owner).toBase58();
   const skrA = skrAta(owner).toBase58();
   const out: Activity[] = [];
@@ -144,14 +153,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, loading: true }));
     try {
       if (bus.simulateOffline) throw new TypeError("Network request failed");
-      const [sol, usd, skr, profile, config, plans] = await Promise.all([
+      const [sol, usd, skr, profile, config] = await Promise.all([
         connection.getBalance(publicKey),
         tokenBalance(usdAta(publicKey)),
         tokenBalance(skrAta(publicKey)),
         fetchProfile(publicKey),
         fetchConfig(),
-        fetchPlans(publicKey),
       ]);
+      const plans = await fetchPlans(publicKey, profile?.plansOpened ?? 0);
       setState((s) => ({ ...s, sol, usd, skr, profile, config, plans, loading: false, loaded: true, error: null, offline: false }));
       loadActivity(publicKey)
         .then((activity) => setState((s) => ({ ...s, activity })))

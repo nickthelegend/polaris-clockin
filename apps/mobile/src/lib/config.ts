@@ -18,11 +18,6 @@ export const RPC_URL =
   (CLUSTER === "localnet" ? `http://${process.env.EXPO_PUBLIC_LOCAL_HOST}:4270` : "https://api.devnet.solana.com");
 export const MWA_CHAIN = CLUSTER === "devnet" ? "solana:devnet" : "solana:localnet";
 
-/** False while the program is not on this cluster yet: the app runs as a clearly labelled preview, never as an error. */
-export const DEPLOYED: boolean = d.deployed !== false;
-export const PREVIEW_NOTE =
-  "Polaris isn't live on Solana devnet yet. You're seeing a preview: payments, credit and clock-ins switch on once the program is deployed.";
-
 export const PROGRAM_ID = new PublicKey(d.programId);
 export const USD_MINT = new PublicKey(d.usdMint);
 export const SKR_MINT = new PublicKey(d.skrMint);

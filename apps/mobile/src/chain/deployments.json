@@ -1,6 +1,6 @@
 {
   "devnet": {
-    "deployed": false,
+    "deployed": true,
     "network": "devnet",
     "programId": "HL4FgsM51RQQis74TwDkK733ZcTDnqWF8L772Y7tFVaA",
     "config": "AtSE7XdrabsoYkCXZqpvNWiYy9gJsF3LX2ygFTRUeRS1",

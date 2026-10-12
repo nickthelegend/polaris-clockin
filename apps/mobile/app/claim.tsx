@@ -87,8 +87,8 @@ export default function Claim() {
             amount={`$${(link.amount / ONE).toFixed(2)}`}
             body="The dollars are in your Polaris dollar account. The link paid its own network fee."
             rows={[
-              { k: "From", v: `${link.sender.slice(0, 4)}…${link.sender.slice(-4)}` },
-              { k: "To", v: publicKey ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}` : "you" },
+              { k: "From", v: "A Polaris send link" },
+              { k: "To", v: "Your dollar account" },
               { k: "Fee you paid", v: "$0.00", tone: color.lime },
               { k: "Network", v: `Solana ${CLUSTER}` },
             ]}
@@ -107,7 +107,7 @@ export default function Claim() {
               {link === undefined
                 ? "Checking the link…"
                 : link
-                  ? `from ${link.sender.slice(0, 4)}…${link.sender.slice(-4)}`
+                  ? "sent to you by link"
                   : done
                     ? "Landed in your dollar account"
                     : "This link was already claimed or taken back."}
@@ -119,7 +119,7 @@ export default function Claim() {
         </View>
         <Card style={{ marginTop: 12, gap: 14 }}>
           {[
-            ["wallet", "Lands in your Polaris dollar account", publicKey ? `${publicKey.toBase58().slice(0, 4)}…` : "A guest wallet is made for you"],
+            ["wallet", "Lands in your Polaris dollar account", publicKey ? "Ready to receive" : "A guest wallet is made for you"],
             ["flash", "No fees to claim", "The link pays the network fee itself"],
             ["globe", "Dollars, wherever you are", "pUSD on Solana devnet (test money)"],
           ].map(([icon, t, m]) => (
