@@ -172,6 +172,7 @@ export default function Me() {
               </Pressable>
             </View>
           ) : (
+            <View style={{ gap: 6 }}>
             <View style={{ flexDirection: "row", gap: 8 }}>
               <TextInput
                 value={key}
@@ -189,15 +190,19 @@ export default function Me() {
               />
               <Button
                 title="Save"
-                disabled={key.length < 20}
+                disabled={!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key.trim())}
                 style={{ paddingHorizontal: 18 }}
                 onPress={async () => {
-                  await setCoachKey(key);
+                  await setCoachKey(key.trim());
                   setKey("");
                   setHasKey(true);
                   toast({ kind: "ok", text: "Coach now uses Claude" });
                 }}
               />
+            </View>
+            {key.trim() && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key.trim()) ? (
+              <Text size={12} color={color.muted}>Anthropic keys start with sk-ant-</Text>
+            ) : null}
             </View>
           )
         ) : null}

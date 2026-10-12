@@ -100,10 +100,10 @@ Also run: unit tests (63) and 19 end-to-end tests on a local validator
 
 ## Install the APK
 
-- File: `polaris-clockin.apk`, version 1.2.0 (versionCode 7), release build
+- File: `polaris-clockin.apk`, version 1.2.1 (versionCode 8), release build
   signed with the project's own key, arm64-v8a + x86_64, package
   `app.polarispay.clockin`, min SDK 24, target SDK 36
-- SHA-256: `1663f712c95d3a7f96bdef6e393834149d8a0c47256795764234aab5fad0f5ef`
+- SHA-256: `665eed4a392c9e1d1f600ad489b56441a8c3696a70458b8ca41269f8c5fe9788`
 - Signing certificate SHA-256: `8370bf40d44f186682e9884972b3e637b3347c8e883ccdaa0b7576fa622b376f`
 - Download: https://github.com/nickthelegend/polaris-clockin/releases/download/clockin-v1/polaris-clockin.apk
 - Install: `adb install polaris-clockin.apk`, or open the file on the phone

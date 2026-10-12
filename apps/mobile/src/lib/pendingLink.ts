@@ -7,7 +7,7 @@ export type LinkBinding = { scope: string; owner: string; mint: string; programI
 export type PendingLink = LinkBinding & { version: 1; linkKey: string; linkPda: string; amount: string; expiresInSecs: number; signature: string | null };
 export type LinkStore = { readMeta: () => Promise<string | null>; writeMeta: (value: string) => Promise<void>; readSecret: () => Promise<string | null>; writeSecret: (value: string) => Promise<void>; clearMeta: () => Promise<void>; clearSecret: () => Promise<void> };
 export type LinkProof = { programId: string; configMint: string; linkPda: string; sender: string; linkKey: string; amount: string; vaultMint: string; vaultAuthority: string; vaultAmount: string; createdAt: number; expiresAt: number; chainTime: number };
-export type LinkRecovery = { kind: 'none' | 'unknown' | 'failed' | 'expired'; message: string } | { kind: 'ready'; url: string; amount: number; signature: string; expiresAt: number };
+export type LinkRecovery = { kind: 'none' | 'settled' | 'unknown' | 'failed' | 'expired'; message: string } | { kind: 'ready'; url: string; amount: number; signature: string; expiresAt: number };
 function sameBinding(record: PendingLink, binding: LinkBinding): boolean { return ['scope','owner','mint','programId'].every(k => record[k as keyof LinkBinding] === binding[k as keyof LinkBinding]); }
 function validate(record: PendingLink): void {
   try {
@@ -65,7 +65,7 @@ export function createPendingLink(store: LinkStore) {
       if (record.signature !== null && record.signature !== signature) throw new Error('Link transaction signature changed. Original receipt retained.');
       await write({ ...record, signature });
     },
-    async recover(binding: LinkBinding, status: (signature: string) => Promise<Receipt>, proof: (record: PendingLink) => Promise<LinkProof | null>): Promise<LinkRecovery> {
+    async recover(binding: LinkBinding, status: (signature: string) => Promise<Receipt>, proof: (record: PendingLink) => Promise<LinkProof | 'closed' | null>): Promise<LinkRecovery> {
       const record = await read(binding);
       if (!record) return {kind:'none',message:'No pending link is stored on this device.'};
       const secret = await store.readSecret();
@@ -78,6 +78,9 @@ export function createPendingLink(store: LinkStore) {
       if (!receipt || receipt.confirmationStatus!=='finalized' || !Object.prototype.hasOwnProperty.call(receipt,'err')) return {kind:'unknown',message:'The original link transaction is not finalized. Check the same receipt again later.'};
       if (receipt.err!==null) return {kind:'failed',message:'The original link transaction finalized with an error. No shareable link is claimed.'};
       const state = await proof(record);
+      // The account is gone AND a later successful transaction touched it (claim or cancel): the money left escrow.
+      // Forget the saved link so a new one can be made. A merely missing account still assumes nothing.
+      if (state === 'closed') { await store.clearMeta(); await store.clearSecret(); return {kind:'settled',message:'Your last link was claimed.'}; }
       if (!state) return {kind:'unknown',message:'The original transaction finalized, but its link account is unavailable or closed. No claim or refund is assumed.'};
       if (state.programId!==record.programId || state.configMint!==record.mint || state.linkPda!==record.linkPda || state.sender!==record.owner || state.linkKey!==record.linkKey || state.amount!==record.amount || state.vaultMint!==record.mint || state.vaultAmount!==record.amount || state.vaultAuthority!==PublicKey.findProgramAddressSync([Buffer.from('config')],new PublicKey(record.programId))[0].toBase58() || !Number.isSafeInteger(state.chainTime) || !Number.isSafeInteger(state.createdAt) || !Number.isSafeInteger(state.expiresAt) || state.expiresAt-state.createdAt!==record.expiresInSecs || state.createdAt<=0 || state.chainTime<=0 || state.chainTime<state.createdAt) return {kind:'unknown',message:'Finalized link state does not match the saved transfer. Share is blocked.'};
       if (state.chainTime>state.expiresAt) return {kind:'expired',message:'The matching link has expired. It is not shareable; owner cancellation requires a verified on-chain action.'};

@@ -48,7 +48,10 @@ export async function recoverPendingLink(owner: PublicKey) {
     const config = await finalizedConfig();
     const key = new PublicKey(record.linkPda);
     const info = await connection.getAccountInfo(key,'finalized');
-    if (!info) return null;
+    if (!info) {
+      const later = await connection.getSignaturesForAddress(key,{limit:10},'finalized');
+      return later.some(x => x.signature !== record.signature && x.err === null) ? 'closed' as const : null;
+    }
     if (!info.owner.equals(PROGRAM_ID)) throw new Error('Saved link account has an unexpected program owner. Share is blocked.');
     const link = program.coder.accounts.decode('link',info.data) as {sender:PublicKey;linkKey:PublicKey;amount:{toString():string};createdAt:{toNumber():number};expiresAt:{toNumber():number}};
     const vaultPda = PublicKey.findProgramAddressSync([Buffer.from('link_vault'),new PublicKey(record.linkKey).toBuffer()],PROGRAM_ID)[0];

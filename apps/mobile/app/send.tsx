@@ -45,6 +45,7 @@ export default function Send() {
       const result = await recoverPendingLink(owner);
       if (activeOwner.current !== owner.toBase58()) return;
       if (result.kind === 'ready') { setLink(result); setRecovery('retained'); setRecoveryMessage('Matching link and original receipt verified finalized.'); }
+      else if (result.kind === 'settled') { setLink(null); setRecovery('none'); toast({kind:'ok',text:result.message}); }
       else { setLink(null); setRecovery(result.kind === 'none' ? 'none' : 'retained'); setRecoveryMessage(result.message); }
     } catch (error) {
       if (activeOwner.current !== owner.toBase58()) return;

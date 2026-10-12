@@ -3,6 +3,21 @@
 Status as of Wed 7 Oct 2026, 19:30 IST (APK 1.1.1: Coach rules fix). Deadline: 2026-10-09 06:59 UTC (Oct 8, 23:59 PDT).
 Everything below was run on this Mac unless it says otherwise.
 
+## 2026-10-12 (evening): final pass, 1.2.1 (versionCode 8)
+
+- **Fixed: Send was blocked forever after a link was claimed.** The saved link stayed on the device, so Send showed
+  "link account is unavailable or closed" and disabled Create link. Now, when the link account is gone *and* a later
+  successful transaction touched it (claim or cancel), the app forgets the saved link, shows "Your last link was
+  claimed" and allows a new one. A merely missing account still assumes nothing (unit test kept; new test added, 64/64 pass).
+  Verified on the sim: create link, claim it by deep link, reopen Send, create a second link, Share opens the iOS sheet.
+- **Coach key entry:** Save is enabled only for a well-formed `sk-ant-` key (trimmed); a hint explains the format.
+  Without a key Coach answers from the program's rules, labelled "Rules-based answer (AI off)".
+- Second full sweep of every screen in a Release build (iPhone Air sim): nothing else broken, overflowing or showing dev text.
+- APK 1.2.1 (8): sha256 `665eed4a392c9e1d1f600ad489b56441a8c3696a70458b8ca41269f8c5fe9788`, signer `8370bf40…376f`
+  (same key), arm64-v8a + x86_64, checked with aapt2/apksigner, uploaded to `clockin-v1`, re-download matches.
+  Not run on an Android device.
+- Demo captures (real devnet txs, fresh guest wallet `9mZV4Eky…wa9G`): `clockin/videos/polaris/captures/` in the workspace.
+
 ## 2026-10-12: no-mocks pass, live on devnet, 1.2.0 (versionCode 7)
 
 - **Deployed to devnet.** Program `HL4FgsM5…tFVaA` (max-len 540000) and initialised: config, pUSD/SKR stand-in

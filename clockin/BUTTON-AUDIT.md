@@ -58,7 +58,7 @@ No buffer accounts are left open.
 | SKR | Unlock 250 SKR | `unlock_skr` | Pass | `4CTwm6Dw2N4UzfEBYFBSii96NJM6b84x8CBdAa2cycFNLKN9dgUvrEdFTz56KX6WmNHMtY7vuJtTAN1ja3xp9JmN` | |
 | Send | Keypad, Create a $5.00 link | `create_link`: escrow + link key funded | Pass | `3R8jXnLjS55sK3iYkMapqxeGNbZ1KoSffJyKp3KY4W5L22FU3pcBT1pXrJbje1pUhZmwaCH8pDBVtr6MbH2Ld4Pu` | Expiry text now "until Oct 26" |
 | Send | Copy link | Copies `polaris://claim?k=…` after the link is finalized | Pass | | |
-| Send | Share | System share sheet with the same verified URL as Copy | Not tapped in this run | | |
+| Send | Share | System share sheet with the same verified URL as Copy | Pass (1.2.1: iOS share sheet with the claim message) | `4Xnh3xBsrtCa73tGPjsGbqTB3RBNb8XnPR8swbiFZGYrj7gdkexZzx9wm477q84qgTGaCxoKE6YqQwRLzGZQvvGy` (link) | |
 | Claim | Open link (deep link) → Claim $5.00 | `claim_link`, the link key pays its own fee | Pass | `2vojfCsCcZBFWDkmxR2mdr8PJ3S3qaS2HfhSpBaPdmohC7MKHj6nCvmpQxe5Hvsgy4QkT1wRSDHGbVwRtEugkVWR` | Sender/recipient addresses replaced with words |
 | Coach | 4 suggested questions, free-text + send | Distinct answers from the on-chain profile | Pass ("Rules-based answer (AI off)") | | |
 | Coach | See / Hide what Coach sees | Shows the exact facts sent | Pass | | |
@@ -98,3 +98,11 @@ autopilot (`EXPO_PUBLIC_AUTOPILOT`, never set in release builds).
 - Coach AI answers need the user's own Anthropic key (or a hosted coach server that is not deployed); without one, the
   app shows rules-based answers and labels them "AI off".
 - The devnet SOL airdrop is rate-limited for most IPs; the app then opens the official faucet.
+
+## 1.2.1 final pass (Oct 12 evening)
+
+- **Send after a claimed link** was permanently blocked ("link account is unavailable or closed", Create link disabled).
+  Fixed: a closed link account with a later successful transaction clears the saved link ("Your last link was claimed").
+  Re-run: link `4Xnh3xBs…QvvGy` created after link `iZtQUcUk…nuPBz` was claimed (`51iGoGMb…3edbU`), Share opened the system sheet.
+- Coach key field validates the `sk-ant-` format before Save; no-key path answers from rules, labelled "AI off".
+- Second sweep: Home, Shop, Checkout (Pay now / Pay in 4), Credit, Plan, SKR, Send, Claim, Coach, Me (+ Advanced). No other issues.
